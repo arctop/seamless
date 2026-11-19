@@ -845,6 +845,19 @@ removed this way. If the earlier key does not sign (its prompt is cancelled),
 the daemon keeps it, and the app's closing alert gives the
 `seamlessd approvers remove` command for it.
 
+On a client computer (`role: client`), `server_url` names the relay's socket
+and the key enrolls with the server through it. The daemon's account, its
+`seamlessd` and its config are the server's, so the window's command, and the
+`seamlessd approvers remove` line for an older key, run in a terminal on the
+server (there, or over SSH), not on the client. `seam touchid enroll` and the
+app both say so: `seam` opens the app with `--role client` (as `seam mcp-proxy`
+does for an approval from the agent's dialog), and the app labels each command
+as the server's. An app installed before this `seam` does not take
+`--role`: its alert says it was started with arguments it does not take, and
+running `seam touchid enroll` again and answering `y` replaces it. Neither looks the server's account up on the
+client: the socket's peer is the client's relay, held to the account root
+pinned there (the relay's), as `seam approve` holds it on a client.
+
 Once enrolled, accepting an access request's dialog with Touch ID opens the
 app for that request: it reads the request's facts from the daemon itself,
 shows them in the Touch ID prompt, and signs over the request and the

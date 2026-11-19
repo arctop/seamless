@@ -120,8 +120,9 @@ public protocol KeyStore {
 public protocol ApproverUI {
     /// `enrollCode` asks for the one-time code that `command` mints for the
     /// new key `key` (its fingerprint); nil is a cancel. `problem` says what
-    /// was wrong with the last one typed.
-    func enrollCode(command: String, key: String, problem: String?) -> String?
+    /// was wrong with the last one typed. `role` says where `command` runs:
+    /// on this Mac, or (`client`) in a terminal on the server.
+    func enrollCode(command: String, key: String, problem: String?, role: Role) -> String?
     /// `confirmForget` asks before the key is deleted.
     func confirmForget(credentials: [String]) -> Bool
 }
@@ -135,17 +136,37 @@ public struct Flows {
     public let defaultName: () -> String
     /// `clock` says the lease's end in the approval's alert.
     public let clock: WallClock
+    /// `role` is where the daemon runs (`--role`): on a client computer the
+    /// socket's peer is the relay, and the daemon's account is the server's.
+    public let role: Role
 
     public init(transport: Transport, keys: KeyStore, ui: ApproverUI,
                 lookupAccount: @escaping (String) -> uid_t? = uidOfAccount,
                 defaultName: @escaping () -> String = { "Touch ID" },
-                clock: WallClock = .system) {
+                clock: WallClock = .system, role: Role = .server) {
         self.transport = transport
         self.keys = keys
         self.ui = ui
         self.lookupAccount = lookupAccount
         self.defaultName = defaultName
         self.clock = clock
+        self.role = role
+    }
+
+    /// `checkAccount` holds the account the daemon names to the socket's
+    /// peer, on a server. On a client computer the peer is this Mac's relay,
+    /// which PeerGuard already held to root's pin (the relay's account, which
+    /// the relay's root step pins as the daemon's), and the account named is
+    /// the server's: a name this Mac resolves, if any, is a local account
+    /// that happens to share it, and proves nothing either way. seam approve
+    /// and seam touchid enroll on a client skip the same check
+    /// (cmd/seam/approve.go runApprove, cmd/seam/touchid.go
+    /// enrollCodeApprover).
+    func checkAccount(_ account: String, isPeer peer: uid_t) throws {
+        if role == .client {
+            return
+        }
+        try requireAccount(account, isPeer: peer, lookup: lookupAccount)
     }
 
     public static func run(_ flow: Flow, _ body: () throws -> Notice) -> Outcome {
@@ -171,7 +192,7 @@ public struct Flows {
             let got = try transport.exchange(HTTPRequest(method: "GET", path: "/console/access/\(id)?format=json"))
             let one: AccessOne = try decode(got.response, what: "the request")
             let plan = try Plan.approval(one, id: id, duration: duration)
-            try requireAccount(plan.account, isPeer: got.peerUID, lookup: lookupAccount)
+            try checkAccount(plan.account, isPeer: got.peerUID)
 
             let reason = Reason.approval(plan.facts, duration: duration, maxLease: plan.maxLease)
             let message = Messages.touchIDApproveMessage(id: plan.id, challenge: plan.challenge, digest: plan.digest,
@@ -216,7 +237,7 @@ public struct Flows {
             let got = try transport.exchange(HTTPRequest(method: "GET", path: "/console/access?format=json"))
             let list: AccessList = try decode(got.response, what: "the daemon's account")
             let account = try Plan.daemonAccount(list.terminal)
-            try requireAccount(account, isPeer: got.peerUID, lookup: lookupAccount)
+            try checkAccount(account, isPeer: got.peerUID)
 
             // The key comes first: the code is minted for it, by the
             // fingerprint in the command this dialog shows.
@@ -240,7 +261,7 @@ public struct Flows {
             }
             let signatures: [Data?]
             do {
-                signatures = try keys.signAll(signings, reason: Reason.enrollment(account: account, replacing: !replacing.isEmpty))
+                signatures = try keys.signAll(signings, reason: Reason.enrollment(account: account, replacing: !replacing.isEmpty, role: role))
             } catch ApproverError.cancelled {
                 throw ApproverError.cancelled("Not enrolled: the Touch ID prompt was cancelled.")
             }
@@ -285,14 +306,14 @@ public struct Flows {
                     }
                 }
             }
-            return Notices.enrolled(name: Text.clean(ok.name ?? label, max: 64), removals: removals, retired: retiredHere)
+            return Notices.enrolled(name: Text.clean(ok.name ?? label, max: 64), removals: removals, retired: retiredHere, role: role)
         }
     }
 
     func askCode(_ command: String, key: String) throws -> String {
         var problem: String?
         for _ in 0..<5 {
-            guard let typed = ui.enrollCode(command: command, key: key, problem: problem) else {
+            guard let typed = ui.enrollCode(command: command, key: key, problem: problem, role: role) else {
                 throw ApproverError.cancelled("Not enrolled: cancelled.")
             }
             let normalized: String
@@ -325,6 +346,8 @@ public struct Flows {
     /// (cmd/seam/approve.go sudoArgv), with sudo and env by absolute path so
     /// the owner's PATH picks neither (internal/shellcmd): "enroll-code
     /// touchid" mints a Touch ID code, "remove <id>" removes a credential.
+    /// Both run where the daemon does: on a client computer (`role`), in a
+    /// terminal on the server, which the dialog and the alert say.
     func daemonCommand(_ t: Terminal?, account: String, verb: String) -> String {
         var parts = ["/usr/bin/sudo -k -u", account]
         if let config = t?.config, config.hasPrefix("/") {

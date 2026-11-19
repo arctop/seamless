@@ -254,5 +254,7 @@ final class ReasonTests: XCTestCase {
                        "add this Mac's Touch ID key as an approver for the Seamless daemon running as _seamless")
         XCTAssertEqual(Reason.enrollment(account: "_seamless", replacing: true),
                        "add this Mac's Touch ID key as an approver for the Seamless daemon running as _seamless, in place of the key this Mac enrolled before")
+        XCTAssertEqual(Reason.enrollment(account: "_serveronly", replacing: true, role: .client),
+                       "add this Mac's Touch ID key as an approver for the Seamless daemon running as _serveronly on the server, in place of the key this Mac enrolled before")
     }
 }

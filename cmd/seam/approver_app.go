@@ -49,10 +49,17 @@ var (
 var errNoApproverSocket = errors.New("the Touch ID approver needs server_url to name the peer_auth socket (unix:///path)")
 
 // approverApproveArgs is the helper's command line for one approval: the
-// socket to read the request from and answer on, the request, and the
-// duration the owner chose in the dialog.
-func approverApproveArgs(socket, requestID, duration string) []string {
-	return []string{"approve", "--socket", socket, "--request", requestID, "--for", duration}
+// socket to read the request from and answer on, the request, the duration
+// the owner chose in the dialog, and on a client computer (role: client)
+// --role client: there the socket is the relay's, and the account the daemon
+// names is the server's, which the helper then does not look up (as seam
+// touchid enroll's approverEnrollArgs).
+func approverApproveArgs(socket, requestID, duration string, onClient bool) []string {
+	argv := []string{"approve", "--socket", socket, "--request", requestID, "--for", duration}
+	if onClient {
+		argv = append(argv, "--role", "client")
+	}
+	return argv
 }
 
 // approverRunner runs a command line; exec.Command in production, a fake in
@@ -62,8 +69,9 @@ type approverRunner func(ctx context.Context, argv []string, stdin io.Reader, st
 // launchApprover opens the Touch ID helper at app for one approval, through
 // LaunchServices, and returns once open has handed it over (open does not wait
 // for the app). goos is the platform: the helper exists only on macOS. self is
-// this seam binary, whose Developer ID team the app is pinned to.
-func launchApprover(ctx context.Context, run approverRunner, self func() (string, error), goos, app, socket, requestID, duration string) error {
+// this seam binary, whose Developer ID team the app is pinned to. onClient is
+// a client computer's bridge (approverApproveArgs).
+func launchApprover(ctx context.Context, run approverRunner, self func() (string, error), goos, app, socket, requestID, duration string, onClient bool) error {
 	switch {
 	case goos != "darwin":
 		return errors.New("the Touch ID approver exists only on macOS")
@@ -79,7 +87,7 @@ func launchApprover(ctx context.Context, run approverRunner, self func() (string
 	if err := verifyApproverForLaunch(ctx, run, self, app); err != nil {
 		return err
 	}
-	argv := append([]string{"open", "-n", "-a", app, "--args"}, approverApproveArgs(socket, requestID, duration)...)
+	argv := append([]string{"open", "-n", "-a", app, "--args"}, approverApproveArgs(socket, requestID, duration, onClient)...)
 	code, err := run(ctx, argv, nil, io.Discard, io.Discard)
 	if err != nil {
 		return fmt.Errorf("open the Touch ID approver: %w", err)

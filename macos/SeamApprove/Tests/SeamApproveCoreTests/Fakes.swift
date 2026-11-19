@@ -248,15 +248,15 @@ final class SoftwareKeyStore: KeyStore {
 final class FakeUI: ApproverUI {
     var codes: [String?]
     var forget = true
-    private(set) var asked: [(command: String, problem: String?)] = []
+    private(set) var asked: [(command: String, problem: String?, role: Role)] = []
     private(set) var forgetAsked: [[String]] = []
 
     init(codes: [String?] = []) {
         self.codes = codes
     }
 
-    func enrollCode(command: String, key: String, problem: String?) -> String? {
-        asked.append((command, problem))
+    func enrollCode(command: String, key: String, problem: String?, role: Role) -> String? {
+        asked.append((command, problem, role))
         return codes.isEmpty ? nil : codes.removeFirst()
     }
 

@@ -22,6 +22,24 @@ final class ArgumentsTests: XCTestCase {
         XCTAssertEqual(try Arguments.parse(["forget"]), .forget)
     }
 
+    /// seam on a client computer (role: client) adds --role client
+    /// (cmd/seam/touchid.go approverEnrollArgs); without it the role is
+    /// server, as an older seam's argv says nothing about it.
+    func testRole() throws {
+        XCTAssertEqual(try Arguments.parse(["enroll", "--socket", sock, "--name", "Touch ID", "--role", "client"]),
+                       .enroll(socket: sock, name: "Touch ID", role: .client))
+        XCTAssertEqual(try Arguments.parse(["enroll", "--socket", sock, "--role=server"]), .enroll(socket: sock, name: nil, role: .server))
+        XCTAssertEqual(try Arguments.parse(["enroll", "--socket", sock]), .enroll(socket: sock, name: nil, role: .server))
+        XCTAssertEqual(try Arguments.parse(["approve", "--socket", sock, "--request", id, "--for", "1h", "--role", "client"]),
+                       .approve(socket: sock, request: id, duration: "1h", role: .client))
+        XCTAssertEqual(try Arguments.parse(["approve", "--socket", sock, "--request", id, "--for", "1h"]),
+                       .approve(socket: sock, request: id, duration: "1h", role: .server))
+        XCTAssertThrowsError(try Arguments.parse(["enroll", "--socket", sock, "--role", "Client"]))
+        XCTAssertThrowsError(try Arguments.parse(["enroll", "--socket", sock, "--role", "client", "--role", "client"]))
+        XCTAssertThrowsError(try Arguments.parse(["enroll", "--socket", sock, "--role"]))
+        XCTAssertThrowsError(try Arguments.parse(["forget", "--role", "client"]))
+    }
+
     func testRefusals() {
         let bad: [[String]] = [
             [],

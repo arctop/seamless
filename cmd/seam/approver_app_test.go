@@ -72,7 +72,7 @@ func TestLaunchApprover(t *testing.T) {
 				got = append(got, argv)
 				return tc.code, tc.runErr
 			}
-			err := launchApprover(context.Background(), run, self, tc.goos, app, tc.sock, tc.id, tc.d)
+			err := launchApprover(context.Background(), run, self, tc.goos, app, tc.sock, tc.id, tc.d, false)
 			if tc.wantRun {
 				require.Equal(t, [][]string{{"open", "-n", "-a", app, "--args",
 					"approve", "--socket", tc.sock, "--request", tc.id, "--for", tc.d}}, got)
@@ -135,7 +135,7 @@ func TestLaunchApprover_ChecksTheAppsSignatureBeforeOpen(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(r)
 			}
-			err := launchApprover(context.Background(), r.exec, self, "darwin", app, socket, id, "1h")
+			err := launchApprover(context.Background(), r.exec, self, "darwin", app, socket, id, "1h", false)
 			calls := r.recorded()
 			usedPin := slices.ContainsFunc(calls, func(c []string) bool { return slices.Contains(c, pinned) })
 			require.Equal(t, tc.wantPin, usedPin, "%v", calls)
@@ -169,7 +169,7 @@ func TestLaunchApprover_RefusesWhenTheCheckCannotRun(t *testing.T) {
 		}
 		return -1, errBoom
 	}
-	err := launchApprover(context.Background(), run, self, "darwin", "/x.app", "/s.sock", testRequestID, "1h")
+	err := launchApprover(context.Background(), run, self, "darwin", "/x.app", "/s.sock", testRequestID, "1h", false)
 	require.ErrorIs(t, err, errBoom)
 	require.ErrorContains(t, err, "seam touchid enroll")
 	require.False(t, opened)
@@ -181,8 +181,32 @@ func TestLaunchApprover_RefusesWhenTheCheckCannotRun(t *testing.T) {
 		_, _ = io.WriteString(stderr, "/x.app: a sealed resource is missing or invalid\nfile modified: /x.app/Contents/MacOS/x\n")
 		return 1, nil
 	}
-	err = launchApprover(context.Background(), run, self, "darwin", "/x.app", "/s.sock", testRequestID, "1h")
+	err = launchApprover(context.Background(), run, self, "darwin", "/x.app", "/s.sock", testRequestID, "1h", false)
 	require.ErrorContains(t, err, "a sealed resource is missing or invalid file modified:")
 	require.NotContains(t, err.Error(), "\n", "one line")
 	require.False(t, opened)
+}
+
+// On a client computer the helper is told its role, so it looks up no account
+// the server names; a server's command line is unchanged.
+func TestLaunchApprover_TellsAClientsHelperItsRole(t *testing.T) {
+	const app, socket = "/Users/owner/Applications/Seamless Approve.app", "/opt/seamless/run/seamlessd.sock"
+	self := func() (string, error) { return fakeSelf, nil }
+	for _, onClient := range []bool{false, true} {
+		var got [][]string
+		signature := newTouchRunner()
+		run := func(ctx context.Context, argv []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+			if argv[0] == "codesign" {
+				return signature.exec(ctx, argv, stdin, stdout, stderr)
+			}
+			got = append(got, argv)
+			return 0, nil
+		}
+		require.NoError(t, launchApprover(context.Background(), run, self, "darwin", app, socket, testRequestID, "1h", onClient))
+		want := []string{"open", "-n", "-a", app, "--args", "approve", "--socket", socket, "--request", testRequestID, "--for", "1h"}
+		if onClient {
+			want = append(want, "--role", "client")
+		}
+		require.Equal(t, [][]string{want}, got, "onClient %v", onClient)
+	}
 }

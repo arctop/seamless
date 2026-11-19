@@ -86,6 +86,9 @@ type approverHost struct {
 	home   func() (string, error) // the owner's home, where the app is installed; nil is os.UserHomeDir
 	socket string                 // the peer_auth socket this bridge dials; "" when server_url names none
 	self   func() (string, error) // this seam binary, whose team the app is pinned to; nil is selfPath
+	// onClient is a client computer's bridge (role: client): the socket is the
+	// relay's, and the helper is told so (--role client).
+	onClient bool
 }
 
 // launch opens the approver for one ask, and returns the helper's stderr to
@@ -128,7 +131,7 @@ func (h approverHost) launch(ctx context.Context, ask core.ApproverLaunch) (*app
 		}
 		return run(ctx, argv, in, out, errw)
 	}
-	err = launchApprover(ctx, withStderr, self, goos, approverAppPath(home), h.socket, ask.RequestID, ask.Duration)
+	err = launchApprover(ctx, withStderr, self, goos, approverAppPath(home), h.socket, ask.RequestID, ask.Duration, h.onClient)
 	if watch != nil {
 		watch.handedOver()
 		if err != nil {

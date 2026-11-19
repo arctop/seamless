@@ -74,6 +74,11 @@ final class PresentationTests: XCTestCase {
         XCTAssertFalse(two.autoCloses)
 
         let replaced = Notices.enrolled(name: "Touch ID", removals: [], retired: 1)
+        let onServer = Notices.enrolled(name: "Touch ID", removals: ["x"], role: .client)
+        XCTAssertTrue(onServer.body.hasSuffix(" To remove it, run this in your own terminal on the server, not on this Mac:"), onServer.body)
+        XCTAssertTrue(Notices.enrolled(name: "Touch ID", removals: ["x", "y"], role: .client).body
+            .hasSuffix(" To remove them, run these in your own terminal on the server, not on this Mac:"))
+
         XCTAssertEqual(replaced, Notice(title: "Touch ID enrolled",
                                         body: "This Mac's Touch ID can now approve access to locked projects. The daemon lists it as \u{201C}Touch ID\u{201D}. "
                                             + "It replaces the key this Mac enrolled before, which is deleted from this Mac and from the daemon.",
@@ -88,11 +93,11 @@ final class PresentationTests: XCTestCase {
                        Notice(title: "Key deleted", body: "This Mac's Touch ID approver key is deleted.", succeeded: true))
         let one = Notices.keyDeleted(credentials: ["01M6TCPBXG2R08217WHWH2DJSB"])
         XCTAssertEqual(one, Notice(title: "Key deleted",
-                                   body: "This Mac's Touch ID approver key is deleted, but the daemon still lists its credential. To remove it, run this as the daemon's account:",
+                                   body: "This Mac's Touch ID approver key is deleted, but the daemon still lists its credential. To remove it, run this as the daemon's account, on the computer the daemon runs on (the server, when this Mac is a client):",
                                    setApart: ["seamlessd approvers remove 01M6TCPBXG2R08217WHWH2DJSB"], succeeded: true, instructs: true))
         XCTAssertFalse(one.body.contains("01M6"), "the id is only in the set-apart command, never in the wrapped body")
         let two = Notices.keyDeleted(credentials: ["01A", "01B"])
-        XCTAssertEqual(two.body, "This Mac's Touch ID approver keys are deleted, but the daemon still lists their credentials. To remove them, run these as the daemon's account:")
+        XCTAssertEqual(two.body, "This Mac's Touch ID approver keys are deleted, but the daemon still lists their credentials. To remove them, run these as the daemon's account, on the computer the daemon runs on (the server, when this Mac is a client):")
         XCTAssertEqual(two.setApart, ["seamlessd approvers remove 01A", "seamlessd approvers remove 01B"])
         XCTAssertEqual(Notices.noKey(), Notice(title: "No key to delete",
                                                body: "No Touch ID approver key is stored on this Mac, so there is nothing to delete.",
@@ -122,8 +127,9 @@ final class PresentationTests: XCTestCase {
 
         let usage = Notices.badArguments("--for \u{201C}1 hour\u{201D} is not a duration (session, 1h or 4h)")
         XCTAssertEqual(usage.title, "Couldn't start")
-        XCTAssertEqual(usage.body, "Seamless Approve was started with arguments it does not take: --for \u{201C}1 hour\u{201D} is not a duration (session, 1h or 4h). It takes these:")
-        XCTAssertEqual(usage.setApart.first, "usage: SeamApprove approve --socket <path> --request <id> --for <duration>")
+        XCTAssertEqual(usage.body, "Seamless Approve was started with arguments it does not take: --for \u{201C}1 hour\u{201D} is not a duration (session, 1h or 4h). "
+            + "If seam is newer than this app, run seam touchid enroll again and answer y to replace it. It takes these:")
+        XCTAssertEqual(usage.setApart.first, "usage: SeamApprove approve --socket <path> --request <id> --for <duration> [--role server|client]")
         XCTAssertFalse(usage.autoCloses)
     }
 
@@ -184,6 +190,13 @@ final class PresentationTests: XCTestCase {
         XCTAssertFalse(p.body.contains("sudo"), "the command is set apart, never wrapped into the body")
         XCTAssertEqual(Prompts.enrollCode(command: command, key: "Y2WK-2PG4-B7DB-FATZ", problem: CodeProblem.notACode).body,
                        "That is not an enrollment code. A code has 16 letters and digits, printed as XXXX-XXXX-XXXX-XXXX.\n\n" + p.body)
+
+        // On a client computer the command is the server's.
+        let client = Prompts.enrollCode(command: command, key: "Y2WK-2PG4-B7DB-FATZ", problem: nil, role: .client)
+        XCTAssertEqual(client.body, "Run this command in a terminal on the server, not on this Mac: this Mac is a client, and the daemon, its account and its seamlessd are on the server. Use a terminal there your agents cannot read. "
+            + "It asks for your password on the server, then prints a one-time enrollment code for this Mac's new key, Y2WK-2PG4-B7DB-FATZ. "
+            + "Check that the key it prints is this one, then type the code below, with or without its dashes. The code works once, for 10 minutes, and only for this key.")
+        XCTAssertEqual(client.setApart, [command])
     }
 
     func testCopyableSetApartLines() {

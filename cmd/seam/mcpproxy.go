@@ -141,8 +141,9 @@ func runMCPProxy(ctx context.Context, e *env, o *mcpProxyOpts, _ []string) error
 	b.stderr = e.stderr
 	// The daemon may ask this bridge to launch the Touch ID approver for an
 	// access request (mcpproxy_approver.go). The helper talks to the daemon only
-	// through the peer_auth socket, so it is told the one this bridge dials.
-	b.approver = approverHost{run: e.run, goos: e.platform(), home: os.UserHomeDir, socket: cfg.SocketPath()}
+	// through the peer_auth socket, so it is told the one this bridge dials,
+	// and, on a client computer, that the socket is the relay's.
+	b.approver = bridgeApprover(e, cfg)
 	// The client that spawned this bridge is the agent whose SessionStart hook
 	// created its ambient session; naming it on every request is what binds the
 	// connection to that session. Resolved once: the parent does not change for
@@ -681,4 +682,11 @@ func isReply(msg []byte) bool {
 		Method string          `json:"method"`
 	}
 	return json.Unmarshal(msg, &m) == nil && m.Method == "" && len(m.ID) > 0
+}
+
+// bridgeApprover is how the bridge launches the Touch ID approver under cfg:
+// through the socket it dials, told on a client computer that the socket is
+// the relay's (approverHost.onClient).
+func bridgeApprover(e *env, cfg config.Config) approverHost {
+	return approverHost{run: e.run, goos: e.platform(), home: os.UserHomeDir, socket: cfg.SocketPath(), onClient: cfg.IsClient()}
 }

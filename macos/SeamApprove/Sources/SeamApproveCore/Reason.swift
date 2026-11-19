@@ -51,8 +51,13 @@ public enum Reason {
 
     /// The enrollment's prompt: the key is about to sign its first message.
     /// `replacing` is whether this Mac's earlier key signs too, to be retired.
-    public static func enrollment(account: String, replacing: Bool = false) -> String {
+    /// On a client computer (`role`) the daemon, and the account it runs as,
+    /// are on the server.
+    public static func enrollment(account: String, replacing: Bool = false, role: Role = .server) -> String {
         var s = "add this Mac's Touch ID key as an approver for the Seamless daemon running as " + Text.clean(account, max: 32)
+        if role == .client {
+            s += " on the server"
+        }
         if replacing {
             s += ", in place of the key this Mac enrolled before"
         }

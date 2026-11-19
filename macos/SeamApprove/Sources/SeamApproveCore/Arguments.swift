@@ -6,12 +6,25 @@ import Foundation
 /// the enrollment code from the owner's own typing in the helper's dialog.
 public enum Command: Equatable {
     /// Approve one access request for one duration.
-    case approve(socket: String, request: String, duration: String)
+    case approve(socket: String, request: String, duration: String, role: Role = .server)
     /// Create this Mac's key and enroll it with the daemon. `name` is the
     /// label the daemon shows; nil picks this Mac's name.
-    case enroll(socket: String, name: String?)
+    case enroll(socket: String, name: String?, role: Role = .server)
     /// Delete this Mac's key from the keychain.
     case forget
+}
+
+/// Where the daemon behind the socket runs (`--role`, from seam's own
+/// config: `role: client` there). `server`, the default, is this Mac: the
+/// socket's peer is the daemon, and the account the daemon names must be
+/// that peer's. `client` is a client computer, whose relay serves the
+/// socket and forwards to the server: the peer is the relay, held to root's
+/// pin as the daemon is on a server (PeerGuard), and the account the daemon
+/// names is the server's, which this Mac cannot resolve; the commands the
+/// helper shows run in a terminal on the server.
+public enum Role: String, Equatable {
+    case server
+    case client
 }
 
 /// A command line the helper refuses.
@@ -25,8 +38,8 @@ public struct UsageError: Error, Equatable, CustomStringConvertible {
 
 public enum Arguments {
     public static let usage = """
-        usage: SeamApprove approve --socket <path> --request <id> --for <duration>
-               SeamApprove enroll --socket <path> [--name <label>]
+        usage: SeamApprove approve --socket <path> --request <id> --for <duration> [--role server|client]
+               SeamApprove enroll --socket <path> [--name <label>] [--role server|client]
                SeamApprove forget
         The enrollment code is typed into the helper's own dialog, never passed here.
         """
@@ -46,7 +59,7 @@ public enum Arguments {
         let rest = Array(args.dropFirst())
         switch verb {
         case "approve":
-            let f = try flags(rest, allowed: ["socket", "request", "for"])
+            let f = try flags(rest, allowed: ["socket", "request", "for", "role"])
             let socket = try required(f, "socket")
             let request = try required(f, "request")
             let duration = try required(f, "for")
@@ -59,9 +72,9 @@ public enum Arguments {
             guard Validate.isDuration(duration) else {
                 throw UsageError("--for \(Text.quoted(duration)) is not a duration (session, 1h or 4h)")
             }
-            return .approve(socket: socket, request: request, duration: duration)
+            return .approve(socket: socket, request: request, duration: duration, role: try role(f))
         case "enroll":
-            let f = try flags(rest, allowed: ["socket", "name"])
+            let f = try flags(rest, allowed: ["socket", "name", "role"])
             let socket = try required(f, "socket")
             if let problem = Validate.socketPathProblem(socket) {
                 throw UsageError(problem)
@@ -70,7 +83,7 @@ public enum Arguments {
             if let raw = f["name"] {
                 name = try approverName(raw)
             }
-            return .enroll(socket: socket, name: name)
+            return .enroll(socket: socket, name: name, role: try role(f))
         case "forget":
             _ = try flags(rest, allowed: [])
             return .forget
@@ -135,6 +148,17 @@ public enum Arguments {
             i += 1
         }
         return out
+    }
+
+    /// `role` is --role's value, `server` when it is absent.
+    static func role(_ f: [String: String]) throws -> Role {
+        guard let raw = f["role"] else {
+            return .server
+        }
+        guard let r = Role(rawValue: raw) else {
+            throw UsageError("--role \(Text.quoted(raw)) is not server or client")
+        }
+        return r
     }
 
     static func required(_ f: [String: String], _ name: String) throws -> String {

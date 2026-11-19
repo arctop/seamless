@@ -189,8 +189,9 @@ public enum Notices {
     /// The key is enrolled under `name`. `retired` is how many keys it
     /// replaced that this Mac and the daemon have both deleted. `removals`
     /// are the commands that remove the credentials of the keys it replaced,
-    /// which this Mac has deleted and the daemon still lists.
-    public static func enrolled(name: String, removals: [String], retired: Int = 0) -> Notice {
+    /// which this Mac has deleted and the daemon still lists. On a client
+    /// computer (`role`) they run in a terminal on the server.
+    public static func enrolled(name: String, removals: [String], retired: Int = 0, role: Role = .server) -> Notice {
         var body = "This Mac's Touch ID can now approve access to locked projects. The daemon lists it as "
         body += Text.quoted(name, max: 64) + "."
         if retired == 1 {
@@ -201,27 +202,30 @@ public enum Notices {
         guard !removals.isEmpty else {
             return Notice(title: "Touch ID enrolled", body: body, succeeded: true)
         }
+        let terminal = role == .client ? "in your own terminal on the server, not on this Mac" : "in your own terminal"
         if removals.count == 1 {
             body += " The key it replaces is deleted from this Mac, but the daemon still lists that key's credential."
-            body += " To remove it, run this in your own terminal:"
+            body += " To remove it, run this " + terminal + ":"
         } else {
             body += " The keys it replaces are deleted from this Mac, but the daemon still lists their credentials."
-            body += " To remove them, run these in your own terminal:"
+            body += " To remove them, run these " + terminal + ":"
         }
         return Notice(title: "Touch ID enrolled", body: body, setApart: removals, succeeded: true, instructs: true)
     }
 
     /// The key is deleted from this Mac. `credentials` are the approver ids
     /// the daemon still lists for it: with any, the alert says how to remove
-    /// them, and stays open.
+    /// them, and stays open. forget reaches no daemon, so it cannot tell a
+    /// client computer from a server: the alert says the command runs where
+    /// the daemon does.
     public static func keyDeleted(credentials: [String]) -> Notice {
         guard !credentials.isEmpty else {
             return Notice(title: "Key deleted", body: "This Mac's Touch ID approver key is deleted.", succeeded: true)
         }
         let one = credentials.count == 1
         let body = one
-            ? "This Mac's Touch ID approver key is deleted, but the daemon still lists its credential. To remove it, run this as the daemon's account:"
-            : "This Mac's Touch ID approver keys are deleted, but the daemon still lists their credentials. To remove them, run these as the daemon's account:"
+            ? "This Mac's Touch ID approver key is deleted, but the daemon still lists its credential. To remove it, run this as the daemon's account, on the computer the daemon runs on (the server, when this Mac is a client):"
+            : "This Mac's Touch ID approver keys are deleted, but the daemon still lists their credentials. To remove them, run these as the daemon's account, on the computer the daemon runs on (the server, when this Mac is a client):"
         return Notice(title: "Key deleted", body: body, setApart: credentials.map { "seamlessd approvers remove " + $0 },
                       succeeded: true, instructs: true)
     }
@@ -237,12 +241,14 @@ public enum Notices {
         Notice(title: flow.failureTitle, body: Text.sentence(message), succeeded: false)
     }
 
-    /// The helper was started with a command line it does not take.
+    /// The helper was started with a command line it does not take. A seam
+    /// newer than this app may pass a flag it does not know (--role was one),
+    /// so the alert says how to replace it.
     public static func badArguments(_ problem: String) -> Notice {
         let lines = Arguments.usage.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
         return Notice(title: "Couldn't start",
                       body: Text.sentence("Seamless Approve was started with arguments it does not take: " + Text.clean(problem, max: 300))
-                          + " It takes these:",
+                          + " If seam is newer than this app, run seam touchid enroll again and answer y to replace it. It takes these:",
                       setApart: lines, succeeded: false)
     }
 }
@@ -291,13 +297,20 @@ public enum Prompts {
 
     /// `enrollCode` asks for the one-time code that `command` mints for this
     /// Mac's new key, `key` (its fingerprint). `problem` says what was wrong
-    /// with the last code typed.
-    public static func enrollCode(command: String, key: String, problem: String?) -> Prompt {
+    /// with the last code typed. On a client computer (`role`) the command
+    /// runs in a terminal on the server: the daemon, its account and its
+    /// seamlessd are there, not on this Mac.
+    public static func enrollCode(command: String, key: String, problem: String?, role: Role = .server) -> Prompt {
         var body = ""
         if let problem = problem, !problem.isEmpty {
             body += Text.sentence(problem) + "\n\n"
         }
-        body += "Run this command in your own terminal, one your agents cannot read. It asks for your password, then prints a one-time enrollment code for this Mac's new key, \(key). "
+        if role == .client {
+            body += "Run this command in a terminal on the server, not on this Mac: this Mac is a client, and the daemon, its account and its seamlessd are on the server. Use a terminal there your agents cannot read. "
+            body += "It asks for your password on the server, then prints a one-time enrollment code for this Mac's new key, \(key). "
+        } else {
+            body += "Run this command in your own terminal, one your agents cannot read. It asks for your password, then prints a one-time enrollment code for this Mac's new key, \(key). "
+        }
         body += "Check that the key it prints is this one, then type the code below, with or without its dashes. The code works once, for 10 minutes, and only for this key."
         return Prompt(title: "Enroll this Mac's Touch ID with Seamless", body: body, setApart: [command],
                       placeholder: codeShape, accept: "Enroll", cancel: "Cancel")

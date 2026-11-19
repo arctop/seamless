@@ -883,6 +883,18 @@ signs is retired, so another Mac's Touch ID key and a passkey are never
 removed this way. If the earlier key does not sign (its prompt is cancelled),
 the daemon keeps it, and the app's closing alert gives the
 <code>seamlessd approvers remove</code> command for it.</p>
+<p>On a client computer (<code>role: client</code>), <code>server_url</code> names the relay's socket
+and the key enrolls with the server through it. The daemon's account, its
+<code>seamlessd</code> and its config are the server's, so the window's command, and the
+<code>seamlessd approvers remove</code> line for an older key, run in a terminal on the
+server (there, or over SSH), not on the client. <code>seam touchid enroll</code> and the
+app both say so: <code>seam</code> opens the app with <code>--role client</code> (as <code>seam mcp-proxy</code>
+does for an approval from the agent's dialog), and the app labels each command
+as the server's. An app installed before this <code>seam</code> does not take
+<code>--role</code>: its alert says it was started with arguments it does not take, and
+running <code>seam touchid enroll</code> again and answering <code>y</code> replaces it. Neither looks the server's account up on the
+client: the socket's peer is the client's relay, held to the account root
+pinned there (the relay's), as <code>seam approve</code> holds it on a client.</p>
 <p>Once enrolled, accepting an access request's dialog with Touch ID opens the
 app for that request: it reads the request's facts from the daemon itself,
 shows them in the Touch ID prompt, and signs over the request and the

@@ -23,6 +23,13 @@ package main
 // a system account, which keeps out an ordinary login account but not another
 // role account.
 //
+// On a client computer (role: client) the socket is the relay's, and the pin
+// names the relay's account (the relay's root step writes it). The peer is
+// held to it as a daemon is, but the account the daemon names is the
+// server's, which the client cannot resolve or compare: seam approve and seam
+// touchid enroll there skip accountIsPeer, and say that every command for the
+// server's account runs on the server.
+//
 // The first connection is only for the check and is closed. A later connection
 // is a new dial of a path the agent may control, and a symlink flipped between
 // the two would pass the check against the real daemon and then read the

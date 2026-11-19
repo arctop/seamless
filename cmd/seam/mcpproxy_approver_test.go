@@ -20,6 +20,7 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/require"
 
+	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 )
 
@@ -164,6 +165,10 @@ func TestBridge_ApproverAsk(t *testing.T) {
 		{name: "launches the approver",
 			params: `{"request_id":"` + testRequestID + `","duration":"1h"}`,
 			want:   [][]string{openArgv(testRequestID, "1h")}},
+		{name: "on a client computer the helper is told its role",
+			params: `{"request_id":"` + testRequestID + `","duration":"1h"}`,
+			mutate: func(b *bridge, _ *fakeOpen) { b.approver.onClient = true },
+			want:   [][]string{append(openArgv(testRequestID, "1h"), "--role", "client")}},
 		{name: "an unknown field is ignored",
 			params: `{"request_id":"` + testRequestID + `","duration":"session","extra":"x"}`,
 			want:   [][]string{openArgv(testRequestID, "session")}},
@@ -449,4 +454,19 @@ func TestBridge_ApproverEndIsReported(t *testing.T) {
 			require.Equal(t, [][]string{openArgv(testRequestID, "1h")}, open.recorded())
 		})
 	}
+}
+
+// The bridge's approver dials the socket server_url names and, with role:
+// client, says it is a client computer's.
+func TestBridgeApprover_RoleComesFromTheConfig(t *testing.T) {
+	e, _, _ := stubEnv()
+	cfg := config.Defaults()
+	cfg.AdvertisedURL = "unix://" + testSocket
+	h := bridgeApprover(e, cfg)
+	require.Equal(t, testSocket, h.socket)
+	require.False(t, h.onClient, "a server's bridge")
+	cfg.Role = config.RoleClient
+	h = bridgeApprover(e, cfg)
+	require.Equal(t, testSocket, h.socket)
+	require.True(t, h.onClient, "a client computer's bridge")
 }

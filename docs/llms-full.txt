@@ -9120,7 +9120,8 @@ how a Mac re-enrolls, are in the
 The app takes nothing from its command line but the socket and the request. It
 reads the request's facts and challenge from the daemon over the socket, refuses
 a socket served by your own account or by any account but the one the daemon
-names, and shows only the daemon's facts in the Touch ID prompt: the grant first,
+names (on a client computer, any account but the relay's, which root pinned
+there), and shows only the daemon's facts in the Touch ID prompt: the grant first,
 then the first three warnings. The agent's own reason is left out of that prompt
 on purpose. Its key is made in the Mac's Secure Enclave and kept in the data
 protection keychain under an access group only the signed app can claim, so
@@ -9484,7 +9485,11 @@ relay from before program names files nothing: update Seamless on that
 computer.
 
 Passkeys approve from any browser. The Touch ID helper on a client Mac enrolls
-and approves through its relay, and the server verifies its signature.
+and approves through its relay, and the server verifies its signature. Its
+enrollment code still comes from this computer: `seam touchid enroll` on the
+client opens the app, whose window shows the `seamlessd approvers enroll-code
+touchid` command to run in a terminal here, and any `seamlessd approvers remove`
+line it prints is this computer's too.
 `seamlessd approve` stays a server command, as does every terminal approval:
 `seam approve`'s sudo path, a console unlock's code and `seamlessd approvers`
 run on this computer, in a terminal here or over SSH. On a client, `seam
@@ -14227,6 +14232,19 @@ signs is retired, so another Mac's Touch ID key and a passkey are never
 removed this way. If the earlier key does not sign (its prompt is cancelled),
 the daemon keeps it, and the app's closing alert gives the
 `seamlessd approvers remove` command for it.
+
+On a client computer (`role: client`), `server_url` names the relay's socket
+and the key enrolls with the server through it. The daemon's account, its
+`seamlessd` and its config are the server's, so the window's command, and the
+`seamlessd approvers remove` line for an older key, run in a terminal on the
+server (there, or over SSH), not on the client. `seam touchid enroll` and the
+app both say so: `seam` opens the app with `--role client` (as `seam mcp-proxy`
+does for an approval from the agent's dialog), and the app labels each command
+as the server's. An app installed before this `seam` does not take
+`--role`: its alert says it was started with arguments it does not take, and
+running `seam touchid enroll` again and answering `y` replaces it. Neither looks the server's account up on the
+client: the socket's peer is the client's relay, held to the account root
+pinned there (the relay's), as `seam approve` holds it on a client.
 
 Once enrolled, accepting an access request's dialog with Touch ID opens the
 app for that request: it reads the request's facts from the daemon itself,

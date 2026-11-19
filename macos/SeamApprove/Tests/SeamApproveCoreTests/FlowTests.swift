@@ -71,6 +71,26 @@ final class FlowTests: XCTestCase {
 
     /// A daemon from before the agent fact: the program's name stands in,
     /// and what is signed is the same.
+    /// On a client computer the account a request names is the server's:
+    /// it is never looked up here, and the relay's signature-carrying POST
+    /// goes ahead.
+    func testApproveOnAClientComputer() throws {
+        let keys = SoftwareKeyStore()
+        try keys.add(credential: "01APPROVERID000000000000AA")
+        let server = try TestServer(replies: [
+            TestServer.reply(200, accessOne(account: "_serveronly")),
+            TestServer.reply(200, #"{"approved":"6B7","project":"acme","expires_at":"2026-11-06T19:09:00Z"}"#),
+        ])
+        defer { server.stop() }
+        let t = UnixSocketTransport(path: server.path, userAgent: "test", timeoutSeconds: 5, admit: { _ in })
+        let f = Flows(transport: t, keys: keys, ui: FakeUI(), lookupAccount: { name in
+            XCTFail("a client looks up no account the server names: \(name)")
+            return nil
+        }, defaultName: { "Test Mac" }, clock: FlowTests.clock, role: .client)
+        guard case .done = f.approve(id: id, duration: "1h") else { return XCTFail("not approved") }
+        XCTAssertEqual(server.requests.count, 2)
+    }
+
     func testApproveAgainstADaemonWithoutTheAgentFact() throws {
         let keys = SoftwareKeyStore()
         let key = try keys.add(credential: "01APPROVERID000000000000AA")
@@ -342,6 +362,51 @@ final class FlowTests: XCTestCase {
         XCTAssertEqual(server.requests.count, 1)
     }
 
+    /// On a client computer (--role client) the socket is this Mac's relay,
+    /// and the account the daemon names is the server's: it is never looked
+    /// up here, and every command the helper shows is for a terminal on the
+    /// server.
+    func testEnrollOnAClientComputer() throws {
+        let keys = SoftwareKeyStore()
+        try keys.add(credential: "01OLDAPPROVER0000000000000")
+        let ui = FakeUI(codes: ["abcd-efgh-jkmn-pqrs"])
+        let serverList = terminalList.replacingOccurrences(of: #""account":"_seamless""#, with: #""account":"_serveronly""#)
+        let server = try TestServer(replies: [
+            TestServer.reply(200, serverList),
+            TestServer.reply(200, #"{"id":"01NEWAPPROVER0000000000000","name":"Test Mac"}"#),
+        ])
+        defer { server.stop() }
+        let t = UnixSocketTransport(path: server.path, userAgent: "test", timeoutSeconds: 5, admit: { _ in })
+        let f = Flows(transport: t, keys: keys, ui: ui, lookupAccount: { name in
+            XCTFail("a client looks up no account the server names: \(name)")
+            return nil
+        }, defaultName: { "Test Mac" }, clock: FlowTests.clock, role: .client)
+
+        let out = f.enroll(name: nil)
+        guard case .done(let notice) = out else { return XCTFail("\(out)") }
+        XCTAssertTrue(notice.body.hasSuffix(" To remove it, run this in your own terminal on the server, not on this Mac:"), notice.body)
+        XCTAssertEqual(notice.setApart, ["/usr/bin/sudo -k -u _serveronly /usr/bin/env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers remove 01OLDAPPROVER0000000000000"])
+        XCTAssertEqual(ui.asked.count, 1)
+        XCTAssertEqual(ui.asked[0].role, .client, "the code dialog says the command runs on the server")
+        XCTAssertTrue(ui.asked[0].command.hasPrefix("/usr/bin/sudo -k -u _serveronly /usr/bin/env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers enroll-code touchid --key "), ui.asked[0].command)
+        XCTAssertEqual(keys.reasons, [Reason.enrollment(account: "_serveronly", replacing: true, role: .client)])
+        XCTAssertEqual(server.requests.count, 2)
+    }
+
+    /// The same daemon on a server is refused: there the account it names
+    /// must be the socket's peer.
+    func testEnrollOnAServerStillChecksTheAccount() throws {
+        let ui = FakeUI(codes: ["abcd-efgh-jkmn-pqrs"])
+        let server = try TestServer(replies: [TestServer.reply(200, terminalList), TestServer.reply(200, "{}")])
+        let t = UnixSocketTransport(path: server.path, userAgent: "test", timeoutSeconds: 5, admit: { _ in })
+        let out = Flows(transport: t, keys: SoftwareKeyStore(), ui: ui, lookupAccount: { _ in nil }, defaultName: { "Test Mac" },
+                        clock: FlowTests.clock, role: .server).enroll(name: nil)
+        server.stop()
+        guard case .failed(let notice) = out else { return XCTFail("\(out)") }
+        XCTAssertEqual(notice.body, "The daemon names \u{201C}_seamless\u{201D} as its account, and this Mac has no such account.")
+        XCTAssertTrue(ui.asked.isEmpty)
+    }
+
     func testEnrollRefusedKeepsNoNewKey() throws {
         let keys = SoftwareKeyStore()
         let old = try keys.add(credential: "01OLDAPPROVER0000000000000")
@@ -385,10 +450,10 @@ final class FlowTests: XCTestCase {
         let out = f.forget()
         XCTAssertEqual(out, .done(Notice(
             title: "Key deleted",
-            body: "This Mac's Touch ID approver key is deleted, but the daemon still lists its credential. To remove it, run this as the daemon's account:",
+            body: "This Mac's Touch ID approver key is deleted, but the daemon still lists its credential. To remove it, run this as the daemon's account, on the computer the daemon runs on (the server, when this Mac is a client):",
             setApart: ["seamlessd approvers remove 01APPROVERID000000000000AA"], succeeded: true, instructs: true)))
         XCTAssertFalse(try XCTUnwrap(out.notice).autoCloses, "the alert carries an instruction and stays open")
-        XCTAssertEqual(out.message, "This Mac's Touch ID approver key is deleted, but the daemon still lists its credential. To remove it, run this as the daemon's account:\n  seamlessd approvers remove 01APPROVERID000000000000AA")
+        XCTAssertEqual(out.message, "This Mac's Touch ID approver key is deleted, but the daemon still lists its credential. To remove it, run this as the daemon's account, on the computer the daemon runs on (the server, when this Mac is a client):\n  seamlessd approvers remove 01APPROVERID000000000000AA")
         XCTAssertTrue(try keys.keys().isEmpty)
         XCTAssertEqual(ui.forgetAsked, [["01APPROVERID000000000000AA"], ["01APPROVERID000000000000AA"]])
         XCTAssertEqual(f.forget(), .done(Notice(title: "No key to delete",

@@ -474,7 +474,8 @@ how a Mac re-enrolls, are in the
 The app takes nothing from its command line but the socket and the request. It
 reads the request's facts and challenge from the daemon over the socket, refuses
 a socket served by your own account or by any account but the one the daemon
-names, and shows only the daemon's facts in the Touch ID prompt: the grant first,
+names (on a client computer, any account but the relay's, which root pinned
+there), and shows only the daemon's facts in the Touch ID prompt: the grant first,
 then the first three warnings. The agent's own reason is left out of that prompt
 on purpose. Its key is made in the Mac's Secure Enclave and kept in the data
 protection keychain under an access group only the signed app can claim, so
@@ -838,7 +839,11 @@ relay from before program names files nothing: update Seamless on that
 computer.
 
 Passkeys approve from any browser. The Touch ID helper on a client Mac enrolls
-and approves through its relay, and the server verifies its signature.
+and approves through its relay, and the server verifies its signature. Its
+enrollment code still comes from this computer: `seam touchid enroll` on the
+client opens the app, whose window shows the `seamlessd approvers enroll-code
+touchid` command to run in a terminal here, and any `seamlessd approvers remove`
+line it prints is this computer's too.
 `seamlessd approve` stays a server command, as does every terminal approval:
 `seam approve`'s sudo path, a console unlock's code and `seamlessd approvers`
 run on this computer, in a terminal here or over SSH. On a client, `seam

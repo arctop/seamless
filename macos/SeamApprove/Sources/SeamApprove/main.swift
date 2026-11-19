@@ -4,8 +4,8 @@ import SystemConfiguration
 
 // Seamless Approve: one approval, one enrollment or one forget per launch.
 //
-//   approve --socket <path> --request <id> --for <duration>
-//   enroll  --socket <path> [--name <label>]
+//   approve --socket <path> --request <id> --for <duration> [--role server|client]
+//   enroll  --socket <path> [--name <label>] [--role server|client]
 //   forget
 //
 // Exit status: 0 done, 1 failed, 2 cancelled by the owner. Started through
@@ -58,22 +58,22 @@ enum Runner {
             return .failed(Notices.badArguments("\(error)"))
         }
         switch command {
-        case let .approve(socket, request, duration):
-            return flows(socket: socket, ui: ui).approve(id: request, duration: duration)
-        case let .enroll(socket, name):
-            return flows(socket: socket, ui: ui).enroll(name: name)
+        case let .approve(socket, request, duration, role):
+            return flows(socket: socket, ui: ui, role: role).approve(id: request, duration: duration)
+        case let .enroll(socket, name, role):
+            return flows(socket: socket, ui: ui, role: role).enroll(name: name)
         case .forget:
-            return flows(socket: nil, ui: ui).forget()
+            return flows(socket: nil, ui: ui, role: .server).forget()
         }
     }
 
-    static func flows(socket: String?, ui: AppUI) -> Flows {
+    static func flows(socket: String?, ui: AppUI, role: Role) -> Flows {
         let peer = PeerGuard(ownUID: getuid())
         let transport: Transport = socket.map {
             UnixSocketTransport(path: $0, userAgent: "SeamlessApprove/" + version, admit: peer.admit)
         } ?? NoTransport()
         return Flows(transport: transport, keys: SecureEnclaveKeyStore(), ui: ui, lookupAccount: uidOfAccount,
-                     defaultName: { SCDynamicStoreCopyComputerName(nil, nil) as String? ?? "Touch ID" })
+                     defaultName: { SCDynamicStoreCopyComputerName(nil, nil) as String? ?? "Touch ID" }, role: role)
     }
 }
 

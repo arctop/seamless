@@ -26,6 +26,14 @@ package main
 //     retires this Mac's earlier key with it. seam then confirms on the
 //     daemon that a new Touch ID key exists and names the one it replaced.
 //
+// On a client computer (role: client) the socket is this computer's relay,
+// which forwards to the server, and the daemon's account, its seamlessd and
+// its config are the server's: the command that mints the code, and the one
+// that removes a key, run in a terminal on the server, and both seam and the
+// app say so (the app through --role client). Nothing here resolves the
+// server's account on this computer: the peer the kernel names is the relay,
+// held to root's pin as seam approve on a client holds it (enrollCodeApprover).
+//
 // Nothing here is the proof of anything. The enrollment code is (the daemon
 // checks it), and every later approval is the key's signature (the daemon's
 // approve core checks it). The terminal check is a courtesy, as for seam
@@ -106,7 +114,13 @@ Mac holds, or a passkey, is never retired.
 It needs macOS, a terminal on stdin and stdout (an agent cannot use it, nor
 can ! in an agent's session, which runs it in the agent's shell), and
 server_url naming the daemon's peer_auth socket (unix:///path), which is how
-the app reaches the daemon.`)
+the app reaches the daemon.
+
+On a client computer (role: client), server_url names the relay's socket,
+and the key enrolls with the server through it. The command that mints the
+code is the server's, and so is the one that removes an older key: run them
+in a terminal on the server (there, or over SSH), where the daemon's account
+and seamlessd are. The app's window and this command say so.`)
 
 type touchIDEnrollOpts struct {
 	app  *presentString
@@ -121,10 +135,16 @@ func bindTouchIDEnroll(fs *flag.FlagSet) *touchIDEnrollOpts {
 }
 
 // approverEnrollArgs is the helper's command line for an enrollment: the
-// socket to enroll over and the name to list the key under. The code is not
-// among them: the owner types it into the helper's own dialog.
-func approverEnrollArgs(socket, name string) []string {
-	return []string{"enroll", "--socket", socket, "--name", name}
+// socket to enroll over, the name to list the key under, and on a client
+// computer --role client, so the helper looks up no account the server names
+// and says its commands run on the server. The code is not among them: the
+// owner types it into the helper's own dialog.
+func approverEnrollArgs(socket, name string, onClient bool) []string {
+	argv := []string{"enroll", "--socket", socket, "--name", name}
+	if onClient {
+		argv = append(argv, "--role", "client")
+	}
+	return argv
 }
 
 func runTouchIDEnroll(ctx context.Context, e *env, o *touchIDEnrollOpts, _ []string) error {
@@ -189,10 +209,17 @@ func runTouchIDEnroll(ctx context.Context, e *env, o *touchIDEnrollOpts, _ []str
 	// here waits on a key the owner might miss after switching terminals. The
 	// command comes from the window, which alone knows the new key's
 	// fingerprint.
+	onClient := cfg.IsClient()
 	fmt.Fprintln(e.stdout, "\nOpening Seamless Approve. Its window shows this Mac's new key and the command that mints a one-time enrollment code for it.")
-	fmt.Fprintln(e.stdout, "Run that command in another terminal on this Mac, one your agents cannot read. It asks for your password or Touch ID and prints the code, "+
-		"which works once, for 10 minutes, and only for that key. Type the code into the window, then touch the sensor. This terminal waits until Seamless Approve closes.")
-	argv := append([]string{"open", "-W", "-n", "-a", target, "--args"}, approverEnrollArgs(sock, name)...)
+	if onClient {
+		fmt.Fprintln(e.stdout, "Run that command in a terminal on the server, not on this Mac: this computer is a client (role: client), and the daemon's account and seamlessd are on the server. "+
+			"Use a terminal there your agents cannot read, at the server or over SSH. It asks for your password there and prints the code, "+
+			"which works once, for 10 minutes, and only for that key. Type the code into the window here, then touch the sensor. This terminal waits until Seamless Approve closes.")
+	} else {
+		fmt.Fprintln(e.stdout, "Run that command in another terminal on this Mac, one your agents cannot read. It asks for your password or Touch ID and prints the code, "+
+			"which works once, for 10 minutes, and only for that key. Type the code into the window, then touch the sensor. This terminal waits until Seamless Approve closes.")
+	}
+	argv := append([]string{"open", "-W", "-n", "-a", target, "--args"}, approverEnrollArgs(sock, name, onClient)...)
 	code, err := e.run(ctx, argv, nil, io.Discard, e.stderr)
 	if err != nil {
 		return fmt.Errorf("open Seamless Approve: %w", err)
@@ -206,22 +233,40 @@ func runTouchIDEnroll(ctx context.Context, e *env, o *touchIDEnrollOpts, _ []str
 	}
 	added := newKeys(before, after)
 	if len(added) == 0 {
-		return errors.New("no new Touch ID key is enrolled: Seamless Approve was cancelled, or the daemon refused the code " +
-			"(it may be mistyped, expired or already used) -- mint a fresh code and run seam touchid enroll again")
+		msg := "no new Touch ID key is enrolled: Seamless Approve was cancelled, or the daemon refused the code " +
+			"(it may be mistyped, expired or already used) -- mint a fresh code and run seam touchid enroll again"
+		if onClient {
+			// An app installed before this seam, kept at the y/N, does not
+			// take --role and said so in its own alert.
+			msg += ". If Seamless Approve said it was started with arguments it does not take, the installed app is older " +
+				"than this seam: run seam touchid enroll again and answer y to replace it"
+		}
+		return errors.New(msg)
 	}
 	for _, k := range added {
 		fmt.Fprintf(e.stdout, "Enrolled the Touch ID key %q (%s). An agent's access dialog can now be approved with it.\n",
 			printable(k.Name), printable(k.ID))
 	}
-	reportReplaced(e.stdout, t, before, after, added)
+	reportReplacedOn(e.stdout, t, onClient, before, after, added)
 	return nil
 }
 
 // reportReplaced says what became of the Touch ID keys enrolled before: the
 // ones the daemon no longer lists (the app's enrollment retired them, each
 // having signed as this Mac's earlier key), and the ones still listed under a
-// new key's name, which only their dates now tell apart.
+// new key's name, which only their dates now tell apart, on a server: the
+// remove command runs on this computer.
 func reportReplaced(w io.Writer, t terminalApprover, before, after, added []approverKey) {
+	reportReplacedOn(w, t, false, before, after, added)
+}
+
+// reportReplacedOn is reportReplaced on a server or, onClient, on a client
+// computer, where the command that removes a key is the server's.
+func reportReplacedOn(w io.Writer, t terminalApprover, onClient bool, before, after, added []approverKey) {
+	where := ""
+	if onClient {
+		where = " in a terminal on the server (not on this computer, a client)"
+	}
 	for _, k := range newKeys(after, before) {
 		fmt.Fprintf(w, "Retired the Touch ID key %q (%s, added %s): it was this Mac's earlier key, and the daemon no longer lists it.\n",
 			printable(k.Name), printable(k.ID), k.AddedAt.Local().Format("2006-01-02 15:04"))
@@ -234,15 +279,16 @@ func reportReplaced(w io.Writer, t terminalApprover, before, after, added []appr
 		fmt.Fprintf(w, "The daemon still lists an older Touch ID key named %q (%s, added %s). ",
 			printable(k.Name), printable(k.ID), k.AddedAt.Local().Format("2006-01-02 15:04"))
 		if !approverRequestID.MatchString(k.ID) { // an approver id is a ULID, as a request id is
-			fmt.Fprintln(w, "If it was this Mac's, remove it with `seamlessd approvers remove`, run as the daemon's account; if it is another Mac's, keep it.")
+			fmt.Fprintf(w, "If it was this Mac's, remove it with `seamlessd approvers remove`, run as the daemon's account%s; if it is another Mac's, keep it.\n", where)
 			continue
 		}
-		fmt.Fprintf(w, "If it was this Mac's, remove it as the daemon's account:\n\n  %s\n\nIf it is another Mac's, keep it.\n",
-			strings.Join(shellWords(removeApproverArgv(t, k.ID)), " "))
+		fmt.Fprintf(w, "If it was this Mac's, remove it as the daemon's account%s:\n\n  %s\n\nIf it is another Mac's, keep it.\n",
+			where, strings.Join(shellWords(removeApproverArgv(t, k.ID)), " "))
 	}
 }
 
-// removeApproverArgv removes one credential as the daemon's account.
+// removeApproverArgv removes one credential as the daemon's account, on the
+// computer the daemon runs on: the server, from a client computer.
 func removeApproverArgv(t terminalApprover, id string) []string {
 	return []string{shellcmd.Sudo, "-k", "-u", t.Account, shellcmd.Env, "SEAMLESS_CONFIG=" + t.Config, t.Seamlessd, "approvers", "remove", id}
 }
@@ -274,6 +320,15 @@ func validKeyName(name string) error {
 // paths the approver commands run with, held to the shapes seam approve
 // holds them to before they become a command line. The daemon is verified
 // first, as seam approve verifies it: they become that command line either way.
+//
+// On a server the account named must be the uid the kernel saw answer
+// (accountIsPeer). On a client computer (role: client) it is not looked up:
+// the peer is this computer's relay, which verifyDaemon held to root's pin
+// (the relay's root step pins the relay's account as the daemon's,
+// cmd/seamlessd/relay_install.go), and the account named is the server's, so
+// a local account of the same name -- setup's default _seamless on both --
+// would match by coincidence and a server with another name would be refused.
+// seam approve on a client skips the same check (runApprove's onClient).
 func enrollCodeApprover(ctx context.Context, e *env, cfg config.Config) (terminalApprover, error) {
 	daemon, err := verifyDaemon(ctx, e, cfg)
 	if err != nil {
@@ -296,6 +351,9 @@ func enrollCodeApprover(ctx context.Context, e *env, cfg config.Config) (termina
 		return terminalApprover{}, fmt.Errorf("the daemon named %q as its seamlessd, which is not an absolute path", t.Seamlessd)
 	case !absPath(t.Config):
 		return terminalApprover{}, fmt.Errorf("the daemon named %q as its config, which is not an absolute path", t.Config)
+	}
+	if cfg.IsClient() {
+		return *t, nil
 	}
 	if err := daemon.accountIsPeer(e, t.Account); err != nil {
 		return terminalApprover{}, err
