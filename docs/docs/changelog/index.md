@@ -10,6 +10,23 @@ bumps) filtered out. Each heading links the release's downloads and checksums.
 Install with one command ([quickstart](https://thereisnospoon.org/docs/quickstart/)), or update an existing
 install in place with `seamlessd update`.
 
+## v0.10.4 {#v0-10-4}
+
+Released 2026-11-19 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.10.4)
+
+### Features
+
+- feat(shellcmd): one table for the commands printed or run for root and the daemon's account
+- feat(relay): the owner's own terminal through a relay makes the owner's decisions, and a code-only relay is approved in place
+- feat(repo-map): map-repo --host maps a clone on another computer, so a relay's restricted account can be placed
+
+### Fixes
+
+- fix(serve): listen on a paired IPv6 address that appears after start, so another process cannot take it while serve runs
+- fix(touchid): on a client, the enroll and approve paths say their daemon commands run on the server, and no longer rely on matching account names
+- fix(commands): every command root or the daemon's account runs names sudo and env by path, and seam approve on a client denies through the relay
+- fix(serve): Linux binds the paired IPv6 addresses with IP_FREEBIND, so a tentative one is held before another process can take it
+
 ## v0.10.3 {#v0-10-3}
 
 Released 2026-11-18 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.10.3)
