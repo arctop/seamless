@@ -15,6 +15,24 @@ bumps) filtered out. Each heading links the release's downloads and checksums.
 Install with one command ([quickstart](/quickstart/)), or update an existing
 install in place with `seamlessd update`.
 
+## v0.10.3 {#v0-10-3}
+
+Released 2026-11-18 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.10.3)
+
+### Features
+
+- feat(relay): a renewed server certificate means re-pairing; the refusal says how, and the server warns 14 days ahead
+- feat(relay): without peer_auth the server serves a relay's owner uid alone, recorded when it pairs
+- feat(peer_auth): a relay's restricted accounts take exclude and only, as peer_auth.restricted entries do
+
+### Fixes
+
+- fix(locks): an agent bound to no session is refused a guarded ref, told from the owner by its environment
+- fix(relay): the re-pair command names --data-dir only for another data directory, on Windows too
+- fix(console): after an upgrade, the new service worker imports the new browserkey.js, and the page waits for it
+- fix(console): turning update checks or automatic updates off is the owner's own decision; approvers approve drops --yes
+- fix(relay): a forwarded call's stream no longer breaks when the answer starts before the transport's last read of the request body
+
 ## v0.10.2 {#v0-10-2}
 
 Released 2026-11-17 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.10.2)
