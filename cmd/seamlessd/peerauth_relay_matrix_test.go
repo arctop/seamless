@@ -230,10 +230,11 @@ func TestPeerAuthRelayMatrix(t *testing.T) {
 		require.Equal(t, http.StatusForbidden, d.initStatus(t, d.httpClient(deskID), c.relay2Headers(relay2Named)))
 	})
 
-	t.Run("a relay paired with a code alone is refused until it pairs again", func(t *testing.T) {
+	t.Run("a relay paired with a code alone is refused until a passkey approves it in place", func(t *testing.T) {
 		status, body := d.do(t, d.httpClient(oldID), http.MethodGet, "/console/?format=json", nil, relayvCallerA.relayvHeaders())
 		require.Equal(t, http.StatusForbidden, status, body)
-		require.Contains(t, body, "pair it again")
+		// Owner decision R-D6: the remedy is the approval in place, not a pairing.
+		require.Contains(t, body, "approve it with a passkey on the server's Devices page, where it waits for you")
 		status, _ = d.do(t, d.httpClient(oldID), http.MethodGet, "/console/?format=json", nil, nil)
 		require.Equal(t, http.StatusForbidden, status, "with or without what it forwards")
 	})

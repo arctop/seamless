@@ -189,7 +189,7 @@ Its transport rows are the ones to read:
 | `device pairing` | How a computer pairs here, and how many are paired or waiting. No TLS is a **warn**: a relay cannot pair, and a pairing over plain http from another computer is refused; with a plain http `server_url` to another host no computer can pair, and no code is minted. An address of this computer's loopback (`server_url` unset on a wildcard bind derives `http://127.0.0.1:8081`) is a **warn** too: the one-liners carry it, so another computer cannot use them. A `server_url` that names a user is a **warn**: no code is minted and no one-liner printed until it is taken out. |
 | `peer_auth devices` | Under peer_auth only: a **warn** for each key device paired with a one-time code alone, before peer_auth, which is still you over TCP though no passkey approved it: revoke it and pair it again, so a passkey approves it. |
 | `relay owners` | Without peer_auth only: an **info** listing each relay with the uid its pairing recorded as yours, the one uid served through it, and a **warn** for each relay whose pairing recorded none (paired before, or by a relay of an earlier release), every caller of which is you: re-pair it to bind the owner's uid ([why](#who-a-relay-serves-without-peer-auth)). |
-| `peer_auth relays` | Under peer_auth only: each relay `peer_auth.relays` maps, and whether it is paired and approved with a passkey. A **warn** when the uid its pairing recorded is not the mapping's `owner_uid`: the mapping judges, but one of the two is wrong. |
+| `peer_auth relays` | Under peer_auth only: each relay `peer_auth.relays` maps, and whether it is paired and approved with a passkey. A relay its one-time code alone paired is a **warn** until you approve it in place on the [Devices page](#devices), where it waits. A **warn** when the uid its pairing recorded is not the mapping's `owner_uid`: the mapping judges, but one of the two is wrong. |
 | `relay renewal` | From 14 days before the TLS certificate's expiry, and past it, a **warn** naming every relay paired here: each pins this exact certificate, so after the renewal each must pair again, and the row prints the command ([why](#renewal-means-re-pairing)). Nothing while no relay is paired. |
 
 Every row is in [the doctor reference](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_doctor).
@@ -476,7 +476,11 @@ neither exists.
   one you do not recognize. Approving needs a signed-in browser on the
   [passkey origin](https://thereisnospoon.org/docs/guides/peer-auth/#the-passkey-origin) and a passkey
   [enrolled](https://thereisnospoon.org/docs/guides/peer-auth/#enroll-an-approver) there; the page says which
-  is missing. Without peer_auth nothing waits: the code is the approval.
+  is missing. Without peer_auth nothing waits: the code is the approval. A
+  relay paired that way, once peer_auth is on and `peer_auth.relays` maps it,
+  waits here too: its requests are refused until **Approve with a passkey**
+  approves it in place, the same device and certificate, so it need not pair
+  again. A revoked or expired relay is not offered: it pairs again.
 - **Paired**: each relay with its key's fingerprint and each key device with the
   start of its key, when it paired and whether your passkey or its one-time
   code approved it, and when it was last seen. A relay also shows the uid its
@@ -605,6 +609,19 @@ shows (`seamlessd console-open --unlock`), and `seamlessd approvers`. Each prove
 itself by becoming the daemon's account, which exists only there, so a relay
 never vouches that you said yes. A terminal on the Server counts wherever you
 sit: SSH to it.
+
+Your other decisions are not approvals, and under peer_auth a terminal of your
+own on a Client makes them through a relay the Server maps: promoting or
+discarding a held write (`seam promote`, `seam discard`), a pairing code, a
+deny, a revoke, and the console's other owner routes. The Server takes such a
+request for your own hands only when the relay named every process of its
+chain, none of them is an agent, the chain is whole, and your uid there is the
+one both the mapping and the relay's pairing name
+([the rule](https://thereisnospoon.org/docs/guides/peer-auth/#your-own-decisions-through-a-relay)). For those
+decisions the Server trusts root on the Client to report the process chain
+truthfully. Each one records an `access.relay_decision` event naming the relay
+and the chain. A key client, and a relay to a Server without peer_auth, make
+none of them.
 
 ## Locked projects and agents on other computers {#locked-projects-and-agents-on-other-computers}
 

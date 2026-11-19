@@ -634,6 +634,7 @@ const (
 	EventDevicePending EventKind = "access.device_pending" // a pairing waits for the owner's passkey, peer_auth only (item_id: the device; payload: kind, name)
 	EventDevicePaired  EventKind = "access.device_paired"  // a device was paired (item_id: the device; payload: kind, name, proof -- code or passkey -- and credential, the passkey)
 	EventDeviceRevoked EventKind = "access.device_revoked" // a device was revoked, or a waiting pairing denied (item_id: the device; payload: kind, name, action -- revoke or deny -- by, requests)
+	EventRelayDecision EventKind = "access.relay_decision" // an owner's decision made through a relay by the owner's own hands there (item_id: the relay's device; payload: name, uid, route, programs)
 
 	// Background update check (internal/update). Payload values are parsed
 	// X.Y.Z versions and fixed install-kind words, never release-API text.

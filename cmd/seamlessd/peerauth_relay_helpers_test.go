@@ -280,8 +280,13 @@ func newRelayvDaemon(t *testing.T, tweaks ...func(*config.PeerAuth)) *relayvDaem
 	t.Cleanup(func() { _ = views.Close() })
 	base, err := views.For(nil)
 	require.NoError(t, err)
+	// serve's pairing (newPairing): the passkey approval, and the relays
+	// peer_auth.relays maps for the approval in place.
+	deviceApprovals, err := approval.NewDeviceApprovals(svc)
+	require.NoError(t, err)
 	pairing := devices.New(devices.Config{DB: db, Events: rec, PeerAuth: true, LocalHost: relayvHost,
-		Server: devices.ServerFacts{URL: "https://127.0.0.1", TLS: true}, Logger: logger})
+		Server: devices.ServerFacts{URL: "https://127.0.0.1", TLS: true}, Logger: logger,
+		Approver: deviceApprovals, RelayMapped: relayMappedIn(cfg.PeerAuth)})
 	consoleSrv, err := console.New(console.Config{
 		DB: base, WriteDB: db, Files: mgr, Gardener: garden, Events: rec.ReadingFrom(base), Screening: screen,
 		Retrieve: ret, APIKey: relayvKey, DataDir: dir, Approvals: svc, Views: views, Devices: pairing, Logger: logger,

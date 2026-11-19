@@ -50,10 +50,10 @@ nothing, and their rows say so.
 | Begin a terminal unlock | `POST /console/unlock/{project}/terminal` | **Approve from a terminal**: the passkey begin's gates, without needing a passkey. Records a waiting unlock bound to this browser and returns a pairing code with the `seamlessd console-open --unlock` command that approves it, run as the daemon's account within ten minutes. The code only names that unlock, so it is not a secret. Opens nothing until the command runs. Capped as the passkey begin is, apart from it: at most 4 wait for one project, and 32 in all. |
 | Ask for access | `POST /console/access/request` | The agent's ask, not your decision: `seam access request`, run from the agent's own shell, files an [access request](/guides/peer-auth/#requests) for a locked project or, with [access requests](/guides/peer-auth/#read-grants-and-the-advisory-tier) on, what the agent's conversation and a confidential or sealed project no lock covers call for: a grant, or a move into the project. With `write=true` it asks for a read-and-write grant or a move, a locked project's included, whose approval opens the lock too. It writes a waiting request, with the agent's reason of at most 200 characters, and opens nothing. An agent that already holds the access is answered with it. |
 | Approve an access request | `POST /console/access/{id}/approve` | Your decision: writes the agent's lease on a locked project, or a grant, for `duration=` (until the session ends, 1 hour or 4 hours), and only while the request's facts still match `digest=`, the digest of the facts you were shown. A grant is read-only unless `access=read-write` on a request that offers the choice. A move request is approved for good: it ends the conversation's session and opens its continuation in the project, and `duration=` bounds only a locked project's lock. Under peer_auth it takes a proof: a passkey assertion from the request's page, or a Touch ID signature from Seamless Approve (`proof=touchid`), accepted on the peer_auth socket only and never for a move. In the advisory tier - access requests without peer_auth - a decision with no passkey is the bearer key's, which is what `seam approve` sends. A paired device's approval with no passkey or Touch ID proof is refused, peer_auth on or off: the bearer key's decision is never a device's. |
-| Deny an access request | `POST /console/access/{id}/deny` | Closes a waiting request with no lease, grant or move; the project stays closed to that agent, and a move's agent stays where it works. Refused over the peer_auth socket and from a paired device: deny on the console, or with `seam approve` in your own terminal on the server. |
-| Revoke an agent's lease | `POST /console/access/leases/{id}/revoke` | **Revoke** under Agent leases on `/console/access`: ends that lease before its expiry and records an `access.revoked` event. Refused over the peer_auth socket and from a paired device. |
-| Revoke a read grant | `POST /console/access/grants/{id}/revoke` | **Revoke** under Read grants: ends a live grant, read-only or read and write, before its expiry. Its holder stays write-confined, since a revoke does not unread what it read. Refused over the peer_auth socket and from a paired device. |
-| Lock a console unlock again | `POST /console/access/unlocks/{id}/end` | **Lock again** on `/console/access`, or **Lock it again** on the unlock page: ends any browser's live console unlock, by id. Refused over the peer_auth socket and from a paired device. |
+| Deny an access request | `POST /console/access/{id}/deny` | Closes a waiting request with no lease, grant or move; the project stays closed to that agent, and a move's agent stays where it works. Refused over the peer_auth socket and from a paired device, but for [your own hands through a relay](/guides/peer-auth/#your-own-decisions-through-a-relay): deny on the console, or with `seam approve` in your own terminal on the server. |
+| Revoke an agent's lease | `POST /console/access/leases/{id}/revoke` | **Revoke** under Agent leases on `/console/access`: ends that lease before its expiry and records an `access.revoked` event. Refused over the peer_auth socket and from a paired device, but for [your own hands through a relay](/guides/peer-auth/#your-own-decisions-through-a-relay). |
+| Revoke a read grant | `POST /console/access/grants/{id}/revoke` | **Revoke** under Read grants: ends a live grant, read-only or read and write, before its expiry. Its holder stays write-confined, since a revoke does not unread what it read. Refused over the peer_auth socket and from a paired device, but for [your own hands through a relay](/guides/peer-auth/#your-own-decisions-through-a-relay). |
+| Lock a console unlock again | `POST /console/access/unlocks/{id}/end` | **Lock again** on `/console/access`, or **Lock it again** on the unlock page: ends any browser's live console unlock, by id. Refused over the peer_auth socket and from a paired device, but for [your own hands through a relay](/guides/peer-auth/#your-own-decisions-through-a-relay). |
 | Begin a passkey enrollment | `POST /console/approvers/passkey/begin` | Only under peer_auth: `name=` the passkey (1 to 64 characters on one line). Returns the WebAuthn creation options, excluding every passkey already [enrolled](/guides/peer-auth/#enroll-an-approver). Holds the enrollment in memory and stores nothing. Refused over the peer_auth socket and from a paired device, since a passkey is created in a browser. A begin never waits for room: at most 16 enrollments wait at once for their browser, and 16 more whose passkey exists and waits for its code, so a begin past 16 displaces the oldest still waiting for its browser, and never one waiting for its code. A displaced enrollment's next step says it expired. |
 | Create the passkey | `POST /console/approvers/passkey/finish` | Verifies the browser's new passkey and returns its key's fingerprint with the `seamlessd approvers enroll-code` command that mints its code. Still stores nothing: the passkey waits for that code. Past 16 waiting for their code, it displaces the oldest of them. Refused from a paired device. |
 | Enroll the passkey | `POST /console/approvers/passkey/confirm` | `code=` the one-time code that command minted for this key. Stores the passkey and uses up the code in one transaction. A code that is mistyped, expired, used or minted for another key leaves the passkey waiting, so it can be typed again. Refused from a paired device. |
@@ -64,8 +64,8 @@ nothing, and their rows say so.
 | Add a passkey, waiting | `POST /console/passkeys/add/finish` | Verifies the device's new passkey and stores it as waiting, with a short code, for 10 minutes. It adds nothing: `seamlessd approvers approve --code`, on the server, adds exactly that passkey. It never waits for room: at most 4 wait at once from one address (an IPv6 address counts by its /64, and every loopback address is one), and 32 from every address but loopback, whose 4 are its own. One past its address's 4 displaces that address's oldest, and one past the 32 the oldest of the address holding the most; a displaced passkey's code names nothing, and its page says to add it again. So someone looping on the page from one computer crowds out only their own, and no number of other hosts reaches a passkey added on the server itself. Behind a proxy every request comes from the proxy's address. |
 | Begin a terminal sign-in | `POST /console/signin/terminal/begin` | Only with `console.sign_in: passkey`, and only from a browser that proves its key: **Show a code** on the login page. Sets a fresh random sign-in cookie bound to that key and stores it waiting, with a short code, for 10 minutes, with the address the request came from and its User-Agent (printable ASCII with each run of spaces as one, at most 256 characters), which the answer also carries for the page to show beside the code. It signs nothing in: `seamlessd console-open --sign-in --code`, on the server (as the daemon's account under peer_auth, at a terminal), shows those and when it began, asks, and on a yes signs in exactly the browser that showed that code, for 7 days. It never waits for room: at most 4 wait at once from one address (an IPv6 address counts by its /64, and every loopback address is one), and 32 from every address but loopback, whose 4 are its own. A begin past its address's 4 displaces that address's oldest code, and one past the 32 the oldest of the address holding the most; a displaced code approves nothing, and its page says to show a new one. So someone looping on **Show a code** from one computer crowds out only their own, and no number of other hosts reaches a code a browser on the server itself showed. Behind a proxy every request comes from the proxy's address. A 404 while the key signs browsers in. |
 | Get a pairing code | `POST /console/devices/code` | Only on a server that serves other computers (TLS, a bind beyond loopback, or a `server_url` naming another host). Mints a one-time pairing code, valid for 10 minutes and for one computer, and shows it once, in this answer, with the client one-liners, which carry the server certificate's fingerprint when it serves TLS; only its hash is stored. Without peer_auth the code is the approval; under peer_auth the pairing it starts waits for a passkey. At most 16 codes wait at once. Refused (409, `pairing needs TLS here`) where the server's address is plain http to another host. Refused (409, `server_url names a user`) where it names a user. Refused from an agent's process on the peer_auth socket, and from a paired device, peer_auth on or off. |
-| Begin a device approval | `POST /console/devices/{id}/approve/begin` | Only under peer_auth, from a signed-in browser, for a pairing that waits. Returns the WebAuthn challenge, bound to that device's id, kind, name, fingerprint and key, and a ticket. Writes nothing. |
-| Approve a device | `POST /console/devices/{id}/approve/finish` | Verifies the passkey assertion for that ticket over the device as it stands, records the passkey's use, and pairs the device: a relay's certificate is accepted from its next request, and a key device collects its own key, once, on its next status. |
+| Begin a device approval | `POST /console/devices/{id}/approve/begin` | Only under peer_auth, from a signed-in browser, for a pairing that waits, or for a relay that waits for its approval in place: active, paired with its one-time code alone, and mapped in `peer_auth.relays`. Returns the WebAuthn challenge, bound to that device's id, kind, name, fingerprint and key (and, in place, to its status and that purpose), and a ticket. Writes nothing. |
+| Approve a device | `POST /console/devices/{id}/approve/finish` | Verifies the passkey assertion for that ticket over the device as it stands, records the passkey's use, and pairs the device: a relay's certificate is accepted from its next request, and a key device collects its own key, once, on its next status. A relay waiting in place is approved where it stands, the same device id and certificate, in one compare-and-set that refuses a relay revoked meanwhile; its requests are judged from the next one on, and an `access.device_paired` event marked `in_place` records it. |
 | Revoke a device, or deny a pairing | `POST /console/devices/{id}/revoke` | Revokes a paired device: its credential is refused from its next request, and the requests it is making end. A pairing that waits is denied instead. Refused from an agent's process on the peer_auth socket, and from a paired device, peer_auth on or off. |
 | Save briefing settings | `POST /console/settings/briefing` | Writes the briefing knobs as a runtime **override row** in the DB. It never writes the config file. |
 | Reset briefing settings | `POST /console/settings/briefing/reset` | Clears the override row, reverting to the file/env configuration. |
@@ -96,17 +96,27 @@ nothing, and their rows say so.
 | Delete a project family | `POST /console/settings/families/delete` | Removes the whole family. Its projects lose the sibling-findings channel; nothing else about them changes. |
 | Sign in / sign out | `POST /console/login`, `POST /console/logout` | Sets or clears the console cookie. Touches no data. |
 
-**Your decisions never come through a paired device.** On a server that serves
-other computers, a request that comes with a paired device's credential - a
-relay's certificate or a device key - is refused (403) on every write that is
-yours to make: a pairing code and a device's revocation, Held's release, discard,
-session marks, lockdown and corpus marks, the optional features, turning update
-checks or automatic updates off (and a reset that would turn checks off), every
-Backups route, bringing a project's fence down, a deny, a revoke, Lock again, a
-passkey's enrollment, and an approval with no passkey or Touch ID proof. That
-holds with peer_auth on or off. A paired computer carries its agents, never your
-hands: make these decisions in the console of the server you sign in to, or in a
-terminal on the server itself. The reads stay open to a device, and so do the writes an agent
+**Your decisions come through a paired device only as your own hands.** On a
+server that serves other computers, a request that comes with a paired device's
+credential - a relay's certificate or a device key - is refused (403) on every
+write that is yours to make: a pairing code and a device's revocation, Held's
+release, discard, session marks, lockdown and corpus marks, the optional
+features, turning update checks or automatic updates off (and a reset that would
+turn checks off), every Backups route, bringing a project's fence down, a deny,
+a revoke, Lock again, a passkey's enrollment, and an approval with no passkey or
+Touch ID proof. That holds with peer_auth on or off, with one exception: under
+peer_auth, a request through a relay you map whose process chain the server
+judges your own hands there - every process named, none an agent, the chain
+whole, and your uid there the one both the mapping and the relay's pairing name
+([the rule](/guides/peer-auth/#your-own-decisions-through-a-relay)) - makes them,
+and each one it makes records an `access.relay_decision` event (item: the relay's
+device; payload: its name, your uid there, the route and the chain's programs by
+name). Its approval with no passkey or Touch ID proof still goes to the approve
+core, which refuses it: a chain is no proof. A key device, a relay to a server
+without peer_auth, and any other chain carry their agents, never your hands, and
+the refusal says why: make these decisions in the console of the server you sign
+in to, in a terminal on the server itself, or in a terminal of your own behind a
+relay you map. The reads stay open to a device, and so do the writes an agent
 may make: `seam` on a client computer reads the console's JSON through its relay,
 and the Touch ID helper there approves through it with its own signature.
 
@@ -1084,7 +1094,12 @@ exist. The computers paired with this server, and how to pair another
   a code, its fingerprint and until when it waits, with **Approve with a
   passkey** and **Deny**. Approving needs a signed-in browser on the
   [passkey origin](/guides/peer-auth/#the-passkey-origin) and an enrolled
-  passkey; the page says which is missing.
+  passkey; the page says which is missing. A relay paired with its one-time
+  code alone, while peer_auth was off, waits here too once `peer_auth.relays`
+  maps it: it is refused until **Approve with a passkey** approves it in place,
+  the same device and certificate, so it need not pair again, and **Revoke**
+  ends it. The JSON lists it under `in_place`, not `paired`. A revoked or
+  expired relay is not offered.
 - **Paired** - each relay and key device: its key's fingerprint or the start
   of its key, when it paired, whether your passkey or its one-time code
   approved it, when it was last seen, and **Revoke**. A relay shows the uid its
@@ -1325,8 +1340,8 @@ The note at the top says who decided the switches: **Default for this build**,
 **Set in the config file or environment**, **Set in this console**, or
 **Automatic updates set in this console**, with **Reset to the config file**
 beside a console choice. Turning checks off from here always works for you; an
-agent's process on the peer_auth socket and a paired device may turn checks and
-automatic updates on, never off. Turning them on does not work when the config
+agent's process on the peer_auth socket, and a paired device but for your own
+hands through a relay, may turn checks and automatic updates on, never off. Turning them on does not work when the config
 file or `SEAMLESS_UPDATE_CHECK` says `false`: that is final, the switch shows
 locked, and the form refuses - `false` promises no update traffic at all. **Check now** asks GitHub once, right away (not more than
 once a minute).

@@ -39,6 +39,10 @@ type DevicesView interface {
 	Approvals() devices.Approver
 	BeginApproval(ctx context.Context, id string) (devices.Ceremony, error)
 	FinishApproval(ctx context.Context, id, ticket string, response []byte) (store.Device, error)
+	// InPlace reports whether the device waits for the owner's approval in
+	// place: under peer_auth, an active relay its one-time code alone paired
+	// that peer_auth.relays maps (owner decision R-D6).
+	InPlace(d store.Device) bool
 }
 
 // devicesScreen is the Devices page's registry entry. Like the lock screens
@@ -72,6 +76,9 @@ type deviceRow struct {
 	// Now is its status as of the request (a pending one past its deadline
 	// reads as expired).
 	Now string `json:"status_now"`
+	// InPlace is an active relay its one-time code alone paired that waits
+	// for the owner's approval in place (DevicesView.InPlace).
+	InPlace bool `json:"in_place,omitempty"`
 }
 
 // KindLabel names the device's kind for a person.
@@ -123,8 +130,13 @@ type devicesData struct {
 	// otherwise.
 	Renewal *devices.Renewal `json:"renewal,omitempty"`
 	Pending []deviceRow      `json:"pending"`
-	Paired  []deviceRow      `json:"paired"`
-	Ended   []deviceRow      `json:"ended"`
+	// InPlace are the relays waiting for the owner's approval in place: paired
+	// with their one-time code alone, mapped under peer_auth, refused until a
+	// passkey approves them where they stand (owner decision R-D6). They are
+	// listed here and not under Paired.
+	InPlace []deviceRow `json:"in_place,omitempty"`
+	Paired  []deviceRow `json:"paired"`
+	Ended   []deviceRow `json:"ended"`
 	// Code is a code just minted, for a browser that posted the form without
 	// the page's script; nil otherwise. It is never in a URL.
 	Code *devices.Code `json:"code,omitempty"`
@@ -167,6 +179,11 @@ func (s *Service) devicesFor(r *http.Request, code *devices.Code) (devicesData, 
 		case store.DevicePending:
 			d.Pending = append(d.Pending, row)
 		case store.DeviceActive:
+			if s.cfg.Devices.InPlace(dev) {
+				row.InPlace = true
+				d.InPlace = append(d.InPlace, row)
+				continue
+			}
 			d.Paired = append(d.Paired, row)
 		default:
 			d.Ended = append(d.Ended, row)

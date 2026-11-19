@@ -128,6 +128,9 @@ func TestSetupClient_RelayUnattended(t *testing.T) {
 				"it never rides in a command line",
 				"peer_auth.relays: {here: {owner_uid: 501}}",
 				"seamlessd approve runs on the Server alone",
+				// Owner decision R-D3: the owner's own terminal there makes
+				// the owner's other decisions through a mapped relay.
+				"a terminal of your own here with no agent above it: the Server trusts root here to name each",
 				"once the relay serves: seam doctor",
 			} {
 				require.Contains(t, text, want)

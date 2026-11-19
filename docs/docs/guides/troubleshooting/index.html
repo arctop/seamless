@@ -680,7 +680,7 @@ call or <code>seam</code> command carries the reason:</p>
 <tr>
 <td><code>forbidden: relay &lt;name&gt; was paired with a one-time code alone, before peer_auth</code></td>
 <td>the Server maps it in <code>peer_auth.relays</code>, and no passkey ever approved it</td>
-<td>revoke it, pair it again, and approve it with your passkey</td>
+<td>approve it with your passkey under <strong>Waiting for your approval</strong> on the Server's Devices page: it keeps its pairing, the same device and certificate, and need not pair again (<a href="../../guides/peer-auth/#agents-on-another-computer-relays">how</a>)</td>
 </tr>
 <tr>
 <td><code>forbidden: uid &lt;n&gt; on relay &lt;name&gt; is neither the owner nor a restricted account peer_auth.relays maps there</code></td>

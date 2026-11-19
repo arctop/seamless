@@ -45,7 +45,7 @@
 {{if .PeerAuth}}
 <section aria-labelledby="devices-pending-title">
   <h2 id="devices-pending-title">Waiting for your approval</h2>
-  {{if .Pending}}
+  {{if or .Pending .InPlace}}
   {{if not .Browser}}
   <p class="held-sub">Approving a device needs a passkey: open this page in the browser you sign in to the console with.</p>
   {{else if not .PasskeysOn}}
@@ -68,6 +68,22 @@
       {{end}}
       <form method="post" action="/console/devices/{{.ID}}/revoke">
         <button class="btn" type="submit">Deny</button>
+      </form>
+    </li>
+    {{end}}
+    {{range .InPlace}}
+    <li class="access-item" data-device="{{.ID}}" data-device-in-place="{{.ID}}">
+      <span class="badge">{{.KindLabel}}</span>
+      <strong>{{.Name}}</strong>
+      <small>fingerprint <code>{{.Fingerprint}}</code> &middot; paired {{with .EnrolledAt}}{{clockDate .}}{{end}} by its one-time code alone{{if .OwnerUID}} &middot; it named uid {{.OwnerUID}} there as yours{{end}}</small>
+      <p class="held-sub">Paired while this server ran without peer_auth, and mapped in <code>peer_auth.relays</code> now: its requests are refused until you approve it here with your passkey. It keeps its pairing, the same device and certificate, so it need not pair again.</p>
+      {{if and $.Data.Browser $.Data.PasskeysOn $.Data.HasPasskey $.Data.OnOrigin}}
+      <form class="access-form" data-device-approve="{{.ID}}" data-in-place>
+        <button class="btn primary" type="submit">{{icon "key-round"}} Approve with a passkey</button>
+      </form>
+      {{end}}
+      <form method="post" action="/console/devices/{{.ID}}/revoke">
+        <button class="btn" type="submit">Revoke</button>
       </form>
     </li>
     {{end}}
@@ -178,7 +194,7 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony or a code on screen must not b
         }).then(function (cred) {
           return pk.post(base + '/finish', { ticket: ticket, response: JSON.stringify(pk.toJSON(cred)) });
         }).then(function (done) {
-          if (said) said.textContent = 'Paired ' + done.name + '.';
+          if (said) said.textContent = (f.hasAttribute('data-in-place') ? 'Approved ' : 'Paired ') + done.name + '.';
           return refresh();
         }).catch(function (err) {
           if (said) said.textContent = pk.refusal(err);

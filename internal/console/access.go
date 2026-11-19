@@ -850,12 +850,13 @@ func formFlag(r *http.Request, name string) (bool, error) {
 }
 
 // accessDeny closes a request without a lease. An agent's socket connection
-// may not deny: the owner's browser or the TCP key only.
+// may not deny: the owner's browser or the TCP key only, or through a relay
+// the owner's own hands there (relayOwnerHands), which has neither.
 func (s *Service) accessDeny(w http.ResponseWriter, r *http.Request) {
 	if s.accessOff(w, r) {
 		return
 	}
-	if access.PeerAuthenticated(r.Context()) {
+	if access.PeerAuthenticated(r.Context()) && !relayOwnerHands(r) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "deny from the console, or with seam approve in the owner's terminal"})
 		return
 	}

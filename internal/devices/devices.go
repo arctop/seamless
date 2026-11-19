@@ -414,6 +414,14 @@ const (
 	// (item_id: the device; payload: kind, name, action -- revoke or deny --
 	// and by).
 	EventRevoked core.EventKind = "access.device_revoked"
+	// EventRelayDecision records one of the owner's own decisions made
+	// through a relay, from a process chain the server judged the owner's
+	// own hands on the relay's computer (owner decision R-D3;
+	// access.RelayHands): item_id is the relay's device; payload: name (the
+	// relay's enrolled name), uid (the owner's there), route (the console
+	// route's pattern) and programs (the chain's programs by base name, the
+	// peer first, never a path).
+	EventRelayDecision core.EventKind = "access.relay_decision"
 )
 
 // The proofs a pairing records.

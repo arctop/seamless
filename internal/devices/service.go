@@ -77,9 +77,15 @@ type Ceremony struct {
 // Approver is the owner's passkey approval of a pending pairing
 // (*approval.DeviceApprovals under peer_auth). It verifies the assertion and
 // makes the device active (store.ApproveDevice), and records the pairing.
+// The in-place pair is the same ceremony for an active relay its one-time
+// code alone paired (owner decision R-D6): it approves the relay where it
+// stands, the same device and certificate (store.ApproveDeviceInPlace). The
+// Service calls it only for a relay InPlace offers.
 type Approver interface {
 	BeginDeviceApproval(ctx context.Context, id string) (Ceremony, error)
 	FinishDeviceApproval(ctx context.Context, id, ticket string, response []byte) (store.Device, error)
+	BeginInPlaceApproval(ctx context.Context, id string) (Ceremony, error)
+	FinishInPlaceApproval(ctx context.Context, id, ticket string, response []byte) (store.Device, error)
 	// PasskeysOn reports whether the relying party is configured, and
 	// Origins where a passkey works.
 	PasskeysOn() bool
@@ -95,6 +101,10 @@ type Config struct {
 	PeerAuth bool
 	// Approver is the passkey approval; nil while PeerAuth is off.
 	Approver Approver
+	// RelayMapped reports, under PeerAuth, whether peer_auth.relays maps the
+	// relay enrolled as name: only such a relay its one-time code alone
+	// paired is offered the approval in place (InPlace). Nil maps none.
+	RelayMapped func(name string) bool
 	// LocalHost is this server's own host name (config.Hostname): no device
 	// may pair under it.
 	LocalHost string
@@ -377,20 +387,56 @@ func (s *Service) Revoke(ctx context.Context, id, by string) (store.Device, erro
 	return d, nil
 }
 
-// BeginApproval starts the owner's passkey approval of the pending device id.
-func (s *Service) BeginApproval(ctx context.Context, id string) (Ceremony, error) {
+// InPlace reports whether d waits for the owner's approval in place (owner
+// decision R-D6): under peer_auth, with a passkey approval to give, an active
+// relay its one-time code alone paired (store.Device.CodeOnlyRelay), never
+// revoked, that peer_auth.relays maps. Until it is approved the relay judge
+// refuses it exactly as before; a revoked or expired relay is not offered,
+// and pairs again.
+func (s *Service) InPlace(d store.Device) bool {
+	return s.Approvals() != nil && s.cfg.RelayMapped != nil && d.CodeOnlyRelay() && s.cfg.RelayMapped(d.Name)
+}
+
+// approvalFor is the ceremony the device id waits for: the approval in place
+// for a relay InPlace offers (inPlace true), the pairing approval for any
+// other, which the Approver refuses unless the device is pending.
+func (s *Service) approvalFor(ctx context.Context, op, id string) (Approver, bool, error) {
 	a := s.Approvals()
 	if a == nil {
-		return Ceremony{}, fmt.Errorf("devices.BeginApproval: %w", ErrNoApprover)
+		return nil, false, fmt.Errorf("%s: %w", op, ErrNoApprover)
+	}
+	d, err := store.DeviceByID(ctx, s.cfg.DB, id)
+	if errors.Is(err, store.ErrDeviceNotFound) {
+		return a, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("%s: %w", op, err)
+	}
+	return a, s.InPlace(d), nil
+}
+
+// BeginApproval starts the owner's passkey approval of the device id: a
+// pending pairing's, or a relay's in place (InPlace).
+func (s *Service) BeginApproval(ctx context.Context, id string) (Ceremony, error) {
+	a, inPlace, err := s.approvalFor(ctx, "devices.BeginApproval", id)
+	switch {
+	case err != nil:
+		return Ceremony{}, err
+	case inPlace:
+		return a.BeginInPlaceApproval(ctx, id)
 	}
 	return a.BeginDeviceApproval(ctx, id)
 }
 
-// FinishApproval verifies the owner's assertion and pairs the device.
+// FinishApproval verifies the owner's assertion and pairs the device, or
+// approves the relay in place (InPlace).
 func (s *Service) FinishApproval(ctx context.Context, id, ticket string, response []byte) (store.Device, error) {
-	a := s.Approvals()
-	if a == nil {
-		return store.Device{}, fmt.Errorf("devices.FinishApproval: %w", ErrNoApprover)
+	a, inPlace, err := s.approvalFor(ctx, "devices.FinishApproval", id)
+	switch {
+	case err != nil:
+		return store.Device{}, err
+	case inPlace:
+		return a.FinishInPlaceApproval(ctx, id, ticket, response)
 	}
 	return a.FinishDeviceApproval(ctx, id, ticket, response)
 }

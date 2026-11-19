@@ -33,7 +33,9 @@ import (
 // decisions, with peer_auth on or off. The shared bearer key and the owner's
 // browser cookie make them as before.
 
-// con2DeviceRefusal is what every refusal of a device's request says.
+// con2DeviceRefusal is what every refusal of a key device's request says; a
+// relay's says relayNotHandsWords instead, and why (owner decision R-D3: a
+// relay's caller may be the owner's own hands, judged by the transport).
 const con2DeviceRefusal = "never the owner's hands"
 
 // con2Route is one console route: its method and a path to request.
@@ -97,13 +99,14 @@ func con2RequireDeviceRefused(t *testing.T, rr *httptest.ResponseRecorder, cred 
 	require.Len(t, answer, 1, what)
 	msg := answer["error"]
 	require.Contains(t, msg, "the owner's decision", what)
-	require.Contains(t, msg, con2DeviceRefusal, what)
 	require.Contains(t, msg, cred.Name, what)
 	require.Contains(t, msg, "the console of the server you sign in to", what)
 	require.Contains(t, msg, "a terminal on the server itself", what)
 	if cred.Kind == devices.KindRelay {
 		require.Contains(t, msg, "through the relay", what)
+		require.Contains(t, msg, relayNotHandsWords, what)
 	} else {
+		require.Contains(t, msg, con2DeviceRefusal, what)
 		require.Contains(t, msg, "with the device key", what)
 	}
 }
@@ -115,6 +118,7 @@ func con2RequireNotRefused(t *testing.T, rr *httptest.ResponseRecorder, what str
 	t.Helper()
 	body := rr.Body.String()
 	require.NotContains(t, body, con2DeviceRefusal, "%s: %d %s", what, rr.Code, body)
+	require.NotContains(t, body, relayNotHandsWords, "%s: %d %s", what, rr.Code, body)
 	require.NotContains(t, body, "process an agent started", "%s: %d %s", what, rr.Code, body)
 }
 

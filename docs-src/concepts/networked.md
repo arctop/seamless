@@ -99,7 +99,11 @@ that account, labeled with the computer's name, and any other uid is refused
 ([how](/guides/peer-auth/#agents-on-another-computer-relays)). Root, or the
 relay's account, on the Client can report any uid and chain, so every lease is
 keyed on the relay: a forged report reaches only what that relay's agents were
-approved. Without peer_auth on the Server, a relay is served for one account on
+approved. For your own decisions that are not approvals - a held write, a deny,
+a revoke - the Server also trusts root there to report the chain truthfully: a
+terminal of yours with no agent above it makes them through a mapped relay
+([how](/guides/peer-auth/#your-own-decisions-through-a-relay)), and an approval
+still needs your passkey or Touch ID. Without peer_auth on the Server, a relay is served for one account on
 its computer: yours. Its pairing records your uid there (`seamlessd relay pair
 --owner-uid`, which setup's root step fills in), and the Server refuses a
 request the relay forwards for any other uid, naming the remedy: turn peer_auth

@@ -275,7 +275,7 @@ func New(cfg Config) (*Service, error) {
 func (s *Service) Register(mux *http.ServeMux) {
 	handle := func(pattern string, h http.HandlerFunc) { mux.HandleFunc(pattern, secured(h)) }
 	post := func(pattern string, maxBytes int64, h http.HandlerFunc) {
-		handle(pattern, s.auth(s.parseForm(maxBytes, followable(h))))
+		handle(pattern, s.auth(s.parseForm(maxBytes, s.relayDecisions(followable(h)))))
 	}
 	// gated composes into the same helpers, so an optional feature's routes
 	// inherit security headers and auth exactly like every other route and can
@@ -370,8 +370,10 @@ func (s *Service) Register(mux *http.ServeMux) {
 	handle("GET /console/access/{id}", s.auth(s.accessOne))
 	post("POST /console/access/request", formBodySmall, s.accessRequest)
 	// A paired device carries agents, never the owner's hands (unlock.go,
-	// refusedFromDevice): it approves only with the owner's own proof, and
-	// never denies. The revokes and Lock again refuse it in ownerDecision.
+	// refusedFromDevice), but for a relay's caller judged the owner's own
+	// hands there (relayOwnerHands, R-D3): it approves only with the owner's
+	// own proof, and never denies. The revokes and Lock again refuse it in
+	// ownerDecision.
 	post("POST /console/access/{id}/approve", formBodyPasskey, deviceNeedsProof(s.accessApprove))
 	post("POST /console/access/{id}/deny", formBodySmall, notThroughDevice(s.accessDeny))
 	post("POST /console/access/leases/{id}/revoke", formBodySmall, s.leaseRevoke)
@@ -388,8 +390,8 @@ func (s *Service) Register(mux *http.ServeMux) {
 	// Device pairing (devices.go): the Devices page exists only on a server
 	// that serves other computers (Config.Devices); every route is a 404
 	// otherwise. A code and a revocation are the owner's own decisions, never a
-	// paired device's (ownerHands); an approval is a passkey ceremony in a
-	// browser.
+	// paired device's but for the owner's own hands through a relay
+	// (ownerHands); an approval is a passkey ceremony in a browser.
 	handle("GET /console/devices", s.auth(s.devicesPage))
 	post("POST /console/devices/code", formBodySmall, ownerHands(s.devicesCode))
 	post("POST /console/devices/{id}/approve/begin", formBodySmall, s.devicesApproveBegin)

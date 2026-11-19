@@ -427,16 +427,32 @@ func (s *Service) unlockTerminalStatus(w http.ResponseWriter, r *http.Request) {
 
 // ownerDecision refuses an agent's socket connection, and a paired device
 // (refusedFromDevice): revoking a lease and locking an unlock again are the
-// owner's, from the browser or the TCP key.
+// owner's, from the browser or the TCP key -- or, through a relay, from the
+// owner's own hands there (relayOwnerHands), which has neither.
 func ownerDecision(w http.ResponseWriter, r *http.Request) bool {
 	if refusedFromDevice(w, r) {
 		return false
 	}
-	if access.PeerAuthenticated(r.Context()) {
+	if access.PeerAuthenticated(r.Context()) && !relayOwnerHands(r) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "revoke from the console, or with the TCP key in the owner's terminal"})
 		return false
 	}
 	return true
+}
+
+// relayOwnerHands reports whether r came through a paired relay from a
+// process chain the transport judged the owner's own hands on the relay's
+// computer (access.OwnerHandsThrough, owner decision R-D3). Only such a
+// request passes the socket's refusal of a deny or a revoke: the owner on a
+// client computer has no TCP key and no terminal on the server. This
+// machine's own socket keeps its refusal.
+func relayOwnerHands(r *http.Request) bool {
+	cred, ok := devices.CredentialOf(r.Context())
+	if !ok || cred.Kind != devices.KindRelay {
+		return false
+	}
+	_, ok = access.OwnerHandsThrough(r.Context(), cred.DeviceID)
+	return ok
 }
 
 // ownerHands refuses, for next, a request a paired device made or one from a
@@ -483,27 +499,51 @@ func refusedFromAgent(w http.ResponseWriter, r *http.Request) bool {
 // refusedFromDevice answers a request that came with a paired device's own
 // credential -- a relay's client certificate, or a key device's key, which the
 // daemon's edge matched (devices.CredentialOf) -- and reports that it did. A
-// paired computer carries its agents, never the owner's hands: without
-// peer_auth a relay forwards whichever account on its computer reaches its
-// socket, and even under it the server cannot tell the owner's own terminal
-// there from an agent's. So the owner's decisions are made in the server's
-// console, from a browser the owner signed in, or in a terminal on the server.
-// It holds with peer_auth on or off; the shared bearer key and the console
-// cookie are not a device's and pass as before.
+// key device carries its agents, never the owner's hands: the server reads no
+// process behind it. A relay's request is the owner's hands only where the
+// transport judged its caller so (owner decision R-D3, relayOwnerHands):
+// under peer_auth, for a relay peer_auth.relays maps, a chain the relay named
+// in full, whole, with no agent in it, from the owner's uid there. Such a
+// request passes, and the route that let it through records the decision
+// (noteRelayDecision). Every other relay request is refused, with why:
+// without peer_auth a relay forwards whichever account on its computer reaches
+// its socket, and no chain is judged. The owner's decisions are then made in
+// the server's console, from a browser the owner signed in, or in a terminal
+// on the server. The shared bearer key and the console cookie are not a
+// device's and pass as before.
 func refusedFromDevice(w http.ResponseWriter, r *http.Request) bool {
 	cred, ok := devices.CredentialOf(r.Context())
 	if !ok {
 		return false
 	}
-	via := "with the device key paired as " + cred.Name
-	if cred.Kind == devices.KindRelay {
-		via = "through the relay paired as " + cred.Name
+	if cred.Kind != devices.KindRelay {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "this is the owner's decision, and this request came " +
+			"with the device key paired as " + cred.Name + ": a paired computer carries its agents, never the owner's hands. " +
+			"Make it in the console of the server you sign in to, or in a terminal on the server itself"})
+		return true
 	}
-	writeJSON(w, http.StatusForbidden, map[string]string{"error": "this is the owner's decision, and this request came " + via +
-		": a paired computer carries its agents, never the owner's hands. Make it in the console of the server you sign in to, " +
-		"or in a terminal on the server itself"})
+	if relayOwnerHands(r) {
+		noteRelayDecision(r)
+		return false
+	}
+	why := "this server judged no process chain for it, as it judges one only under peer_auth, for a relay peer_auth.relays maps"
+	where := "Make it in the console of the server you sign in to, or in a terminal on the server itself"
+	if hands, judged := access.RelayHandsOf(r.Context()); judged {
+		why = hands.Why
+		if why == "" || hands.Relay != cred.DeviceID {
+			why = "this server could not tie its judgment of the caller to this relay's request"
+		}
+		where = "Make it in the console of the server you sign in to, in a terminal on the server itself, or in a " +
+			"terminal of your own on that computer, with no agent above it"
+	}
+	writeJSON(w, http.StatusForbidden, map[string]string{"error": "this is the owner's decision, and this request came " +
+		"through the relay paired as " + cred.Name + ", whose caller " + relayNotHandsWords + ": " + why + ". " + where})
 	return true
 }
+
+// relayNotHandsWords say, in every refusal of a relay's request at the
+// owner's decision, that the caller was not taken for the owner's own hands.
+const relayNotHandsWords = "this server does not take for the owner's own hands"
 
 // notThroughDevice refuses, for next, a request a paired device made
 // (refusedFromDevice), and nothing else: for an owner decision whose handler
@@ -525,11 +565,21 @@ func notThroughDevice(next http.HandlerFunc) http.HandlerFunc {
 // verifies whatever carried it, so the helper on a client computer approves
 // through its relay. Without one, the decision would rest on the transport,
 // as the bearer key's does in the advisory tier, and a device's credential is
-// not the owner's hands. It reads the parsed form (post's parseForm ran).
+// not the owner's hands. A relay's request the transport judged the owner's
+// own hands passes to the approve core, which under peer_auth -- the only
+// tier with a judgment -- still takes no approval without a proof: the hands
+// are no proof. It reads the parsed form (post's parseForm ran).
 func deviceNeedsProof(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.PostForm.Get("response") == "" && !r.PostForm.Has("proof") && refusedFromDevice(w, r) {
-			return
+		switch {
+		case r.PostForm.Get("response") == "" && !r.PostForm.Has("proof"):
+			if refusedFromDevice(w, r) {
+				return
+			}
+		case relayOwnerHands(r):
+			// The proof decides; the owner's hands made the decision, and
+			// the route records it as theirs (relayDecisions).
+			noteRelayDecision(r)
 		}
 		next(w, r)
 	}

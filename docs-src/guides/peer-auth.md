@@ -534,7 +534,9 @@ That is why doctor checks two things about every origin:
   one, `[::1]` beside `127.0.0.1`. Doctor's `bind` row lists them, and
   `bind.addresses` dials each to confirm this daemon answers there. Under
   peer_auth `serve` refuses to start while another process holds any of them,
-  and the service starts it again once the address is free. It never
+  and the service starts it again once the address is free. On Linux it holds
+  an address still tentative (duplicate address detection running) from the
+  start, so no other process can take it first. It never
   pairs a private address with a global IPv6 one, which would widen a LAN bind
   to the internet. An address the pairing misses, such as one on another
   interface, still needs the wildcard (`addr: "0.0.0.0:8081"` holds every
@@ -784,7 +786,8 @@ peer_auth:
 ```
 
 `seamlessd doctor`, run as the daemon's account, checks each mapping: a name no
-paired relay holds, or a relay no passkey approved, is a **warn**, and a
+paired relay holds, or a relay no passkey approved (approve it on the Devices
+page, below), is a **warn**, and a
 mapping that holds names the restricted accounts there. A relay's pairing also
 records the uid it named as yours there (`seamlessd relay pair --owner-uid`,
 which setup fills in); the mapping's `owner_uid` is what judges, and doctor
@@ -800,8 +803,13 @@ agent's tree on that computer and to nothing else: not a sibling agent there,
 not the same pid here, not another relay.
 
 Any other uid gets 403, and a request forwarding no caller gets 400. A relay
-paired with the code alone, while peer_auth was off, is refused until it pairs
-again and you approve it with a passkey. A relay you do not map is refused,
+paired with the code alone, while peer_auth was off (or before you mapped it),
+is refused until you approve it with a passkey: once it is mapped, the Devices
+page lists it under **Waiting for your approval**, and **Approve with a
+passkey** approves it where it stands, the same device and certificate, so it
+need not pair again. The approval is the pairing approval's own ceremony, in a
+browser you signed in, and records an `access.device_paired` event marked
+`in_place`; a revoked or expired relay is not offered, and pairs again. A relay you do not map is refused,
 whatever uid it forwards: every account on that computer can reach its socket,
 and none is known to be you until you map it. A key client is you over TCP, as
 the bearer key is, and never holds a lease, and a Windows computer is always
@@ -832,17 +840,55 @@ computer.
 
 Passkeys approve from any browser. The Touch ID helper on a client Mac enrolls
 and approves through its relay, and the server verifies its signature.
-`seamlessd approve` stays a server command, as does every terminal path:
-`seam approve`, a console unlock's code and `seamlessd approvers` run on this
-computer, in a terminal here or over SSH. Your own decisions (a pairing code,
-revoking, denying, approving without Touch ID or a passkey, held writes,
-features, turning updates off, and backups) are refused through a relay or a
-device key, with or without peer_auth: make them in the console of the server you sign in to, or in
-a terminal on the server.
+`seamlessd approve` stays a server command, as does every terminal approval:
+`seam approve`'s sudo path, a console unlock's code and `seamlessd approvers`
+run on this computer, in a terminal here or over SSH. On a client, `seam
+approve --passkey` and Touch ID approve.
 
 Revoking a relay ends its leases, read grants and waiting requests at once. A
 console lock turned back on, and a restore, end a relay's leases as they end
 this machine's.
+
+#### Your own decisions through a relay {#your-own-decisions-through-a-relay}
+
+Your other decisions - a pairing code, denying a request, revoking a lease, a
+read grant or a device, Lock again, promoting or discarding a held write
+(`seam promote`, `seam discard`), features, turning updates off, and backups -
+go through a relay you map only from your own hands there: a terminal of yours
+with no agent above it. The server takes a relay's request for your hands only
+when all of these hold:
+
+- peer_auth is on, the relay is mapped in `peer_auth.relays`, and a passkey
+  approved its pairing;
+- it forwards your uid there, the mapping's `owner_uid`, and the relay's
+  pairing recorded the same uid (`seamlessd relay pair --owner-uid`, which
+  setup fills in);
+- the relay named the program of every process of the chain (a relay of this
+  release: wire version 2);
+- no process of the chain is an agent, by the judgment this socket makes:
+  Claude Code, Codex, the Claude app's helper, or node, bun or deno, which an
+  agent may run as;
+- the chain is whole, as far as the server can tell: shorter than 32
+  processes, the most a relay forwards, and ending at a terminal, a terminal
+  multiplexer, an editor or application that hosts terminals, a login or
+  remote-login process, or the system's process manager. A chain that ends at
+  a shell, at `su`, `sudo` or `doas`, or at any other program may have been
+  cut short above it, or detached from the session that started it.
+
+Anything else is refused (403), and the refusal says which rule failed: a
+relay of an earlier release, a process it did not name, an agent in the chain,
+a chain that may be cut, a pairing that recorded no uid or another. A
+restricted account, a key device and a relay to a server without peer_auth
+never make these decisions. Each decision your hands make through a relay
+records an `access.relay_decision` event naming the relay, its device and the
+chain's programs by name.
+
+This is a trust choice: for your own decisions the
+server trusts root on the client computer to report the process chain
+truthfully, as it trusts its own kernel for this socket. No chain is a proof:
+approving an access request still needs a passkey or Touch ID. And as on this
+socket, the rule stops an agent's ordinary tool calls, not one that detaches a
+process from its tree.
 
 ## Read grants and the advisory tier
 
@@ -1310,8 +1356,8 @@ until you turn them off. The layout above is all it needs:
 itself", or names what is missing. A daemon set up with root-owned binaries
 needs `sudo chown -R _seamless:_seamless /opt/seamless/bin`, on Linux the
 linger, and a restart. Turn automatic updates off with the toggle there (your
-decision alone: an agent's process on the socket and a paired device may turn
-them on, never off), or for good with `update.auto: false` in its config,
+decision alone: an agent's process on the socket, and a paired device but for
+your own hands through a relay, may turn them on, never off), or for good with `update.auto: false` in its config,
 `/opt/seamless/etc/seamless.yaml`, which the console cannot override.
 
 The [usual rules](/updating/#automatic-updates) hold: the soak,
@@ -1507,7 +1553,12 @@ and console unlock the backup held.
   need one on the daemon's own computer.
 - **A relay is trusted for its computer.** Root or the relay's account there
   can report any uid and chain. Every lease is keyed on the relay, so a forged
-  report reaches only what that relay's agents were approved.
+  report reaches only what that relay's agents were approved. For your own
+  decisions the server also trusts it to report the chain truthfully: a chain
+  root there forged as your terminal's makes them as you would, a deny, a
+  revoke or a held write's promotion among them, though never an approval,
+  which needs your passkey or Touch ID
+  ([your decisions through a relay](#your-own-decisions-through-a-relay)).
 - **A relay's socket reaches every local account by default (mode `0666`).**
   The daemon refuses a relay you have not mapped. Through a mapped one, only
   your uid there and the restricted accounts you listed get anything. Setup's
@@ -1572,7 +1623,9 @@ and console unlock the backup held.
 - **Some decisions refuse a process an agent started**: bringing a fence down,
   releasing or discarding a held write, clearing a session's mark, changing
   which features are on, and turning update checks or automatic updates off
-  (turning them on stays open). Make them in your own terminal or the console. This stops
+  (turning them on stays open). Make them in your own terminal or the console;
+  through a relay, from a terminal of yours there that the server judges your
+  own hands ([how](#your-own-decisions-through-a-relay)). This stops
   an agent's ordinary tool calls, not one that detaches a process from its tree or
   reads the key in your `console.yaml`, until you
   [retire the key](/reference/cli-seamlessd/#seamlessd_setup_retire).

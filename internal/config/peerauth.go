@@ -102,7 +102,8 @@ type PeerAuth struct {
 	// uid there is the owner, holding the leases that process chain holds; any
 	// other uid is refused, but those the entry's restricted map names
 	// (PeerRelay.Restricted). A relay a passkey never approved (paired while
-	// peer_auth was off, with the code alone) is refused until it pairs again.
+	// peer_auth was off, with the code alone) is refused until the owner
+	// approves it in place with a passkey on the Devices page (R-D6).
 	// A relay not named here is refused too: every account on its computer
 	// reaches its socket, and none is known to be the owner. Refused at load
 	// while peer_auth is disabled. File only (no env).

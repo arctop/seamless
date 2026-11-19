@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"fmt"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -397,4 +398,115 @@ func TestApplyKeptState_KeepsTodaysDevices(t *testing.T) {
 	require.ErrorIs(t, err, ErrDeviceNotFound, "a device today does not hold does not come back")
 	_, err = PairDevice(ctx, backup, staleCode, deviceRelay("example-ci", "relay-key-2", false), deviceT0)
 	require.ErrorIs(t, err, ErrPairingCode, "a code today does not hold pairs nothing")
+}
+
+// A relay its one-time code alone paired is approved in place (owner decision
+// R-D6): the same device id, certificate and key, approved by the passkey,
+// in one compare-and-set on the row still an active, unapproved relay never
+// revoked and still showing the fingerprint the assertion was bound to.
+// Anything else -- a pending pairing, one a passkey approved, a key device, a
+// revoked or expired relay -- is ErrDeviceNotCodeOnly, and nothing moves.
+func TestApproveDeviceInPlace_CodeOnlyRelayKeepsItsPairing(t *testing.T) {
+	ctx := context.Background()
+	db := deviceDB(t)
+	pair := func(nd NewDevice) Device {
+		t.Helper()
+		code, _, err := MintPairingCode(ctx, db, DeviceByConsole, deviceT0)
+		require.NoError(t, err)
+		d, err := PairDevice(ctx, db, code, nd, deviceT0)
+		require.NoError(t, err)
+		return d
+	}
+	relay := pair(deviceRelay("example-laptop", "relay-key-1", false))
+	require.True(t, relay.CodeOnlyRelay())
+	before, err := DeviceByID(ctx, db, relay.ID)
+	require.NoError(t, err)
+
+	_, err = ApproveDeviceInPlace(ctx, db, relay.ID, ApproverKeyFingerprint([]byte("another key")), "01PASSKEY")
+	require.ErrorIs(t, err, ErrDeviceNotCodeOnly, "an approval bound to another key's fingerprint takes nothing")
+	_, err = ApproveDeviceInPlace(ctx, db, relay.ID, relay.Fingerprint, " ")
+	require.ErrorIs(t, err, ErrInvalidDevice, "an approval names its credential")
+	_, err = ApproveDeviceInPlace(ctx, db, "01NOSUCHDEVICE", relay.Fingerprint, "01PASSKEY")
+	require.ErrorIs(t, err, ErrDeviceNotFound)
+
+	got, err := ApproveDeviceInPlace(ctx, db, relay.ID, relay.Fingerprint, "01PASSKEY")
+	require.NoError(t, err)
+	require.Equal(t, "01PASSKEY", got.ApprovedBy)
+	require.False(t, got.CodeOnlyRelay())
+	got.ApprovedBy = ""
+	require.Equal(t, before, got, "only the approval moved: same id, status, fingerprint, key, times and owner")
+	byKey, err := DeviceByKey(ctx, db, DeviceRelayKind, deviceHash("pub:relay-key-1"))
+	require.NoError(t, err)
+	require.Equal(t, relay.ID, byKey.ID, "the certificate's key still names the same device")
+	_, err = ApproveDeviceInPlace(ctx, db, relay.ID, relay.Fingerprint, "01OTHERPASSKEY")
+	require.ErrorIs(t, err, ErrDeviceNotCodeOnly, "an approval works once")
+
+	pending := pair(deviceRelay("example-desk", "relay-key-2", true))
+	approved := pair(deviceRelay("example-studio", "relay-key-3", true))
+	_, err = ApproveDevice(ctx, db, approved.ID, approved.Fingerprint, "01PASSKEY", deviceT0)
+	require.NoError(t, err)
+	key := pair(deviceKeyed("example-ci", "abcd1234", false))
+	revoked := pair(deviceRelay("example-old", "relay-key-4", false))
+	_, err = RevokeDevice(ctx, db, revoked.ID, DeviceByConsole, deviceT0.Add(time.Minute))
+	require.NoError(t, err)
+	expired := pair(deviceRelay("example-late", "relay-key-5", true))
+	code, _, err := MintPairingCode(ctx, db, DeviceByConsole, deviceT0.Add(DevicePendingTTL))
+	require.NoError(t, err)
+	_, err = PairDevice(ctx, db, code, deviceRelay("example-sweep", "relay-key-6", false), deviceT0.Add(DevicePendingTTL))
+	require.NoError(t, err, "a pairing sweeps the expired one")
+	for name, d := range map[string]Device{"a pending pairing": pending, "one a passkey approved": approved, "a key device": key,
+		"a revoked relay": revoked, "an expired pairing": expired} {
+		was, err := DeviceByID(ctx, db, d.ID)
+		require.NoError(t, err)
+		require.False(t, was.CodeOnlyRelay(), name)
+		_, err = ApproveDeviceInPlace(ctx, db, d.ID, d.Fingerprint, "01PASSKEY")
+		require.ErrorIs(t, err, ErrDeviceNotCodeOnly, name)
+		now, err := DeviceByID(ctx, db, d.ID)
+		require.NoError(t, err)
+		require.Equal(t, was, now, "%s: nothing moved", name)
+	}
+}
+
+// Of two approvals in place racing each other and a revocation, at most one
+// lands, the revocation always does, and the relay ends revoked whatever the
+// order: an approval never brings a revoked relay back.
+func TestApproveDeviceInPlace_RacesARevocation(t *testing.T) {
+	ctx := context.Background()
+	db := deviceDB(t)
+	for i := range 8 {
+		code, _, err := MintPairingCode(ctx, db, DeviceByConsole, deviceT0)
+		require.NoError(t, err)
+		relay, err := PairDevice(ctx, db, code, deviceRelay(fmt.Sprintf("example-race-%d", i), fmt.Sprintf("race-key-%d", i), false), deviceT0)
+		require.NoError(t, err)
+		var wg sync.WaitGroup
+		errs := make([]error, 3)
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			_, errs[0] = ApproveDeviceInPlace(ctx, db, relay.ID, relay.Fingerprint, "01PASSKEYA")
+		}()
+		go func() {
+			defer wg.Done()
+			_, errs[1] = ApproveDeviceInPlace(ctx, db, relay.ID, relay.Fingerprint, "01PASSKEYB")
+		}()
+		go func() {
+			defer wg.Done()
+			_, errs[2] = RevokeDevice(ctx, db, relay.ID, DeviceByConsole, deviceT0.Add(time.Minute))
+		}()
+		wg.Wait()
+		require.NoError(t, errs[2], "the revocation always lands")
+		approvals := 0
+		for _, err := range errs[:2] {
+			if err == nil {
+				approvals++
+				continue
+			}
+			require.ErrorIs(t, err, ErrDeviceNotCodeOnly)
+		}
+		require.LessOrEqual(t, approvals, 1, "at most one approval lands")
+		got, err := DeviceByID(ctx, db, relay.ID)
+		require.NoError(t, err)
+		require.Equal(t, DeviceRevoked, got.Status)
+		require.NotNil(t, got.RevokedAt)
+	}
 }

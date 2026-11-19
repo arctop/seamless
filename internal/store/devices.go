@@ -122,6 +122,10 @@ var (
 	// ErrDeviceNotPending is an approval of a device that is not waiting:
 	// already approved, denied, revoked, or past its deadline.
 	ErrDeviceNotPending = errors.New("that device is not waiting for approval")
+	// ErrDeviceNotCodeOnly is an approval in place of a device that is not an
+	// active relay its one-time code alone paired: a passkey approved it
+	// already, it was revoked, or it is no relay.
+	ErrDeviceNotCodeOnly = errors.New("that device is not an active relay its one-time code alone paired")
 	// ErrDeviceEnded is a revocation of a device already ended.
 	ErrDeviceEnded = errors.New("that device is already revoked or was never paired")
 	// ErrDeviceSecretUsed is a pairing with a secret an earlier pairing
@@ -702,6 +706,45 @@ func ApproveDevice(ctx context.Context, db *sql.DB, id, fingerprint, credential 
 		return Device{}, fmt.Errorf("%s: %w", op, err)
 	}
 	return d, nil
+}
+
+// ApproveDeviceInPlace records credential (the passkey whose assertion the
+// caller verified) as the approval of the active relay id that its one-time
+// code alone paired (approved_by empty; owner decision R-D6): the same device,
+// the same certificate, and now a passkey-approved pairing. It is one
+// compare-and-set on the row still an active relay, still unapproved, never
+// revoked and still showing fingerprint, the fingerprint the owner's assertion
+// was bound to, so a revocation, an expiry or another approval racing it
+// leaves nothing to approve: ErrDeviceNotCodeOnly. Only approved_by moves.
+func ApproveDeviceInPlace(ctx context.Context, db *sql.DB, id, fingerprint, credential string) (Device, error) {
+	const op = "store.ApproveDeviceInPlace"
+	if strings.TrimSpace(credential) == "" {
+		return Device{}, fmt.Errorf("%s: %w: an approval names the credential that proved it", op, ErrInvalidDevice)
+	}
+	res, err := db.ExecContext(ctx, `UPDATE devices SET approved_by = ?
+		WHERE id = ? AND kind = ? AND status = ? AND approved_by = '' AND revoked_at IS NULL AND fingerprint = ?`,
+		credential, id, DeviceRelayKind, DeviceActive, fingerprint)
+	if err != nil {
+		return Device{}, fmt.Errorf("%s: %w", op, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return Device{}, fmt.Errorf("%s: %w", op, err)
+	}
+	if n != 1 {
+		return Device{}, fmt.Errorf("%s: %w", op, explainDevice(ctx, db, id, ErrDeviceNotCodeOnly))
+	}
+	d, err := DeviceByID(ctx, db, id)
+	if err != nil {
+		return Device{}, fmt.Errorf("%s: %w", op, err)
+	}
+	return d, nil
+}
+
+// CodeOnlyRelay reports whether d is an active relay its one-time code alone
+// paired, never revoked: one ApproveDeviceInPlace can approve.
+func (d Device) CodeOnlyRelay() bool {
+	return d.Kind == DeviceRelayKind && d.Status == DeviceActive && d.ApprovedBy == "" && d.RevokedAt == nil
 }
 
 // CollectDeviceKey gives the active key device whose pairing secret hashes to

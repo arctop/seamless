@@ -98,13 +98,26 @@ const (
 
 // program is one classified program: its kind, the readable agent name
 // (Facts.Agent) for an agent, the base name the kernel gave it, and, for a
-// broad one, what kind of process it is.
+// broad one, what kind of process it is (what, with its base name) and its
+// category alone (one of the broad* words).
 type program struct {
-	kind  programKind
-	agent string
-	base  string
-	what  string
+	kind     programKind
+	agent    string
+	base     string
+	what     string
+	category string
 }
+
+// The categories of broad ancestor, as the refusals name them.
+const (
+	broadShell    = "a shell"
+	broadMux      = "a terminal multiplexer"
+	broadTerminal = "a terminal"
+	broadEditor   = "an editor that hosts terminals"
+	broadLogin    = "a login session"
+	broadManager  = "the system's process manager"
+	broadApp      = "an application"
+)
 
 var (
 	// versionRe is a release version as Claude Code and Codex lay them out
@@ -142,20 +155,20 @@ var broadWords = func() map[string]string {
 			m[n] = what
 		}
 	}
-	add("a shell", "sh", "bash", "zsh", "dash", "ksh", "mksh", "ash", "fish", "csh", "tcsh", "busybox", "nu",
+	add(broadShell, "sh", "bash", "zsh", "dash", "ksh", "mksh", "ash", "fish", "csh", "tcsh", "busybox", "nu",
 		"elvish", "yash", "cmd", "powershell", "pwsh")
-	add("a terminal multiplexer", "tmux", "tmate", "screen", "zellij", "byobu", "abduco", "dtach",
+	add(broadMux, "tmux", "tmate", "screen", "zellij", "byobu", "abduco", "dtach",
 		"wezterm-mux-server")
-	add("a terminal", "terminal", "iterm2", "ghostty", "alacritty", "kitty", "wezterm", "wezterm-gui", "warp",
+	add(broadTerminal, "terminal", "iterm2", "ghostty", "alacritty", "kitty", "wezterm", "wezterm-gui", "warp",
 		"hyper", "tabby", "rio", "wave", "waveterm", "contour", "foot", "footclient", "konsole", "gnome-terminal",
 		"gnome-terminal-server", "kgx", "ptyxis", "ptyxis-agent", "xterm", "uxterm", "urxvt", "urxvtd", "rxvt", "st",
 		"tilix", "terminator", "xfce4-terminal", "lxterminal", "mate-terminal", "qterminal", "terminology", "sakura",
 		"guake", "yakuake", "tilda", "cool-retro-term", "blackbox", "conhost", "openconsole", "windowsterminal")
-	add("an editor that hosts terminals", "code", "code-insiders", "codium", "vscodium", "code-server", "cursor",
+	add(broadEditor, "code", "code-insiders", "codium", "vscodium", "code-server", "cursor",
 		"windsurf", "zed", "zed-editor", "electron", "emacs", "nvim", "vim")
-	add("a login session", "login", "sshd", "sshd-session", "sshd-auth", "dropbear", "mosh-server", "telnetd",
+	add(broadLogin, "login", "sshd", "sshd-session", "sshd-auth", "dropbear", "mosh-server", "telnetd",
 		"su", "sudo", "doas")
-	add("the system's process manager", "launchd", "init", "systemd")
+	add(broadManager, "launchd", "init", "systemd")
 	return m
 }()
 
@@ -163,12 +176,12 @@ var broadWords = func() map[string]string {
 // role (iTermServer-3.5.0, Code Helper (Plugin)), or that the kernel cuts
 // short (Linux keeps 15 bytes: gnome-terminal-).
 var broadPrefixes = []struct{ prefix, what string }{
-	{"itermserver", "a terminal"},
-	{"gnome-terminal", "a terminal"},
-	{"code helper", "an editor that hosts terminals"},
-	{"code - insiders helper", "an editor that hosts terminals"},
-	{"cursor helper", "an editor that hosts terminals"},
-	{"electron helper", "an editor that hosts terminals"},
+	{"itermserver", broadTerminal},
+	{"gnome-terminal", broadTerminal},
+	{"code helper", broadEditor},
+	{"code - insiders helper", broadEditor},
+	{"cursor helper", broadEditor},
+	{"electron helper", broadEditor},
 }
 
 // baseName is a program's base name as the rule compares it: the last path
@@ -248,12 +261,15 @@ func classify(p string) program {
 		return agent("Codex")
 	}
 
+	broad := func(category string) program {
+		return program{kind: programBroad, base: base, what: base + ", " + category, category: category}
+	}
 	if what, ok := broadWords[lower]; ok {
-		return program{kind: programBroad, base: base, what: base + ", " + what}
+		return broad(what)
 	}
 	for _, b := range broadPrefixes {
 		if strings.HasPrefix(lower, b.prefix) {
-			return program{kind: programBroad, base: base, what: base + ", " + b.what}
+			return broad(b.what)
 		}
 	}
 	// A macOS application's own executable (anything in an app bundle's
@@ -261,7 +277,7 @@ func classify(p string) program {
 	// and plugins no one agent session started. The agents' own bundles
 	// matched above.
 	if strings.Contains(slashed, ".app/Contents/MacOS/") {
-		return program{kind: programBroad, base: base, what: base + ", an application"}
+		return broad(broadApp)
 	}
 	return program{kind: programOther, base: base}
 }

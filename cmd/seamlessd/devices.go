@@ -98,7 +98,9 @@ func pairingFacts(cfg config.Config) (devices.ServerFacts, error) {
 
 // newPairing builds serve's device pairing, or nil when pairingOn says it is
 // off. Under peer_auth a pairing waits for the owner's passkey, approved
-// through svc's relying party.
+// through svc's relying party, and a relay its one-time code alone paired
+// that peer_auth.relays maps waits for the same approval in place (owner
+// decision R-D6; devices.Service.InPlace).
 func newPairing(cfg config.Config, db *sql.DB, rec *events.Recorder, svc *approval.Service, logger *slog.Logger) (*devices.Service, error) {
 	if !pairingOn(cfg) {
 		return nil, nil
@@ -115,6 +117,7 @@ func newPairing(cfg config.Config, db *sql.DB, rec *events.Recorder, svc *approv
 			return nil, fmt.Errorf("device pairing: %w", err)
 		}
 		dc.Approver = approvals
+		dc.RelayMapped = relayMappedIn(cfg.PeerAuth)
 	}
 	return devices.New(dc), nil
 }

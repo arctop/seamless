@@ -125,7 +125,9 @@ func TestRelayMappingChecks(t *testing.T) {
 	}
 	require.Equal(t, statusOK, byName[relayvLaptop].status, byName[relayvLaptop].detail)
 	require.Equal(t, statusWarn, byName[relayvOld].status)
-	require.Contains(t, byName[relayvOld].detail, "pairs again")
+	// Owner decision R-D6: the remedy is the approval in place, not a pairing.
+	require.Contains(t, byName[relayvOld].detail, "until you approve it with a passkey on the Devices page")
+	require.Contains(t, byName[relayvOld].detail, "it keeps its pairing")
 	require.Equal(t, statusWarn, byName["example-gone"].status)
 	require.Contains(t, byName["example-gone"].detail, "no paired relay holds")
 }

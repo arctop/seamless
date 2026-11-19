@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/arctop/seamless/internal/access"
+	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/devices"
 	"github.com/arctop/seamless/internal/screening"
@@ -39,9 +40,10 @@ import (
 // For a relay peer_auth.relays maps, by its enrolled name:
 //
 //   - a pairing no passkey approved (one made with the code alone, while
-//     peer_auth was off) is refused (403) until the relay pairs again: its
-//     report of who is calling would be trusted from a relay the owner never
-//     vetted;
+//     peer_auth was off) is refused (403) until the owner approves it with a
+//     passkey on the Devices page, where it waits in place (owner decision
+//     R-D6: the same device and certificate, no pairing again): its report of
+//     who is calling would be trusted from a relay the owner never vetted;
 //   - a request that forwards no attributes is refused (400), never served as
 //     the owner;
 //   - a uid that is neither the mapping's owner_uid nor one of its restricted
@@ -51,9 +53,13 @@ import (
 //     (Policy.RelayChainViewNamed): the forwarded chain, every process the
 //     relay's, the programs the relay named for them (wire version 2; none
 //     from version 1), and the leases live on it at now, judged by the View
-//     (WithLeases). The chain counts as an agent's (access.FromAgent): the
-//     owner's own decisions are refused through a relay, which names no
-//     program the server can see for itself;
+//     (WithLeases). The chain is the owner's own hands there
+//     (approval.JudgeRelayHands, owner decision R-D3) only when the relay
+//     named every process of it, none is an agent by the judgment this
+//     socket makes, it is whole by its evidence, and the pairing recorded
+//     the same owner's uid; the request carries that judgment
+//     (access.WithRelayHands), and access.FromAgent answers it. Any other
+//     chain counts as an agent's: the owner's own decisions are refused;
 //   - a restricted account there (the mapping's restricted list) gets that
 //     account's view, labeled "<name>@<relay>", with its reach loaded per
 //     request as peerHandler loads a restricted account's on this socket: the
@@ -90,8 +96,7 @@ func relayHandler(policy *access.Policy, leases peerLeases, logger *slog.Logger,
 		if !cred.Approved {
 			logger.Warn("peer_auth: refused a relay paired with a code alone", "relay", cred.Name, "device", cred.DeviceID)
 			access.NoteRefusal(r.Context(), screening.RefusedPeerUnknown)
-			http.Error(w, fmt.Sprintf("forbidden: relay %s was paired with a one-time code alone, before peer_auth: pair it "+
-				"again, and approve it with a passkey on the server's Devices page", cred.Name), http.StatusForbidden)
+			http.Error(w, relayCodeOnlyRefusal(cred.Name), http.StatusForbidden)
 			return
 		}
 		attrs, forwarded := devices.RelayAttributesOf(r.Context())
@@ -143,10 +148,25 @@ func relayHandler(policy *access.Policy, leases peerLeases, logger *slog.Logger,
 			if policy.HasLocked() {
 				view = relayLeasedView(ctx, view, leases, logger)
 			}
-			ctx = access.WithAgentChain(access.WithView(ctx, view), func() bool { return true })
+			// The owner's own hands there, or not (owner decision R-D3): the
+			// chain judged as this machine's socket judges one, with the
+			// programs the relay named, whole by its evidence, and the
+			// pairing's uid agreeing with the mapping's.
+			hands := approval.JudgeRelayHands(view.Principal(), cred.Name, cred.OwnerUID)
+			ctx = access.WithView(ctx, view)
+			ctx = access.WithAgentChain(ctx, func() bool { return !hands.Owner() })
+			ctx = access.WithRelayHands(ctx, hands)
 		}
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// relayCodeOnlyRefusal is relayHandler's answer to a mapped relay its
+// one-time code alone paired: the rule, and the approval in place that ends
+// it (owner decision R-D6), which keeps the relay's pairing.
+func relayCodeOnlyRefusal(relay string) string {
+	return fmt.Sprintf("forbidden: relay %s was paired with a one-time code alone, before peer_auth: approve it with a "+
+		"passkey on the server's Devices page, where it waits for you; it keeps its pairing, and need not pair again", relay)
 }
 
 // healthzPath is the daemon's health check (daemonRoutes), the one route that
@@ -213,7 +233,8 @@ func relayMappingChecks(ctx context.Context, cfg config.Config, db *sql.DB) []ch
 				"pair it, or correct the name to the one the Devices page shows", n)})
 		case dev.ApprovedBy == "":
 			out = append(out, check{statusWarn, name, fmt.Sprintf("relay %s was paired with a one-time code alone, before "+
-				"peer_auth: its requests are refused until it pairs again and you approve it with a passkey", n)})
+				"peer_auth: its requests are refused until you approve it with a passkey on the Devices page, where it "+
+				"waits: it keeps its pairing, and need not pair again", n)})
 		default:
 			line := fmt.Sprintf("relay %s: its requests are judged as this socket's, and uid %d there is the owner", n, p.Relays[n].OwnerUID)
 			if restricted := relayRestrictedWords(p.Relays[n]); restricted != "" {
@@ -252,4 +273,14 @@ func relayRestrictedWords(r config.PeerRelay) string {
 		words = append(words, fmt.Sprintf("%s (uid %d)", n, r.Restricted[n].UID))
 	}
 	return strings.Join(words, ", ")
+}
+
+// relayMappedIn reports, for device pairing (devices.Config.RelayMapped),
+// whether p maps the relay enrolled as name in peer_auth.relays: the keys
+// Policy.RelayMapped reads, as the config names them.
+func relayMappedIn(p config.PeerAuth) func(name string) bool {
+	return func(name string) bool {
+		_, ok := p.Relays[name]
+		return ok
+	}
 }

@@ -93,7 +93,8 @@ func (s *Service) grantApprove(w http.ResponseWriter, r *http.Request, a store.A
 
 // grantRevoke ends a live read grant before its expiry. Its holder stays
 // write-confined: a revoke does not unread what it read. An agent's socket
-// connection may not revoke: the owner's browser or the TCP key only.
+// connection may not revoke: the owner's browser or the TCP key only, or the
+// owner's own hands through a relay (ownerDecision).
 func (s *Service) grantRevoke(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.Grants == nil {
 		s.notFound(w, r, "read grants are off (isolation.requests), so there are none to revoke")

@@ -368,7 +368,8 @@ any of it.
   form is parsed (`ownerHandsIf`, `switchedOff`; a reset where it would turn
   checks off, `updatesResetTurnsOff`), so turning them on stays open. It stops ordinary tool calls and is not a
   wall: a detached process or the TCP key passes. The lock is the wall. A paired
-  device's credential is refused there too (`refusedFromDevice`).
+  device's credential is refused there too (`refusedFromDevice`), but for the
+  owner's own hands through a mapped relay (owner decision R-D3, below).
 - **A session belongs to the principal that started it**
   (`core.Session.Account`, set once by `store.CreateSession`). Every surface
   that resumes, binds to, names or writes into a session checks
@@ -538,7 +539,8 @@ any of it.
   the core recomputes the binding from the submitted duration and the facts
   as they stand; a Touch ID signature over
   `TouchIDApproveMessage`) and the facts digest the owner saw. No route
-  constructs `ProofDaemon`. An agent's socket connection may not deny.
+  constructs `ProofDaemon`. An agent's socket connection may not deny (the
+  owner's own hands through a mapped relay may: `relayOwnerHands`).
   An asker that already holds what it asks for (its tree's lease, or a read
   grant from the same project) more than `access.ExpiryWarning` from its end
   is answered with it (`approval.AccessLiveError`) and files nothing; from the
@@ -996,7 +998,11 @@ any of it.
   the owner's uid there, file only) is judged as the socket is (`relayHandler`,
   `Policy.RelayChainView`): owner_uid is the owner on a socket
   (`Principal.Relay`), any other uid 403, nothing forwarded 400, a relay no
-  passkey approved 403 until it pairs again; `/healthz` is not judged. Every
+  passkey approved 403 until the owner approves it in place on the Devices
+  page (owner decision R-D6: `devices.Service.InPlace`, the pairing approval's
+  ceremony over a challenge of its own, `store.ApproveDeviceInPlace` one
+  compare-and-set keeping the device id and certificate and refusing a revoked
+  relay); `/healthz` is not judged. Every
   token of a relay's chain names the relay (`ProcessToken.Relay`, key
   `relay/<id>/<boot>:<pid>:<version>`), so leases, grants and requests match on
   (relay, process) wherever keys are compared, and
@@ -1010,14 +1016,26 @@ any of it.
   uid or a `config.RelayRestricted` shape) makes a uid
   there `KindRestricted`, labeled `access.RelayAccountLabel`, and the approve
   core refuses a stored relay row with
-  no program. A relay's chain counts as an agent's (`FromAgent`).
-  A device's credential never makes the owner's decisions (review H1):
-  `refusedFromDevice` (console/unlock.go) answers 403 for a relay or a key
-  device, peer_auth on or off, inside `ownerHands`, `refusedFromAgent` and
-  `ownerDecision`, and on a deny and a passkey's enrollment
-  (`notThroughDevice`) and an approval with no passkey or Touch ID proof
-  (`deviceNeedsProof`). Its reads, and the writes an agent may make, stay
-  open: `seam` on a client reads console JSON through the relay.
+  no program. A relay's chain is the owner's own hands only by
+  `approval.JudgeRelayHands` (owner decision R-D3), carried as
+  `access.WithRelayHands` and answered by `FromAgent`: under peer_auth a
+  mapped, passkey-approved relay; owner_uid AND the pairing's recorded uid
+  (none or another refuses); wire v2, every program named; no hop
+  `approval.IsAgentProgram` (the socket's `chainHasAgent` predicate); whole by
+  its evidence (shorter than `access.MaxChainHops`, ending at a session root:
+  never a shell, su/sudo/doas or an unknown program). Any other relay chain
+  counts as an agent's. A device's credential never makes the owner's
+  decisions (review H1) but for those hands: `refusedFromDevice`
+  (console/unlock.go) answers 403 for a key device always, and for a relay
+  unless `access.OwnerHandsThrough` holds (`relayOwnerHands`), saying why,
+  inside `ownerHands`, `refusedFromAgent` and `ownerDecision`, on a deny and a
+  passkey's enrollment (`notThroughDevice`) and on an approval with no proof
+  (`deviceNeedsProof`, which then reaches the approve core: hands are no
+  proof). Those hands also pass `ownerDecision`'s and `accessDeny`'s socket
+  refusal; this machine's socket keeps it. Each decision they make records
+  `access.relay_decision` (console/relay_decision.go). Its reads, and the
+  writes an agent may make, stay open: `seam` on a client reads console JSON
+  through the relay.
   Revoking refuses the credential from its next request, ends the requests it is making and, in the same transaction, a relay's live leases, grants and waiting requests (`store.RevokeDeviceEndingAccess`); the edge registers a request (`track`) before it reads the device's status a last time, so no revocation slips between its lookup and its registration (review I1). Under peer_auth doctor warns for each key device a code alone paired (`peer_auth devices`, review I2). A merge carries no device, a fresh import revokes the snapshot's,
   and a backup restore keeps today's (`keptTables`).
 - **The relay forwards and judges nothing** (plan networked-relay;

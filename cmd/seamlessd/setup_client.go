@@ -554,8 +554,10 @@ func setupRelayStep(r *setupRun, st *setupState) error {
 		fmt.Fprintf(r.out, "%s%s\n", setupRowCont, dim("log out and back in once: your agents join "+clientRelayGroup+" at your next login"))
 	}
 	setupRow(r.out, "approvals", setupText("on the {server}'s console, with a passkey, from any browser: a pairing under locked projects, access"))
-	fmt.Fprintf(r.out, "%s%s\n", setupRowCont, setupText("requests and unlocks. seamlessd approve runs on the {server} alone: from here, sudo would be the"))
-	fmt.Fprintf(r.out, "%s%s\n", setupRowCont, "relay vouching for you, which it never does")
+	fmt.Fprintf(r.out, "%s%s\n", setupRowCont, setupText("requests and unlocks. seamlessd approve runs on the {server} alone. Under locked projects, once"))
+	fmt.Fprintf(r.out, "%s%s\n", setupRowCont, "this relay is mapped, your other decisions (seam promote and seam discard, for one) also work from")
+	fmt.Fprintf(r.out, "%s%s\n", setupRowCont, setupText("a terminal of your own here with no agent above it: the {server} trusts root here to name each"))
+	fmt.Fprintf(r.out, "%s%s\n", setupRowCont, "process this relay forwards, and refuses a chain with an agent in it")
 	return nil
 }
 

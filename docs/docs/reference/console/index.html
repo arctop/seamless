@@ -427,22 +427,22 @@ nothing, and their rows say so.</p>
 <tr>
 <td>Deny an access request</td>
 <td><code>POST /console/access/{id}/deny</code></td>
-<td>Closes a waiting request with no lease, grant or move; the project stays closed to that agent, and a move's agent stays where it works. Refused over the peer_auth socket and from a paired device: deny on the console, or with <code>seam approve</code> in your own terminal on the server.</td>
+<td>Closes a waiting request with no lease, grant or move; the project stays closed to that agent, and a move's agent stays where it works. Refused over the peer_auth socket and from a paired device, but for <a href="../../guides/peer-auth/#your-own-decisions-through-a-relay">your own hands through a relay</a>: deny on the console, or with <code>seam approve</code> in your own terminal on the server.</td>
 </tr>
 <tr>
 <td>Revoke an agent's lease</td>
 <td><code>POST /console/access/leases/{id}/revoke</code></td>
-<td><strong>Revoke</strong> under Agent leases on <code>/console/access</code>: ends that lease before its expiry and records an <code>access.revoked</code> event. Refused over the peer_auth socket and from a paired device.</td>
+<td><strong>Revoke</strong> under Agent leases on <code>/console/access</code>: ends that lease before its expiry and records an <code>access.revoked</code> event. Refused over the peer_auth socket and from a paired device, but for <a href="../../guides/peer-auth/#your-own-decisions-through-a-relay">your own hands through a relay</a>.</td>
 </tr>
 <tr>
 <td>Revoke a read grant</td>
 <td><code>POST /console/access/grants/{id}/revoke</code></td>
-<td><strong>Revoke</strong> under Read grants: ends a live grant, read-only or read and write, before its expiry. Its holder stays write-confined, since a revoke does not unread what it read. Refused over the peer_auth socket and from a paired device.</td>
+<td><strong>Revoke</strong> under Read grants: ends a live grant, read-only or read and write, before its expiry. Its holder stays write-confined, since a revoke does not unread what it read. Refused over the peer_auth socket and from a paired device, but for <a href="../../guides/peer-auth/#your-own-decisions-through-a-relay">your own hands through a relay</a>.</td>
 </tr>
 <tr>
 <td>Lock a console unlock again</td>
 <td><code>POST /console/access/unlocks/{id}/end</code></td>
-<td><strong>Lock again</strong> on <code>/console/access</code>, or <strong>Lock it again</strong> on the unlock page: ends any browser's live console unlock, by id. Refused over the peer_auth socket and from a paired device.</td>
+<td><strong>Lock again</strong> on <code>/console/access</code>, or <strong>Lock it again</strong> on the unlock page: ends any browser's live console unlock, by id. Refused over the peer_auth socket and from a paired device, but for <a href="../../guides/peer-auth/#your-own-decisions-through-a-relay">your own hands through a relay</a>.</td>
 </tr>
 <tr>
 <td>Begin a passkey enrollment</td>
@@ -497,12 +497,12 @@ nothing, and their rows say so.</p>
 <tr>
 <td>Begin a device approval</td>
 <td><code>POST /console/devices/{id}/approve/begin</code></td>
-<td>Only under peer_auth, from a signed-in browser, for a pairing that waits. Returns the WebAuthn challenge, bound to that device's id, kind, name, fingerprint and key, and a ticket. Writes nothing.</td>
+<td>Only under peer_auth, from a signed-in browser, for a pairing that waits, or for a relay that waits for its approval in place: active, paired with its one-time code alone, and mapped in <code>peer_auth.relays</code>. Returns the WebAuthn challenge, bound to that device's id, kind, name, fingerprint and key (and, in place, to its status and that purpose), and a ticket. Writes nothing.</td>
 </tr>
 <tr>
 <td>Approve a device</td>
 <td><code>POST /console/devices/{id}/approve/finish</code></td>
-<td>Verifies the passkey assertion for that ticket over the device as it stands, records the passkey's use, and pairs the device: a relay's certificate is accepted from its next request, and a key device collects its own key, once, on its next status.</td>
+<td>Verifies the passkey assertion for that ticket over the device as it stands, records the passkey's use, and pairs the device: a relay's certificate is accepted from its next request, and a key device collects its own key, once, on its next status. A relay waiting in place is approved where it stands, the same device id and certificate, in one compare-and-set that refuses a relay revoked meanwhile; its requests are judged from the next one on, and an <code>access.device_paired</code> event marked <code>in_place</code> records it.</td>
 </tr>
 <tr>
 <td>Revoke a device, or deny a pairing</td>
@@ -652,17 +652,27 @@ nothing, and their rows say so.</p>
 </tbody>
 </table>
 </div>
-<p><strong>Your decisions never come through a paired device.</strong> On a server that serves
-other computers, a request that comes with a paired device's credential - a
-relay's certificate or a device key - is refused (403) on every write that is
-yours to make: a pairing code and a device's revocation, Held's release, discard,
-session marks, lockdown and corpus marks, the optional features, turning update
-checks or automatic updates off (and a reset that would turn checks off), every
-Backups route, bringing a project's fence down, a deny, a revoke, Lock again, a
-passkey's enrollment, and an approval with no passkey or Touch ID proof. That
-holds with peer_auth on or off. A paired computer carries its agents, never your
-hands: make these decisions in the console of the server you sign in to, or in a
-terminal on the server itself. The reads stay open to a device, and so do the writes an agent
+<p><strong>Your decisions come through a paired device only as your own hands.</strong> On a
+server that serves other computers, a request that comes with a paired device's
+credential - a relay's certificate or a device key - is refused (403) on every
+write that is yours to make: a pairing code and a device's revocation, Held's
+release, discard, session marks, lockdown and corpus marks, the optional
+features, turning update checks or automatic updates off (and a reset that would
+turn checks off), every Backups route, bringing a project's fence down, a deny,
+a revoke, Lock again, a passkey's enrollment, and an approval with no passkey or
+Touch ID proof. That holds with peer_auth on or off, with one exception: under
+peer_auth, a request through a relay you map whose process chain the server
+judges your own hands there - every process named, none an agent, the chain
+whole, and your uid there the one both the mapping and the relay's pairing name
+(<a href="../../guides/peer-auth/#your-own-decisions-through-a-relay">the rule</a>) - makes them,
+and each one it makes records an <code>access.relay_decision</code> event (item: the relay's
+device; payload: its name, your uid there, the route and the chain's programs by
+name). Its approval with no passkey or Touch ID proof still goes to the approve
+core, which refuses it: a chain is no proof. A key device, a relay to a server
+without peer_auth, and any other chain carry their agents, never your hands, and
+the refusal says why: make these decisions in the console of the server you sign
+in to, in a terminal on the server itself, or in a terminal of your own behind a
+relay you map. The reads stay open to a device, and so do the writes an agent
 may make: <code>seam</code> on a client computer reads the console's JSON through its relay,
 and the Touch ID helper there approves through it with its own signature.</p>
 <p>Read the shape of that list. There is no &quot;create memory&quot;, no &quot;edit note&quot;, no
@@ -1926,7 +1936,12 @@ on this computer.</li>
 a code, its fingerprint and until when it waits, with <strong>Approve with a
 passkey</strong> and <strong>Deny</strong>. Approving needs a signed-in browser on the
 <a href="../../guides/peer-auth/#the-passkey-origin">passkey origin</a> and an enrolled
-passkey; the page says which is missing.</li>
+passkey; the page says which is missing. A relay paired with its one-time
+code alone, while peer_auth was off, waits here too once <code>peer_auth.relays</code>
+maps it: it is refused until <strong>Approve with a passkey</strong> approves it in place,
+the same device and certificate, so it need not pair again, and <strong>Revoke</strong>
+ends it. The JSON lists it under <code>in_place</code>, not <code>paired</code>. A revoked or
+expired relay is not offered.</li>
 <li><strong>Paired</strong> - each relay and key device: its key's fingerprint or the start
 of its key, when it paired, whether your passkey or its one-time code
 approved it, when it was last seen, and <strong>Revoke</strong>. A relay shows the uid its
@@ -2162,8 +2177,8 @@ next, including a streak of failed checks and why.</p>
 <strong>Set in the config file or environment</strong>, <strong>Set in this console</strong>, or
 <strong>Automatic updates set in this console</strong>, with <strong>Reset to the config file</strong>
 beside a console choice. Turning checks off from here always works for you; an
-agent's process on the peer_auth socket and a paired device may turn checks and
-automatic updates on, never off. Turning them on does not work when the config
+agent's process on the peer_auth socket, and a paired device but for your own
+hands through a relay, may turn checks and automatic updates on, never off. Turning them on does not work when the config
 file or <code>SEAMLESS_UPDATE_CHECK</code> says <code>false</code>: that is final, the switch shows
 locked, and the form refuses - <code>false</code> promises no update traffic at all. <strong>Check now</strong> asks GitHub once, right away (not more than
 once a minute).</p>

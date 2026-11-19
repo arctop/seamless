@@ -517,7 +517,7 @@ that is <a href="#step-1-widen-the-server">by hand</a>.</p>
 </tr>
 <tr>
 <td><code>peer_auth relays</code></td>
-<td>Under peer_auth only: each relay <code>peer_auth.relays</code> maps, and whether it is paired and approved with a passkey. A <strong>warn</strong> when the uid its pairing recorded is not the mapping's <code>owner_uid</code>: the mapping judges, but one of the two is wrong.</td>
+<td>Under peer_auth only: each relay <code>peer_auth.relays</code> maps, and whether it is paired and approved with a passkey. A relay its one-time code alone paired is a <strong>warn</strong> until you approve it in place on the <a href="#devices">Devices page</a>, where it waits. A <strong>warn</strong> when the uid its pairing recorded is not the mapping's <code>owner_uid</code>: the mapping judges, but one of the two is wrong.</td>
 </tr>
 <tr>
 <td><code>relay renewal</code></td>
@@ -772,7 +772,11 @@ only a computer whose fingerprint is the one its own screen shows; <strong>Deny<
 one you do not recognize. Approving needs a signed-in browser on the
 <a href="../../guides/peer-auth/#the-passkey-origin">passkey origin</a> and a passkey
 <a href="../../guides/peer-auth/#enroll-an-approver">enrolled</a> there; the page says which
-is missing. Without peer_auth nothing waits: the code is the approval.</p>
+is missing. Without peer_auth nothing waits: the code is the approval. A
+relay paired that way, once peer_auth is on and <code>peer_auth.relays</code> maps it,
+waits here too: its requests are refused until <strong>Approve with a passkey</strong>
+approves it in place, the same device and certificate, so it need not pair
+again. A revoked or expired relay is not offered: it pairs again.</p>
 </li>
 <li>
 <p><strong>Paired</strong>: each relay with its key's fingerprint and each key device with the
@@ -888,6 +892,18 @@ shows (<code>seamlessd console-open --unlock</code>), and <code>seamlessd approv
 itself by becoming the daemon's account, which exists only there, so a relay
 never vouches that you said yes. A terminal on the Server counts wherever you
 sit: SSH to it.</p>
+<p>Your other decisions are not approvals, and under peer_auth a terminal of your
+own on a Client makes them through a relay the Server maps: promoting or
+discarding a held write (<code>seam promote</code>, <code>seam discard</code>), a pairing code, a
+deny, a revoke, and the console's other owner routes. The Server takes such a
+request for your own hands only when the relay named every process of its
+chain, none of them is an agent, the chain is whole, and your uid there is the
+one both the mapping and the relay's pairing name
+(<a href="../../guides/peer-auth/#your-own-decisions-through-a-relay">the rule</a>). For those
+decisions the Server trusts root on the Client to report the process chain
+truthfully. Each one records an <code>access.relay_decision</code> event naming the relay
+and the chain. A key client, and a relay to a Server without peer_auth, make
+none of them.</p>
 <h2 id="locked-projects-and-agents-on-other-computers">Locked projects and agents on other computers</h2>
 <p>Run agents that need a locked project on the Server's computer, on its
 peer_auth socket (a terminal there, or SSH to it), or on a macOS or Linux

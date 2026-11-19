@@ -577,7 +577,8 @@ release, so that direction is the owner's own decision. The console's routes
 judge it after the form is parsed (<code>ownerHandsIf</code> in
 <code>internal/console/unlock.go</code>): <code>check=off</code> and <code>auto=off</code> (<code>switchedOff</code>, which
 reads the field exactly as the handler does) are refused to an agent's process
-on the peer_auth socket and to a paired device, with the words every
+on the peer_auth socket and to a paired device (but for the owner's own hands
+through a mapped relay, <code>relayOwnerHands</code>), with the words every
 <code>ownerHands</code> route answers, whatever the switch reads now: a stored off
 outlasts the state it changes nothing in today. <code>on</code> stays open to every
 caller. A reset is judged by what it would turn off (<code>updatesResetTurnsOff</code>):
