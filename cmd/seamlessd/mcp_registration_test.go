@@ -214,7 +214,7 @@ func TestReconcileCodexMCP_StateMachine(t *testing.T) {
 		{"malformed get JSON", []byte(`{"name":`), nil, "", 2 * time.Second, "", "parse Codex MCP JSON", 0, 1},
 		{"malformed list JSON", nil, nil, "malformed-list", 2 * time.Second, "", "mcp list --json", 0, 1},
 		{"old Codex without JSON", nil, nil, "no-json", 2 * time.Second, "", "absence check failed", 0, 1},
-		{"timeout", nil, nil, "timeout", 500 * time.Millisecond, "", "deadline exceeded", 0, 1},
+		{"timeout", nil, nil, "timeout", 3 * time.Second, "", "deadline exceeded", 0, 1},
 		{"add failure", nil, marshalCodexMCPState(t, want), "add-fail", 2 * time.Second, "", "write desired", 1, 1},
 		{"repair add failure preserves old entry", marshalCodexMCPState(t, oldConfig), marshalCodexMCPState(t, want), "add-fail", 2 * time.Second, "", "synthetic add failure", 1, 1},
 		{"repair verifies second get", marshalCodexMCPState(t, disabled), marshalCodexMCPState(t, oldConfig), "", 2 * time.Second, "", "desired state still differs", 1, 2},
@@ -442,7 +442,9 @@ func newFakeCodex(t *testing.T, initial, afterAdd []byte, mode string) fakeCodex
 	// The production command bound guards against a hung real CLI; spawning even
 	// this trivial script can exceed it when the whole suite runs under -race.
 	// The fake always exits on its own, so tests need only a hang backstop.
-	// Tests that exercise the deadline path pass their own runner timeout.
+	// Tests that exercise the deadline path pass their own runner timeout,
+	// long enough for the script to log its call under -race (the timeout case
+	// gave it 500ms, and a loaded gate once saw no call logged at all).
 	prevTimeout := mcpCommandTimeout
 	mcpCommandTimeout = 5 * time.Minute
 	t.Cleanup(func() { mcpCommandTimeout = prevTimeout })
