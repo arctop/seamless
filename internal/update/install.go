@@ -3,6 +3,8 @@ package update
 import (
 	"fmt"
 	"strings"
+
+	"github.com/arctop/seamless/internal/shellcmd"
 )
 
 // Distribution values, stamped into seamlessd at link time (main.distribution).
@@ -73,8 +75,9 @@ type Install struct {
 func (i Install) NotifyOnly() bool { return i.Kind != KindInstaller && i.Kind != KindSystem }
 
 // SystemHint is the update command of a peer_auth system daemon laid out as the
-// peer_auth guide lays it out: the updater, run as the daemon's account.
-const SystemHint = "sudo -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml"
+// peer_auth guide lays it out: the updater, run as the daemon's account, through
+// sudo by absolute path (shellcmd.Sudo), never found on the owner's PATH.
+const SystemHint = shellcmd.Sudo + " -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml"
 
 // SystemManualHint is how a peer_auth daemon that does not update itself is
 // updated: by an administrator, since `seamlessd update` refuses it.

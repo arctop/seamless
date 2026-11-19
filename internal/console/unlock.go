@@ -15,8 +15,8 @@ package console
 //     this browser (approval.BeginConsoleUnlock and FinishConsoleUnlock);
 //   - the terminal: POST .../terminal records an unlock bound to this browser's
 //     cookie and answers a pairing code, the page shows it with the command,
-//     and `sudo -k -u <daemon account> seamlessd console-open --unlock <project>
-//     --code <code>` approves it as the daemon's own account. The page asks GET
+//     and `/usr/bin/sudo -k -u <daemon account> seamlessd console-open --unlock
+//     <project> --code <code>` approves it as the daemon's own account. The page asks GET
 //     .../terminal?id= until it is live. Nothing the terminal shows is a
 //     credential: the code only names the row, and no route lets a request
 //     move a row to another browser's cookie.
@@ -43,6 +43,7 @@ import (
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/devices"
 	"github.com/arctop/seamless/internal/passkey"
+	"github.com/arctop/seamless/internal/shellcmd"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -130,7 +131,8 @@ func shellWord(s string) string {
 
 // unlockCommand is the terminal's half of a terminal unlock: console-open as
 // the daemon's own account, through sudo -k so it asks every time, approving
-// the code this browser's page shows.
+// the code this browser's page shows. sudo and env are named by absolute path
+// (shellcmd).
 func (s *Service) unlockCommand(project, code string) string {
 	account, seamlessd, env := "<daemon account>", "seamlessd", ""
 	if t := s.cfg.Terminal; t != nil {
@@ -141,10 +143,11 @@ func (s *Service) unlockCommand(project, code string) string {
 			seamlessd = shellWord(t.Seamlessd)
 		}
 		if t.Config != "" {
-			env = "env SEAMLESS_CONFIG=" + shellWord(t.Config) + " "
+			env = shellcmd.Env + " SEAMLESS_CONFIG=" + shellWord(t.Config) + " "
 		}
 	}
-	return fmt.Sprintf("sudo -k -u %s %s%s console-open --unlock %s --code %s", account, env, seamlessd, shellWord(project), shellWord(code))
+	return fmt.Sprintf("%s -k -u %s %s%s console-open --unlock %s --code %s", shellcmd.Sudo, account, env, seamlessd,
+		shellWord(project), shellWord(code))
 }
 
 func (s *Service) unlockPage(w http.ResponseWriter, r *http.Request) {

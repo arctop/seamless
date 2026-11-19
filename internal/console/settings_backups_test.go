@@ -951,7 +951,7 @@ func TestBackupsRestore_PasskeyGate(t *testing.T) {
 	// account, and the ceremony will not begin.
 	_, page := lc.get(t, "/console/settings?s=backups&restore="+url.QueryEscape(ref), "")
 	require.Contains(t, page, "No passkey is enrolled, so a restore runs from a terminal")
-	require.Contains(t, page, "sudo -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd restore /backups/"+name)
+	require.Contains(t, page, "/usr/bin/sudo -u _seamless /usr/bin/env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd restore /backups/"+name)
 	require.Contains(t, page, "seamlessd restore --merge /backups/"+name)
 	require.NotContains(t, page, "Restore with passkey")
 	// A locked project shows its name and the backup's counts, never now's.

@@ -605,7 +605,7 @@ func TestProbeInstall_System(t *testing.T) {
 				}
 				return read(p)
 			}
-		}, sysCfg, update.KindUnknown, "sudo loginctl enable-linger _seamless"},
+		}, sysCfg, update.KindUnknown, ": /usr/bin/sudo /bin/loginctl enable-linger _seamless"},
 		{"windows has no peer_auth", "windows", nil, sysCfg, update.KindUnknown, "macOS and Linux only"},
 		{"no config file", "darwin", nil, installConfig{peerAuth: true, owner: "me"},
 			update.KindUnknown, "no config file"},

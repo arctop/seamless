@@ -211,12 +211,12 @@ final class FlowTests: XCTestCase {
             body: "This Mac's Touch ID can now approve access to locked projects. The daemon lists it as \u{201C}Test Mac\u{201D}. "
                 + "The key it replaces is deleted from this Mac, but the daemon still lists that key's credential. "
                 + "To remove it, run this in your own terminal:",
-            setApart: ["sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers remove 01OLDAPPROVER0000000000000"],
+            setApart: ["/usr/bin/sudo -k -u _seamless /usr/bin/env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers remove 01OLDAPPROVER0000000000000"],
             succeeded: true, instructs: true)))
         XCTAssertFalse(try XCTUnwrap(out.notice).autoCloses)
         XCTAssertFalse(out.message.contains("01NEWAPPROVER0000000000000"), out.message)
         XCTAssertEqual(ui.asked.count, 2)
-        XCTAssertTrue(ui.asked[0].command.hasPrefix("sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers enroll-code touchid --key "), ui.asked[0].command)
+        XCTAssertTrue(ui.asked[0].command.hasPrefix("/usr/bin/sudo -k -u _seamless /usr/bin/env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers enroll-code touchid --key "), ui.asked[0].command)
         XCTAssertNil(ui.asked[0].problem)
         XCTAssertEqual(ui.asked[1].problem, CodeProblem.notACode)
 
@@ -231,7 +231,7 @@ final class FlowTests: XCTestCase {
         XCTAssertEqual(pub.count, 65)
         XCTAssertEqual(pub.first, 0x04)
         XCTAssertEqual(ui.asked[0].command,
-                       "sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers enroll-code touchid --key " + Messages.keyFingerprint(publicKey: pub),
+                       "/usr/bin/sudo -k -u _seamless /usr/bin/env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers enroll-code touchid --key " + Messages.keyFingerprint(publicKey: pub),
                        "the code is minted for the key this enrollment registers")
 
         let stored = try keys.keys()
@@ -283,7 +283,7 @@ final class FlowTests: XCTestCase {
         ])
         defer { server.stop() }
         let out = flows(server, keys: keys, ui: FakeUI(codes: ["ABCD-EFGH-JKMN-PQRS"])).enroll(name: nil)
-        XCTAssertEqual(out.notice?.setApart, ["sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers remove 01OLDAPPROVER0000000000000"])
+        XCTAssertEqual(out.notice?.setApart, ["/usr/bin/sudo -k -u _seamless /usr/bin/env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers remove 01OLDAPPROVER0000000000000"])
         let form = formOf(server.requestStrings[1])
         XCTAssertNil(form["replace"])
         XCTAssertNil(form["replace_signature"])

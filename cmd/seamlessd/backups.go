@@ -27,6 +27,7 @@ import (
 	"github.com/arctop/seamless/internal/archive"
 	"github.com/arctop/seamless/internal/backup"
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/shellcmd"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/update"
 )
@@ -492,15 +493,15 @@ func restoreCmd(ctx context.Context, args []string, d restoreDeps) error {
 // the proof, as for the terminal approval.
 func restoreAccountCheck(cfg config.Config, d restoreDeps) error {
 	if d.euid == 0 {
-		return errors.New("run it as the daemon's account (sudo -u <account> seamlessd restore ...), never as root")
+		return errors.New("run it as the daemon's account (" + shellcmd.Sudo + " -u <account> seamlessd restore ...), never as root")
 	}
 	facts, err := d.inspect(cfg.DataDir)
 	if err != nil {
 		return fmt.Errorf("data_dir %s: %w (run this as the daemon's account)", cfg.DataDir, err)
 	}
 	if int(facts.uid) != d.euid {
-		return fmt.Errorf("this is not the daemon's account (data_dir %s belongs to uid %d): run it as the daemon's account (sudo -u <account> seamlessd restore ...)",
-			cfg.DataDir, facts.uid)
+		return fmt.Errorf("this is not the daemon's account (data_dir %s belongs to uid %d): run it as the daemon's account (%s -u <account> seamlessd restore ...)",
+			cfg.DataDir, facts.uid, shellcmd.Sudo)
 	}
 	return nil
 }

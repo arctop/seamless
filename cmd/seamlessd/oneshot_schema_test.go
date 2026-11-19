@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/shellcmd"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -300,9 +301,9 @@ func TestMapRepo_RefusesToCreateADatabaseOnAClientInstall(t *testing.T) {
 	err := refusing(t, func() error { return runMapRepo([]string{"--path", dir, "--project", "app"}) })
 
 	require.ErrorContains(t, err, "its repositories are mapped in the server's database, not here")
-	require.ErrorContains(t, err, "--path "+posixShellArg(dir)+" --project app")
+	require.ErrorContains(t, err, "--path "+shellcmd.PosixArg(dir)+" --project app")
 	if name := config.Hostname(); name != "" {
-		require.ErrorContains(t, err, "seamlessd map-repo --host "+posixShellArg(name)+" ")
+		require.ErrorContains(t, err, "seamlessd map-repo --host "+shellcmd.PosixArg(name)+" ")
 	}
 	require.NoDirExists(t, dataDir)
 

@@ -15,6 +15,7 @@ import (
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/devices"
 	"github.com/arctop/seamless/internal/relay"
+	"github.com/arctop/seamless/internal/shellcmd"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -137,5 +138,5 @@ func relayRenewalWords(r devices.Renewal, server string) string {
 		"(restart it after renewing), revoke each on the Devices page, get a code, and run on its computer, as an administrator, "+
 		"with the fingerprint this server then shows (seamlessd devices code prints it): %s -u %s -H %s relay pair --server %s "+
 		"--fingerprint %s --owner-uid <your uid there> --replace --code -", when, strings.Join(r.Relays, ", "),
-		"/usr/bin/sudo", relay.DefaultAccount, relay.DefaultBinary, server, relay.PairAgainFingerprint)
+		shellcmd.Sudo, relay.DefaultAccount, relay.DefaultBinary, server, relay.PairAgainFingerprint)
 }

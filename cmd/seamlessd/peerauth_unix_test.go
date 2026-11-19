@@ -427,7 +427,7 @@ func TestLogPolicy_DaemonAccountPin(t *testing.T) {
 	out := logged(env)
 	require.Contains(t, out, "level=WARN")
 	require.Contains(t, out, "no pin at /opt/seamless/etc/daemon-account names the daemon's account")
-	require.Contains(t, out, `echo \"_seamless $(id -u _seamless)\" | sudo tee /opt/seamless/etc/daemon-account >/dev/null && sudo chmod 0644 /opt/seamless/etc/daemon-account`)
+	require.Contains(t, out, `echo \"_seamless $(id -u _seamless)\" | /usr/bin/sudo /usr/bin/tee /opt/seamless/etc/daemon-account >/dev/null && /usr/bin/sudo /bin/chmod 0644 /opt/seamless/etc/daemon-account`)
 
 	env.daemonAccount = paPinned(uint32(os.Geteuid()))
 	out = logged(env)
@@ -466,7 +466,7 @@ func TestPeerAuthChecks_DaemonAccountRows(t *testing.T) {
 	require.Equal(t, []check{{statusWarn, "peer_auth.daemon_account", "no pin at /opt/seamless/etc/daemon-account names the daemon's account, " +
 		"so seam approve, seam touchid enroll and the Touch ID approver fall back to accepting any system account as the daemon's, " +
 		"another service's or a restricted role account included: pin this one, as an administrator: " +
-		`echo "_seamless_test $(id -u _seamless_test)" | sudo tee /opt/seamless/etc/daemon-account >/dev/null && sudo chmod 0644 /opt/seamless/etc/daemon-account`}}, pin)
+		`echo "_seamless_test $(id -u _seamless_test)" | /usr/bin/sudo /usr/bin/tee /opt/seamless/etc/daemon-account >/dev/null && /usr/bin/sudo /bin/chmod 0644 /opt/seamless/etc/daemon-account`}}, pin)
 
 	env.daemonAccount = paPinned(me)
 	pin, fails = rows(env)

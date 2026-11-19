@@ -549,7 +549,7 @@ func TestSignIn_AddPasskeyCommandFollowsTheTier(t *testing.T) {
 		c.Terminal = &TerminalApprover{Account: "_seamless", Seamlessd: "/opt/seamless/bin/seamlessd", Config: "/opt/seamless/etc/seamless.yaml"}
 	})
 	added = daemon.signinAdd(t, signinNewBrowser(t), signinAuthenticator(t), "phone")
-	require.Equal(t, "sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd approvers approve --code "+
+	require.Equal(t, "/usr/bin/sudo -k -u _seamless /usr/bin/env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd approvers approve --code "+
 		signinString(t, added, "code"), signinString(t, added, "command"))
 }
 

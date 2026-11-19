@@ -31,6 +31,7 @@ import (
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/devices"
 	"github.com/arctop/seamless/internal/relay"
+	"github.com/arctop/seamless/internal/shellcmd"
 )
 
 // relayDoctorEnv is where doctor looks for a relay; tests point it at a temp
@@ -195,12 +196,14 @@ func relayBinaryRow(e relayDoctorEnv) (check, bool) {
 
 // relayRestartCommand restarts the relay's service on goos: its LaunchDaemon
 // on macOS, its system unit on Linux. The running relay keeps the binary it
-// started with until then.
+// started with until then. Root runs it, so sudo and the service manager are
+// named by their full paths (shellcmd.ToolsFor), as the root step names them.
 func relayRestartCommand(goos string) string {
+	t := shellcmd.ToolsFor(goos)
 	if goos == "darwin" {
-		return "sudo launchctl kickstart -k system/" + clientRelayLabel
+		return t.AsRoot(t.Launchctl, "kickstart", "-k", "system/"+clientRelayLabel)
 	}
-	return "sudo systemctl restart " + strings.TrimSuffix(clientRelayUnit, ".service")
+	return t.AsRoot(t.Systemctl, "restart", strings.TrimSuffix(clientRelayUnit, ".service"))
 }
 
 // relayPairingRow reads the pairing: which server, which certificate it pins,

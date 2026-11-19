@@ -27,6 +27,7 @@ import (
 
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/shellcmd"
 	"github.com/arctop/seamless/internal/update"
 )
 
@@ -365,8 +366,9 @@ func probeLinger(env installProbeEnv) string {
 		return "could not name uid " + uid + " to check that its systemd user manager lingers"
 	}
 	if _, err := env.readFile(filepath.Join(lingerDir, a.Name)); err != nil {
+		t := shellcmd.ToolsFor("linux")
 		return "the systemd user manager of " + a.Name + " does not linger, and the updater runs as a unit of it: " +
-			"sudo loginctl enable-linger " + a.Name
+			t.AsRoot(t.Loginctl, "enable-linger", a.Name)
 	}
 	return ""
 }

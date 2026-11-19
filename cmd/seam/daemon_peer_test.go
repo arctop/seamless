@@ -505,7 +505,7 @@ func TestApprove_AccountNamedByUIDMatchesThePeer(t *testing.T) {
 	require.Equal(t, 0, rig.run("R-7F3K", "--for", "1h"), rig.errb.String())
 	require.Contains(t, rig.out.String(), "Access request R-7F3K\n")
 	calls := rig.runner.recorded()
-	require.Equal(t, []string{"sudo", "-k", "-u", account}, calls[len(calls)-1][:4])
+	require.Equal(t, []string{"/usr/bin/sudo", "-k", "-u", account}, calls[len(calls)-1][:4])
 }
 
 // A socket the agent controls can be swapped between the check and the read, so

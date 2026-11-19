@@ -121,7 +121,7 @@ command:
 | Homebrew | no | `brew upgrade --cask arctop/tap/seamless` |
 | a clone (`make install`), `go install` or `go build` | no | `git pull && make install` |
 | a client of a shared daemon | no | re-run the pairing commands `seamlessd client-config` prints on the server |
-| a [peer_auth](/guides/peer-auth/) system daemon | yes, in [the guide's layout](/guides/peer-auth/#updates) | `sudo -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml` |
+| a [peer_auth](/guides/peer-auth/) system daemon | yes, in [the guide's layout](/guides/peer-auth/#updates) | `/usr/bin/sudo -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml` |
 
 **What is sent.** One anonymous `GET` to
 `https://api.github.com/repos/arctop/seamless/releases`, with a fixed

@@ -322,12 +322,13 @@ public struct Flows {
 
     /// `daemonCommand` is a `seamlessd approvers` command run as the daemon's
     /// account, as `seam approve` would run the daemon's seamlessd
-    /// (cmd/seam/approve.go sudoArgv): "enroll-code touchid" mints a Touch ID
-    /// code, "remove <id>" removes a credential.
+    /// (cmd/seam/approve.go sudoArgv), with sudo and env by absolute path so
+    /// the owner's PATH picks neither (internal/shellcmd): "enroll-code
+    /// touchid" mints a Touch ID code, "remove <id>" removes a credential.
     func daemonCommand(_ t: Terminal?, account: String, verb: String) -> String {
-        var parts = ["sudo -k -u", account]
+        var parts = ["/usr/bin/sudo -k -u", account]
         if let config = t?.config, config.hasPrefix("/") {
-            parts.append("env SEAMLESS_CONFIG=" + Text.clean(config, max: 120))
+            parts.append("/usr/bin/env SEAMLESS_CONFIG=" + Text.clean(config, max: 120))
         }
         if let exe = t?.seamlessd, exe.hasPrefix("/") {
             parts.append(Text.clean(exe, max: 120))

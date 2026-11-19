@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/shellcmd"
 )
 
 // listenerAnswer is what answers at one address of the listener: whether a
@@ -255,15 +256,13 @@ func relaySocketServer(env relaySocketEnv) (relay, installed bool) {
 // relaySocketRepair is the client server_url row's repair for a relay's
 // socket that does not answer: the relay's service, or its root step.
 func relaySocketRepair(goos string, installed bool) string {
-	start := "sudo systemctl restart " + strings.TrimSuffix(clientRelayUnit, ".service")
 	svc := "the system unit " + clientRelayUnit
 	if goos == "darwin" {
-		start = "sudo launchctl kickstart -k system/" + clientRelayLabel
 		svc = "the LaunchDaemon " + clientRelayLabel
 	}
 	if installed {
 		return fmt.Sprintf("the relay serves it on this computer, as %s: start it (%s), and if it stops again, doctor run as the "+
-			"relay's account says why (sudo -u %s -H /opt/seamless/bin/seamlessd doctor)", svc, start, clientRelayAccount)
+			"relay's account says why (%s -u %s -H /opt/seamless/bin/seamlessd doctor)", svc, relayRestartCommand(goos), shellcmd.Sudo, clientRelayAccount)
 	}
 	return fmt.Sprintf("the relay serves it on this computer, and its root step has not run: seamlessd setup prints it, to run as "+
 		"an administrator (%sguides/network-install/#the-relays-root-step); it installs the relay's service, %s", setupDocs, svc)

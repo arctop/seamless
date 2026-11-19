@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/arctop/seamless/internal/shellcmd"
 )
 
 // A copy is six commands, each value quoted and each tool by its full path:
@@ -26,7 +28,7 @@ func TestAddrStepCopyCommands(t *testing.T) {
 		"darwin": {"/usr/sbin/chown", "/usr/bin/shasum -a 256"},
 		"linux":  {"/bin/chown", "/usr/bin/sha256sum"},
 	} {
-		got := rootstepCopyCommands(rootstepToolsFor(goos), rootstepCopy{source: "/h/my pair/it's.key", sha256: sum,
+		got := rootstepCopyCommands(shellcmd.ToolsFor(goos), rootstepCopy{source: "/h/my pair/it's.key", sha256: sum,
 			staged: "/opt/x/.k.new", dest: "/opt/x/k", owner: "root", group: "_example", mode: "0640"})
 		require.Equal(t, []string{
 			"/usr/bin/sudo /usr/bin/install -m 0600 /dev/null /opt/x/.k.new",
@@ -38,8 +40,8 @@ func TestAddrStepCopyCommands(t *testing.T) {
 		}, got, goos)
 	}
 	// The tailnet's command is root's, where its own packages put it.
-	require.Equal(t, "/Applications/Tailscale.app/Contents/MacOS/Tailscale", rootstepToolsFor("darwin").tailscale)
-	require.Equal(t, "/usr/bin/tailscale", rootstepToolsFor("linux").tailscale)
+	require.Equal(t, "/Applications/Tailscale.app/Contents/MacOS/Tailscale", shellcmd.ToolsFor("darwin").Tailscale)
+	require.Equal(t, "/usr/bin/tailscale", shellcmd.ToolsFor("linux").Tailscale)
 }
 
 // addrstepPlan is a TLS root plan from the owner's files whose every value

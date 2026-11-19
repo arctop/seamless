@@ -65,7 +65,7 @@ func TestListenPaired_SquattedLoopbackStopsTheStart(t *testing.T) {
 	require.Contains(t, err.Error(), "localhost is both loopback addresses")
 	require.Contains(t, err.Error(), "the service starts serve again, and it runs once the address is free")
 	if runtime.GOOS != "windows" {
-		require.Contains(t, err.Error(), "sudo lsof -nP -iTCP:"+strconv.Itoa(port)+" -sTCP:LISTEN names it")
+		require.Contains(t, err.Error(), "(/usr/bin/sudo lsof -nP -iTCP:"+strconv.Itoa(port)+" -sTCP:LISTEN names it")
 	}
 	require.NoError(t, squat.Close())
 

@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/arctop/seamless/internal/shellcmd"
 )
 
 // rootstepPlan is a relay plan whose every value holds its format.
@@ -33,29 +35,29 @@ func TestRootStepChain(t *testing.T) {
 // The tools are named by the paths macOS and Linux keep them at, and on this
 // computer each of its own OS is there.
 func TestRootStepTools(t *testing.T) {
-	mac, lin := rootstepToolsFor("darwin"), rootstepToolsFor("linux")
-	require.Equal(t, "/usr/sbin/chown", mac.chown)
-	require.Equal(t, "/usr/bin/shasum -a 256", mac.sum)
-	require.Equal(t, "/bin/chown", lin.chown)
-	require.Equal(t, "/usr/bin/sha256sum", lin.sum)
-	require.Equal(t, "/bin/systemctl", lin.systemctl)
-	for _, tt := range []rootstepTools{mac, lin} {
-		for _, p := range []string{tt.sudo, tt.env, tt.id, tt.install, tt.tee, tt.chmod, tt.chown, tt.mv, tt.sum} {
+	mac, lin := shellcmd.ToolsFor("darwin"), shellcmd.ToolsFor("linux")
+	require.Equal(t, "/usr/sbin/chown", mac.Chown)
+	require.Equal(t, "/usr/bin/shasum -a 256", mac.Sum)
+	require.Equal(t, "/bin/chown", lin.Chown)
+	require.Equal(t, "/usr/bin/sha256sum", lin.Sum)
+	require.Equal(t, "/bin/systemctl", lin.Systemctl)
+	for _, tt := range []shellcmd.Tools{mac, lin} {
+		for _, p := range []string{tt.Sudo, tt.Env, tt.ID, tt.Install, tt.Tee, tt.Chmod, tt.Chown, tt.Mv, tt.Sum} {
 			require.True(t, strings.HasPrefix(p, "/"), p)
 		}
 	}
-	var own rootstepTools
+	var own shellcmd.Tools
 	var always, usual []string
 	switch runtime.GOOS {
 	case "darwin":
 		own = mac
-		always = []string{own.sudo, own.env, own.id, own.install, own.tee, own.chmod, own.chown, own.mv, strings.Fields(own.sum)[0], own.dscl, own.launchctl}
+		always = []string{own.Sudo, own.Env, own.ID, own.Install, own.Tee, own.Chmod, own.Chown, own.Mv, strings.Fields(own.Sum)[0], own.Dscl, own.Launchctl}
 	case "linux":
 		own = lin
 		// coreutils is everywhere; sudo, shadow's tools and systemd are not
 		// on every machine a test runs on.
-		always = []string{own.env, own.id, own.install, own.tee, own.chmod, own.chown, own.mv, own.sum}
-		usual = []string{own.sudo, own.useradd, own.groupadd, own.usermod, own.systemctl}
+		always = []string{own.Env, own.ID, own.Install, own.Tee, own.Chmod, own.Chown, own.Mv, own.Sum}
+		usual = []string{own.Sudo, own.Useradd, own.Groupadd, own.Usermod, own.Systemctl}
 	default:
 		t.Skip("the relay's root step is printed for macOS and Linux")
 	}

@@ -54,6 +54,7 @@ import (
 
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/shellcmd"
 )
 
 // The guide's peer_auth layout (docs-src/guides/peer-auth.md, "Deploy it"):
@@ -350,13 +351,13 @@ func setupLANCertCommands(name, cert, key string) []string {
 	}
 }
 
-// setupHomeArg quotes a path for a command the owner runs (posixShellArg),
+// setupHomeArg quotes a path for a command the owner runs (shellcmd.PosixArg),
 // leaving a leading ~/ bare so the shell still reads it as the home.
 func setupHomeArg(p string) string {
 	if rest, ok := strings.CutPrefix(p, "~/"); ok {
-		return "~/" + posixShellArg(rest)
+		return "~/" + shellcmd.PosixArg(rest)
 	}
-	return posixShellArg(p)
+	return shellcmd.PosixArg(p)
 }
 
 // setupResolveAddress resolves plan.name on this computer and fills in the
@@ -855,16 +856,16 @@ func (p setupTLSRootPlan) problem() string {
 // as its own alone and checks it against what setup read -- the certificate
 // 0644 and the key 0640, the daemon's group's.
 func setupTLSRootCommands(p setupTLSRootPlan) []string {
-	t := rootstepToolsFor(p.goos)
+	t := shellcmd.ToolsFor(p.goos)
 	cert, key := setupPeerAuthPair(p.name)
-	qc, qk := posixShellArg(cert), posixShellArg(key)
-	cmds := []string{t.asRoot(t.install, "-d", "-o", "root", "-g", posixShellArg(p.acct), "-m", "0750", setupPeerAuthTLSDir)}
+	qc, qk := shellcmd.PosixArg(cert), shellcmd.PosixArg(key)
+	cmds := []string{t.AsRoot(t.Install, "-d", "-o", "root", "-g", shellcmd.PosixArg(p.acct), "-m", "0750", setupPeerAuthTLSDir)}
 	if p.source == setupAddrTailscale {
 		return append(cmds,
-			t.asRoot(t.tailscale, "cert", "--cert-file", qc, "--key-file", qk, posixShellArg(p.name)),
-			t.asRoot(t.chown, posixShellArg("root:"+p.acct), qc, qk),
-			t.asRoot(t.chmod, "0644", qc),
-			t.asRoot(t.chmod, "0640", qk))
+			t.AsRoot(t.Tailscale, "cert", "--cert-file", qc, "--key-file", qk, shellcmd.PosixArg(p.name)),
+			t.AsRoot(t.Chown, shellcmd.PosixArg("root:"+p.acct), qc, qk),
+			t.AsRoot(t.Chmod, "0644", qc),
+			t.AsRoot(t.Chmod, "0640", qk))
 	}
 	for _, c := range []rootstepCopy{
 		{source: p.cert, sha256: p.certSHA, staged: setupTLSStaged(cert), dest: cert, owner: "root", group: p.acct, mode: "0644"},

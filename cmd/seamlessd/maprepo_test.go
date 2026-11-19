@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/shellcmd"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/store/storetest"
 )
@@ -166,7 +167,7 @@ func TestMapRepo_ThisMachine(t *testing.T) {
 	_, ok := mrRow(t, db, "alpha", gone)
 	require.True(t, ok)
 	require.Contains(t, warn.String(), "note: "+gone+" does not exist on this machine")
-	require.Contains(t, warn.String(), "seamlessd map-repo --host NAME --path "+posixShellArg(gone)+" --project example-app")
+	require.Contains(t, warn.String(), "seamlessd map-repo --host NAME --path "+shellcmd.PosixArg(gone)+" --project example-app")
 	require.Contains(t, warn.String(), "(paired here: example-laptop).")
-	require.Contains(t, warn.String(), "seamlessd unmap-repo --path "+posixShellArg(gone)+" removes this machine's mapping")
+	require.Contains(t, warn.String(), "seamlessd unmap-repo --path "+shellcmd.PosixArg(gone)+" removes this machine's mapping")
 }

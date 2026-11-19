@@ -7,6 +7,7 @@ import (
 
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/shellcmd"
 )
 
 // The shared client config. Under peer_auth a client config holds no secret --
@@ -73,7 +74,7 @@ func configFileCheck(cfg config.Config, goos string, env sharedConfigEnv) check 
 	if len(secrets) > 0 {
 		return configPermissionsCheck(path, goos)
 	}
-	if c, ok := sharedClientConfigCheck(path, env); ok {
+	if c, ok := sharedClientConfigCheck(path, goos, env); ok {
 		return c
 	}
 	c := configPermissionsCheck(path, goos)
@@ -86,8 +87,9 @@ func configFileCheck(cfg config.Config, goos string, env sharedConfigEnv) check 
 // sharedClientConfigCheck judges a secret-free client config at path as a
 // shared one. ok is false when it is not one: not a regular file (a symlink
 // included), or owned by neither root nor the pinned daemon account, or not
-// inspectable on this platform. Those keep the owner-only rule.
-func sharedClientConfigCheck(path string, env sharedConfigEnv) (check, bool) {
+// inspectable on this platform. Those keep the owner-only rule. goos is this
+// computer's, whose root the repair names its tools for.
+func sharedClientConfigCheck(path, goos string, env sharedConfigEnv) (check, bool) {
 	const name = "config permissions"
 	facts, err := env.inspect(path)
 	if err != nil || facts.symlink || !facts.mode.IsRegular() {
@@ -112,9 +114,10 @@ func sharedClientConfigCheck(path string, env sharedConfigEnv) (check, bool) {
 	lead := path + " holds no secret (a client config with no key)"
 	perm := facts.mode.Perm()
 	if perm&0o022 != 0 {
+		t := shellcmd.ToolsFor(goos)
 		return check{statusWarn, name, fmt.Sprintf(
-			"%s, but mode %04o lets accounts other than %s rewrite it, and with it redirect every hook and bridge that reads it; run: sudo %s",
-			lead, perm, owner, chmodRepairCommand("644", path))}, true
+			"%s, but mode %04o lets accounts other than %s rewrite it, and with it redirect every hook and bridge that reads it; run: %s",
+			lead, perm, owner, t.AsRoot(t.Chmod, "644", chmodRepairArg(path)))}, true
 	}
 	if p := sharedConfigDirProblem(path, trusted, env); p != "" {
 		return check{statusWarn, name, lead + ", but " + p +

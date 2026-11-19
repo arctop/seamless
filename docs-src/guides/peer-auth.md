@@ -428,7 +428,7 @@ and revokes every live lease
 The page then shows the command that mints a code for it:
 
 ```bash
-sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml \
+/usr/bin/sudo -k -u _seamless /usr/bin/env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml \
   /opt/seamless/bin/seamlessd approvers enroll-code passkey --key XXXX-XXXX-XXXX-XXXX
 ```
 
@@ -442,7 +442,7 @@ Keychain, count as one.
 **With console sign-in by passkey** a passkey is added from the device that will
 hold it. `seamlessd approvers add`, run as the daemon's account, prints the plain
 address; the device creates the passkey and shows a code.
-`sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd approvers approve --code 7KQ2-M9XD`
+`/usr/bin/sudo -k -u _seamless /usr/bin/env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd approvers approve --code 7KQ2-M9XD`
 shows that passkey and asks before adding it.
 
 Only the code crosses, and it names a waiting passkey without carrying a key, so
@@ -739,7 +739,7 @@ authenticator there. **Approve from a terminal** shows a code and the command
 that approves it, for example:
 
 ```bash
-sudo -k -u _seamless seamlessd console-open --unlock example-finance --code 7KQ2-M9XD
+/usr/bin/sudo -k -u _seamless seamlessd console-open --unlock example-finance --code 7KQ2-M9XD
 ```
 
 Run it in your own terminal. `sudo -k` asks for your password or Touch ID, and the
@@ -843,7 +843,9 @@ and approves through its relay, and the server verifies its signature.
 `seamlessd approve` stays a server command, as does every terminal approval:
 `seam approve`'s sudo path, a console unlock's code and `seamlessd approvers`
 run on this computer, in a terminal here or over SSH. On a client, `seam
-approve --passkey` and Touch ID approve.
+approve` runs no sudo: its `y` opens the request's passkey page, as `seam
+approve --passkey` does, Touch ID approves from the agent's dialog, and its
+`d` denies through the relay, from your own hands there (below).
 
 Revoking a relay ends its leases, read grants and waiting requests at once. A
 console lock turned back on, and a restore, end a relay's leases as they end
@@ -851,7 +853,8 @@ this machine's.
 
 #### Your own decisions through a relay {#your-own-decisions-through-a-relay}
 
-Your other decisions - a pairing code, denying a request, revoking a lease, a
+Your other decisions - a pairing code, denying a request (`d` in `seam approve`
+on that computer), revoking a lease, a
 read grant or a device, Lock again, promoting or discarding a held write
 (`seam promote`, `seam discard`), features, turning updates off, and backups -
 go through a relay you map only from your own hands there: a terminal of yours
@@ -877,7 +880,8 @@ when all of these hold:
 
 Anything else is refused (403), and the refusal says which rule failed: a
 relay of an earlier release, a process it did not name, an agent in the chain,
-a chain that may be cut, a pairing that recorded no uid or another. A
+a chain that may be cut, a pairing that recorded no uid or another; `seam
+approve` shows that refusal as it came. A
 restricted account, a key device and a relay to a server without peer_auth
 never make these decisions. Each decision your hands make through a relay
 records an `access.relay_decision` event naming the relay, its device and the
@@ -1372,7 +1376,7 @@ A rollback renames the kept ones back the same way. Hooks installed with
 with the daemon. To update by hand:
 
 ```bash
-sudo -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml
+/usr/bin/sudo -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml
 ```
 
 The trade-off: the daemon's account can rewrite its own binaries, so a
@@ -1515,7 +1519,7 @@ not on the [passkey origin](#the-passkey-origin) - the confirm card says why and
 shows the terminal's way instead, with a copy button:
 
 ```bash
-sudo -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd restore [--merge] <path>
+/usr/bin/sudo -u _seamless /usr/bin/env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd restore [--merge] <path>
 ```
 
 [`seamlessd restore`](/reference/cli-seamlessd/#seamlessd_restore) refuses to

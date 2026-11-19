@@ -30,6 +30,7 @@ import (
 	"github.com/arctop/seamless/internal/archive"
 	"github.com/arctop/seamless/internal/backup"
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/shellcmd"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/update"
 )
@@ -989,7 +990,7 @@ func (s *Service) passkeyReach(r *http.Request) passkeyFacts {
 
 // restoreCommand is the terminal's way to restore the backup at path in mode:
 // seamlessd restore as the daemon's own account, the proof a passkey stands in
-// for here.
+// for here, through sudo and env by absolute path (shellcmd).
 func (s *Service) restoreCommand(path, mode string) string {
 	account, seamlessd, env := "<daemon account>", "seamlessd", ""
 	if t := s.cfg.Terminal; t != nil {
@@ -1000,14 +1001,14 @@ func (s *Service) restoreCommand(path, mode string) string {
 			seamlessd = shellWord(t.Seamlessd)
 		}
 		if t.Config != "" {
-			env = "env SEAMLESS_CONFIG=" + shellWord(t.Config) + " "
+			env = shellcmd.Env + " SEAMLESS_CONFIG=" + shellWord(t.Config) + " "
 		}
 	}
 	flag := ""
 	if mode == backup.ModeMerge {
 		flag = "--merge "
 	}
-	return fmt.Sprintf("sudo -u %s %s%s restore %s%s", account, env, seamlessd, flag, shellWord(path))
+	return fmt.Sprintf("%s -u %s %s%s restore %s%s", shellcmd.Sudo, account, env, seamlessd, flag, shellWord(path))
 }
 
 // restoreProgressFor is the progress card of a restore in flight, nil without

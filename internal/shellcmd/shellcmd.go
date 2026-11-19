@@ -33,9 +33,9 @@ type Tools struct {
 	Sum string
 	// macOS's account and service tools.
 	Dscl, Launchctl string
-	// Linux's. /bin/systemctl holds on a Debian or Ubuntu whose /bin is not
-	// merged into /usr/bin, and wherever it is.
-	Useradd, Groupadd, Usermod, Systemctl string
+	// Linux's. /bin/systemctl and /bin/loginctl hold on a Debian or Ubuntu
+	// whose /bin is not merged into /usr/bin, and wherever it is.
+	Useradd, Groupadd, Usermod, Systemctl, Loginctl string
 	// Tailscale is the tailnet's command where its own packages put it,
 	// root's: the macOS app's, Linux's /usr/bin. Never a package manager's
 	// prefix the owner can write (Homebrew's), which root would run.
@@ -54,6 +54,7 @@ func ToolsFor(goos string) Tools {
 	}
 	t.Chown, t.Sum = "/bin/chown", "/usr/bin/sha256sum"
 	t.Useradd, t.Groupadd, t.Usermod, t.Systemctl = "/usr/sbin/useradd", "/usr/sbin/groupadd", "/usr/sbin/usermod", "/bin/systemctl"
+	t.Loginctl = "/bin/loginctl"
 	t.Tailscale = "/usr/bin/tailscale"
 	return t
 }

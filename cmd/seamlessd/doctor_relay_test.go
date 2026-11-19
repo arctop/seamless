@@ -128,10 +128,11 @@ func TestRelayDoctor_SaysWhenRootsCopyIsNotThisSeamlessd(t *testing.T) {
 }
 
 // The restart that puts root's new copy to work: the relay's LaunchDaemon on
-// macOS, its system unit on Linux, as the root step's block 4 names them.
+// macOS, its system unit on Linux, as the root step's block 4 names them, and
+// by the same full paths.
 func TestRelayRestartCommand(t *testing.T) {
-	require.Equal(t, "sudo launchctl kickstart -k system/com.arctop.seamless.relay", relayRestartCommand("darwin"))
-	require.Equal(t, "sudo systemctl restart seamless-relay", relayRestartCommand("linux"))
+	require.Equal(t, "/usr/bin/sudo /bin/launchctl kickstart -k system/com.arctop.seamless.relay", relayRestartCommand("darwin"))
+	require.Equal(t, "/usr/bin/sudo /bin/systemctl restart seamless-relay", relayRestartCommand("linux"))
 }
 
 // A paired, running relay, seen as its own account: the account (no pin, so a

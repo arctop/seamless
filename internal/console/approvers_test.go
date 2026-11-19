@@ -229,7 +229,7 @@ func TestApprovers_FinishNamesTheKeyAndItsCommand(t *testing.T) {
 	}{
 		"no terminal approver": {plainDB, plainMux, "seamlessd approvers enroll-code passkey --key "},
 		"the daemon's account": {withTerminal.db, withTerminal.mux,
-			"sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd approvers enroll-code passkey --key "},
+			"/usr/bin/sudo -k -u _seamless /usr/bin/env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd approvers enroll-code passkey --key "},
 	} {
 		t.Run(name, func(t *testing.T) {
 			a, err := passkeytest.New(true)

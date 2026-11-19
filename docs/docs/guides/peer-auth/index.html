@@ -702,7 +702,7 @@ and revokes every live lease
 <p><strong>Passkeys</strong> work with hardware keys, phones and password managers. Open
 <code>/console/approvers</code> on the passkey origin in your browser and create the passkey.
 The page then shows the command that mints a code for it:</p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -k -u _seamless env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>/opt/seamless/etc/seamless.yaml <span class="se">\
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">/usr/bin/sudo -k -u _seamless /usr/bin/env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>/opt/seamless/etc/seamless.yaml <span class="se">\
 </span></span></span><span class="line"><span class="cl">  /opt/seamless/bin/seamlessd approvers enroll-code passkey --key XXXX-XXXX-XXXX-XXXX
 </span></span></code></pre></div>
 <p>Run it in your own terminal, check that the key it prints is the one on the page,
@@ -714,7 +714,7 @@ Keychain, count as one.</p>
 <p><strong>With console sign-in by passkey</strong> a passkey is added from the device that will
 hold it. <code>seamlessd approvers add</code>, run as the daemon's account, prints the plain
 address; the device creates the passkey and shows a code.
-<code>sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd approvers approve --code 7KQ2-M9XD</code>
+<code>/usr/bin/sudo -k -u _seamless /usr/bin/env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd approvers approve --code 7KQ2-M9XD</code>
 shows that passkey and asks before adding it.</p>
 <p>Only the code crosses, and it names a waiting passkey without carrying a key, so
 a code read off your screen cannot add another. Under peer_auth every new passkey
@@ -1016,7 +1016,7 @@ page, <code>/console/unlock/&lt;project&gt;</code>, for at most three hours (les
 is shorter), in one of two ways. <strong>Unlock with a passkey</strong> asks your
 authenticator there. <strong>Approve from a terminal</strong> shows a code and the command
 that approves it, for example:</p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -k -u _seamless seamlessd console-open --unlock example-finance --code 7KQ2-M9XD
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">/usr/bin/sudo -k -u _seamless seamlessd console-open --unlock example-finance --code 7KQ2-M9XD
 </span></span></code></pre></div>
 <p>Run it in your own terminal. <code>sudo -k</code> asks for your password or Touch ID, and the
 page updates by itself once the code is approved. The unlock opens the browser
@@ -1105,12 +1105,14 @@ computer.</p>
 and approves through its relay, and the server verifies its signature.
 <code>seamlessd approve</code> stays a server command, as does every terminal approval:
 <code>seam approve</code>'s sudo path, a console unlock's code and <code>seamlessd approvers</code>
-run on this computer, in a terminal here or over SSH. On a client, <code>seam approve --passkey</code> and Touch ID approve.</p>
+run on this computer, in a terminal here or over SSH. On a client, <code>seam approve</code> runs no sudo: its <code>y</code> opens the request's passkey page, as <code>seam approve --passkey</code> does, Touch ID approves from the agent's dialog, and its
+<code>d</code> denies through the relay, from your own hands there (below).</p>
 <p>Revoking a relay ends its leases, read grants and waiting requests at once. A
 console lock turned back on, and a restore, end a relay's leases as they end
 this machine's.</p>
 <h4 id="your-own-decisions-through-a-relay">Your own decisions through a relay</h4>
-<p>Your other decisions - a pairing code, denying a request, revoking a lease, a
+<p>Your other decisions - a pairing code, denying a request (<code>d</code> in <code>seam approve</code>
+on that computer), revoking a lease, a
 read grant or a device, Lock again, promoting or discarding a held write
 (<code>seam promote</code>, <code>seam discard</code>), features, turning updates off, and backups -
 go through a relay you map only from your own hands there: a terminal of yours
@@ -1136,7 +1138,7 @@ cut short above it, or detached from the session that started it.</li>
 </ul>
 <p>Anything else is refused (403), and the refusal says which rule failed: a
 relay of an earlier release, a process it did not name, an agent in the chain,
-a chain that may be cut, a pairing that recorded no uid or another. A
+a chain that may be cut, a pairing that recorded no uid or another; <code>seam approve</code> shows that refusal as it came. A
 restricted account, a key device and a relay to a server without peer_auth
 never make these decisions. Each decision your hands make through a relay
 records an <code>access.relay_decision</code> event naming the relay, its device and the
@@ -1572,7 +1574,7 @@ launchd's <code>KeepAlive</code> or systemd's <code>Restart=always</code> then s
 A rollback renames the kept ones back the same way. Hooks installed with
 <code>--seam /opt/seamless/bin/seam</code> (<a href="#connect-the-owner">Connect the owner</a>) move
 with the daemon. To update by hand:</p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">/usr/bin/sudo -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml
 </span></span></code></pre></div>
 <p>The trade-off: the daemon's account can rewrite its own binaries, so a
 compromised daemon could keep itself in place across restarts, and could replace
@@ -1712,7 +1714,7 @@ passkey-only for now.</p>
 <p>Without a usable passkey - none enrolled, passkeys not configured, or the page
 not on the <a href="#the-passkey-origin">passkey origin</a> - the confirm card says why and
 shows the terminal's way instead, with a copy button:</p>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -u _seamless env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd restore <span class="o">[</span>--merge<span class="o">]</span> &lt;path&gt;
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">/usr/bin/sudo -u _seamless /usr/bin/env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd restore <span class="o">[</span>--merge<span class="o">]</span> &lt;path&gt;
 </span></span></code></pre></div>
 <p><a href="../../reference/cli-seamlessd/#seamlessd_restore"><code>seamlessd restore</code></a> refuses to
 run as root or as any account but the daemon's: running as that account is its

@@ -725,7 +725,7 @@ func TestTouchIDEnroll_ReportsTheKeyItReplaced(t *testing.T) {
 	require.Contains(t, out, `Enrolled the Touch ID key "Touch ID on laptop" (01KTOUCHIDKEY0000000000001)`)
 	require.Contains(t, out, `Retired the Touch ID key "Touch ID on laptop" (01KPREVKEY0000000000000001, added `)
 	require.Contains(t, out, `The daemon still lists an older Touch ID key named "Touch ID on laptop" (01KPREVKEY0000000000000002, added `)
-	require.Contains(t, out, "\n  sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers remove 01KPREVKEY0000000000000002\n")
+	require.Contains(t, out, "\n  /usr/bin/sudo -k -u _seamless /usr/bin/env SEAMLESS_CONFIG=/opt/seamless/seamless.yaml /opt/seamless/bin/seamlessd approvers remove 01KPREVKEY0000000000000002\n")
 	require.NotContains(t, out, "01KM1N1KEY0000000000000003", "another Mac's key, under another name, is not this enrollment's business")
 }
 

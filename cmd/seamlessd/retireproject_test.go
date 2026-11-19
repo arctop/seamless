@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/shellcmd"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/store/storetest"
 )
@@ -256,10 +257,10 @@ var awkwardArgs = []string{
 // that shell, and for POSIX through every real sh, bash and zsh on this
 // machine. A plain path stays bare, so the common remedy prints as typed.
 func TestShellQuoters_RoundTrip(t *testing.T) {
-	require.Equal(t, "/home/me/app", posixShellArg("/home/me/app"))
-	require.Equal(t, `'C:\repos\app'`, posixShellArg(`C:\repos\app`))
-	require.Equal(t, `'it'\''s'`, posixShellArg("it's"))
-	require.Equal(t, "''", posixShellArg(""))
+	require.Equal(t, "/home/me/app", shellcmd.PosixArg("/home/me/app"))
+	require.Equal(t, `'C:\repos\app'`, shellcmd.PosixArg(`C:\repos\app`))
+	require.Equal(t, `'it'\''s'`, shellcmd.PosixArg("it's"))
+	require.Equal(t, "''", shellcmd.PosixArg(""))
 	require.Equal(t, `C:\repos\app`, powerShellArg(`C:\repos\app`))
 	require.Equal(t, "/home/me/app", powerShellArg("/home/me/app"))
 	require.Equal(t, `'it''s'`, powerShellArg("it's"))
@@ -268,9 +269,9 @@ func TestShellQuoters_RoundTrip(t *testing.T) {
 
 	quoted := make([]string, len(awkwardArgs))
 	for i, s := range awkwardArgs {
-		require.Equal(t, []string{"seamlessd", s}, splitPOSIXWords(t, "seamlessd "+posixShellArg(s)), "POSIX %q", s)
+		require.Equal(t, []string{"seamlessd", s}, splitPOSIXWords(t, "seamlessd "+shellcmd.PosixArg(s)), "POSIX %q", s)
 		require.Equal(t, []string{"seamlessd", s}, splitPowerShellWords(t, "seamlessd "+powerShellArg(s)), "PowerShell %q", s)
-		quoted[i] = posixShellArg(s)
+		quoted[i] = shellcmd.PosixArg(s)
 	}
 	for _, sh := range posixShells() {
 		require.Equal(t, awkwardArgs, shellArgv(t, sh, "seamlessd "+strings.Join(quoted, " ")), sh[0])

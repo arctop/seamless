@@ -53,6 +53,7 @@ import (
 
 	"github.com/arctop/seamless/internal/devices"
 	"github.com/arctop/seamless/internal/files"
+	"github.com/arctop/seamless/internal/shellcmd"
 )
 
 // The root-owned layout, as on a peer_auth server (the peer_auth guide's
@@ -71,10 +72,6 @@ const (
 	DefaultAccount = "_seamless"
 )
 
-// sudoPath is sudo as the client setup's root step names it: by its full
-// path, never one found on the owner's PATH.
-const sudoPath = "/usr/bin/sudo"
-
 // PairAgainFingerprint stands in PairAgainCommand where the fingerprint the
 // server itself shows goes (its Devices page, or seamlessd doctor there):
 // never the one a refusal saw offered, which is also what an interception
@@ -90,7 +87,9 @@ const PairAgainFingerprint = "<the fingerprint the server shows>"
 // running it on every relay (owner decision R-D2), once the old device is
 // revoked on the server: no two live devices share a name.
 func (s State) PairAgainCommand(dataDir string) string {
-	words := []string{sudoPath, "-u", DefaultAccount, "-H", DefaultBinary, "relay", "pair", "--server", s.ServerURL,
+	// sudo by its full path, as the client setup's root step names it:
+	// never one found on the owner's PATH (shellcmd.Sudo).
+	words := []string{shellcmd.Sudo, "-u", DefaultAccount, "-H", DefaultBinary, "relay", "pair", "--server", s.ServerURL,
 		"--fingerprint", PairAgainFingerprint}
 	if s.CAFile != "" {
 		words = append(words, "--ca-file", s.CAPath(dataDir))

@@ -15,6 +15,7 @@ import (
 
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/devices"
+	"github.com/arctop/seamless/internal/shellcmd"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -173,11 +174,11 @@ func pairedDevicesSuffix(paired []string) string {
 // disk does not have.
 func absentRepoPathNote(ctx context.Context, db *sql.DB, abs, slug string) string {
 	_, paired := repoHosts(ctx, db)
-	quoted := posixShellArg(abs)
+	quoted := shellcmd.PosixArg(abs)
 	return fmt.Sprintf("note: %s does not exist on this machine. A clone on another computer, such as a restricted "+
 		"account's behind a relay, is mapped with that computer's name and its path there: seamlessd map-repo --host NAME "+
 		"--path %s --project %s%s seamlessd unmap-repo --path %s removes this machine's mapping.",
-		abs, quoted, posixShellArg(slug), pairedDevicesSuffix(paired), quoted)
+		abs, quoted, shellcmd.PosixArg(slug), pairedDevicesSuffix(paired), quoted)
 }
 
 // clientMapRepoRefusal is map-repo's answer on a client install. This
@@ -196,12 +197,12 @@ func clientMapRepoRefusal(path, slug, host string) error {
 	}
 	shown := "<this computer's name>"
 	if name != "" {
-		shown = posixShellArg(name)
+		shown = shellcmd.PosixArg(name)
 	}
 	return fmt.Errorf("seamlessd.map-repo: this computer is a client (role: client), and its repositories are mapped in "+
 		"the server's database, not here. Map this clone on the server, as its owner (under peer_auth, as the daemon's "+
 		"account):\n  seamlessd map-repo --host %s --path %s --project %s\n--host is the name this computer paired as, "+
-		"which the server's Devices page lists", shown, posixShellArg(abs), posixShellArg(slug))
+		"which the server's Devices page lists", shown, shellcmd.PosixArg(abs), shellcmd.PosixArg(slug))
 }
 
 // openMapRepoDB is openServedDB, except that a server install with no database

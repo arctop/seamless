@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/shellcmd"
 )
 
 // Beside a concrete IPv4 addr, serve also listens on the IPv6 addresses of
@@ -287,12 +288,14 @@ func (e *pairedListenError) Error() string {
 
 func (e *pairedListenError) Unwrap() error { return e.err }
 
-// listenHint is the command that names the process listening on port.
+// listenHint is the command that names the process listening on port: a
+// diagnostic, so lsof stays a bare name, and only the sudo before it is named
+// by its full path (shellcmd).
 func listenHint(port string) string {
 	if runtime.GOOS == "windows" {
 		return "netstat -ano | findstr :" + port
 	}
-	return "sudo lsof -nP -iTCP:" + port + " -sTCP:LISTEN"
+	return shellcmd.Sudo + " lsof -nP -iTCP:" + port + " -sTCP:LISTEN"
 }
 
 // heldBy is what serve's listeners hold: every address for a wildcard one,

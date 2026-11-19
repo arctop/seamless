@@ -360,9 +360,15 @@ func configPermissionsCheck(path, goos string) check {
 }
 
 // chmodRepairCommand returns a copy-pasteable Unix command with an absolute,
-// shell-quoted path. Making the path absolute also keeps a leading dash from
-// being interpreted as an option by chmod.
+// shell-quoted path (chmodRepairArg).
 func chmodRepairCommand(mode, path string) string {
+	return "chmod " + mode + " " + chmodRepairArg(path)
+}
+
+// chmodRepairArg is path for a printed chmod: absolute and single-quoted.
+// Making the path absolute also keeps a leading dash from being interpreted
+// as an option by chmod.
+func chmodRepairArg(path string) string {
 	target, err := filepath.Abs(path)
 	if err != nil {
 		target = path
@@ -370,7 +376,7 @@ func chmodRepairCommand(mode, path string) string {
 			target = "." + string(filepath.Separator) + target
 		}
 	}
-	return fmt.Sprintf("chmod %s '%s'", mode, strings.ReplaceAll(target, "'", "'\"'\"'"))
+	return "'" + strings.ReplaceAll(target, "'", "'\"'\"'") + "'"
 }
 
 // schemaAheadCause and schemaAheadFix are the one diagnosis of a database whose

@@ -14,6 +14,7 @@ import (
 
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/shellcmd"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -195,9 +196,10 @@ func countOf(n int, one, many string) string {
 // so it runs where the daemon does and goos is runtime.GOOS: a remedy can name
 // another machine's path, but it is run here.
 //
-//   - Everywhere but Windows, POSIX single quotes (posixShellArg), which sh,
-//     bash and zsh all read literally -- so a Windows client's "C:\repos\app"
-//     keeps its backslashes and a path with a space stays one argument.
+//   - Everywhere but Windows, POSIX single quotes (shellcmd.PosixArg), which
+//     sh, bash and zsh all read literally -- so a Windows client's
+//     "C:\repos\app" keeps its backslashes and a path with a space stays one
+//     argument.
 //   - On Windows, PowerShell single quotes (powerShellArg). PowerShell is the
 //     default shell there and the one the Windows installer runs in, and its
 //     single-quoted string is its only literal one: a double-quoted string
@@ -211,19 +213,7 @@ func shellQuoter(goos string) func(string) string {
 	if goos == "windows" {
 		return powerShellArg
 	}
-	return posixShellArg
-}
-
-// posixShellArg quotes s for a POSIX shell: bare when it is all letters, digits
-// and punctuation no shell reads specially anywhere in a word, else in single
-// quotes, each embedded quote closing them, escaped, and reopening them. "=" and
-// "~" are not bare: zsh expands a word starting with "=", and a leading "~" is a
-// home directory.
-func posixShellArg(s string) string {
-	if isBareWord(s, "_@%+:,./-") {
-		return s
-	}
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+	return shellcmd.PosixArg
 }
 
 // powerShellQuotes escapes the inside of a PowerShell single-quoted string.

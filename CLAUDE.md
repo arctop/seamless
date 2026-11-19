@@ -101,7 +101,7 @@ internal/update/   update check + automatic updates: GitHub release list,
                    renders (briefing notice, console, doctor, /healthz). Never
                    installs in-process: the daemon spawns a detached `seamlessd
                    update --auto` (cmd/seamlessd/update_spawn*.go) to run the
-                   release's installer. Imports config + core only
+                   release's installer. Imports config, core and shellcmd only
 internal/releasesig/ Sigstore check that a release asset came from this repo's
                    release workflow on its exact tag (pinned trusted root,
                    offline): the updater's, and the macOS seam's for the Touch

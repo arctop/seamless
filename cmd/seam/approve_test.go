@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/shellcmd"
 )
 
 // Every test here runs against a stand-in console and a fake program runner:
@@ -110,7 +111,7 @@ func (f *fakeRunner) exec(stdin io.Reader) execFunc {
 			return f.code(argv)
 		}
 		// By default sudo -n is refused, as it is with no NOPASSWD rule.
-		if len(argv) > 1 && argv[0] == "sudo" && argv[1] == "-n" {
+		if len(argv) > 1 && argv[0] == shellcmd.Sudo && argv[1] == "-n" {
 			return 1, nil
 		}
 		return 0, nil
@@ -158,16 +159,16 @@ func (r *approveRig) run(argv ...string) int {
 }
 
 func approveArgvFor(id, duration, digest string) []string {
-	return []string{"sudo", "-k", "-u", "_seamless", "env", "SEAMLESS_CONFIG=/opt/seamless/seamless.yaml",
+	return []string{"/usr/bin/sudo", "-k", "-u", "_seamless", "/usr/bin/env", "SEAMLESS_CONFIG=/opt/seamless/seamless.yaml",
 		"/opt/seamless/bin/seamlessd", "approve", id, "--for", duration, "--digest", digest}
 }
 
 func denyArgvFor(id string) []string {
-	return []string{"sudo", "-k", "-u", "_seamless", "env", "SEAMLESS_CONFIG=/opt/seamless/seamless.yaml",
+	return []string{"/usr/bin/sudo", "-k", "-u", "_seamless", "/usr/bin/env", "SEAMLESS_CONFIG=/opt/seamless/seamless.yaml",
 		"/opt/seamless/bin/seamlessd", "approve", id, "--deny"}
 }
 
-var passwordlessProbe = [][]string{{"sudo", "-k"}, {"sudo", "-n", "-u", "_seamless", "true"}}
+var passwordlessProbe = [][]string{{"/usr/bin/sudo", "-k"}, {"/usr/bin/sudo", "-n", "-u", "_seamless", "true"}}
 
 // --- the terminal check ---
 

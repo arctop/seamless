@@ -1035,7 +1035,9 @@ any of it.
   refusal; this machine's socket keeps it. Each decision they make records
   `access.relay_decision` (console/relay_decision.go). Its reads, and the
   writes an agent may make, stay open: `seam` on a client reads console JSON
-  through the relay.
+  through the relay, and `seam approve` there builds no sudo line
+  (`decideOnClient`, keyed on `role: client`): d posts the console's deny
+  route, judged as above, and y opens the passkey page.
   Revoking refuses the credential from its next request, ends the requests it is making and, in the same transaction, a relay's live leases, grants and waiting requests (`store.RevokeDeviceEndingAccess`); the edge registers a request (`track`) before it reads the device's status a last time, so no revocation slips between its lookup and its registration (review I1). Under peer_auth doctor warns for each key device a code alone paired (`peer_auth devices`, review I2). A merge carries no device, a fresh import revokes the snapshot's,
   and a backup restore keeps today's (`keptTables`).
 - **The relay forwards and judges nothing** (plan networked-relay;
@@ -1497,7 +1499,7 @@ health check stay theirs.
   took of the bytes it checked as a pair, then owner, mode and one rename), so
   root opens no file of the owner's and the key is readable by no other account
   at any step; a tailnet certificate root mints with `tailscale` named by its
-  package's path (`rootstepTools.tailscale`). Knobs `SEAMLESS_SERVER_NAME`,
+  package's path (`shellcmd.Tools.Tailscale`). Knobs `SEAMLESS_SERVER_NAME`,
   `SEAMLESS_TLS_CERT`,
   `SEAMLESS_TLS_KEY` (not `SEAMLESS_TLS_*_FILE`, which the service never sees).
   Tests fake the resolver, interfaces and tailnet (`setupAddrArrange`): no test
@@ -1522,9 +1524,18 @@ health check stay theirs.
   `SEAMLESS_SERVER_URL` after setup in a pairing. Tests arrange the server
   (`clientArrange`) and never dial the machine's socket
   (`clientHost.relayServing`). Each block is one AND-list; every tool is named
-  by its absolute path (`rootstepToolsFor`) and every value goes through
-  `posixShellArg`; setup refuses a server host that is not a host name or an IP
+  by its absolute path (`shellcmd.ToolsFor`) and every value goes through
+  `shellcmd.PosixArg`; setup refuses a server host that is not a host name or an IP
   literal (`setupHostProblem`), and `parseSetupState` checks every value again.
+- **Every command root or the daemon's account runs names sudo by its path**
+  (owner decision 2026-11-18, task L4): whatever Seamless prints for the owner
+  to paste, or runs itself (`seam approve`'s sudoArgv, the console's daemon
+  commands, doctor's repairs, `update.SystemHint`, the Touch ID app's lines),
+  starts with `shellcmd.Sudo`, the `env` that `sudo -u` runs is `shellcmd.Env`,
+  and a fixed tool root runs comes from `shellcmd.ToolsFor`. Diagnostic hints
+  the owner runs to look (`lsof`, `launchctl print`, `id -u`) stay bare, after
+  sudo too. cmd/seamlessd's `l4_printed_commands_unix_test.go` scans the
+  renderers; add a new one there.
 - **Retiring the key judges every step from what is there**
   (`setup_retire.go`, the `retire-key` change, offered on a Standalone install
   with locked projects). It reads the daemon over the owner's socket (`GET

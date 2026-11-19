@@ -45,6 +45,7 @@ import (
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/console"
+	"github.com/arctop/seamless/internal/shellcmd"
 )
 
 // retireConsoleConfig is the console's own config the peer-auth guide has the
@@ -176,7 +177,7 @@ func retirePreconditions(r *setupRun, env retireEnv, st console.SignInState, acc
 		return retireStop("the daemon-account pin is there but not believed (%v): root rewrites it, as the peer-auth guide shows", err)
 	case !ok:
 		setupRow(r.out, "pin", "missing: setup runs no root step. As an administrator, paste this whole:")
-		for _, line := range strings.Split(rootstepChain(rootstepPinCommands(rootstepToolsFor(r.goos), acct)), "\n") {
+		for _, line := range strings.Split(rootstepChain(rootstepPinCommands(shellcmd.ToolsFor(r.goos), acct)), "\n") {
 			fmt.Fprintf(r.out, "%s  %s\n", setupRowCont, line)
 		}
 		return retireStop("the daemon's account is not pinned (%s)", access.DaemonAccountPath)
@@ -214,10 +215,10 @@ func retireAnswer(instance string) string {
 
 // retireRootEdit prints one root step: an edit of the daemon's config, then
 // the restart. Like every command setup prints for root, each names its tools
-// by their absolute paths (rootstepTools).
+// by their absolute paths (shellcmd.ToolsFor).
 func retireRootEdit(r *setupRun, label, what string, lines ...string) {
 	setupRow(r.out, label, what+": setup runs no root step. As an administrator:")
-	fmt.Fprintf(r.out, "%s  %s -e %s\n", setupRowCont, rootstepToolsFor(r.goos).sudo, setupPeerAuthConfig)
+	fmt.Fprintf(r.out, "%s  %s -e %s\n", setupRowCont, shellcmd.Sudo, setupPeerAuthConfig)
 	for _, l := range lines {
 		fmt.Fprintf(r.out, "%s    %s\n", setupRowCont, dim(l))
 	}
@@ -226,11 +227,11 @@ func retireRootEdit(r *setupRun, label, what string, lines ...string) {
 
 // retireRestartCommand restarts the peer_auth daemon.
 func retireRestartCommand(goos string) string {
-	t := rootstepToolsFor(goos)
+	t := shellcmd.ToolsFor(goos)
 	if goos == "darwin" {
-		return t.asRoot(t.launchctl, "kickstart", "-k", "system/"+systemDaemonLabel)
+		return t.AsRoot(t.Launchctl, "kickstart", "-k", "system/"+systemDaemonLabel)
 	}
-	return t.asRoot(t.systemctl, "restart", strings.TrimSuffix(systemDaemonUnit, ".service"))
+	return t.AsRoot(t.Systemctl, "restart", strings.TrimSuffix(systemDaemonUnit, ".service"))
 }
 
 // retireWait asks the daemon until done says so, or the patience runs out.
@@ -289,8 +290,7 @@ func retirePasskeyReady(r *setupRun, env retireEnv, st console.SignInState, acct
 // sudo and env by their absolute paths, which are the same on macOS and
 // Linux, so neither is found on the owner's PATH.
 func retireDaemonCommand(acct, verb string) string {
-	t := rootstepToolsFor("")
-	return fmt.Sprintf("%s -k -u %s %s SEAMLESS_CONFIG=%s /opt/seamless/bin/seamlessd %s", t.sudo, posixShellArg(acct), t.env, setupPeerAuthConfig, verb)
+	return fmt.Sprintf("%s -k -u %s %s SEAMLESS_CONFIG=%s /opt/seamless/bin/seamlessd %s", shellcmd.Sudo, shellcmd.PosixArg(acct), shellcmd.Env, setupPeerAuthConfig, verb)
 }
 
 // retireProof waits for the owner to sign in with a passkey now: nothing is

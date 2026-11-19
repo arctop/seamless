@@ -30,6 +30,7 @@ import (
 
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/releasesig"
+	"github.com/arctop/seamless/internal/shellcmd"
 	"github.com/arctop/seamless/internal/sshsig"
 	"github.com/arctop/seamless/internal/update"
 )
@@ -152,8 +153,9 @@ func releaseSignersFileProblem(path string, rootOnly bool, fsys signersFS) strin
 		return fmt.Sprintf("%s %s is not a regular file", releaseSignersWhat, real)
 	case !trusted(facts.uid):
 		if rootOnly {
+			t := shellcmd.ToolsFor(runtime.GOOS)
 			return fmt.Sprintf("%s %s is owned by uid %d: under peer_auth it must be root's, so that neither your account nor the daemon's can change "+
-				"which keys sign a release -- sudo chown root %s", releaseSignersWhat, real, facts.uid, real)
+				"which keys sign a release -- %s", releaseSignersWhat, real, facts.uid, t.AsRoot(t.Chown, "root", shellcmd.PosixArg(real)))
 		}
 		return fmt.Sprintf("%s %s is owned by uid %d: it must be root's or this account's", releaseSignersWhat, real, facts.uid)
 	case facts.mode.Perm()&0o022 != 0:

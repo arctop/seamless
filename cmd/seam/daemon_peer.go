@@ -30,10 +30,15 @@ package main
 // what is read through it came from a process the kernel named.
 //
 // A TCP server_url carries no peer identity, so it is refused for anything that
-// builds a sudo command line. The seamlessd path, the config path, sudo and env
-// are deliberately not checked further: once the peer is verified they are the
-// real daemon's words, and an agent able to poison PATH can equally replace
-// seam.
+// builds a sudo command line. The seamlessd path and the config path are
+// deliberately not checked further: once the peer is verified they are the
+// real daemon's words. sudo and env are not looked up at all: the command line
+// names them by absolute path (shellcmd.Sudo, shellcmd.Env), because the
+// owner's PATH can lead through a directory the owner's processes write, where
+// a planted sudo would take the owner's password and a planted env would run as
+// the daemon's account (owner decision 2026-11-18). A process able to rewrite
+// the owner's files could still replace seam itself; this closes the cheaper
+// path, as the root step's commands do.
 
 import (
 	"context"

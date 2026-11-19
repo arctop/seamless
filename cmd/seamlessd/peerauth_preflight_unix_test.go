@@ -5,6 +5,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/shellcmd"
 	"github.com/arctop/seamless/internal/sshsig"
 	"github.com/arctop/seamless/internal/sshsig/sshsigtest"
 )
@@ -174,6 +176,11 @@ func TestFilesystemProblems_ReleaseSigners(t *testing.T) {
 	require.Empty(t, pinProblems(good), "root's 0644 file passes")
 	require.Len(t, pinProblems(daemonOwned), 1)
 	require.Contains(t, pinProblems(daemonOwned)[0], "under peer_auth it must be root's")
+	// Both repairs root runs name sudo and its tool by their full paths.
+	tools := shellcmd.ToolsFor(runtime.GOOS)
+	require.Contains(t, pinProblems(daemonOwned)[0], "-- "+tools.Sudo+" "+tools.Chown+" root "+shellcmd.PosixArg(daemonOwned)+" --")
+	require.True(t, strings.HasSuffix(pinProblems(daemonOwned)[0],
+		" -- have root install it: /usr/bin/sudo /usr/bin/install -o root -m 0644 <release_signers> "+shellcmd.PosixArg(daemonOwned)), pinProblems(daemonOwned)[0])
 	require.Contains(t, pinProblems(noKeys)[0], "no key for namespace seamless-release")
 	require.Contains(t, pinProblems(filepath.Join(etc, "missing"))[0], "update.release_signers")
 }

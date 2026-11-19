@@ -35,6 +35,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/arctop/seamless/internal/shellcmd"
 	"github.com/arctop/seamless/internal/update"
 )
 
@@ -602,7 +603,7 @@ func (u *updater) rollbackSystemFailed(target update.Version, cause, reason stri
 	back := u.job.req.From
 	moved := u.dataDir() + ".broken"
 	msg := fmt.Sprintf("v%s did not come up (%s), and the rollback to v%s was not confirmed (%s); the daemon may be down: "+
-		"check it with sudo launchctl print system/%s on macOS or systemctl status %s on Linux; "+
+		"check it with "+shellcmd.Sudo+" launchctl print system/%s on macOS or systemctl status %s on Linux; "+
 		"put v%s's seamlessd and seam back in %s if they are not, and to bring the data back as it was, stop the daemon, "+
 		"move the data dir aside to %s and run seamlessd import --from %s as the daemon's account",
 		target, cause, back, reason, systemDaemonLabel, systemDaemonUnit, back, u.swap.dir, moved, movedBackupPath(u.dataDir(), moved, u.backup.path))

@@ -230,7 +230,7 @@ keeps sending the key.
 - **No passkey at hand.** Under **Sign in from a terminal on the server**, the
   login page's **Show a code** begins a terminal sign-in: the browser gets a
   cookie bound to its key and shows a code with the command that approves it,
-  `sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd console-open --sign-in --code 7KQ2-M9XD`
+  `/usr/bin/sudo -k -u _seamless /usr/bin/env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd console-open --sign-in --code 7KQ2-M9XD`
   under peer_auth (`seamlessd console-open --sign-in --code 7KQ2-M9XD`
   without it). Approved, that browser is signed in for 7 days, as with a
   passkey, and the page goes on by itself. The command first shows the browser the code names (when it began, its address and User-Agent) and asks; say yes only to a code your own browser shows you now. The code signs in no other browser,

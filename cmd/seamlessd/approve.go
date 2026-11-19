@@ -27,7 +27,7 @@ import (
 // The owner runs `seam approve` in their own terminal; it shows the request's
 // facts, asks for a duration, and then runs
 //
-//	sudo -k -u <daemon account> seamlessd approve <id> --for <d> --digest <x>
+//	/usr/bin/sudo -k -u <daemon account> /usr/bin/env SEAMLESS_CONFIG=<config> <seamlessd> approve <id> --for <d> --digest <x>
 //
 // The sudo is the proof: it asks for the owner's Touch ID or password every
 // time (-k leaves no cached ticket an agent could reuse), and becoming the

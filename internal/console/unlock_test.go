@@ -567,7 +567,7 @@ func TestLockedConsole_TerminalUnlock(t *testing.T) {
 
 	begun, cookie := lc.beginTerminal(t, lockedSlug, "")
 	require.Equal(t, begun.Code, store.FormatUnlockCode(begun.Code), "XXXX-XXXX")
-	require.Equal(t, "sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd "+
+	require.Equal(t, "/usr/bin/sudo -k -u _seamless /usr/bin/env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd "+
 		"console-open --unlock "+lockedSlug+" --code "+begun.Code, begun.Command)
 	require.Equal(t, 10, begun.Minutes)
 	_, err := time.Parse(time.RFC3339, begun.PendingUntil)

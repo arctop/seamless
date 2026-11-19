@@ -29,11 +29,11 @@ import (
 // the passkeys and Touch ID keys that can sign an access approval.
 //
 // Every verb opens the database directly, so it runs as the daemon's own
-// account (under peer_auth, `sudo -k -u _seamless env SEAMLESS_CONFIG=...
-// seamlessd approvers ...`): becoming that account is the proof. That is the
-// whole reason enroll-code lives here and on no route -- a code is what lets
-// every credential in, and nothing an agent can reach over the socket or the
-// TCP key may mint one.
+// account (under peer_auth, `/usr/bin/sudo -k -u _seamless /usr/bin/env
+// SEAMLESS_CONFIG=... seamlessd approvers ...`): becoming that account is the
+// proof. That is the whole reason enroll-code lives here and on no route -- a
+// code is what lets every credential in, and nothing an agent can reach over
+// the socket or the TCP key may mint one.
 
 const approversUsage = `usage: seamlessd approvers <verb>
 

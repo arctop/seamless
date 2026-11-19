@@ -17,6 +17,7 @@ import (
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/devices"
 	"github.com/arctop/seamless/internal/relay"
+	"github.com/arctop/seamless/internal/shellcmd"
 )
 
 // prRenewalCfg serves TLS with a certificate valid until notAfter.
@@ -142,7 +143,7 @@ func TestPRPairAgainCommand_IsTheRootStepsLine(t *testing.T) {
 	}
 	require.NotEmpty(t, line)
 	again := relay.State{ServerURL: "https://box.example:8081", OwnerUID: 501}.PairAgainCommand(relay.DefaultDataDir)
-	prefix := rootstepToolsFor("linux").sudo + " -u " + clientRelayAccount + " -H " + relay.DefaultBinary + " relay pair --server https://box.example:8081 --fingerprint "
+	prefix := shellcmd.ToolsFor("linux").Sudo + " -u " + clientRelayAccount + " -H " + relay.DefaultBinary + " relay pair --server https://box.example:8081 --fingerprint "
 	require.True(t, strings.HasPrefix(line, prefix), line)
 	require.True(t, strings.HasPrefix(again, prefix), again)
 	require.True(t, strings.HasSuffix(line, "--owner-uid 501 --code -"), line)

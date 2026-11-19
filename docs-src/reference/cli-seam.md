@@ -689,9 +689,14 @@ as the daemon's account, with the account, executable and config the daemon
 names in its answer:
 
 ```bash
-sudo -k -u _seamless env SEAMLESS_CONFIG=<config> <seamlessd> approve <id> --for <duration> --digest <facts digest>
-sudo -k -u _seamless env SEAMLESS_CONFIG=<config> <seamlessd> approve <id> --deny
+/usr/bin/sudo -k -u _seamless /usr/bin/env SEAMLESS_CONFIG=<config> <seamlessd> approve <id> --for <duration> --digest <facts digest>
+/usr/bin/sudo -k -u _seamless /usr/bin/env SEAMLESS_CONFIG=<config> <seamlessd> approve <id> --deny
 ```
+
+`sudo` and the `env` it runs are named by absolute path, never looked up on
+your `PATH`, which can lead through a directory your own processes write
+(`~/.local/bin` among them): a planted `sudo` would take your password, a
+planted `env` would run as the daemon's account.
 
 Before sudo runs it says what the prompt is for (`sudo asks for your Touch ID
 or password next: it commits the approval as _seamless.`), unless the probe
@@ -708,7 +713,7 @@ facts you were shown: when they changed in the meantime, the approval is
 refused and you look again.
 
 Before running it, `seam approve` drops sudo's cached ticket and tries
-`sudo -n -u <account> true`, which succeeds only under a sudoers rule that asks
+`/usr/bin/sudo -n -u <account> true`, which succeeds only under a sudoers rule that asks
 for no authentication. When it does, it warns that the approval proves nothing
 while the rule stands - any process running as you could run the same command
 unasked - and goes ahead. A rule scoped to `seamlessd` alone is not seen by
@@ -717,6 +722,26 @@ that probe.
 When the daemon's answer does not say how to reach the terminal path (its
 account, executable or config file is unknown), the facts are still shown and
 the command points at the request's passkey page instead.
+
+On a client computer (`role: client`), whose relay serves `server_url`'s
+socket and forwards to the server, no daemon runs and nothing runs sudo:
+`seamlessd approve` is a server command. The socket is checked as on the
+server (the relay's account must be the one root pinned, or a system
+account), the facts are shown and the questions asked as above, and one line
+before `Approve R-7F3K? [y/N/d=deny]` says what `y` and `d` do there. `d`
+denies over the relay (`POST /console/access/<id>/deny`), and the server
+takes a deny only from your own hands on that computer: a terminal of yours
+with no agent above it, through a relay it maps
+([Your own decisions through a relay](/guides/peer-auth/#your-own-decisions-through-a-relay)).
+It refuses any other caller and says why (a relay of an earlier release, an
+agent in the chain, a chain that may be cut), and `seam approve` shows that
+refusal as it came (`the decision on R-7F3K did not complete: ...`) and exits
+1. `y` opens the request's passkey page with the duration you chose, as
+`--passkey` does, and approves nothing itself; on a Mac, Touch ID approves
+from the agent's dialog instead (never a move, and a grant only read-only).
+When the daemon names no passkey page, `y` says so, names Touch ID where it
+applies and a terminal on the server, and exits 1. A client whose
+`server_url` is not a socket (a key device's address) is refused as before.
 
 `--passkey` opens the request's passkey page (the `page` the daemon names) in
 the default browser - `open` on macOS, `xdg-open` on Linux, `rundll32` on
@@ -800,7 +825,7 @@ the key's fingerprint and the command that mints a one-time enrollment code for
 that key, as the daemon's account, to run in another terminal:
 
 ```bash
-sudo -k -u _seamless env SEAMLESS_CONFIG=<config> <seamlessd> approvers enroll-code touchid --key XXXX-XXXX-XXXX-XXXX
+/usr/bin/sudo -k -u _seamless /usr/bin/env SEAMLESS_CONFIG=<config> <seamlessd> approvers enroll-code touchid --key XXXX-XXXX-XXXX-XXXX
 ```
 
 Type the code into the app's window and touch the sensor: the app signs with its

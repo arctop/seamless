@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/shellcmd"
 )
 
 // setupAddrTailnet is a tailnet for the address step's tests: Status answers
@@ -458,14 +459,14 @@ func TestSetupAddress_PeerAuth(t *testing.T) {
 		require.Empty(t, w.minted, "the owner's account mints no key the daemon would serve")
 		require.Empty(t, w.wrote)
 		crt, k := "/opt/seamless/etc/tls/"+setupAddrTSName+".crt", "/opt/seamless/etc/tls/"+setupAddrTSName+".key"
-		tools := rootstepToolsFor(goos)
+		tools := shellcmd.ToolsFor(goos)
 		in := setupRowCont + "  "
 		for _, want := range []string{
 			"  root steps   locked projects are on",
 			"paste it whole: it stops at its first failure.",
 			in + "/usr/bin/sudo /usr/bin/install -d -o root -g _example -m 0750 /opt/seamless/etc/tls &&\n" +
-				in + "/usr/bin/sudo " + tools.tailscale + " cert --cert-file " + crt + " --key-file " + k + " " + setupAddrTSName + " &&\n" +
-				in + "/usr/bin/sudo " + tools.chown + " root:_example " + crt + " " + k + " &&\n" +
+				in + "/usr/bin/sudo " + tools.Tailscale + " cert --cert-file " + crt + " --key-file " + k + " " + setupAddrTSName + " &&\n" +
+				in + "/usr/bin/sudo " + tools.Chown + " root:_example " + crt + " " + k + " &&\n" +
 				in + "/usr/bin/sudo /bin/chmod 0644 " + crt + " &&\n" +
 				in + "/usr/bin/sudo /bin/chmod 0640 " + k + "\n",
 			"then put these in the daemon's config (/opt/seamless/etc/seamless.yaml), replacing any it has:",
@@ -491,7 +492,7 @@ func TestSetupAddress_PeerAuth(t *testing.T) {
 		out, _, err := setupAddrFirstHalf(t, r)
 		require.NoError(t, err, out)
 		require.Empty(t, w.wrote)
-		tools := rootstepToolsFor(goos)
+		tools := shellcmd.ToolsFor(goos)
 		in := setupRowCont + "  "
 		dir := "/opt/seamless/etc/tls/"
 		crt, k := dir+setupAddrDomain+".crt", dir+setupAddrDomain+".key"
@@ -501,14 +502,14 @@ func TestSetupAddress_PeerAuth(t *testing.T) {
 			in+"/usr/bin/sudo /usr/bin/install -d -o root -g _seamless -m 0750 /opt/seamless/etc/tls &&\n"+
 			in+"/usr/bin/sudo /usr/bin/install -m 0600 /dev/null "+sc+" &&\n"+
 			in+"/usr/bin/sudo /usr/bin/tee "+sc+" >/dev/null < "+cert+" &&\n"+
-			in+"echo '"+certSum+"  "+sc+"' | /usr/bin/sudo "+tools.sum+" -c &&\n"+
-			in+"/usr/bin/sudo "+tools.chown+" root:_seamless "+sc+" &&\n"+
+			in+"echo '"+certSum+"  "+sc+"' | /usr/bin/sudo "+tools.Sum+" -c &&\n"+
+			in+"/usr/bin/sudo "+tools.Chown+" root:_seamless "+sc+" &&\n"+
 			in+"/usr/bin/sudo /bin/chmod 0644 "+sc+" &&\n"+
 			in+"/usr/bin/sudo /bin/mv -f "+sc+" "+crt+" &&\n"+
 			in+"/usr/bin/sudo /usr/bin/install -m 0600 /dev/null "+sk+" &&\n"+
 			in+"/usr/bin/sudo /usr/bin/tee "+sk+" >/dev/null < "+key+" &&\n"+
-			in+"echo '"+keySum+"  "+sk+"' | /usr/bin/sudo "+tools.sum+" -c &&\n"+
-			in+"/usr/bin/sudo "+tools.chown+" root:_seamless "+sk+" &&\n"+
+			in+"echo '"+keySum+"  "+sk+"' | /usr/bin/sudo "+tools.Sum+" -c &&\n"+
+			in+"/usr/bin/sudo "+tools.Chown+" root:_seamless "+sk+" &&\n"+
 			in+"/usr/bin/sudo /bin/chmod 0640 "+sk+" &&\n"+
 			in+"/usr/bin/sudo /bin/mv -f "+sk+" "+k+"\n")
 		require.Contains(t, out, "and delete "+tildePath(key)+" once it serves")

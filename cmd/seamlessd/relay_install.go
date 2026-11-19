@@ -22,6 +22,7 @@ import (
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/devices"
 	"github.com/arctop/seamless/internal/relay"
+	"github.com/arctop/seamless/internal/shellcmd"
 )
 
 // The relay's names on a Client: its account (the name the peer_auth guide
@@ -125,12 +126,12 @@ func (p clientRelayPlan) problem() string {
 // own directory and checks it there before it goes into place, and the
 // certificate the owner compared is printed for root to write.
 func clientRelayRootStep(p clientRelayPlan) [][]string {
-	t := rootstepToolsFor(p.goos)
+	t := shellcmd.ToolsFor(p.goos)
 	wheel := "wheel"
 	if p.goos == "linux" {
 		wheel = "root"
 	}
-	acct, grp, owner := clientRelayAccount, clientRelayGroup, posixShellArg(p.owner)
+	acct, grp, owner := clientRelayAccount, clientRelayGroup, shellcmd.PosixArg(p.owner)
 	var out [][]string
 
 	block := []string{"its account, a system account of its own, and a group holding you and it alone (the socket's)"}
@@ -139,49 +140,49 @@ func clientRelayRootStep(p clientRelayPlan) [][]string {
 		if !p.accountExists {
 			id := strconv.Itoa(p.uid)
 			block = append(block,
-				t.asRoot(t.dscl, ".", "-create", "/Groups/"+acct, "PrimaryGroupID", id),
-				t.asRoot(t.dscl, ".", "-create", "/Users/"+acct, "UniqueID", id),
-				t.asRoot(t.dscl, ".", "-create", "/Users/"+acct, "PrimaryGroupID", id),
-				t.asRoot(t.dscl, ".", "-create", "/Users/"+acct, "UserShell", "/usr/bin/false"),
-				t.asRoot(t.dscl, ".", "-create", "/Users/"+acct, "NFSHomeDirectory", clientRelayHome),
-				t.asRoot(t.dscl, ".", "-create", "/Users/"+acct, "Password", "'*'"),
-				t.asRoot(t.dscl, ".", "-create", "/Users/"+acct, "IsHidden", "1"))
+				t.AsRoot(t.Dscl, ".", "-create", "/Groups/"+acct, "PrimaryGroupID", id),
+				t.AsRoot(t.Dscl, ".", "-create", "/Users/"+acct, "UniqueID", id),
+				t.AsRoot(t.Dscl, ".", "-create", "/Users/"+acct, "PrimaryGroupID", id),
+				t.AsRoot(t.Dscl, ".", "-create", "/Users/"+acct, "UserShell", "/usr/bin/false"),
+				t.AsRoot(t.Dscl, ".", "-create", "/Users/"+acct, "NFSHomeDirectory", clientRelayHome),
+				t.AsRoot(t.Dscl, ".", "-create", "/Users/"+acct, "Password", "'*'"),
+				t.AsRoot(t.Dscl, ".", "-create", "/Users/"+acct, "IsHidden", "1"))
 		}
 		if !p.groupExists {
-			block = append(block, t.asRoot(t.dscl, ".", "-create", "/Groups/"+grp, "PrimaryGroupID", strconv.Itoa(p.gid)))
+			block = append(block, t.AsRoot(t.Dscl, ".", "-create", "/Groups/"+grp, "PrimaryGroupID", strconv.Itoa(p.gid)))
 		}
-		block = append(block, t.asRoot(t.dscl, ".", "-append", "/Groups/"+grp, "GroupMembership", owner, acct))
+		block = append(block, t.AsRoot(t.Dscl, ".", "-append", "/Groups/"+grp, "GroupMembership", owner, acct))
 	default:
 		if !p.accountExists {
-			block = append(block, t.asRoot(t.useradd, "--system", "--user-group", "--shell", "/usr/sbin/nologin", "--home-dir", clientRelayHome, acct))
+			block = append(block, t.AsRoot(t.Useradd, "--system", "--user-group", "--shell", "/usr/sbin/nologin", "--home-dir", clientRelayHome, acct))
 		}
 		if !p.groupExists {
-			block = append(block, t.asRoot(t.groupadd, "--system", grp))
+			block = append(block, t.AsRoot(t.Groupadd, "--system", grp))
 		}
-		block = append(block, t.asRoot(t.usermod, "-aG", grp, owner), t.asRoot(t.usermod, "-aG", grp, acct))
+		block = append(block, t.AsRoot(t.Usermod, "-aG", grp, owner), t.AsRoot(t.Usermod, "-aG", grp, acct))
 	}
 	out = append(out, block)
 
 	block = []string{"the layout, root's own copy of seamlessd (no account but root can replace it), and the pin",
-		t.asRoot(t.install, "-d", "-o", "root", "-g", wheel, "-m", "0755", "/opt/seamless", "/opt/seamless/bin", "/opt/seamless/etc"),
-		t.asRoot(t.install, "-d", "-o", acct, "-g", acct, "-m", "0755", "/opt/seamless/run"),
-		t.asRoot(t.install, "-d", "-o", acct, "-g", acct, "-m", "0700", clientRelayHome, relay.DefaultDataDir)}
+		t.AsRoot(t.Install, "-d", "-o", "root", "-g", wheel, "-m", "0755", "/opt/seamless", "/opt/seamless/bin", "/opt/seamless/etc"),
+		t.AsRoot(t.Install, "-d", "-o", acct, "-g", acct, "-m", "0755", "/opt/seamless/run"),
+		t.AsRoot(t.Install, "-d", "-o", acct, "-g", acct, "-m", "0700", clientRelayHome, relay.DefaultDataDir)}
 	// The owner's shell opens the source and root only writes what it reads,
 	// into a copy that is root's alone until it passes its check.
 	block = append(block, rootstepCopyCommands(t, rootstepCopy{source: p.source, sha256: p.sha256, staged: clientRelayStaged,
 		dest: relay.DefaultBinary, owner: "root", group: wheel, mode: "0755"})...)
 	if p.caPEM != "" {
-		block = append(block, rootstepHeredoc(t.asRoot(t.tee, clientRelayCAFile, ">/dev/null"), p.caPEM),
-			t.asRoot(t.chmod, "0644", clientRelayCAFile))
+		block = append(block, rootstepHeredoc(t.AsRoot(t.Tee, clientRelayCAFile, ">/dev/null"), p.caPEM),
+			t.AsRoot(t.Chmod, "0644", clientRelayCAFile))
 	}
 	if !p.pinned {
 		block = append(block, rootstepPinCommands(t, acct)...)
 	}
 	out = append(out, block)
 
-	pair := []string{t.sudo, "-u", acct, "-H", relay.DefaultBinary, "relay", "pair", "--server", posixShellArg(p.server)}
+	pair := []string{t.Sudo, "-u", acct, "-H", relay.DefaultBinary, "relay", "pair", "--server", shellcmd.PosixArg(p.server)}
 	if p.fingerprint != "" {
-		pair = append(pair, "--fingerprint", posixShellArg(p.fingerprint))
+		pair = append(pair, "--fingerprint", shellcmd.PosixArg(p.fingerprint))
 	}
 	if p.caPEM != "" {
 		pair = append(pair, "--ca-file", clientRelayCAFile)
@@ -200,13 +201,13 @@ func clientRelayRootStep(p clientRelayPlan) [][]string {
 
 	if p.goos == "darwin" {
 		out = append(out, []string{"its service, a LaunchDaemon that runs it as that account",
-			rootstepHeredoc(t.asRoot(t.tee, clientRelayPlistPath(), ">/dev/null"), clientRelayPlist()),
-			t.asRoot(t.launchctl, "bootstrap", "system", clientRelayPlistPath())})
+			rootstepHeredoc(t.AsRoot(t.Tee, clientRelayPlistPath(), ">/dev/null"), clientRelayPlist()),
+			t.AsRoot(t.Launchctl, "bootstrap", "system", clientRelayPlistPath())})
 	} else {
 		out = append(out, []string{"its service, a system unit that runs it as that account",
-			rootstepHeredoc(t.asRoot(t.tee, clientRelayUnitPath(), ">/dev/null"), clientRelayUnitFile()),
-			t.asRoot(t.systemctl, "daemon-reload"),
-			t.asRoot(t.systemctl, "enable", "--now", strings.TrimSuffix(clientRelayUnit, ".service"))})
+			rootstepHeredoc(t.AsRoot(t.Tee, clientRelayUnitPath(), ">/dev/null"), clientRelayUnitFile()),
+			t.AsRoot(t.Systemctl, "daemon-reload"),
+			t.AsRoot(t.Systemctl, "enable", "--now", strings.TrimSuffix(clientRelayUnit, ".service"))})
 	}
 	return out
 }

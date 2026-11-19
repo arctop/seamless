@@ -60,8 +60,8 @@ interface that reach no further: `[::1]` beside `127.0.0.1`, a tailnet's
 them, `serve` refuses to start rather than leave it to that process: `[::1]`
 always, an address the `server_url` host or (with passkeys on) a passkey
 origin's host resolves to, and under peer_auth any of them. The error names the
-address, says it is in use by another process and how to find it (`sudo lsof
--nP -iTCP:<port> -sTCP:LISTEN`); the service starts `serve` again, and it runs
+address, says it is in use by another process and how to find it (`/usr/bin/sudo
+lsof -nP -iTCP:<port> -sTCP:LISTEN`); the service starts `serve` again, and it runs
 once the address is free. An address this computer does not have yet is skipped
 with a warning, as is, without peer_auth, one no name points at.
 
@@ -377,7 +377,7 @@ account, never as root. It has no `--config` flag, so name the config through
 the environment, as the console's command does:
 
 ```bash
-sudo -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd restore <file>
+/usr/bin/sudo -u _seamless /usr/bin/env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd restore <file>
 ```
 
 The account is the proof the console asks a passkey for.
@@ -529,7 +529,7 @@ yours to read.
    answers as this daemon on both `127.0.0.1` and `::1`; and the daemon's
    sign-in binds its cookie to the browser's key (a daemon too old for that is
    refused, to be updated first).
-2. **Passkey sign-in on.** As an administrator, `sudo -e
+2. **Passkey sign-in on.** As an administrator, `/usr/bin/sudo -e
    /opt/seamless/etc/seamless.yaml`, add `sign_in: passkey` under `console:`,
    keep `mcp.api_key`, and restart the daemon (the command is printed). With
    no passkey yet, it shows the Add a passkey address and the
@@ -819,7 +819,7 @@ stops with the refusal `restore_pending`.
 With a config that turns peer_auth on, `update` runs no installer, which would
 set up a per-user service that cannot host it. A system daemon that
 [updates itself](/guides/peer-auth/#updates), run as the daemon's account
-(`sudo -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml`),
+(`/usr/bin/sudo -u _seamless /opt/seamless/bin/seamlessd update --config /opt/seamless/etc/seamless.yaml`),
 is updated the way its own updater does it: the archive checked against the
 verified `checksums.txt`, `seamlessd` and `seam` swapped in place, the daemon
 ended for its service manager to start again, and the same backup,
@@ -1054,7 +1054,8 @@ seamlessd approve <request> --deny
 The terminal approval path's commit for an access request to a locked
 project. You do not normally type it: `seam approve`, in your own terminal,
 shows the request's facts, asks for the duration, and runs it as
-`sudo -k -u <daemon account> seamlessd approve ...`. The `sudo -k` asks for
+`/usr/bin/sudo -k -u <daemon account> /usr/bin/env SEAMLESS_CONFIG=<config>
+<seamlessd> approve ...`. The `sudo -k` asks for
 your Touch ID or password every time, and becoming the daemon's account is
 the proof - this command refuses unless it runs as that account (the data
 directory is its own and `0700`, and it is not the owner's account).
@@ -1210,7 +1211,7 @@ the command that approves it, run as the daemon's own account through `sudo -k`
 so it asks for your password or Touch ID every time:
 
 ```bash
-sudo -k -u _seamless seamlessd console-open --unlock example-finance --code 7KQ2-M9XD
+/usr/bin/sudo -k -u _seamless seamlessd console-open --unlock example-finance --code 7KQ2-M9XD
 ```
 
 It refuses unless it runs as the daemon's account (the same check as
@@ -1238,7 +1239,7 @@ to its key and shows a code with the command that approves it, run as the
 daemon's account under peer_auth (as you, without it):
 
 ```bash
-sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd console-open --sign-in --code 7KQ2-M9XD
+/usr/bin/sudo -k -u _seamless /usr/bin/env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd console-open --sign-in --code 7KQ2-M9XD
 ```
 
 Before it signs anything in, it shows the browser the code names, as the console

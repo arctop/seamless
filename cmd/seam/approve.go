@@ -14,7 +14,12 @@ package main
 // and labeled as the agent's -- asks for a duration and a confirmation, and then
 // commits through
 //
-//	sudo -k -u <daemon account> env SEAMLESS_CONFIG=<config> <seamlessd> approve <id> --for <d> --digest <x>
+//	/usr/bin/sudo -k -u <daemon account> /usr/bin/env SEAMLESS_CONFIG=<config> <seamlessd> approve <id> --for <d> --digest <x>
+//
+// sudo and env are named by absolute path (shellcmd.Sudo, shellcmd.Env), never
+// found on the owner's PATH, which can lead through a directory the owner's
+// processes write: a planted sudo would take the owner's password, a planted
+// env would run as the daemon's account.
 //
 // The sudo is the proof, not this command: -k asks for the owner's Touch ID or
 // password every time and leaves no cached ticket behind, and only the daemon's
@@ -56,6 +61,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/shellcmd"
 )
 
 // watchInterval is how often seam approve --watch polls the pending list.
@@ -93,6 +99,13 @@ Touch ID or password is asked for every time; the daemon's answer names the
 account, its seamlessd and its config. Before that it warns when a sudoers
 rule lets this account skip the authentication, which would make the approval
 prove nothing. Only warnings are colored, and not with NO_COLOR set.
+
+On a client computer (role: client), whose relay forwards to the server,
+nothing runs sudo: seamlessd approve runs only on the server. There d denies
+over the relay, which the server takes only from the owner's own hands (a
+terminal with no agent above it, through a relay it maps) and otherwise
+refuses, saying why; y opens the request's passkey page instead, and Touch ID
+approves from the agent's dialog.
 
 A read grant request (isolation.requests: an agent asking to read a
 confidential project) is decided the same way. On a daemon without peer_auth
@@ -215,13 +228,20 @@ func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error
 	if err := accessGetVia(daemon.client, cfg, accessOnePath(ref), &one); err != nil {
 		return err
 	}
+	// On a client computer the account, seamlessd and config the daemon names
+	// are the server's, and the peer the kernel named is this computer's relay,
+	// so no terminal commit is looked for: nothing here runs sudo
+	// (decideOnClient).
+	onClient := cfg.IsClient()
 	var t terminalApprover
 	if !*o.passkey && !one.Advisory {
 		if unverified != nil {
 			return unverified
 		}
-		if t, err = daemon.terminal(e, one); err != nil {
-			return err
+		if !onClient {
+			if t, err = daemon.terminal(e, one); err != nil {
+				return err
+			}
 		}
 	}
 	f := one.Request
@@ -284,13 +304,21 @@ func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error
 	}
 
 	// What y grants, said before anything runs: the agent, the project, the
-	// access and the duration. sudo's prompt follows only after the answer.
+	// access and the duration. sudo's prompt follows only after the answer; on
+	// a client computer, what y and d do there instead.
+	clientDecides := onClient && !one.Advisory
 	if answer == "" {
 		fmt.Fprintln(e.stdout, "If approved: "+decisionWords(f, duration, accessChosen, one.MaxLease, e.clock()))
+		if clientDecides {
+			fmt.Fprintln(e.stdout, onClientWords(e, one, accessChosen))
+		}
 		answer, _ = prompt(e, in, "Approve "+printable(f.Short)+"? [y/N/d=deny] ")
 	}
 	if one.Advisory {
 		return decideOverConsole(e, cfg, f, strings.ToLower(answer), duration, accessChosen)
+	}
+	if clientDecides {
+		return decideOnClient(ctx, e, cfg, daemon.client, one, strings.ToLower(answer), duration, accessChosen)
 	}
 	var argv []string
 	what, done := "", ""
@@ -537,6 +565,13 @@ type accessDecided struct {
 // access, "" for read-only) over the digest of the facts shown, d denies it,
 // anything else changes nothing.
 func decideOverConsole(e *env, cfg config.Config, f accessFacts, answer, duration, accessChoice string) error {
+	return decideOverConsoleVia(nil, e, cfg, f, answer, duration, accessChoice)
+}
+
+// decideOverConsoleVia is decideOverConsole through client (accessCallVia): a
+// verified daemon's, or cfg's own when nil. The console's refusal is said as
+// it came.
+func decideOverConsoleVia(client *http.Client, e *env, cfg config.Config, f accessFacts, answer, duration, accessChoice string) error {
 	short := printable(f.Short)
 	var path string
 	form := url.Values{}
@@ -554,7 +589,7 @@ func decideOverConsole(e *env, cfg config.Config, f accessFacts, answer, duratio
 		fmt.Fprintln(e.stdout, "Nothing changed.")
 		return nil
 	}
-	b, err := accessCall(cfg, http.MethodPost, path, form)
+	b, err := accessCallVia(client, cfg, http.MethodPost, path, form)
 	if err != nil {
 		return fmt.Errorf("the decision on %s did not complete: %w", short, err)
 	}
@@ -563,11 +598,13 @@ func decideOverConsole(e *env, cfg config.Config, f accessFacts, answer, duratio
 		return fmt.Errorf("unreadable console response from %s: %w", path, err)
 	}
 	switch {
+	case answer != "y" && answer != "yes" && got.Denied == "":
+		return fmt.Errorf("the console's answer from %s does not say %s was denied", path, short)
 	case got.Denied != "" && f.Kind == kindMove:
 		fmt.Fprintf(e.stdout, "Denied %s: the agent stays in %s, and %s stays closed to it.\n", short, homeWords(f.From),
 			printable(got.Project))
 	case got.Denied != "":
-		fmt.Fprintf(e.stdout, "Denied %s: %s stays closed to that session.\n", short, printable(got.Project))
+		fmt.Fprintf(e.stdout, "Denied %s: %s stays %s that session.\n", short, printable(got.Project), closedWord(f.Kind))
 	case got.Kind == kindMove:
 		fmt.Fprintf(e.stdout, "Approved %s: the agent works in %s from now on, as session %s.\n", short,
 			printable(got.Project), printable(got.Session))
@@ -579,6 +616,61 @@ func decideOverConsole(e *env, cfg config.Config, f accessFacts, answer, duratio
 			printable(got.From), printable(got.Project), clockTime(got.ExpiresAt))
 	}
 	return nil
+}
+
+// decideOnClient commits the owner's answer on a client computer, whose relay
+// forwards to the server: no daemon runs here, so nothing runs sudo. d denies
+// over the relay (client, the verified socket's), where the server takes a
+// deny only from the owner's own hands on this computer (owner decision R-D3:
+// a terminal with no agent above it, through a mapped relay of this release)
+// and says why it refuses any other; the refusal is shown as it came. y needs
+// a proof the server checks, so it opens the request's passkey page with the
+// choices made (openPasskeyPage); Touch ID approves from the agent's dialog.
+// Anything else changes nothing.
+func decideOnClient(ctx context.Context, e *env, cfg config.Config, client *http.Client, one accessOne, answer, duration, accessChoice string) error {
+	switch answer {
+	case "d", "deny":
+		return decideOverConsoleVia(client, e, cfg, one.Request, answer, "", "")
+	case "y", "yes":
+		if one.Page == "" {
+			return fmt.Errorf("nothing was approved: %s", noPasskeyOnClient(e, one, accessChoice))
+		}
+		return openPasskeyPage(ctx, e, one, duration, accessChoice)
+	default:
+		fmt.Fprintln(e.stdout, "Nothing changed.")
+		return nil
+	}
+}
+
+// onClientWords says, before the question, what y and d do on a client
+// computer.
+func onClientWords(e *env, one accessOne, accessChoice string) string {
+	s := "On this computer nothing runs sudo: seamlessd approve runs on the server. "
+	if one.Page == "" {
+		return s + "d denies " + printable(one.Request.Short) + " from here; " + noPasskeyOnClient(e, one, accessChoice) + "."
+	}
+	s += "y opens the request's passkey page, for your passkey to approve it there"
+	if touchIDApproves(e, one.Request, accessChoice) {
+		s += " (Touch ID approves it from the agent's dialog too)"
+	}
+	return s + ", and d denies it from here."
+}
+
+// noPasskeyOnClient says how a request is approved on a client computer when
+// the daemon names no passkey page for it.
+func noPasskeyOnClient(e *env, one accessOne, accessChoice string) string {
+	s := "the daemon names no passkey page for " + printable(one.Request.Short) + ", so "
+	if touchIDApproves(e, one.Request, accessChoice) {
+		s += "approve it with Touch ID from the agent's dialog, or "
+	}
+	return s + "with seam approve in a terminal on the server itself"
+}
+
+// touchIDApproves reports whether the Touch ID helper can approve f with
+// accessChoice: on a Mac only, never a move, and a grant read-only (its
+// dialog approves no other access).
+func touchIDApproves(e *env, f accessFacts, accessChoice string) bool {
+	return e.platform() == "darwin" && f.Kind != kindMove && accessChoice != accessReadWrite
 }
 
 // pickRequest lists the pending requests and returns the id of the one to
@@ -1130,7 +1222,7 @@ func passkeyPlace(one accessOne) string {
 // the daemon's account with the config the daemon loaded. -k makes sudo ask
 // every time and keep no ticket an agent could reuse.
 func sudoArgv(t terminalApprover, tail ...string) []string {
-	argv := []string{"sudo", "-k", "-u", t.Account, "env", "SEAMLESS_CONFIG=" + t.Config, t.Seamlessd, "approve"}
+	argv := []string{shellcmd.Sudo, "-k", "-u", t.Account, shellcmd.Env, "SEAMLESS_CONFIG=" + t.Config, t.Seamlessd, "approve"}
 	return append(argv, tail...)
 }
 
@@ -1159,10 +1251,10 @@ func denyArgv(t terminalApprover, f accessFacts) []string {
 // passwordless reports that rule, so the caller does not also announce a
 // prompt sudo will not show.
 func warnPasswordless(ctx context.Context, e *env, t terminalApprover) (passwordless bool, err error) {
-	if _, err := e.run(ctx, []string{"sudo", "-k"}, nil, io.Discard, io.Discard); err != nil {
+	if _, err := e.run(ctx, []string{shellcmd.Sudo, "-k"}, nil, io.Discard, io.Discard); err != nil {
 		return false, fmt.Errorf("run sudo: %w", err)
 	}
-	code, err := e.run(ctx, []string{"sudo", "-n", "-u", t.Account, "true"}, nil, io.Discard, io.Discard)
+	code, err := e.run(ctx, []string{shellcmd.Sudo, "-n", "-u", t.Account, "true"}, nil, io.Discard, io.Discard)
 	if err != nil {
 		return false, fmt.Errorf("run sudo: %w", err)
 	}

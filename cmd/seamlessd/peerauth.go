@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -30,6 +31,7 @@ import (
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/screening"
+	"github.com/arctop/seamless/internal/shellcmd"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -97,12 +99,22 @@ func (env peerAuthEnv) daemonPin() (access.DaemonPin, bool, error) {
 // daemon's account.
 const guideAccountSection = `"Deploy it: the daemon runs as its own account"`
 
-// pinCommand is the one command line that pins account as the daemon's, as the
-// guide writes it. account must be ValidDaemonAccountName: it is printed into
-// a shell command.
+// pinCommand is the one command line that pins account as the daemon's: the
+// guide's two lines as one, with sudo and the tools root runs named by their
+// full paths (shellcmd). id runs as the owner, so it stays a bare name.
+// account must be ValidDaemonAccountName: it is printed into a shell command.
 func pinCommand(account string) string {
-	return fmt.Sprintf(`echo "%s $(id -u %s)" | sudo tee %s >/dev/null && sudo chmod 0644 %s`,
-		account, account, access.DaemonAccountPath, access.DaemonAccountPath)
+	t := shellcmd.ToolsFor(runtime.GOOS)
+	return fmt.Sprintf(`echo "%s $(id -u %s)" | %s && %s`, account, account,
+		t.AsRoot(t.Tee, access.DaemonAccountPath, ">/dev/null"), t.AsRoot(t.Chmod, "0644", access.DaemonAccountPath))
+}
+
+// releaseSignersInstallCommand is the command root runs to put the release
+// signers' file at path, root's and 0644, on goos: sudo and install by their
+// full paths (shellcmd), the file the owner names in its placeholder.
+func releaseSignersInstallCommand(goos, path string) string {
+	t := shellcmd.ToolsFor(goos)
+	return t.AsRoot(t.Install, "-o", "root", "-m", "0644", "<release_signers>", shellcmd.PosixArg(path))
 }
 
 // noPinNote is serve's warning and doctor's row when no pin names the
@@ -216,7 +228,7 @@ func (rt *peerAuthRuntime) filesystemProblems(cfg config.Config, create bool) []
 	if path := cfg.Update.ReleaseSigners; path != "" {
 		fsys := signersFS{euid: rt.env.euid, inspect: rt.env.inspect, open: func(p string) (io.ReadCloser, error) { return os.Open(p) }}
 		if _, err := loadReleaseSigners(path, true, fsys); err != nil {
-			problems = append(problems, err.Error()+" -- have root install it: sudo install -o root -m 0644 <release_signers> "+path)
+			problems = append(problems, err.Error()+" -- have root install it: "+releaseSignersInstallCommand(runtime.GOOS, path))
 		}
 	}
 	// The TLS pair: whoever can read the key serves the console's own name with

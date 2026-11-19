@@ -30,6 +30,7 @@ import (
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/passkey"
+	"github.com/arctop/seamless/internal/shellcmd"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -251,7 +252,9 @@ func (s *Service) enrollCodeCommand(kind, fingerprint string) string {
 
 // daemonCommand is seamlessd running verb on this daemon's database: as the
 // daemon's account, through sudo -k so it asks every time, when the daemon
-// knows how that account is reached (peer_auth), else as it is.
+// knows how that account is reached (peer_auth), else as it is. sudo and the
+// env it runs are named by absolute path (shellcmd), never found on the
+// owner's PATH.
 func (s *Service) daemonCommand(verb string) string {
 	t := s.cfg.Terminal
 	if t == nil || t.Account == "" || t.Seamlessd == "" {
@@ -259,9 +262,9 @@ func (s *Service) daemonCommand(verb string) string {
 	}
 	env := ""
 	if t.Config != "" {
-		env = "env SEAMLESS_CONFIG=" + shellWord(t.Config) + " "
+		env = shellcmd.Env + " SEAMLESS_CONFIG=" + shellWord(t.Config) + " "
 	}
-	return "sudo -k -u " + shellWord(t.Account) + " " + env + shellWord(t.Seamlessd) + " " + verb
+	return shellcmd.Sudo + " -k -u " + shellWord(t.Account) + " " + env + shellWord(t.Seamlessd) + " " + verb
 }
 
 // The Touch ID helper's enrollment form: what the Secure Enclave key it made

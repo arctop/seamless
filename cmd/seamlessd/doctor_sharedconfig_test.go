@@ -99,7 +99,7 @@ func TestConfigFileCheck_OwnershipAndContent(t *testing.T) {
 		},
 		{
 			name: "root-owned but group-writable: warn", body: socketClient, dirMode: 0o755, fileMode: 0o664, pin: noPin,
-			status: statusWarn, want: []string{"holds no secret", "mode 0664 lets accounts other than root rewrite it", "sudo chmod 644 '"},
+			status: statusWarn, want: []string{"holds no secret", "mode 0664 lets accounts other than root rewrite it", "run: /usr/bin/sudo /bin/chmod 644 '"},
 		},
 		{
 			name: "root-owned under a directory another account owns: warn", body: socketClient, dirMode: 0o755, fileMode: 0o644, pin: noPin,

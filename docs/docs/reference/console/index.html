@@ -777,7 +777,7 @@ device shows.</li>
 <li><strong>No passkey at hand.</strong> Under <strong>Sign in from a terminal on the server</strong>, the
 login page's <strong>Show a code</strong> begins a terminal sign-in: the browser gets a
 cookie bound to its key and shows a code with the command that approves it,
-<code>sudo -k -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd console-open --sign-in --code 7KQ2-M9XD</code>
+<code>/usr/bin/sudo -k -u _seamless /usr/bin/env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml /opt/seamless/bin/seamlessd console-open --sign-in --code 7KQ2-M9XD</code>
 under peer_auth (<code>seamlessd console-open --sign-in --code 7KQ2-M9XD</code>
 without it). Approved, that browser is signed in for 7 days, as with a
 passkey, and the page goes on by itself. The command first shows the browser the code names (when it began, its address and User-Agent) and asks; say yes only to a code your own browser shows you now. The code signs in no other browser,

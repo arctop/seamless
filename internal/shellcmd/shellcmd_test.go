@@ -26,6 +26,8 @@ func TestToolsFor_AbsolutePathsPerOS(t *testing.T) {
 	require.Equal(t, "/bin/launchctl", mac.Launchctl)
 	require.Empty(t, mac.Systemctl)
 	require.Equal(t, "/bin/systemctl", linux.Systemctl)
+	require.Equal(t, "/bin/loginctl", linux.Loginctl)
+	require.Empty(t, mac.Loginctl)
 	require.Empty(t, linux.Dscl)
 	require.Equal(t, "/usr/bin/sudo /usr/bin/install -m 0755 a b", mac.AsRoot(mac.Install, "-m", "0755", "a", "b"))
 }

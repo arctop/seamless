@@ -46,6 +46,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/shellcmd"
 )
 
 // approverBundleID is the helper app's bundle identifier, the Identifier its
@@ -243,7 +244,7 @@ func reportReplaced(w io.Writer, t terminalApprover, before, after, added []appr
 
 // removeApproverArgv removes one credential as the daemon's account.
 func removeApproverArgv(t terminalApprover, id string) []string {
-	return []string{"sudo", "-k", "-u", t.Account, "env", "SEAMLESS_CONFIG=" + t.Config, t.Seamlessd, "approvers", "remove", id}
+	return []string{shellcmd.Sudo, "-k", "-u", t.Account, shellcmd.Env, "SEAMLESS_CONFIG=" + t.Config, t.Seamlessd, "approvers", "remove", id}
 }
 
 // defaultKeyName is the name a key is listed under when --name is absent.
