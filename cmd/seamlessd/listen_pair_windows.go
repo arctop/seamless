@@ -21,6 +21,11 @@ const (
 // address and port already.
 func addrInUse(err error) bool { return errors.Is(err, wsaeAddrInUse) }
 
+// addrTaken reports whether a listen failed because another socket holds the
+// address: in use, or WSAEACCES, another account's exclusive socket. It is
+// what stops a running serve beside an address it must hold (pairWatch).
+func addrTaken(err error) bool { return addrInUse(err) || errors.Is(err, syscall.WSAEACCES) }
+
 // addrUnheld reports whether a listen failed because no process can hold the
 // address now: it is not this machine's (or not usable yet), or its family
 // is not supported here. Anything else -- in use, refused (WSAEACCES, another

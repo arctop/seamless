@@ -181,7 +181,7 @@ Its transport rows are the ones to read:
 | Row | What it tells you |
 |---|---|
 | `bind` | Loopback is OK. Non-loopback without TLS is a **warn** naming what travels in the clear; non-loopback with TLS is OK with the reminder that the bearer key is still the only authentication. |
-| `bind.addresses` | Dials the bind and the IPv6 addresses `serve` listens on beside it. Another process answering at one is a **fail**: it would answer for the daemon there, and `serve` refuses to start while it holds one a name points at. |
+| `bind.addresses` | Dials the bind and the IPv6 addresses `serve` listens on beside it. Another process answering at one is a **fail**: it would answer for the daemon there, and `serve` refuses to start, or stops, while it holds one a name points at. |
 | `server_url` | Fetches `/healthz` through the advertised URL. A `421` here is a **fail** that names the Host header it just refused - the allowlist and the advertised name disagree. |
 | `tls` | Off, or the certificate's expiry and whether its SANs cover the advertised host. |
 | `tls.key_file` | Who can read the TLS key: your account alone is **info**, group or world a **warn**. |
@@ -786,7 +786,9 @@ A concrete IPv4 `addr` (one LAN or tailnet address instead of the wildcard)
 also listens on its interface's IPv6 addresses that reach no further, so a
 dual-stack name reaches the daemon over either family. Beside a private or
 tailnet address that means only unique local addresses (`fd…`), never a global
-IPv6 address the internet may reach. Doctor's `bind` row lists them.
+IPv6 address the internet may reach. Doctor's `bind` row lists them. One that
+appears after the daemon starts (a tailnet adds its IPv6 address a moment after
+its IPv4 one) is listened on within 2 seconds.
 
 Naming `server_url` also arms the **Host-header allowlist**: the daemon then
 answers the loopback names, a concrete bind host, and the host of `server_url`,

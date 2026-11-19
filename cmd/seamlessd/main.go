@@ -837,12 +837,17 @@ func runServe(args []string) error {
 	// another process may hold stops the start when it matters (pairedNeed):
 	// ::1, an address of a name browsers and clients dial, any under
 	// peer_auth. The service manager starts serve again, and it runs once the
-	// address is free.
+	// address is free. An address that appears later is taken while serve
+	// runs (watchPaired, below).
 	lnPort := ""
 	if _, p, perr := net.SplitHostPort(ln.Addr().String()); perr == nil {
 		lnPort = p
 	}
-	paired, err := listenPaired(ctx, ln, hostIfaceAddrs, pairedListen, pairedNeedFor(cfg, lnPort))
+	pairs := newPairWatch(ln, hostIfaceAddrs, pairedListen, pairedNeedFor(cfg, lnPort))
+	var paired []net.Listener
+	if pairs != nil {
+		paired, err = pairs.start(ctx)
+	}
 	if err != nil {
 		_ = ln.Close()
 		stop()
@@ -850,7 +855,8 @@ func runServe(args []string) error {
 		return fmt.Errorf("seamlessd.serve: %w", err)
 	}
 	lns := append([]net.Listener{ln}, paired...)
-	srv.Handler = daemonHandler(bind, append(cfg.AllowedHostsEffective(), listenerHosts(paired)...), activity, tcpRoutes)
+	pairedHosts := newPairedHostSet(paired)
+	srv.Handler = daemonHandlerPaired(bind, cfg.AllowedHostsEffective(), pairedHosts, activity, tcpRoutes)
 	if approvalSvc != nil || signIn != nil {
 		// The passkey origins, judged against what these listeners hold.
 		warnPasskeyOrigins(ctx, cfg, bind, heldBy(lns), logger)
@@ -892,7 +898,15 @@ func runServe(args []string) error {
 		slog.Info("device pairing on", "peer_auth_approval", cfg.PeerAuth.Enabled, "tls", tlsOn)
 	}
 
-	errCh := make(chan error, len(lns)+1)
+	// The first error ends serve; any after it is dropped, never blocked on:
+	// the listeners watchPaired adds serve into the same channel.
+	errCh := make(chan error, 1)
+	fail := func(err error) {
+		select {
+		case errCh <- err:
+		default:
+		}
+	}
 	listening := []any{"addr", bind}
 	for _, l := range paired {
 		listening = append(listening, "also", l.Addr().String())
@@ -901,8 +915,9 @@ func runServe(args []string) error {
 		"data_dir", cfg.DataDir,
 		"version", buildVersion(), "commit", commit, "built", buildDate, "mcp_tools", mcpSrv.NumTools(),
 		"distribution", distribution, "instance", instance)...)
-	// One server on every TCP listener: Shutdown and Close reach them all.
-	for _, l := range lns {
+	// One server on every TCP listener: Shutdown and Close reach them all, and
+	// one served after Shutdown began is closed at once (http.Server.Serve).
+	serveOn := func(l net.Listener) {
 		go func() {
 			serve := func() error { return srv.Serve(l) }
 			if tlsOn {
@@ -910,15 +925,31 @@ func runServe(args []string) error {
 				serve = func() error { return srv.ServeTLS(l, "", "") }
 			}
 			if err := serve(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				errCh <- err
+				fail(err)
 			}
 		}()
+	}
+	for _, l := range lns {
+		serveOn(l)
+	}
+	if pairs != nil {
+		// An IPv6 address that appears beside the bind once serve runs is
+		// listened on by the start's rules, its host admitted before it is
+		// served; the passkey origins are judged again against what serve
+		// then holds. One another process holds that serve must hold stops
+		// serve, as it would have stopped the start (pairWatch).
+		var judge func(heldAddrs)
+		if approvalSvc != nil || signIn != nil {
+			judge = func(held heldAddrs) { warnPasskeyOrigins(ctx, cfg, bind, held, logger) }
+		}
+		watchDone := watchPaired(ctx, pairs, pairWatchInterval, pairedHosts, serveOn, judge, fail)
+		defer func() { stop(); <-watchDone }()
 	}
 	if sockSrv != nil {
 		go func() {
 			slog.Info("seamlessd listening on the peer_auth socket", "socket", peer.cfg.Socket.Path)
 			if err := sockSrv.Serve(sockLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				errCh <- err
+				fail(err)
 			}
 		}()
 	}
@@ -1046,7 +1077,30 @@ func (d daemonRoutes) mux() *http.ServeMux {
 // counts unless activityExempt says otherwise, a request the bearer check then
 // refuses included; update.Decide allows for a client looping on a bad key.
 func daemonHandler(bind string, allowedHosts []string, activity *activityTracker, routes http.Handler) http.Handler {
-	return hostGuard(bind, allowedHosts, activity.wrap(routes))
+	return daemonHandlerPaired(bind, allowedHosts, nil, activity, routes)
+}
+
+// daemonHandlerPaired is daemonHandler whose Host allowlist also admits the
+// hosts in paired, the IPv6 addresses serve listens on beside its bind, read
+// at each request: pairWatch adds one while serve runs, before it serves
+// there. They are facts about the listeners, as the bind host is. A nil paired
+// admits nothing more. Paired addresses exist only beside a concrete IPv4
+// bind, where hostGuard always guards, so admitting them here is the same as
+// listing them in allowedHosts.
+func daemonHandlerPaired(bind string, allowedHosts []string, paired *pairedHostSet, activity *activityTracker,
+	routes http.Handler) http.Handler {
+	inner := activity.wrap(routes)
+	guarded := hostGuard(bind, allowedHosts, inner)
+	if paired == nil {
+		return guarded
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if paired.has(requestHost(r)) {
+			inner.ServeHTTP(w, r)
+			return
+		}
+		guarded.ServeHTTP(w, r)
+	})
 }
 
 // newHTTPServer builds the daemon's HTTP server. Requests inherit ctx as their

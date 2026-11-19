@@ -64,6 +64,16 @@ lsof -nP -iTCP:<port> -sTCP:LISTEN`); the service starts `serve` again, and it r
 once the address is free. An address this computer does not have yet is skipped
 with a warning, as is, without peer_auth, one no name points at.
 
+The interfaces can change after the start: a tailnet adds its IPv6 address a
+moment after its IPv4 one, a router advertises a new prefix, a link comes up.
+So a running `serve` reads them again every 2 seconds and listens on a paired
+address it does not hold yet, by the same rules, admitting it to the Host
+allowlist before it serves there. One it cannot listen on yet is tried again at
+the next read and logged once. One another process holds where `serve` must
+hold it stops `serve` with the start's error, and the service starts it again.
+An address `serve` holds stays held until it stops, even if the interface drops
+it, so no process can take it when it comes back.
+
 On a true first run - no config file anywhere in the search order and no
 `SEAMLESS_MCP_API_KEY` in the environment - it generates the bearer key and
 writes it to `~/.config/seamless/seamless.yaml` before starting. An existing
@@ -111,7 +121,7 @@ Checks stop early if config or the database cannot be loaded at all.
 | `llm` | The provider, or a warning that its credential is missing. |
 | `embedder` | Probes the embedder with a real embed call. Unreachable, unconfigured, or provider `anthropic` (no embeddings API) is a warning: recall degrades to FTS. |
 | `bind` | Loopback is OK. Non-loopback with TLS is OK with the reminder that the bearer key is still the only authentication; non-loopback *without* TLS is a warning naming what travels in the clear. |
-| `bind.addresses` | Dials the bind and each IPv6 address `serve` listens on beside it, and reads the instance id `/healthz` names at each. One daemon at all of them is OK; another process answering beside it is a **fail** (stop it, then restart the daemon), as is one answering there while the daemon is not; nothing answering beside a daemon that answers is a **warn** (it could not listen there when it started, and another process can take it; on Linux `serve` holds an address that is not up yet, so if `ip -6 addr` shows it tentative or dadfailed, fix the address instead). The `server_url.addresses` and passkey rows read the same dial: an address another process answers at is not held, and on a passkey origin a **fail**. No row for a wildcard bind, a bind with nothing beside it, or while nothing answers. |
+| `bind.addresses` | Dials the bind and each IPv6 address `serve` listens on beside it, and reads the instance id `/healthz` names at each. One daemon at all of them is OK; another process answering beside it is a **fail** (stop it, and the daemon listens there within 2 seconds), as is one answering there while the daemon is not; nothing answering beside a daemon that answers is a **warn** (it has not listened there yet, and another process can take it: an address that only just appeared is listened on within 2 seconds, one still tentative or dadfailed needs fixing, and a daemon of an earlier release needs a restart). The `server_url.addresses` and passkey rows read the same dial: an address another process answers at is not held, and on a passkey origin a **fail**. No row for a wildcard bind, a bind with nothing beside it, or while nothing answers. |
 | `server_url` | Fetches `/healthz` through the advertised URL. Not answering is **info** (the daemon is often stopped while doctor runs); a `421` is a **fail** naming the Host header it just refused, which means the allowlist and the advertised name disagree. A derived URL says so. A `server_url` that names a user (`https://user:password@host`) is a **warn** instead, and is not fetched: the fetch would send the user and password as Basic auth. Every other row, and serve's log, names the address without its user. |
 | `tls` | Off, or the certificate's expiry (a warning from 30 days out, nothing auto-renews) and whether its SANs cover the host of `server_url` - the one that fails at the client's handshake with a message that names no file on the server. From 14 days out, on a server with relays paired, `relay renewal` warns too, naming each relay: a renewal means re-pairing each. |
 | `tls.key_file` | Without peer_auth, on a server other computers reach: who can read the TLS key. Your account alone is **info** (the daemon runs as you, so every process of yours can read it and serve the daemon's name on any port; locked projects move it out of their reach); group- or world-readable is a **warn** with the `chmod 600`. Under peer_auth the `peer_auth` rows judge it, as `serve` does. |

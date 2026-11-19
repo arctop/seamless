@@ -623,7 +623,9 @@ that address first would reach it instead of the daemon, so <code>serve</code> r
 start (for <code>[::1]</code>, for an address the <code>server_url</code> or passkey origin's host
 resolves to, and under peer_auth for any). The service starts it again every few
 seconds and the log repeats the line; <code>seamlessd doctor</code>'s <code>bind.addresses</code> row
-is a <strong>fail</strong> naming the address.</p>
+is a <strong>fail</strong> naming the address. A daemon that is already running stops with
+the same line when such an address appears after its start (it looks for new
+ones every 2 seconds) and another process holds it.</p>
 <p><strong>Fix.</strong> Find the process: <code>sudo lsof -nP -iTCP:8081 -sTCP:LISTEN</code> (Windows:
 <code>netstat -ano | findstr :8081</code>). Stop it, and the daemon starts at the service's
 next attempt (on Windows the Scheduled Task retries three times, a minute apart;

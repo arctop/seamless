@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net"
 	"net/netip"
 	"net/url"
@@ -46,6 +45,12 @@ import (
 // them: any process may bind it with IP_FREEBIND and answer there once it is
 // up, so serve binds with IP_FREEBIND too and holds it first (pairedListen,
 // listen_pair_linux.go).
+//
+// The interfaces change while serve runs: tailscaled adds a node's IPv6
+// address a moment after its IPv4 one, a router advertisement brings a unique
+// local address, a link comes up. So serve reads them again every
+// pairWatchInterval and listens on a paired address it does not hold yet, by
+// the same rules (pairWatch, listen_pair_watch.go).
 
 // ifaceAddrs lists the addresses of each interface that is up, one slice per
 // interface. Injected so tests never read this machine's interfaces.
@@ -140,43 +145,15 @@ func pairedIPv6(v4 netip.Addr, ifaces [][]netip.Addr) []netip.Addr {
 // *pairedListenError), with every listener made here closed: another process
 // holds it, or may take it, and would answer there for this daemon.
 // Interfaces it cannot read pair nothing, which under peer_auth (need.all) is
-// the error too.
+// the error too. It is pairWatch's start, the one read serve makes before it
+// serves; nothing beside a wildcard, IPv6 or link-local ln reads anything.
 func listenPaired(ctx context.Context, ln net.Listener, ifaces ifaceAddrs, listen func(network, address string) (net.Listener, error),
 	need pairedNeed) ([]net.Listener, error) {
-	ap, err := netip.ParseAddrPort(ln.Addr().String())
-	if err != nil || !ap.Addr().Unmap().Is4() {
+	w := newPairWatch(ln, ifaces, listen, need)
+	if w == nil {
 		return nil, nil
 	}
-	all, err := ifaces()
-	if err != nil {
-		if need.all {
-			return nil, fmt.Errorf("cannot read this machine's interfaces to listen on the IPv6 addresses beside %s, which locked "+
-				"projects (peer_auth) need held by this daemon: %w", ln.Addr(), err)
-		}
-		slog.Warn("seamlessd: cannot read this machine's interfaces, so it listens on no IPv6 address beside "+ln.Addr().String(),
-			"err", err)
-		return nil, nil
-	}
-	var out []net.Listener
-	for _, a := range pairedIPv6(ap.Addr(), all) {
-		addr := netip.AddrPortFrom(a, ap.Port()).String()
-		l, err := listen("tcp", addr)
-		if err == nil {
-			out = append(out, l)
-			continue
-		}
-		if !addrUnheld(err) {
-			if must, why := need.must(ctx, a); must {
-				for _, l := range out {
-					_ = l.Close()
-				}
-				return nil, &pairedListenError{addr: addr, beside: ln.Addr().String(), port: ap.Port(), why: why, err: err}
-			}
-		}
-		slog.Warn("seamlessd: not listening on "+addr+", the IPv6 address beside "+ln.Addr().String()+
-			": a client that tries it first reaches whatever listens there instead, if anything does", "err", err)
-	}
-	return out, nil
+	return w.start(ctx)
 }
 
 // pairedNeed says which of the addresses serve pairs beside its bind it must
@@ -266,15 +243,25 @@ func (n pairedNeed) must(ctx context.Context, a netip.Addr) (bool, string) {
 }
 
 // pairedListenError is serve's refusal to run without an address it must
-// hold beside its bind (listenPaired).
+// hold beside its bind (listenPaired), or, running, the reason it stops: an
+// address that was not its own at the start is in use by another process
+// (pairWatch).
 type pairedListenError struct {
 	addr, beside string
 	port         uint16
 	why          string
 	err          error
+	running      bool
 }
 
 func (e *pairedListenError) Error() string {
+	if e.running {
+		return fmt.Sprintf("%s is in use by another process, and serve must listen there beside %s (%s): serve did not hold it "+
+			"when it started, and a browser or client that tries it first would reach that process instead of this daemon, so "+
+			"serve stops -- stop the process holding it (%s names it), or move this daemon to another port (addr); the service "+
+			"starts serve again, and it runs once the address is free",
+			e.addr, e.beside, e.why, listenHint(strconv.Itoa(int(e.port))))
+	}
 	if addrInUse(e.err) {
 		return fmt.Sprintf("%s is in use by another process, and serve must listen there beside %s (%s): a browser or client that "+
 			"tries it first would reach that process instead of this daemon -- stop the process holding it (%s names it), or move "+

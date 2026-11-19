@@ -1,6 +1,6 @@
 ---
 title: Domain invariants
-description: The rules plausible-looking code breaks - supersession, scope resolution, FTS and LIKE escaping, LLM degradation, automatic updates, backups and restore, and release discipline - and why each exists.
+description: The rules plausible-looking code breaks - supersession, scope resolution, FTS and LIKE escaping, LLM degradation, automatic updates, backups and restore, listening beside the bind, and release discipline - and why each exists.
 ---
 
 These are the rules that reasonable code violates. Every one of them has a
@@ -502,6 +502,33 @@ that account and root can change; a disk that cannot keep that fails the run,
 and the file is removed. The folder check answers "inside Seamless's data
 folder" for any path in the data directory but its own `backups/` before any
 other probe, so it can never be used to learn what the data directory holds.
+
+## Listening beside the bind
+
+Enforced in `cmd/seamlessd` (`listen_pair.go`, `listen_pair_watch.go`).
+Reference: [`seamlessd serve`](/reference/cli-seamlessd/).
+
+Beside a concrete IPv4 bind, `serve` listens on the IPv6 addresses of that
+interface that reach no further. An address of a name the daemon does not hold
+is one another local process can listen on and answer from in its place.
+
+### A running serve holds what the start would have held
+
+The interfaces change while `serve` runs, so it reads them again every
+`pairWatchInterval` and applies the start's rules (`pairedIPv6`,
+`pairedNeed`) to any address it does not hold yet. A start that would refuse
+to run beside another process on an address must also stop a running `serve`
+there: otherwise when it started would decide whether it runs beside that
+process. It stops only when the address is in use (`addrTaken`); a failure that
+names no other process is logged once and tried again.
+
+### A held listener is never closed before shutdown
+
+A paired listener stays open when its address leaves the interface. Closing it
+frees the port there, and a process that binds it before the address comes back
+(a tailnet restarting) answers for the daemon. Its host stays in the Host
+allowlist (`pairedHostSet`) for the same reason, and it is admitted before the
+listener is served (`watchPaired`), so the first request there is not refused.
 
 ## Release discipline
 

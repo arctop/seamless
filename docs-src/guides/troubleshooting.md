@@ -379,7 +379,9 @@ that address first would reach it instead of the daemon, so `serve` refuses to
 start (for `[::1]`, for an address the `server_url` or passkey origin's host
 resolves to, and under peer_auth for any). The service starts it again every few
 seconds and the log repeats the line; `seamlessd doctor`'s `bind.addresses` row
-is a **fail** naming the address.
+is a **fail** naming the address. A daemon that is already running stops with
+the same line when such an address appears after its start (it looks for new
+ones every 2 seconds) and another process holds it.
 
 **Fix.** Find the process: `sudo lsof -nP -iTCP:8081 -sTCP:LISTEN` (Windows:
 `netstat -ano | findstr :8081`). Stop it, and the daemon starts at the service's

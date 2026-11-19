@@ -537,7 +537,10 @@ That is why doctor checks two things about every origin:
   peer_auth `serve` refuses to start while another process holds any of them,
   and the service starts it again once the address is free. On Linux it holds
   an address still tentative (duplicate address detection running) from the
-  start, so no other process can take it first. It never
+  start, so no other process can take it first. An address that appears while
+  it runs (a tailnet's IPv6 address a moment after its IPv4 one) is listened on
+  within 2 seconds, and one another process holds by then stops it, as it would
+  have stopped the start. It never
   pairs a private address with a global IPv6 one, which would widen a LAN bind
   to the internet. An address the pairing misses, such as one on another
   interface, still needs the wildcard (`addr: "0.0.0.0:8081"` holds every

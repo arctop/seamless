@@ -3,8 +3,9 @@ package main
 // Doctor dials what it would otherwise infer (review M1). The addresses serve
 // listens on beside an IPv4 bind (listen_pair.go) come from this machine's
 // interfaces, and an interface listing an address says nothing about who
-// listens on it: another process that held it when serve started answers
-// there instead. So doctor's run carries a probe (withListenerProbe), and
+// listens on it: another process that held it when serve started, or took it
+// before serve's next read of the interfaces (pairWatch), answers there
+// instead. So doctor's run carries a probe (withListenerProbe), and
 // boundAddrs, which every row judging what serve holds reads (bind,
 // server_url.addresses, the passkey rows of peer_auth and of console
 // sign-in), keeps an address beside the bind only where the daemon answering
@@ -17,8 +18,9 @@ package main
 // other account can bind one of them while it does (EADDRINUSE).
 //
 // The instance id tells this daemon from another process, not from one that
-// relays /healthz to it: serve's refusal to start without the addresses that
-// matter (pairedNeed) is what keeps a process off them.
+// relays /healthz to it: serve's refusal to start, or to keep running,
+// without the addresses that matter (pairedNeed) is what keeps a process off
+// them.
 
 import (
 	"context"
@@ -181,18 +183,20 @@ func bindAddressesCheck(ctx context.Context, cfg config.Config, hn hostNet) (che
 	switch {
 	case len(held.taken) > 0 && !held.self.answered:
 		return check{statusFail, name, fmt.Sprintf("another process answers at %s, beside %s, where this daemon is not answering: a "+
-			"browser or client that tries that address first reaches it, and serve refuses to start while it holds a loopback "+
-			"address, one a name browsers and clients dial resolves to, or under peer_auth any -- stop it (%s names it)",
+			"browser or client that tries that address first reaches it, and serve refuses to start, or stops, while it holds a "+
+			"loopback address, one a name browsers and clients dial resolves to, or under peer_auth any -- stop it (%s names it)",
 			at(held.taken), bind, listenHint(port))}, true
 	case len(held.taken) > 0:
 		return check{statusFail, name, fmt.Sprintf("another process answers at %s, not this daemon (instance %s at %s): a browser or "+
-			"client that tries that address first reaches it instead -- stop it (%s names it), then restart the daemon so it "+
-			"listens there", at(held.taken), held.self.instance, bind, listenHint(port))}, true
+			"client that tries that address first reaches it instead -- stop it (%s names it): the daemon tries the address "+
+			"again every %s, and listens there once it is free", at(held.taken), held.self.instance, bind, listenHint(port),
+			pairWatchInterval)}, true
 	case len(held.silent) > 0:
-		return check{statusWarn, name, fmt.Sprintf("nothing answers at %s, beside %s where this daemon does: it could not listen "+
-			"there when it started (its log says why), and another process can take the address -- restart the daemon. On Linux "+
-			"serve holds an address that is not up yet: if ip -6 addr shows it tentative or dadfailed, fix the address instead",
-			at(held.silent), bind)}, true
+		return check{statusWarn, name, fmt.Sprintf("nothing answers at %s, beside %s where this daemon does: it has not listened "+
+			"there yet (it tries every %s, and its log says why it could not), and another process can take the address. An "+
+			"address that only just appeared is listened on within that time; one still tentative or dadfailed (ip -6 addr on "+
+			"Linux, ifconfig on macOS) needs the address fixed; a daemon of an earlier release listens only where it could at "+
+			"its start -- restart it", at(held.silent), bind, pairWatchInterval)}, true
 	case !held.self.answered:
 		return check{}, false
 	case held.self.instance == "":

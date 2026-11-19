@@ -7772,7 +7772,7 @@ Its transport rows are the ones to read:
 | Row | What it tells you |
 |---|---|
 | `bind` | Loopback is OK. Non-loopback without TLS is a **warn** naming what travels in the clear; non-loopback with TLS is OK with the reminder that the bearer key is still the only authentication. |
-| `bind.addresses` | Dials the bind and the IPv6 addresses `serve` listens on beside it. Another process answering at one is a **fail**: it would answer for the daemon there, and `serve` refuses to start while it holds one a name points at. |
+| `bind.addresses` | Dials the bind and the IPv6 addresses `serve` listens on beside it. Another process answering at one is a **fail**: it would answer for the daemon there, and `serve` refuses to start, or stops, while it holds one a name points at. |
 | `server_url` | Fetches `/healthz` through the advertised URL. A `421` here is a **fail** that names the Host header it just refused - the allowlist and the advertised name disagree. |
 | `tls` | Off, or the certificate's expiry and whether its SANs cover the advertised host. |
 | `tls.key_file` | Who can read the TLS key: your account alone is **info**, group or world a **warn**. |
@@ -8375,7 +8375,9 @@ A concrete IPv4 `addr` (one LAN or tailnet address instead of the wildcard)
 also listens on its interface's IPv6 addresses that reach no further, so a
 dual-stack name reaches the daemon over either family. Beside a private or
 tailnet address that means only unique local addresses (`fd…`), never a global
-IPv6 address the internet may reach. Doctor's `bind` row lists them.
+IPv6 address the internet may reach. Doctor's `bind` row lists them. One that
+appears after the daemon starts (a tailnet adds its IPv6 address a moment after
+its IPv4 one) is listened on within 2 seconds.
 
 Naming `server_url` also arms the **Host-header allowlist**: the daemon then
 answers the loopback names, a concrete bind host, and the host of `server_url`,
@@ -9184,7 +9186,10 @@ That is why doctor checks two things about every origin:
   peer_auth `serve` refuses to start while another process holds any of them,
   and the service starts it again once the address is free. On Linux it holds
   an address still tentative (duplicate address detection running) from the
-  start, so no other process can take it first. It never
+  start, so no other process can take it first. An address that appears while
+  it runs (a tailnet's IPv6 address a moment after its IPv4 one) is listened on
+  within 2 seconds, and one another process holds by then stops it, as it would
+  have stopped the start. It never
   pairs a private address with a global IPv6 one, which would widen a LAN bind
   to the internet. An address the pairing misses, such as one on another
   interface, still needs the wildcard (`addr: "0.0.0.0:8081"` holds every
@@ -11680,7 +11685,9 @@ that address first would reach it instead of the daemon, so `serve` refuses to
 start (for `[::1]`, for an address the `server_url` or passkey origin's host
 resolves to, and under peer_auth for any). The service starts it again every few
 seconds and the log repeats the line; `seamlessd doctor`'s `bind.addresses` row
-is a **fail** naming the address.
+is a **fail** naming the address. A daemon that is already running stops with
+the same line when such an address appears after its start (it looks for new
+ones every 2 seconds) and another process holds it.
 
 **Fix.** Find the process: `sudo lsof -nP -iTCP:8081 -sTCP:LISTEN` (Windows:
 `netstat -ano | findstr :8081`). Stop it, and the daemon starts at the service's
@@ -14651,6 +14658,16 @@ lsof -nP -iTCP:<port> -sTCP:LISTEN`); the service starts `serve` again, and it r
 once the address is free. An address this computer does not have yet is skipped
 with a warning, as is, without peer_auth, one no name points at.
 
+The interfaces can change after the start: a tailnet adds its IPv6 address a
+moment after its IPv4 one, a router advertises a new prefix, a link comes up.
+So a running `serve` reads them again every 2 seconds and listens on a paired
+address it does not hold yet, by the same rules, admitting it to the Host
+allowlist before it serves there. One it cannot listen on yet is tried again at
+the next read and logged once. One another process holds where `serve` must
+hold it stops `serve` with the start's error, and the service starts it again.
+An address `serve` holds stays held until it stops, even if the interface drops
+it, so no process can take it when it comes back.
+
 On a true first run - no config file anywhere in the search order and no
 `SEAMLESS_MCP_API_KEY` in the environment - it generates the bearer key and
 writes it to `~/.config/seamless/seamless.yaml` before starting. An existing
@@ -14698,7 +14715,7 @@ Checks stop early if config or the database cannot be loaded at all.
 | `llm` | The provider, or a warning that its credential is missing. |
 | `embedder` | Probes the embedder with a real embed call. Unreachable, unconfigured, or provider `anthropic` (no embeddings API) is a warning: recall degrades to FTS. |
 | `bind` | Loopback is OK. Non-loopback with TLS is OK with the reminder that the bearer key is still the only authentication; non-loopback *without* TLS is a warning naming what travels in the clear. |
-| `bind.addresses` | Dials the bind and each IPv6 address `serve` listens on beside it, and reads the instance id `/healthz` names at each. One daemon at all of them is OK; another process answering beside it is a **fail** (stop it, then restart the daemon), as is one answering there while the daemon is not; nothing answering beside a daemon that answers is a **warn** (it could not listen there when it started, and another process can take it; on Linux `serve` holds an address that is not up yet, so if `ip -6 addr` shows it tentative or dadfailed, fix the address instead). The `server_url.addresses` and passkey rows read the same dial: an address another process answers at is not held, and on a passkey origin a **fail**. No row for a wildcard bind, a bind with nothing beside it, or while nothing answers. |
+| `bind.addresses` | Dials the bind and each IPv6 address `serve` listens on beside it, and reads the instance id `/healthz` names at each. One daemon at all of them is OK; another process answering beside it is a **fail** (stop it, and the daemon listens there within 2 seconds), as is one answering there while the daemon is not; nothing answering beside a daemon that answers is a **warn** (it has not listened there yet, and another process can take it: an address that only just appeared is listened on within 2 seconds, one still tentative or dadfailed needs fixing, and a daemon of an earlier release needs a restart). The `server_url.addresses` and passkey rows read the same dial: an address another process answers at is not held, and on a passkey origin a **fail**. No row for a wildcard bind, a bind with nothing beside it, or while nothing answers. |
 | `server_url` | Fetches `/healthz` through the advertised URL. Not answering is **info** (the daemon is often stopped while doctor runs); a `421` is a **fail** naming the Host header it just refused, which means the allowlist and the advertised name disagree. A derived URL says so. A `server_url` that names a user (`https://user:password@host`) is a **warn** instead, and is not fetched: the fetch would send the user and password as Basic auth. Every other row, and serve's log, names the address without its user. |
 | `tls` | Off, or the certificate's expiry (a warning from 30 days out, nothing auto-renews) and whether its SANs cover the host of `server_url` - the one that fails at the client's handshake with a message that names no file on the server. From 14 days out, on a server with relays paired, `relay renewal` warns too, naming each relay: a renewal means re-pairing each. |
 | `tls.key_file` | Without peer_auth, on a server other computers reach: who can read the TLS key. Your account alone is **info** (the daemon runs as you, so every process of yours can read it and serve the daemon's name on any port; locked projects move it out of their reach); group- or world-readable is a **warn** with the `chmod 600`. Under peer_auth the `peer_auth` rows judge it, as `serve` does. |
@@ -21499,6 +21516,33 @@ that account and root can change; a disk that cannot keep that fails the run,
 and the file is removed. The folder check answers "inside Seamless's data
 folder" for any path in the data directory but its own `backups/` before any
 other probe, so it can never be used to learn what the data directory holds.
+
+## Listening beside the bind
+
+Enforced in `cmd/seamlessd` (`listen_pair.go`, `listen_pair_watch.go`).
+Reference: [`seamlessd serve`](/reference/cli-seamlessd/).
+
+Beside a concrete IPv4 bind, `serve` listens on the IPv6 addresses of that
+interface that reach no further. An address of a name the daemon does not hold
+is one another local process can listen on and answer from in its place.
+
+### A running serve holds what the start would have held
+
+The interfaces change while `serve` runs, so it reads them again every
+`pairWatchInterval` and applies the start's rules (`pairedIPv6`,
+`pairedNeed`) to any address it does not hold yet. A start that would refuse
+to run beside another process on an address must also stop a running `serve`
+there: otherwise when it started would decide whether it runs beside that
+process. It stops only when the address is in use (`addrTaken`); a failure that
+names no other process is logged once and tried again.
+
+### A held listener is never closed before shutdown
+
+A paired listener stays open when its address leaves the interface. Closing it
+frees the port there, and a process that binds it before the address comes back
+(a tailnet restarting) answers for the daemon. Its host stays in the Host
+allowlist (`pairedHostSet`) for the same reason, and it is admitted before the
+listener is served (`watchPaired`), so the first request there is not refused.
 
 ## Release discipline
 
