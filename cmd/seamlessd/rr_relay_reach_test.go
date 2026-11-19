@@ -161,11 +161,10 @@ func newRRRelayRig(t *testing.T) *rrRelayRig {
 		require.NoError(t, err)
 		require.NoError(t, store.SetProjectIsolation(ctx, d.db, slug, iso))
 	}
-	// The desk's clone on example-laptop maps to its project there: the repo
-	// map is keyed by host, and a relay's requests speak for its enrolled name.
-	_, err := d.db.ExecContext(ctx, `INSERT INTO repo_map (host, path, slug, origin, created_at) VALUES (?, ?, ?, '', ?)`,
-		relayvLaptop, rrRelayDeskClone, rrRelayBooks, core.FormatTime(time.Now().UTC()))
-	require.NoError(t, err)
+	// The desk's clone on example-laptop maps to its project there, as
+	// `seamlessd map-repo --host` maps it: the repo map is keyed by host, and a
+	// relay's requests speak for its enrolled name.
+	require.NoError(t, store.AddHostRepoMapping(ctx, d.db, relayvLaptop, rrRelayDeskClone, rrRelayBooks))
 	now := time.Now().UTC()
 	for _, p := range rrRelayTargets {
 		if p == rrRelayNone {

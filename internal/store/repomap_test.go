@@ -677,6 +677,40 @@ func TestRemoveRepoMappings_DropsRowAndMirror(t *testing.T) {
 	check()
 }
 
+// AddHostRepoMapping writes another host's row on a shared daemon, exactly as
+// given and never into the local mirror, and leaves this machine's mapping for
+// the same path alone. A relative path is refused, and naming the local host
+// (or "") is a local mapping, mirror included.
+func TestAddHostRepoMapping_WritesThatHostsRowAlone(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	require.NoError(t, AdoptLocalHost(ctx, db, "alpha"))
+	require.NoError(t, AddRepoMapping(ctx, db, "/work/app", "app"))
+
+	require.NoError(t, AddHostRepoMapping(ctx, db, "beta", "/work/app/", "beta-app"))
+	require.NoError(t, AddHostRepoMapping(ctx, db, " beta ", `C:/repos/win`, "win"))
+	for host, want := range map[string]string{"beta": "beta-app", "alpha": "app"} {
+		slug, err := ResolveProjectForCWD(ctx, db, host, "/work/app/src")
+		require.NoError(t, err)
+		require.Equal(t, want, slug, host)
+	}
+	slug, err := ResolveProjectForCWD(ctx, db, "beta", `C:\repos\win\src`)
+	require.NoError(t, err)
+	require.Equal(t, "win", slug)
+	mirror, err := RepoProjectMap(ctx, db)
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"/work/app": "app"}, mirror, "another host's row never reaches the mirror")
+
+	err = AddHostRepoMapping(ctx, db, "beta", "repos/app", "app")
+	require.ErrorContains(t, err, `"repos/app" is not an absolute path on host "beta"`)
+
+	require.NoError(t, AddHostRepoMapping(ctx, db, "alpha", "/work/other", "other"))
+	require.NoError(t, AddHostRepoMapping(ctx, db, "", "/work/third", "third"))
+	mirror, err = RepoProjectMap(ctx, db)
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"/work/app": "app", "/work/other": "other", "/work/third": "third"}, mirror)
+}
+
 // RemoveHostRepoMappings drops another host's row on a shared daemon and leaves
 // this machine's mapping for the same path -- and the local mirror -- alone,
 // since two machines with one home layout map the same paths. An unknown path

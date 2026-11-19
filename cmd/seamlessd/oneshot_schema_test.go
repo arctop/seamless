@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -288,6 +289,9 @@ func TestMapRepo_CreatesAnAbsentDatabaseOnAServerInstall(t *testing.T) {
 }
 
 // A client install never gets a database of its own: nothing would ever read it.
+// Its repositories are mapped in the server's database, so the refusal names
+// the command to run there, with this computer's name and its path made
+// absolute here.
 func TestMapRepo_RefusesToCreateADatabaseOnAClientInstall(t *testing.T) {
 	dir := t.TempDir()
 	dataDir := filepath.Join(dir, "client-data")
@@ -295,7 +299,18 @@ func TestMapRepo_RefusesToCreateADatabaseOnAClientInstall(t *testing.T) {
 
 	err := refusing(t, func() error { return runMapRepo([]string{"--path", dir, "--project", "app"}) })
 
-	require.ErrorContains(t, err, "no database at")
+	require.ErrorContains(t, err, "its repositories are mapped in the server's database, not here")
+	require.ErrorContains(t, err, "--path "+posixShellArg(dir)+" --project app")
+	if name := config.Hostname(); name != "" {
+		require.ErrorContains(t, err, "seamlessd map-repo --host "+posixShellArg(name)+" ")
+	}
+	require.NoDirExists(t, dataDir)
+
+	// --host names the computer when the owner knows its paired name.
+	err = refusing(t, func() error {
+		return runMapRepo([]string{"--host", "Example-Laptop", "--path", dir, "--project", "app"})
+	})
+	require.ErrorContains(t, err, "seamlessd map-repo --host example-laptop --path ")
 	require.NoDirExists(t, dataDir)
 }
 

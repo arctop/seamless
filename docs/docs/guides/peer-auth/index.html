@@ -1077,7 +1077,11 @@ one: it never runs the relay, and its agents never open a locked project.</p>
 the relay, by its name and uid there (<code>restricted</code> above). It reaches the open
 projects that are not locked, reads the global scope, and files no requests;
 a mapping in place of the uid shapes that reach as an entry here does
-(<a href="#shaping-an-accounts-reach">Shaping an account's reach</a>).
+(<a href="#shaping-an-accounts-reach">Shaping an account's reach</a>). Map its clones
+under the relay's name, with their paths on that computer
+(<code>seamlessd map-repo --host example-laptop --path &lt;its clone&gt; --project &lt;slug&gt;</code>,
+<a href="../../reference/cli-seamlessd/#another-computers-clone">another computer's clone</a>),
+and a session it starts in one is recorded in that project.
 Its writes carry the label <code>_example_agent@example-laptop</code>, the account and the
 host, and its constraints, conventions, protocols and stages wait on the Held
 screen for you. Root and your own uid there are never restricted, and the relay
@@ -1397,9 +1401,13 @@ or <code>only</code>, such as <code>_example_desk: {uid: 503, only: [example-des
 the same rule and the same checks. Its rule is the one its relay's entry
 names: a uid there is that computer's, so the same uid on this computer, or
 through another relay, is another account under its own entry. The repo map
-keeps each computer's paths apart, and <code>seamlessd map-repo</code> maps paths on
-this computer only, so such a desk binds to its project with <code>session_start</code>
-(<code>project=example-desk</code>), and its writes land there.</li>
+keeps each computer's paths apart, so map such a desk's clone under its
+relay's name, with its path on that computer, as the daemon's account here:
+<code>seamlessd map-repo --host example-laptop --path /Users/_example_desk/repos/desk --project example-desk</code>
+(<a href="../../reference/cli-seamlessd/#another-computers-clone">another computer's clone</a>). A session it starts
+there is then recorded in that project, as on this computer. Without the
+mapping it binds with <code>session_start</code> (<code>project=example-desk</code>), and its writes
+land there.</li>
 </ul>
 <p>Doctor prints each shaped entry with what it reaches now, for example
 <code>_example_desk (uid 502): restricted, only [example-desk] -- ... (now example-desk (confidential))</code>, and a relay's under the row name

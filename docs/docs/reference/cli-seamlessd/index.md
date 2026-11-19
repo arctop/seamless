@@ -843,20 +843,57 @@ interactive use, and it refuses `--check`, `--dry-run` and `--url`.
 
 ```bash
 seamlessd map-repo --project SLUG [--path DIR]
+seamlessd map-repo --host NAME --path DIR --project SLUG
 ```
 
-Adds an entry to the `repo_project_map` setting, so an agent whose working
-directory is under that path resolves to that project - in the hooks and in
-`session_start`. This is what makes a briefing arrive scoped to the right
-project without the agent passing `project` anywhere.
+Adds an entry to the repo map, so an agent whose working directory is under
+that path resolves to that project - in the hooks and in `session_start`. This
+is what makes a briefing arrive scoped to the right project without the agent
+passing `project` anywhere.
 
 Mostly you will not need it: a git repo maps itself on its first session, taking
 the slug from the repo root's directory name. Run `map-repo` to override that
-derived slug, or to map a directory that is not a git repo.
+derived slug, to map a directory that is not a git repo, or to map a
+[restricted account](https://thereisnospoon.org/docs/guides/peer-auth/#restricted-local-accounts)'s clone:
+such an account maps nothing itself, and its briefing asks you to.
 
-`--project` is required. `--path` defaults to the current directory and is made
-absolute. The command also ensures the project exists, so mapping a new slug
-registers it. Writes straight to the database; no running daemon needed.
+| Flag | Default | Meaning |
+|---|---|---|
+| `--project` | - | Required. The project the path maps to. The command ensures it exists, so mapping a new slug registers it. |
+| `--path` | the current directory | The repo root, made absolute. Required with `--host`. |
+| `--host` | this machine | Map a path on that machine instead: the name a relay or a key paired as, which the console's Devices page lists. The path must be absolute on that machine, whatever this one runs, and is used as given. |
+
+Writes straight to the database; no running daemon needed. A path this
+machine's disk does not have is mapped all the same, with a note that names
+`--host` and the paired devices, since such a path is most often another
+computer's.
+
+### Another computer's clone {#another-computers-clone}
+
+On a [shared daemon](https://thereisnospoon.org/docs/guides/network-install/) the repo map is keyed by
+machine, and a request through a relay speaks for the name the relay paired
+as. A restricted account behind a relay therefore resolves only through a
+mapping under that name: run `map-repo --host` beside the server's database
+(under peer_auth, as the daemon's account), with the clone's path on that
+computer:
+
+```bash
+sudo -u _seamless env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml \
+  /opt/seamless/bin/seamlessd map-repo --host example-laptop \
+  --path /Users/_example_agent/repos/example-app --project example-app
+```
+
+The same path mapped without `--host` is a directory on the server's disk, and
+places nothing behind the relay. `--host` stats nothing, as
+`unmap-repo --host` does: the other machine's disk cannot be read from here.
+A host that no paired device, session or mapping has named is mapped with a
+warning, since nothing resolves through it until a request speaks for that
+name. `unmap-repo --host NAME --path DIR` removes it.
+
+Run on a client computer (`role: client`), `map-repo` changes nothing: its
+repositories are mapped in the server's database, so it refuses and prints the
+`--host` command to run on the server, with this computer's name and the path
+made absolute here.
 
 ## seamlessd unmap-repo {#seamlessd_unmap_repo}
 

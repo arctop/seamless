@@ -213,7 +213,9 @@ usage:
                            backed up, confirmed and rolled back on an installer-made install
                            (--check reports installed vs newest; --dry-run previews; honors SEAMLESS_VERSION)
   seamlessd map-repo       override a repo's auto-derived project slug (rarely needed;
-                           repos self-map on first session -- repo_project_map)
+                           repos self-map on first session -- repo_project_map);
+                           --host NAME --path DIR maps another machine's clone, such as
+                           a restricted account's behind a relay
   seamlessd unmap-repo     remove this machine's mapping for a repo (--path DIR), or every mapping
                            whose path no longer exists (--stale); --dry-run previews. Projects stay.
                            --host NAME --path DIR removes another machine's mapping on a shared daemon

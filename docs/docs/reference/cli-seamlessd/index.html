@@ -242,7 +242,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#seamlessd_serve">seamlessd serve</a></li><li class="lvl-2"><a href="#seamlessd_doctor">seamlessd doctor</a></li><li class="lvl-2"><a href="#seamlessd_export">seamlessd export</a></li><li class="lvl-2"><a href="#seamlessd_import">seamlessd import</a></li><li class="lvl-3"><a href="#importing-a-v1-directory">Importing a v1 directory</a></li><li class="lvl-3"><a href="#importing-an-archive">Importing an archive</a></li><li class="lvl-2"><a href="#seamlessd_backups">seamlessd backups</a></li><li class="lvl-2"><a href="#seamlessd_restore">seamlessd restore</a></li><li class="lvl-2"><a href="#seamlessd_setup">seamlessd setup</a></li><li class="lvl-3"><a href="#seamlessd_setup_address">The Server&#39;s address</a></li><li class="lvl-3"><a href="#seamlessd_setup_import">Starting from a backup</a></li><li class="lvl-3"><a href="#seamlessd_setup_retire">Retiring the key</a></li><li class="lvl-2"><a href="#seamlessd_install_hooks">seamlessd install-hooks</a></li><li class="lvl-3"><a href="#seamlessd_install_hooks_managed">Claude Code&#39;s managed settings</a></li><li class="lvl-2"><a href="#seamlessd_client_config">seamlessd client-config</a></li><li class="lvl-2"><a href="#seamlessd_uninstall">seamlessd uninstall</a></li><li class="lvl-2"><a href="#seamlessd_update">seamlessd update</a></li><li class="lvl-2"><a href="#seamlessd_map_repo">seamlessd map-repo</a></li><li class="lvl-2"><a href="#seamlessd_unmap_repo">seamlessd unmap-repo</a></li><li class="lvl-2"><a href="#seamlessd_retire_project">seamlessd retire-project</a></li><li class="lvl-2"><a href="#seamlessd_family">seamlessd family</a></li><li class="lvl-2"><a href="#seamlessd_approvers">seamlessd approvers</a></li><li class="lvl-2"><a href="#seamlessd_approve">seamlessd approve</a></li><li class="lvl-2"><a href="#seamlessd_devices">seamlessd devices</a></li><li class="lvl-2"><a href="#seamlessd_relay">seamlessd relay</a></li><li class="lvl-2"><a href="#seamlessd_console_open">seamlessd console-open</a></li><li class="lvl-2"><a href="#seamlessd_service">seamlessd start / stop / restart / status</a></li><li class="lvl-2"><a href="#seamlessd_version">seamlessd version</a></li>
+      <li class="lvl-2"><a href="#seamlessd_serve">seamlessd serve</a></li><li class="lvl-2"><a href="#seamlessd_doctor">seamlessd doctor</a></li><li class="lvl-2"><a href="#seamlessd_export">seamlessd export</a></li><li class="lvl-2"><a href="#seamlessd_import">seamlessd import</a></li><li class="lvl-3"><a href="#importing-a-v1-directory">Importing a v1 directory</a></li><li class="lvl-3"><a href="#importing-an-archive">Importing an archive</a></li><li class="lvl-2"><a href="#seamlessd_backups">seamlessd backups</a></li><li class="lvl-2"><a href="#seamlessd_restore">seamlessd restore</a></li><li class="lvl-2"><a href="#seamlessd_setup">seamlessd setup</a></li><li class="lvl-3"><a href="#seamlessd_setup_address">The Server&#39;s address</a></li><li class="lvl-3"><a href="#seamlessd_setup_import">Starting from a backup</a></li><li class="lvl-3"><a href="#seamlessd_setup_retire">Retiring the key</a></li><li class="lvl-2"><a href="#seamlessd_install_hooks">seamlessd install-hooks</a></li><li class="lvl-3"><a href="#seamlessd_install_hooks_managed">Claude Code&#39;s managed settings</a></li><li class="lvl-2"><a href="#seamlessd_client_config">seamlessd client-config</a></li><li class="lvl-2"><a href="#seamlessd_uninstall">seamlessd uninstall</a></li><li class="lvl-2"><a href="#seamlessd_update">seamlessd update</a></li><li class="lvl-2"><a href="#seamlessd_map_repo">seamlessd map-repo</a></li><li class="lvl-3"><a href="#another-computers-clone">Another computer&#39;s clone</a></li><li class="lvl-2"><a href="#seamlessd_unmap_repo">seamlessd unmap-repo</a></li><li class="lvl-2"><a href="#seamlessd_retire_project">seamlessd retire-project</a></li><li class="lvl-2"><a href="#seamlessd_family">seamlessd family</a></li><li class="lvl-2"><a href="#seamlessd_approvers">seamlessd approvers</a></li><li class="lvl-2"><a href="#seamlessd_approve">seamlessd approve</a></li><li class="lvl-2"><a href="#seamlessd_devices">seamlessd devices</a></li><li class="lvl-2"><a href="#seamlessd_relay">seamlessd relay</a></li><li class="lvl-2"><a href="#seamlessd_console_open">seamlessd console-open</a></li><li class="lvl-2"><a href="#seamlessd_service">seamlessd start / stop / restart / status</a></li><li class="lvl-2"><a href="#seamlessd_version">seamlessd version</a></li>
     </ul>
   </details>
   <p><code>seamlessd</code> is both the server and the operator CLI. <code>serve</code> runs the daemon;
@@ -1389,17 +1389,70 @@ daemon that updates itself starts its updater with, outside the service
 interactive use, and it refuses <code>--check</code>, <code>--dry-run</code> and <code>--url</code>.</p>
 <h2 id="seamlessd_map_repo">seamlessd map-repo</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd map-repo --project SLUG <span class="o">[</span>--path DIR<span class="o">]</span>
+</span></span><span class="line"><span class="cl">seamlessd map-repo --host NAME --path DIR --project SLUG
 </span></span></code></pre></div>
-<p>Adds an entry to the <code>repo_project_map</code> setting, so an agent whose working
-directory is under that path resolves to that project - in the hooks and in
-<code>session_start</code>. This is what makes a briefing arrive scoped to the right
-project without the agent passing <code>project</code> anywhere.</p>
+<p>Adds an entry to the repo map, so an agent whose working directory is under
+that path resolves to that project - in the hooks and in <code>session_start</code>. This
+is what makes a briefing arrive scoped to the right project without the agent
+passing <code>project</code> anywhere.</p>
 <p>Mostly you will not need it: a git repo maps itself on its first session, taking
 the slug from the repo root's directory name. Run <code>map-repo</code> to override that
-derived slug, or to map a directory that is not a git repo.</p>
-<p><code>--project</code> is required. <code>--path</code> defaults to the current directory and is made
-absolute. The command also ensures the project exists, so mapping a new slug
-registers it. Writes straight to the database; no running daemon needed.</p>
+derived slug, to map a directory that is not a git repo, or to map a
+<a href="../../guides/peer-auth/#restricted-local-accounts">restricted account</a>'s clone:
+such an account maps nothing itself, and its briefing asks you to.</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--project</code></td>
+<td>-</td>
+<td>Required. The project the path maps to. The command ensures it exists, so mapping a new slug registers it.</td>
+</tr>
+<tr>
+<td><code>--path</code></td>
+<td>the current directory</td>
+<td>The repo root, made absolute. Required with <code>--host</code>.</td>
+</tr>
+<tr>
+<td><code>--host</code></td>
+<td>this machine</td>
+<td>Map a path on that machine instead: the name a relay or a key paired as, which the console's Devices page lists. The path must be absolute on that machine, whatever this one runs, and is used as given.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Writes straight to the database; no running daemon needed. A path this
+machine's disk does not have is mapped all the same, with a note that names
+<code>--host</code> and the paired devices, since such a path is most often another
+computer's.</p>
+<h3 id="another-computers-clone">Another computer's clone</h3>
+<p>On a <a href="../../guides/network-install/">shared daemon</a> the repo map is keyed by
+machine, and a request through a relay speaks for the name the relay paired
+as. A restricted account behind a relay therefore resolves only through a
+mapping under that name: run <code>map-repo --host</code> beside the server's database
+(under peer_auth, as the daemon's account), with the clone's path on that
+computer:</p>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">sudo -u _seamless env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>/opt/seamless/etc/seamless.yaml <span class="se">\
+</span></span></span><span class="line"><span class="cl">  /opt/seamless/bin/seamlessd map-repo --host example-laptop <span class="se">\
+</span></span></span><span class="line"><span class="cl">  --path /Users/_example_agent/repos/example-app --project example-app
+</span></span></code></pre></div>
+<p>The same path mapped without <code>--host</code> is a directory on the server's disk, and
+places nothing behind the relay. <code>--host</code> stats nothing, as
+<code>unmap-repo --host</code> does: the other machine's disk cannot be read from here.
+A host that no paired device, session or mapping has named is mapped with a
+warning, since nothing resolves through it until a request speaks for that
+name. <code>unmap-repo --host NAME --path DIR</code> removes it.</p>
+<p>Run on a client computer (<code>role: client</code>), <code>map-repo</code> changes nothing: its
+repositories are mapped in the server's database, so it refuses and prints the
+<code>--host</code> command to run on the server, with this computer's name and the path
+made absolute here.</p>
 <h2 id="seamlessd_unmap_repo">seamlessd unmap-repo</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd unmap-repo --path DIR <span class="o">[</span>--dry-run<span class="o">]</span>
 </span></span><span class="line"><span class="cl">seamlessd unmap-repo --stale <span class="o">[</span>--dry-run<span class="o">]</span>
@@ -1808,7 +1861,7 @@ daemon is running older code than what you just built.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#seamlessd_serve">seamlessd serve</a></li><li class="lvl-2"><a href="#seamlessd_doctor">seamlessd doctor</a></li><li class="lvl-2"><a href="#seamlessd_export">seamlessd export</a></li><li class="lvl-2"><a href="#seamlessd_import">seamlessd import</a></li><li class="lvl-3"><a href="#importing-a-v1-directory">Importing a v1 directory</a></li><li class="lvl-3"><a href="#importing-an-archive">Importing an archive</a></li><li class="lvl-2"><a href="#seamlessd_backups">seamlessd backups</a></li><li class="lvl-2"><a href="#seamlessd_restore">seamlessd restore</a></li><li class="lvl-2"><a href="#seamlessd_setup">seamlessd setup</a></li><li class="lvl-3"><a href="#seamlessd_setup_address">The Server&#39;s address</a></li><li class="lvl-3"><a href="#seamlessd_setup_import">Starting from a backup</a></li><li class="lvl-3"><a href="#seamlessd_setup_retire">Retiring the key</a></li><li class="lvl-2"><a href="#seamlessd_install_hooks">seamlessd install-hooks</a></li><li class="lvl-3"><a href="#seamlessd_install_hooks_managed">Claude Code&#39;s managed settings</a></li><li class="lvl-2"><a href="#seamlessd_client_config">seamlessd client-config</a></li><li class="lvl-2"><a href="#seamlessd_uninstall">seamlessd uninstall</a></li><li class="lvl-2"><a href="#seamlessd_update">seamlessd update</a></li><li class="lvl-2"><a href="#seamlessd_map_repo">seamlessd map-repo</a></li><li class="lvl-2"><a href="#seamlessd_unmap_repo">seamlessd unmap-repo</a></li><li class="lvl-2"><a href="#seamlessd_retire_project">seamlessd retire-project</a></li><li class="lvl-2"><a href="#seamlessd_family">seamlessd family</a></li><li class="lvl-2"><a href="#seamlessd_approvers">seamlessd approvers</a></li><li class="lvl-2"><a href="#seamlessd_approve">seamlessd approve</a></li><li class="lvl-2"><a href="#seamlessd_devices">seamlessd devices</a></li><li class="lvl-2"><a href="#seamlessd_relay">seamlessd relay</a></li><li class="lvl-2"><a href="#seamlessd_console_open">seamlessd console-open</a></li><li class="lvl-2"><a href="#seamlessd_service">seamlessd start / stop / restart / status</a></li><li class="lvl-2"><a href="#seamlessd_version">seamlessd version</a></li>
+      <li class="lvl-2"><a href="#seamlessd_serve">seamlessd serve</a></li><li class="lvl-2"><a href="#seamlessd_doctor">seamlessd doctor</a></li><li class="lvl-2"><a href="#seamlessd_export">seamlessd export</a></li><li class="lvl-2"><a href="#seamlessd_import">seamlessd import</a></li><li class="lvl-3"><a href="#importing-a-v1-directory">Importing a v1 directory</a></li><li class="lvl-3"><a href="#importing-an-archive">Importing an archive</a></li><li class="lvl-2"><a href="#seamlessd_backups">seamlessd backups</a></li><li class="lvl-2"><a href="#seamlessd_restore">seamlessd restore</a></li><li class="lvl-2"><a href="#seamlessd_setup">seamlessd setup</a></li><li class="lvl-3"><a href="#seamlessd_setup_address">The Server&#39;s address</a></li><li class="lvl-3"><a href="#seamlessd_setup_import">Starting from a backup</a></li><li class="lvl-3"><a href="#seamlessd_setup_retire">Retiring the key</a></li><li class="lvl-2"><a href="#seamlessd_install_hooks">seamlessd install-hooks</a></li><li class="lvl-3"><a href="#seamlessd_install_hooks_managed">Claude Code&#39;s managed settings</a></li><li class="lvl-2"><a href="#seamlessd_client_config">seamlessd client-config</a></li><li class="lvl-2"><a href="#seamlessd_uninstall">seamlessd uninstall</a></li><li class="lvl-2"><a href="#seamlessd_update">seamlessd update</a></li><li class="lvl-2"><a href="#seamlessd_map_repo">seamlessd map-repo</a></li><li class="lvl-3"><a href="#another-computers-clone">Another computer&#39;s clone</a></li><li class="lvl-2"><a href="#seamlessd_unmap_repo">seamlessd unmap-repo</a></li><li class="lvl-2"><a href="#seamlessd_retire_project">seamlessd retire-project</a></li><li class="lvl-2"><a href="#seamlessd_family">seamlessd family</a></li><li class="lvl-2"><a href="#seamlessd_approvers">seamlessd approvers</a></li><li class="lvl-2"><a href="#seamlessd_approve">seamlessd approve</a></li><li class="lvl-2"><a href="#seamlessd_devices">seamlessd devices</a></li><li class="lvl-2"><a href="#seamlessd_relay">seamlessd relay</a></li><li class="lvl-2"><a href="#seamlessd_console_open">seamlessd console-open</a></li><li class="lvl-2"><a href="#seamlessd_service">seamlessd start / stop / restart / status</a></li><li class="lvl-2"><a href="#seamlessd_version">seamlessd version</a></li>
     </ul>
   </aside>
   

@@ -812,7 +812,11 @@ A second account on that computer can be a
 the relay, by its name and uid there (`restricted` above). It reaches the open
 projects that are not locked, reads the global scope, and files no requests;
 a mapping in place of the uid shapes that reach as an entry here does
-([Shaping an account's reach](#shaping-an-accounts-reach)).
+([Shaping an account's reach](#shaping-an-accounts-reach)). Map its clones
+under the relay's name, with their paths on that computer
+(`seamlessd map-repo --host example-laptop --path <its clone> --project <slug>`,
+[another computer's clone](/reference/cli-seamlessd/#another-computers-clone)),
+and a session it starts in one is recorded in that project.
 Its writes carry the label `_example_agent@example-laptop`, the account and the
 host, and its constraints, conventions, protocols and stages wait on the Held
 screen for you. Root and your own uid there are never restricted, and the relay
@@ -1179,9 +1183,13 @@ peer_auth:
   the same rule and the same checks. Its rule is the one its relay's entry
   names: a uid there is that computer's, so the same uid on this computer, or
   through another relay, is another account under its own entry. The repo map
-  keeps each computer's paths apart, and `seamlessd map-repo` maps paths on
-  this computer only, so such a desk binds to its project with `session_start`
-  (`project=example-desk`), and its writes land there.
+  keeps each computer's paths apart, so map such a desk's clone under its
+  relay's name, with its path on that computer, as the daemon's account here:
+  `seamlessd map-repo --host example-laptop --path /Users/_example_desk/repos/desk --project example-desk`
+  ([another computer's clone](/reference/cli-seamlessd/#another-computers-clone)). A session it starts
+  there is then recorded in that project, as on this computer. Without the
+  mapping it binds with `session_start` (`project=example-desk`), and its writes
+  land there.
 
 Doctor prints each shaped entry with what it reaches now, for example
 `_example_desk (uid 502): restricted, only [example-desk] -- ... (now

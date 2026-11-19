@@ -272,6 +272,33 @@ func AddRepoMapping(ctx context.Context, db *sql.DB, repoPath, slug string) erro
 	return putRepoMapRow(ctx, db, RepoMapRow{Host: host, Path: repoPath, Slug: slug})
 }
 
+// AddHostRepoMapping is AddRepoMapping for a named host: the owner's override
+// behind `seamlessd map-repo --host`. A relay's requests speak for its
+// enrolled name, so a restricted account's clone on the relay's computer
+// resolves only through a row of that host, and no agent there can write one
+// (a restricted account registers nothing). Naming this machine's host (or "")
+// is exactly AddRepoMapping.
+//
+// Nothing is stat'd, as RemoveHostRepoMappings stats nothing: the path is
+// another machine's (constraint network-install-identity-is-host-scoped). It
+// must be absolute on some OS (IsAbsRepoPath), and is stored in normPath's
+// form. Another host's row never touches the legacy JSON mirror, which holds
+// only the local view.
+func AddHostRepoMapping(ctx context.Context, db *sql.DB, host, repoPath, slug string) error {
+	host = strings.TrimSpace(host)
+	local, err := localHostSetting(ctx, db)
+	if err != nil {
+		return fmt.Errorf("store.AddHostRepoMapping: %w", err)
+	}
+	if host == "" || host == local {
+		return AddRepoMapping(ctx, db, repoPath, slug)
+	}
+	if !IsAbsRepoPath(repoPath) {
+		return fmt.Errorf("store.AddHostRepoMapping: %q is not an absolute path on host %q", repoPath, host)
+	}
+	return putRepoMapRow(ctx, db, RepoMapRow{Host: host, Path: repoPath, Slug: slug})
+}
+
 // LocalRepoMappings returns THIS machine's mappings: the rows of the host
 // recorded by AdoptLocalHost plus the unnamed ("") bucket, which carries rows
 // written before the machine named itself and entries that only ever existed in
