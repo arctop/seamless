@@ -19,6 +19,7 @@ import (
 
 	"github.com/arctop/seamless/internal/core"
 	mcpserver "github.com/arctop/seamless/internal/mcp"
+	"github.com/arctop/seamless/internal/mcp/mcpversion"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -26,6 +27,13 @@ import (
 // the agent process identity its MCP bridge sends. An empty proc is a client
 // that names no process.
 func dialAgent(t *testing.T, ctx context.Context, url, proc string) *mcpclient.Client {
+	t.Helper()
+	return dialAgentAt(t, ctx, url, proc, mcpversion.Client)
+}
+
+// dialAgentAt is dialAgent asking for the given protocol version, and requires
+// the connection to settle on it.
+func dialAgentAt(t *testing.T, ctx context.Context, url, proc, version string) *mcpclient.Client {
 	t.Helper()
 	headers := map[string]string{"Authorization": "Bearer " + testKey}
 	if proc != "" {
@@ -36,10 +44,11 @@ func dialAgent(t *testing.T, ctx context.Context, url, proc string) *mcpclient.C
 	t.Cleanup(func() { _ = cli.Close() })
 	require.NoError(t, cli.Start(ctx))
 	var initReq mcp.InitializeRequest
-	initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initReq.Params.ProtocolVersion = version
 	initReq.Params.ClientInfo = mcp.Implementation{Name: "agent-test", Version: "0"}
 	_, err = cli.Initialize(ctx, initReq)
 	require.NoError(t, err)
+	require.Equal(t, version, cli.ProtocolVersion())
 	return cli
 }
 

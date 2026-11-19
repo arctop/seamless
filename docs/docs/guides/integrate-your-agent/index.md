@@ -149,7 +149,9 @@ that call only. A name that matches no session is refused, never ignored. It is
 also how a session will survive MCP's stateless revision (`2026-07-28`), which
 has no `Mcp-Session-Id` to bind to. Seamless does not serve that revision yet: a
 client that asks for it is refused with the list of supported versions and
-negotiates down to `2025-11-25`, the newest revision with a handshake.
+negotiates down to `2025-11-25`, the newest revision with a handshake. An
+mcp-go client from v1.3.0 on returns that refusal instead of negotiating down,
+so set its initialize request's protocol version to `2025-11-25`.
 
 Claude Code and Codex agents are spared all of this: their connection names the
 agent process, and the daemon matches it to the agent's own session on every

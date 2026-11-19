@@ -66,6 +66,7 @@ import (
 	"github.com/arctop/seamless/internal/gardener"
 	"github.com/arctop/seamless/internal/hooks"
 	"github.com/arctop/seamless/internal/mcp"
+	"github.com/arctop/seamless/internal/mcp/mcpversion"
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/screening"
 	"github.com/arctop/seamless/internal/store"
@@ -318,7 +319,7 @@ func (d *dgDaemon) dial(t *testing.T, label string, extra map[string]string) dgC
 	ctx := context.Background()
 	require.NoError(t, cli.Start(ctx))
 	var initReq mcpgo.InitializeRequest
-	initReq.Params.ProtocolVersion = mcpgo.LATEST_PROTOCOL_VERSION
+	initReq.Params.ProtocolVersion = mcpversion.Client
 	initReq.Params.ClientInfo = mcpgo.Implementation{Name: "dg-" + label, Version: "0"}
 	res, err := cli.Initialize(ctx, initReq)
 	require.NoError(t, err)

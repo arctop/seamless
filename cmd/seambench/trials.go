@@ -43,6 +43,7 @@ import (
 
 	"github.com/arctop/seamless/internal/bench"
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/mcp/mcpversion"
 )
 
 // trialLab is the research lab every seambench result lands in.
@@ -205,7 +206,7 @@ func dialTrials(ctx context.Context, t trialTarget) (*trialRecorder, error) {
 		return nil, fmt.Errorf("connect to %s: %w", t.url, err)
 	}
 	var init mcp.InitializeRequest
-	init.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	init.Params.ProtocolVersion = mcpversion.Client
 	init.Params.ClientInfo = mcp.Implementation{Name: "seambench", Version: "0"}
 	if _, err := cli.Initialize(dialCtx, init); err != nil {
 		_ = cli.Close()

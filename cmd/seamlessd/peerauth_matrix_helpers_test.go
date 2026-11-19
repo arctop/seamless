@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/arctop/seamless/internal/approval"
+	"github.com/arctop/seamless/internal/mcp/mcpversion"
 	"github.com/arctop/seamless/internal/passkey"
 )
 
@@ -90,7 +91,7 @@ func paClientHeaders(t *testing.T, base, key string, extra map[string]string) *m
 	t.Cleanup(func() { _ = cli.Close() })
 	require.NoError(t, cli.Start(ctx))
 	var init mcpgo.InitializeRequest
-	init.Params.ProtocolVersion = mcpgo.LATEST_PROTOCOL_VERSION
+	init.Params.ProtocolVersion = mcpversion.Client
 	init.Params.ClientInfo = mcpgo.Implementation{Name: "matrix", Version: "0"}
 	_, err = cli.Initialize(ctx, init)
 	require.NoError(t, err)

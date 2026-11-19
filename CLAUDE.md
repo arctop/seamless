@@ -92,6 +92,9 @@ internal/gardener/ the propose-only passes (dedup, staleness, stale-stage,
 internal/plans/    captured CC plan vocabulary: tags, statuses, tracking task
 internal/mcp/      MCP tools (streamable HTTP, static bearer key or the peer_auth
                    socket); see ToolCount [P2+]
+internal/mcp/mcpversion/ the MCP protocol versions: the one Seamless's clients
+                   ask for (2025-11-25) and the ones the server serves; imports
+                   only mcp-go, so seam links it without the server
 internal/hooks/    session hooks + CC plan-mode capture (PostToolUse etc.) [P2/P3]
 internal/console/  server-rendered observability UI (html/template + SSE)  [P5]
 internal/capture/  SSRF-safe URL fetch                                     [P4]

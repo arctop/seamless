@@ -10,6 +10,8 @@ import (
 	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/require"
+
+	"github.com/arctop/seamless/internal/mcp/mcpversion"
 )
 
 // A tool call that waits past the server's ReadTimeout still returns its
@@ -46,7 +48,7 @@ func TestHandler_ToolCallOutlivesTheReadTimeout(t *testing.T) {
 	ctx := context.Background()
 	require.NoError(t, cli.Start(ctx))
 	var initReq mcp.InitializeRequest
-	initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initReq.Params.ProtocolVersion = mcpversion.Client
 	initReq.Params.ClientInfo = mcp.Implementation{Name: "deadline", Version: "0"}
 	_, err = cli.Initialize(ctx, initReq)
 	require.NoError(t, err)

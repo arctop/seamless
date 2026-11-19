@@ -14,6 +14,7 @@ import (
 
 	"github.com/arctop/seamless/internal/core"
 	mcpserver "github.com/arctop/seamless/internal/mcp"
+	"github.com/arctop/seamless/internal/mcp/mcpversion"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -159,7 +160,7 @@ func TestClaimNotice_TheSeamCLIIsNotToldAndLeavesItPending(t *testing.T) {
 	t.Cleanup(func() { _ = cliTr.Close() })
 	require.NoError(t, cliTr.Start(ctx))
 	var initReq mcp.InitializeRequest
-	initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initReq.Params.ProtocolVersion = mcpversion.Client
 	initReq.Params.ClientInfo = mcp.Implementation{Name: "seam-cli", Version: "0"}
 	_, err = cliTr.Initialize(ctx, initReq)
 	require.NoError(t, err)

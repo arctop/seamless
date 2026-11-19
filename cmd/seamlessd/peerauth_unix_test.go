@@ -22,6 +22,7 @@ import (
 
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/mcp/mcpversion"
 )
 
 // paLayout is a deployment laid out the way the runbook lays it out, under a
@@ -716,7 +717,7 @@ func TestPeerAuthSocket_MCPOverTheRealSocket(t *testing.T) {
 	t.Cleanup(func() { _ = cli.Close() })
 	require.NoError(t, cli.Start(ctx))
 	var init mcpgo.InitializeRequest
-	init.Params.ProtocolVersion = mcpgo.LATEST_PROTOCOL_VERSION
+	init.Params.ProtocolVersion = mcpversion.Client
 	init.Params.ClientInfo = mcpgo.Implementation{Name: "socket-test", Version: "0"}
 	_, err = cli.Initialize(ctx, init)
 	require.NoError(t, err)

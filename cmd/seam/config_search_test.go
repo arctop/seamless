@@ -42,7 +42,7 @@ func newRecorder(t *testing.T) *recorder {
 		r.auths = append(r.auths, req.Header.Get("Authorization"))
 		r.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{}}`))
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-11-25"}}`))
 	}))
 	t.Cleanup(r.Close)
 	return r

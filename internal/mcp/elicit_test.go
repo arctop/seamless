@@ -29,6 +29,7 @@ import (
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	mcpserver "github.com/arctop/seamless/internal/mcp"
+	"github.com/arctop/seamless/internal/mcp/mcpversion"
 	"github.com/arctop/seamless/internal/passkey"
 	"github.com/arctop/seamless/internal/passkey/passkeytest"
 	"github.com/arctop/seamless/internal/store"
@@ -214,7 +215,7 @@ func (d *dialogRig) dialOwner(base string, o *owner, caps *mcp.ElicitationCapabi
 	ctx := context.Background()
 	require.NoError(d.t, cli.Start(ctx))
 	var initReq mcp.InitializeRequest
-	initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initReq.Params.ProtocolVersion = mcpversion.Client
 	initReq.Params.ClientInfo = mcp.Implementation{Name: "dialog", Version: "0"}
 	if caps != nil {
 		initReq.Params.Capabilities.Elicitation = caps

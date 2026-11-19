@@ -14,7 +14,7 @@ set -eu
 
 # GO-2026-6911: mcp-go's client transport follows an MCP server's redirect
 # with no policy, re-sending its headers to wherever Location points. No
-# fixed mcp-go yet (checked 2026-11-06, v1.1.1). Every MCP client Seamless
+# fixed mcp-go yet (checked 2026-11-19, v1.5.0). Every MCP client Seamless
 # builds -- seam's dial, the mcp-proxy bridge, seamlessd doctor's probe,
 # seambench -- sets CheckRedirect to config.RefuseRedirect, so none follows
 # one (tests: *RefusesARedirect). Owner decision 2026-11-06.

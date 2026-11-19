@@ -54,6 +54,7 @@ import (
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/devices"
 	"github.com/arctop/seamless/internal/mcp"
+	"github.com/arctop/seamless/internal/mcp/mcpversion"
 	"github.com/arctop/seamless/internal/relay"
 )
 
@@ -666,7 +667,7 @@ func clientSessionHost(ctx context.Context, cfg config.Config, name string) (str
 		return "", err
 	}
 	var initReq mcpgo.InitializeRequest
-	initReq.Params.ProtocolVersion = mcpgo.LATEST_PROTOCOL_VERSION
+	initReq.Params.ProtocolVersion = mcpversion.Client
 	initReq.Params.ClientInfo = mcpgo.Implementation{Name: "seamlessd-setup", Version: version}
 	if _, err := cli.Initialize(ctx, initReq); err != nil {
 		return "", err

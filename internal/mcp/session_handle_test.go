@@ -4,13 +4,16 @@ import (
 	"context"
 	"testing"
 
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/require"
 
 	mcpserver "github.com/arctop/seamless/internal/mcp"
 )
 
 // statelessServer serves the stateless MCP revision too, which production does
-// not yet (Config.ServeStatelessMCP); mcp-go's client prefers it when offered.
+// not yet (Config.ServeStatelessMCP). The tests on it dial asking for that
+// revision (mcp.LATEST_PROTOCOL_VERSION), as a client that speaks it would;
+// Seamless's own clients ask for mcpversion.Client.
 func statelessServer(t *testing.T) string {
 	url, _ := newServerCfg(t, func(c *mcpserver.Config) { c.ServeStatelessMCP = true })
 	return url
@@ -21,7 +24,7 @@ func statelessServer(t *testing.T) string {
 // to and credited to that session as the binding would have made it.
 func TestSessionHandle_StatelessConnectionThreadsTheSession(t *testing.T) {
 	ctx := context.Background()
-	cli := dialClient(t, ctx, statelessServer(t), testKey)
+	cli := dialClientAt(t, ctx, statelessServer(t), testKey, mcp.LATEST_PROTOCOL_VERSION)
 
 	start := callJSON(t, ctx, cli, "session_start", map[string]any{"project": "alpha"})
 	name, _ := start["name"].(string)
@@ -116,7 +119,7 @@ func TestSessionHandle_ProcessBindingNeedsNoHandleWhenStateless(t *testing.T) {
 	alpha := seedAgentAmbient(t, ctx, db, "cc/alpha", "demo", "/work/demo", "100.1")
 	seedAgentAmbient(t, ctx, db, "cc/beta", "other", "/work/other", "200.2")
 
-	a := dialAgent(t, ctx, url, "100.1")
+	a := dialAgentAt(t, ctx, url, "100.1", mcp.LATEST_PROTOCOL_VERSION)
 	require.Equal(t, "demo", writeMemory(t, ctx, a, "alpha-note", nil)["project"])
 	require.Equal(t, alpha, lastToolCall(t, db, "memory_write"))
 

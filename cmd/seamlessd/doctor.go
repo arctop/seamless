@@ -31,6 +31,7 @@ import (
 	"github.com/arctop/seamless/internal/hooks"
 	"github.com/arctop/seamless/internal/llm"
 	"github.com/arctop/seamless/internal/mcp"
+	"github.com/arctop/seamless/internal/mcp/mcpversion"
 	agentskills "github.com/arctop/seamless/internal/skills"
 	"github.com/arctop/seamless/internal/store"
 )
@@ -1532,7 +1533,7 @@ func remoteToolCount(ctx context.Context, cfg config.Config) (int, bool, error) 
 		return 0, false, err
 	}
 	var initReq mcpgo.InitializeRequest
-	initReq.Params.ProtocolVersion = mcpgo.LATEST_PROTOCOL_VERSION
+	initReq.Params.ProtocolVersion = mcpversion.Client
 	initReq.Params.ClientInfo = mcpgo.Implementation{Name: "seamlessd-doctor", Version: version}
 	if _, err := cli.Initialize(ctx, initReq); err != nil {
 		return 0, false, err

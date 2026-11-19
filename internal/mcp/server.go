@@ -31,6 +31,7 @@ import (
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/gardener"
 	"github.com/arctop/seamless/internal/llm"
+	"github.com/arctop/seamless/internal/mcp/mcpversion"
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/screening"
 	"github.com/arctop/seamless/internal/store"
@@ -503,10 +504,12 @@ func (s *Server) Handler() http.Handler {
 	// request in a throwaway session, so the binding session_start keys by that
 	// id (setBinding) lasts one call, and a caller must thread its session=
 	// handle instead (session_handle.go). A newer client is refused with the
-	// supported list and negotiates down.
+	// supported list, so it can negotiate down to the handshake. mcp-go's own
+	// client returns that refusal instead (since v1.3.0), so Seamless's clients
+	// ask for mcpversion.Client, one of these, from the start.
 	var opts []mcpserver.StreamableHTTPOption
 	if !s.cfg.ServeStatelessMCP {
-		opts = append(opts, mcpserver.WithStreamableHTTPProtocolVersions(mcp.LegacyProtocolVersions()...))
+		opts = append(opts, mcpserver.WithStreamableHTTPProtocolVersions(mcpversion.Served()...))
 	}
 	transport := mcpserver.NewStreamableHTTPServer(s.mcp, opts...)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

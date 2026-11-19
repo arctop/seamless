@@ -15,6 +15,7 @@ import (
 	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/config"
 	mcpserver "github.com/arctop/seamless/internal/mcp"
+	"github.com/arctop/seamless/internal/mcp/mcpversion"
 )
 
 // The anchor rule at the tool surface (owner decision 2026-11-07): a call
@@ -77,7 +78,7 @@ func dialNaming(t *testing.T, base string, proc access.ProcessToken) *mcpclient.
 	t.Cleanup(func() { _ = cli.Close() })
 	require.NoError(t, cli.Start(context.Background()))
 	var initReq mcp.InitializeRequest
-	initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initReq.Params.ProtocolVersion = mcpversion.Client
 	initReq.Params.ClientInfo = mcp.Implementation{Name: "pane", Version: "0"}
 	_, err = cli.Initialize(context.Background(), initReq)
 	require.NoError(t, err)

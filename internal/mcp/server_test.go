@@ -25,6 +25,7 @@ import (
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/gardener"
 	mcpserver "github.com/arctop/seamless/internal/mcp"
+	"github.com/arctop/seamless/internal/mcp/mcpversion"
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/store/storetest"
@@ -85,8 +86,16 @@ func newServerFiles(t *testing.T, tune func(*mcpserver.Config)) (string, *sql.DB
 	return ts.URL, db, mgr, dir
 }
 
-// dialClient starts and initializes an MCP client against url with the given key.
+// dialClient starts and initializes an MCP client against url with the given
+// key, asking for the protocol version Seamless's own clients send.
 func dialClient(t *testing.T, ctx context.Context, url, key string) *mcpclient.Client {
+	t.Helper()
+	return dialClientAt(t, ctx, url, key, mcpversion.Client)
+}
+
+// dialClientAt is dialClient asking for the given protocol version, and
+// requires the connection to settle on it.
+func dialClientAt(t *testing.T, ctx context.Context, url, key, version string) *mcpclient.Client {
 	t.Helper()
 	cli, err := mcpclient.NewStreamableHttpClient(url,
 		transport.WithHTTPHeaders(map[string]string{"Authorization": "Bearer " + key}))
@@ -95,10 +104,11 @@ func dialClient(t *testing.T, ctx context.Context, url, key string) *mcpclient.C
 	require.NoError(t, cli.Start(ctx))
 
 	var initReq mcp.InitializeRequest
-	initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initReq.Params.ProtocolVersion = version
 	initReq.Params.ClientInfo = mcp.Implementation{Name: "test", Version: "0"}
 	_, err = cli.Initialize(ctx, initReq)
 	require.NoError(t, err)
+	require.Equal(t, version, cli.ProtocolVersion())
 	return cli
 }
 
@@ -134,7 +144,7 @@ func TestServer_InitializeIncludesAgentGuidance(t *testing.T) {
 	require.NoError(t, cli.Start(ctx))
 
 	var initReq mcp.InitializeRequest
-	initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initReq.Params.ProtocolVersion = mcpversion.Client
 	initReq.Params.ClientInfo = mcp.Implementation{Name: "instructions-test", Version: "0"}
 	result, err := cli.Initialize(ctx, initReq)
 	require.NoError(t, err)
@@ -192,6 +202,11 @@ func TestServer_ServesOnlySessionProtocolVersions(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw, &refused))
 	require.Contains(t, refused.Error.Data.Supported, mcp.LATEST_LEGACY_PROTOCOL_VERSION)
 	require.NotContains(t, refused.Error.Data.Supported, mcp.ProtocolVersion20260728)
+	// The list a refused client falls back from is the served list, and holds
+	// the version Seamless's own clients ask for: a seam from before the pin
+	// (mcp-go v1.1.1, asking for 2026-07-28 first) falls back to it.
+	require.Equal(t, mcpversion.Served(), refused.Error.Data.Supported)
+	require.Contains(t, refused.Error.Data.Supported, mcpversion.Client)
 }
 
 func callJSON(t *testing.T, ctx context.Context, cli *mcpclient.Client, name string, args map[string]any) map[string]any {
@@ -770,7 +785,7 @@ func TestMCPAuth_PairedDeviceIsTheOwnerOnlyWhenTheEdgeMatchedIt(t *testing.T) {
 	srv := mcpserver.New(mcpserver.Config{DB: db, Events: events.NewRecorder(db), APIKey: testKey})
 	key, _, err := devices.NewKey()
 	require.NoError(t, err)
-	initialize := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"` + mcp.LATEST_PROTOCOL_VERSION +
+	initialize := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"` + mcpversion.Client +
 		`","capabilities":{},"clientInfo":{"name":"device-test","version":"0"}}}`
 	for _, tc := range []struct {
 		name   string

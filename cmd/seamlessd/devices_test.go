@@ -41,6 +41,7 @@ import (
 	"github.com/arctop/seamless/internal/gardener"
 	"github.com/arctop/seamless/internal/hooks"
 	"github.com/arctop/seamless/internal/mcp"
+	"github.com/arctop/seamless/internal/mcp/mcpversion"
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/store/storetest"
@@ -213,7 +214,7 @@ type devicePlace struct {
 func devicePlaces() []devicePlace {
 	jsonHdr := http.Header{"Content-Type": {"application/json"}}
 	mcpHdr := http.Header{"Content-Type": {"application/json"}, "Accept": {"application/json, text/event-stream"}}
-	initialize := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"` + mcpgo.LATEST_PROTOCOL_VERSION +
+	initialize := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"` + mcpversion.Client +
 		`","capabilities":{},"clientInfo":{"name":"device-test","version":"0"}}}`
 	out := []devicePlace{
 		{"mcp", http.MethodPost, "/api/mcp", initialize, mcpHdr},
@@ -325,7 +326,7 @@ func TestPairDeviceKey_HostIsTheEnrolledName(t *testing.T) {
 	t.Cleanup(func() { _ = cli.Close() })
 	require.NoError(t, cli.Start(ctx))
 	var initReq mcpgo.InitializeRequest
-	initReq.Params.ProtocolVersion = mcpgo.LATEST_PROTOCOL_VERSION
+	initReq.Params.ProtocolVersion = mcpversion.Client
 	initReq.Params.ClientInfo = mcpgo.Implementation{Name: "device-host", Version: "0"}
 	_, err = cli.Initialize(ctx, initReq)
 	require.NoError(t, err)

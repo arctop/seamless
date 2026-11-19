@@ -22,6 +22,7 @@ import (
 
 	"github.com/arctop/seamless/internal/agentproc"
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/mcp/mcpversion"
 )
 
 func main() {
@@ -178,7 +179,7 @@ func dialWith(ctx context.Context, cfg config.Config) (*mcpclient.Client, config
 		return nil, cfg, err
 	}
 	var initReq mcp.InitializeRequest
-	initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initReq.Params.ProtocolVersion = mcpversion.Client
 	initReq.Params.ClientInfo = mcp.Implementation{Name: "seam-cli", Version: "0"}
 	if _, err := cli.Initialize(ctx, initReq); err != nil {
 		return nil, cfg, fmt.Errorf("connect to seamlessd at %s: %w", cfg.DaemonAddress(), err)

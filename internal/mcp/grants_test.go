@@ -26,6 +26,7 @@ import (
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/files"
 	mcpserver "github.com/arctop/seamless/internal/mcp"
+	"github.com/arctop/seamless/internal/mcp/mcpversion"
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/store/storetest"
@@ -456,7 +457,7 @@ func TestGrants_PeerTierDaemonProof(t *testing.T) {
 		t.Cleanup(func() { _ = cli.Close() })
 		require.NoError(t, cli.Start(ctx))
 		var initReq mcp.InitializeRequest
-		initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+		initReq.Params.ProtocolVersion = mcpversion.Client
 		initReq.Params.ClientInfo = mcp.Implementation{Name: "grant", Version: "0"}
 		_, err = cli.Initialize(ctx, initReq)
 		require.NoError(t, err)

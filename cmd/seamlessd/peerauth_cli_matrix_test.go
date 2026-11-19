@@ -38,6 +38,7 @@ import (
 	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/mcp/mcpversion"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -197,7 +198,7 @@ func TestPeerAuthMatrix_CLI(t *testing.T) {
 	t.Cleanup(func() { _ = agent.Close() })
 	require.NoError(t, agent.Start(ctx))
 	var init mcpgo.InitializeRequest
-	init.Params.ProtocolVersion = mcpgo.LATEST_PROTOCOL_VERSION
+	init.Params.ProtocolVersion = mcpversion.Client
 	init.Params.ClientInfo = mcpgo.Implementation{Name: "cm-agent", Version: "0"}
 	_, err = agent.Initialize(ctx, init)
 	require.NoError(t, err)

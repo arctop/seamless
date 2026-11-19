@@ -26,6 +26,7 @@ import (
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/files"
 	mcpserver "github.com/arctop/seamless/internal/mcp"
+	"github.com/arctop/seamless/internal/mcp/mcpversion"
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/store/storetest"
@@ -189,7 +190,7 @@ func (r *lockRig) dial(base string, agent bool) *mcpclient.Client {
 	r.t.Cleanup(func() { _ = cli.Close() })
 	require.NoError(r.t, cli.Start(context.Background()))
 	var initReq mcp.InitializeRequest
-	initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initReq.Params.ProtocolVersion = mcpversion.Client
 	initReq.Params.ClientInfo = mcp.Implementation{Name: "lock", Version: "0"}
 	_, err = cli.Initialize(context.Background(), initReq)
 	require.NoError(r.t, err)

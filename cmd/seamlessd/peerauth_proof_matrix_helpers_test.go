@@ -46,6 +46,7 @@ import (
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/hooks"
 	"github.com/arctop/seamless/internal/mcp"
+	"github.com/arctop/seamless/internal/mcp/mcpversion"
 	"github.com/arctop/seamless/internal/passkey"
 	"github.com/arctop/seamless/internal/passkey/passkeytest"
 	"github.com/arctop/seamless/internal/retrieve"
@@ -377,7 +378,7 @@ func (d *pmDaemon) dial(base string, proc access.ProcessToken, o *pmOwner, caps 
 	ctx := context.Background()
 	require.NoError(d.t, cli.Start(ctx))
 	var init mcpgo.InitializeRequest
-	init.Params.ProtocolVersion = mcpgo.LATEST_PROTOCOL_VERSION
+	init.Params.ProtocolVersion = mcpversion.Client
 	init.Params.ClientInfo = mcpgo.Implementation{Name: "proof-matrix", Version: "0"}
 	if caps != nil {
 		init.Params.Capabilities.Elicitation = caps

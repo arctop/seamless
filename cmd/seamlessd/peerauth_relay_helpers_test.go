@@ -48,6 +48,7 @@ import (
 	"github.com/arctop/seamless/internal/gardener"
 	"github.com/arctop/seamless/internal/hooks"
 	"github.com/arctop/seamless/internal/mcp"
+	"github.com/arctop/seamless/internal/mcp/mcpversion"
 	"github.com/arctop/seamless/internal/passkey"
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/screening"
@@ -450,7 +451,7 @@ func (d *relayvDaemon) mcpVia(t *testing.T, id *devices.RelayIdentity, key strin
 	t.Cleanup(func() { _ = cli.Close() })
 	require.NoError(t, cli.Start(ctx))
 	var init mcpgo.InitializeRequest
-	init.Params.ProtocolVersion = mcpgo.LATEST_PROTOCOL_VERSION
+	init.Params.ProtocolVersion = mcpversion.Client
 	init.Params.ClientInfo = mcpgo.Implementation{Name: "claude-code", Version: "0"}
 	_, err = cli.Initialize(ctx, init)
 	require.NoError(t, err)
@@ -517,7 +518,7 @@ func (d *relayvDaemon) do(t *testing.T, client *http.Client, method, target stri
 
 // relayvInitialize is one MCP initialize request, the first a client sends.
 func relayvInitialize() string {
-	return `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"` + mcpgo.LATEST_PROTOCOL_VERSION +
+	return `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"` + mcpversion.Client +
 		`","capabilities":{},"clientInfo":{"name":"relay-matrix","version":"0"}}}`
 }
 

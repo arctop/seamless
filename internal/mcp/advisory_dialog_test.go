@@ -20,6 +20,7 @@ import (
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/approval"
 	mcpserver "github.com/arctop/seamless/internal/mcp"
+	"github.com/arctop/seamless/internal/mcp/mcpversion"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -73,7 +74,7 @@ func advDialAs(t *testing.T, base, proc string, o *owner, caps *mcp.ElicitationC
 	ctx := context.Background()
 	require.NoError(t, cli.Start(ctx))
 	var initReq mcp.InitializeRequest
-	initReq.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+	initReq.Params.ProtocolVersion = mcpversion.Client
 	initReq.Params.ClientInfo = mcp.Implementation{Name: "advisory-dialog", Version: "0"}
 	if caps != nil {
 		initReq.Params.Capabilities.Elicitation = caps
