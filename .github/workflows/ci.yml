@@ -24,8 +24,10 @@ jobs:
     # make check took 14m50s on 2026-10-10 (go test -race ./... alone ~11m,
     # internal/console the long pole at ~9m), and the next run was cut off
     # 12ms after printing "check: all green". This caps a hung job, so it
-    # leaves headroom over a normal run rather than tracking it.
-    timeout-minutes: 25
+    # leaves headroom over a normal run rather than tracking it. Runs reached
+    # 18-24m by 2026-11-18, and on 2026-11-19 one was cancelled at 25m with
+    # every finished package ok and internal/store still under -race.
+    timeout-minutes: 40
     steps:
       # fetch-depth: 0 because `make docs-check` runs scripts/changelog.sh
       # --check, which rebuilds the changelog from every v* tag and the commit
