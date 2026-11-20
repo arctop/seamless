@@ -826,7 +826,7 @@
       "inputSchema": {
         "properties": {
           "kind": {
-            "description": "only memories of this frontmatter kind (e.g. convention); implies memories-only, so any scope that excludes memories is rejected; with no query, lists the kind newest-first",
+            "description": "only memories of this frontmatter kind (e.g. convention), not a hit's item type: scope selects notes, tasks, trials or sessions; implies memories-only, so any scope that excludes memories is rejected; with no query, lists the kind newest-first",
             "enum": [
               "constraint",
               "convention",
