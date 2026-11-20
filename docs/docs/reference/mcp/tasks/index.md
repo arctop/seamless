@@ -48,6 +48,11 @@ the default `tasks_ready` and `tasks_list`. That keeps a twelve-step plan from
 burying the handful of tasks that are actually loose work. Pass `plan=<slug>` to
 either tool to see that plan's steps instead.
 
+`tasks_list` lists; it does not search. A `query` holding exactly one task id
+is read as `id=<that id>`: the direct lookup, which ignores project, status and
+plan. Any other `query` is refused with a pointer to `recall query=<text>
+scope=tasks`.
+
 ## Gates
 
 A task that waits on a person, or on an event outside Seamless, carries a gate

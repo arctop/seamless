@@ -11,8 +11,10 @@ import (
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/oklog/ulid/v2"
 
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/retrieve"
 )
 
 // Argument normalization and validation against a tool's declared input schema.
@@ -168,12 +170,43 @@ func recallKindAsScope(raw map[string]any) (map[string]any, error) {
 	return out, nil
 }
 
+// tasksListQueryAsID rewrites a tasks_list query that is exactly one ULID into
+// id=, the direct lookup it names. tasks_list declares no query; agents send
+// one holding a task id they want loaded (the gardener's tool-error pass found
+// it), and a ULID read as a task id is lossless: ids are globally unique, and
+// one that is no task's still answers as an id miss, exactly as id= would. Any
+// other query is text, left for normalizeArgs to refuse with the recall
+// redirect (paramRedirects): tasks_list has no text search to read it as. An
+// id that differs from the query is refused rather than picked. raw is not
+// mutated (see dropRetired).
+func tasksListQueryAsID(raw map[string]any) (map[string]any, error) {
+	q, ok := raw["query"].(string)
+	if !ok {
+		return raw, nil
+	}
+	q = strings.TrimSpace(q)
+	if len(q) != ulid.EncodedSize {
+		return raw, nil
+	}
+	if _, err := ulid.ParseStrict(q); err != nil {
+		return raw, nil
+	}
+	if id, present := raw["id"]; present && id != "" && id != q {
+		return nil, fmt.Errorf("conflicting values for id: query %q is a task id, but id is %v; pass id alone", q, id)
+	}
+	out := maps.Clone(raw)
+	delete(out, "query")
+	out["id"] = q
+	return out, nil
+}
+
 // argRewrites are per-tool rewrites applied before normalizeArgs, each for a
 // value the tool's own vocabulary teaches agents to send under the wrong
 // parameter. A rewrite must have exactly one reading of the value it rewrites;
 // a value it cannot read without a guess is left for normalizeArgs to refuse.
 var argRewrites = map[string]func(map[string]any) (map[string]any, error){
-	"recall": recallKindAsScope,
+	"recall":     recallKindAsScope,
+	"tasks_list": tasksListQueryAsID,
 }
 
 // rewriteArgs applies tool's rewrite (see argRewrites), if it has one.
@@ -731,8 +764,14 @@ func jsonTypeName(v any) string {
 // the fix is a different call, not a different spelling. A tool that declares
 // the parameter (recall declares query) never reaches the unknown path, so the
 // hint only ever shows where it applies.
+//
+// The query pointer names recall's narrow scopes: the caller was searching one
+// tool's items (tasks_list's tasks, notes_read's notes), and plain recall
+// query=<text> would hand it every item type back.
 var paramRedirects = map[string]string{
-	"query": "to search by text, use the recall tool (recall query=<text>)",
+	"query": "to search by text, use the recall tool (recall query=<text>; add scope=<" +
+		strings.Join(slices.DeleteFunc(slices.Clone(retrieve.RecallScopes), func(s string) bool { return s == "all" }), "|") +
+		"> to search only that item type)",
 }
 
 // unknownParamError names the bad parameter, suggests the intended one when it

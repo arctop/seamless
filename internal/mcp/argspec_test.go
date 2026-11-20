@@ -689,3 +689,58 @@ func TestRecallKindAsScope(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, raw, got)
 }
+
+func TestTasksListQueryAsID(t *testing.T) {
+	const id = "01M7X4PRQSC29J9C58S6Q476HX"
+	for _, tc := range []struct {
+		name    string
+		raw     map[string]any
+		want    map[string]any
+		wantErr string
+	}{
+		{"a ULID query is the id it names",
+			map[string]any{"query": id},
+			map[string]any{"id": id}, ""},
+		{"surrounding space is not part of an id",
+			map[string]any{"query": " " + id + "\n", "plan": "p"},
+			map[string]any{"id": id, "plan": "p"}, ""},
+		{"the same id agrees",
+			map[string]any{"query": id, "id": id},
+			map[string]any{"id": id}, ""},
+		{"an empty id is absent",
+			map[string]any{"query": id, "id": ""},
+			map[string]any{"id": id}, ""},
+		{"text is left for the unknown-parameter refusal",
+			map[string]any{"query": "fix the recall kind error", "plan": "p"},
+			map[string]any{"query": "fix the recall kind error", "plan": "p"}, ""},
+		{"26 characters that are no ULID are text",
+			map[string]any{"query": "abcdefghijklmnopqrstuvwxyz"},
+			map[string]any{"query": "abcdefghijklmnopqrstuvwxyz"}, ""},
+		{"a non-string query is left for coercion",
+			map[string]any{"query": float64(1)},
+			map[string]any{"query": float64(1)}, ""},
+		{"a different id is refused, not picked",
+			map[string]any{"query": id, "id": "01M7X4PQ4R1ZS9TVRZME049AG9"},
+			nil, `conflicting values for id: query "` + id + `" is a task id, but id is 01M7X4PQ4R1ZS9TVRZME049AG9; pass id alone`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before := maps.Clone(tc.raw)
+			got, err := rewriteArgs("tasks_list", tc.raw)
+			require.Equal(t, before, tc.raw, "the raw arguments are the interactions feed's evidence and must not be mutated")
+			if tc.wantErr != "" {
+				require.EqualError(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// The query redirect names recall's narrow scopes from the canonical set, so a
+// caller searching one tool's items is told how to search only those.
+func TestParamRedirects_QueryNamesRecallScopes(t *testing.T) {
+	err := unknownParamError("query", []string{"id", "plan"})
+	require.EqualError(t, err, `unknown parameter "query": valid parameters are: id, plan; to search by text, use the recall tool `+
+		`(recall query=<text>; add scope=<memories|notes|tasks|trials|sessions> to search only that item type)`)
+}

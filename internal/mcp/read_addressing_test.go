@@ -206,3 +206,27 @@ func TestNotesRead_BySlug(t *testing.T) {
 	require.True(t, isErr)
 	require.Contains(t, txt, "id or slug is required")
 }
+
+// tasks_list declares no query. A query holding one task id is the direct
+// lookup it names (the gardener's recurring tool error
+// 01M7X4PRQSC29J9C58S6Q476HX); any other query is text, which tasks_list cannot
+// search, so it is refused with recall's tasks scope named.
+func TestTasksList_QueryIDLoadsTheTaskAndTextRedirects(t *testing.T) {
+	ctx := context.Background()
+	url, _ := newServer(t)
+	cli := dialClient(t, ctx, url, testKey)
+	callJSON(t, ctx, cli, "session_start", map[string]any{"cwd": "/work/demo"})
+	task := callJSON(t, ctx, cli, "tasks_add", map[string]any{"title": "load me by id"})
+	id, _ := task["id"].(string)
+	require.NotEmpty(t, id)
+
+	got := callJSON(t, ctx, cli, "tasks_list", map[string]any{"query": id})
+	tasks, _ := got["tasks"].([]any)
+	require.Len(t, tasks, 1)
+	require.Equal(t, id, tasks[0].(map[string]any)["id"])
+
+	isErr, txt := callErr(t, ctx, cli, "tasks_list", map[string]any{"query": "load me", "plan": "p"})
+	require.True(t, isErr)
+	require.Contains(t, txt, `unknown parameter "query"`)
+	require.Contains(t, txt, "recall query=<text>; add scope=<memories|notes|tasks|trials|sessions>")
+}
