@@ -1203,7 +1203,8 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Hard token budget for the SessionStart briefing.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_MAX_BRIEFING_TOKENS</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">max_briefing_tokens</span><span class="p">:</span><span class="w"> </span><span class="m">1500</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Default token budget for a recall response.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Default token budget for a recall search&#39;s response (a kind listing, recall</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># kind=&lt;kind&gt; with no query, is bounded by its limit instead).</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_RECALL_BUDGET_TOKENS</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">recall_budget_tokens</span><span class="p">:</span><span class="w"> </span><span class="m">1000</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Per-field cap (in runes) on captured Interactions transport events (tool-call</span><span class="w">

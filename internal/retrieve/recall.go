@@ -385,15 +385,44 @@ func (s *Service) unboundFence(ctx context.Context, project string) error {
 }
 
 func (s *Service) Recall(ctx context.Context, in RecallInput) ([]Hit, error) {
+	hits, _, err := s.RecallCounted(ctx, in)
+	return hits, err
+}
+
+// RecallCounted is Recall plus, for a kind listing (Kind set, no Query), the
+// number of further matches past the limit, so a caller can say the listing
+// is not the whole kind. A search counts nothing: its ranking has no fixed tail
+// to count, and more is always 0 for it.
+func (s *Service) RecallCounted(ctx context.Context, in RecallInput) (hits []Hit, more int, err error) {
+	kinds, limit, err := s.recallArgs(ctx, in)
+	if err != nil {
+		return nil, 0, err
+	}
+	// A kind with no query is the browse mode: a premade filter ("list the
+	// conventions"), not a search, so it skips the retrieval legs entirely.
+	if in.Query == "" {
+		if in.Kind == "" {
+			return nil, 0, errors.New("retrieve.Recall: query is required unless kind is set")
+		}
+		return s.browseKind(ctx, in.Kind, in.Project, in.Also, limit)
+	}
+	hits, err = s.recallSearch(ctx, in, kinds, limit)
+	return hits, 0, err
+}
+
+// recallArgs applies the guards every recall shares, the listing included:
+// the caller's reach, A2A's fence, the kind and scope pairing and the limit.
+// It returns the item kinds to search and the effective limit.
+func (s *Service) recallArgs(ctx context.Context, in RecallInput) ([]string, int, error) {
 	// peer_auth: a project the caller's OS account may not read is refused here,
 	// whichever surface asked (MCP recall resolved the scope through its own
 	// fence first; A2A names it straight from the message metadata).
 	if !access.Visible(ctx, in.Project) {
-		return nil, access.Refusal(ctx, in.Project)
+		return nil, 0, access.Refusal(ctx, in.Project)
 	}
 	if in.Unbound {
 		if err := s.unboundFence(ctx, in.Project); err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 	}
 	kinds := recallScopeKinds(in.Scope)
@@ -402,7 +431,7 @@ func (s *Service) Recall(ctx context.Context, in RecallInput) ([]Hit, error) {
 		// "no such knowledge" -- the MCP boundary enforces the enum, this guards
 		// the Go API.
 		if !core.MemoryKind(in.Kind).Valid() {
-			return nil, fmt.Errorf("retrieve.Recall: unknown kind %q", in.Kind)
+			return nil, 0, fmt.Errorf("retrieve.Recall: unknown kind %q", in.Kind)
 		}
 		// A kind filter names a memory frontmatter kind, so it is memories-only
 		// by definition; combined with a scope that excludes memories nothing
@@ -410,7 +439,7 @@ func (s *Service) Recall(ctx context.Context, in RecallInput) ([]Hit, error) {
 		// knowledge". Reject the contradiction instead. Any other scope narrows
 		// to memories.
 		if !slices.Contains(knowledgeScopes, in.Scope) {
-			return nil, fmt.Errorf("retrieve.Recall: kind %q filters memories; scope=%s excludes them -- drop kind or widen scope", in.Kind, in.Scope)
+			return nil, 0, fmt.Errorf("retrieve.Recall: kind %q filters memories; scope=%s excludes them -- drop kind or widen scope", in.Kind, in.Scope)
 		}
 		kinds = []string{core.ItemKindMemory}
 	}
@@ -419,18 +448,14 @@ func (s *Service) Recall(ctx context.Context, in RecallInput) ([]Hit, error) {
 		limit = DefaultRecallLimit
 	}
 	if limit < 1 || limit > MaxRecallLimit {
-		return nil, fmt.Errorf("retrieve.Recall: %w: got %d, want 1-%d (or 0 for the default)",
+		return nil, 0, fmt.Errorf("retrieve.Recall: %w: got %d, want 1-%d (or 0 for the default)",
 			ErrInvalidRecallLimit, in.Limit, MaxRecallLimit)
 	}
+	return kinds, limit, nil
+}
 
-	// A kind with no query is the browse mode: a premade filter ("list the
-	// conventions"), not a search, so it skips the retrieval legs entirely.
-	if in.Query == "" {
-		if in.Kind == "" {
-			return nil, errors.New("retrieve.Recall: query is required unless kind is set")
-		}
-		return s.browseKind(ctx, in.Kind, in.Project, in.Also, limit)
-	}
+// recallSearch is Recall's query mode: the fused, budgeted ranking.
+func (s *Service) recallSearch(ctx context.Context, in RecallInput, kinds []string, limit int) ([]Hit, error) {
 
 	// The recall scope is the bound project plus global (project "") -- except
 	// for a sealed project, which reads nothing outside itself, global included
@@ -543,25 +568,25 @@ func (s *Service) Recall(ctx context.Context, in RecallInput) ([]Hit, error) {
 }
 
 // browseKind is Recall's no-query mode: enumerate the scope's active memories
-// of one kind, newest-first, under the same limit and token budget as a
-// searching recall. Deliberately list-shaped, not rank-shaped: no fusion, no
-// link expansion, and no favorite or utility boost -- library rails default to
-// recency, and there is no fused score to boost. The MCP layer records a
-// browse's hits as passive-class exposure (source "recall-browse"), never as
-// query-gated demand: a listing is the briefing's kin, and crediting it would
-// let browsing reinforce the ranking it reads
+// of one kind, newest-first, up to the limit, and count the matches past it.
+// Deliberately list-shaped, not rank-shaped: no fusion, no link expansion, and
+// no favorite or utility boost -- library rails default to recency, and there
+// is no fused score to boost. Nor does the search's token budget apply: it
+// keeps a ranking to its best few, but a listing has no best few, and cutting
+// it short at a budget returned part of the kind as if it were all of it (21 of
+// 39 constraints at limit=100), so agents asked for limits the schema refuses.
+// The limit, default 10 and at most 100, is the caller's own size. The MCP
+// layer records a browse's hits as passive-class exposure (source
+// "recall-browse"), never as query-gated demand: a listing is the briefing's
+// kin, and crediting it would let browsing reinforce the ranking it reads
 // (closed-loop-utility-signal-contract).
-func (s *Service) browseKind(ctx context.Context, kind, project string, also []string, limit int) ([]Hit, error) {
+func (s *Service) browseKind(ctx context.Context, kind, project string, also []string, limit int) ([]Hit, int, error) {
 	mems, err := s.scopedActiveMemories(ctx, project, also)
 	if err != nil {
-		return nil, err
-	}
-	budget := s.budgets.RecallBudgetTokens
-	if budget <= 0 {
-		budget = 1000
+		return nil, 0, err
 	}
 	out := make([]Hit, 0, min(limit, len(mems)))
-	used := 0
+	more := 0
 	for _, m := range mems {
 		if string(m.Kind) != kind {
 			continue
@@ -572,22 +597,18 @@ func (s *Service) browseKind(ctx context.Context, kind, project string, also []s
 		if !access.Visible(ctx, m.Project) {
 			continue
 		}
+		if len(out) >= limit {
+			more++
+			continue
+		}
 		h := memoryHit(m)
 		h.Source = "browse"
-		cost := estTokens(h.Title + h.Description)
-		if len(out) > 0 && (len(out) >= limit || used+cost > budget) {
-			break
-		}
 		out = append(out, h)
-		used += cost
-		if len(out) >= limit {
-			break
-		}
 	}
 	if err := s.attachStamps(ctx, out); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return out, nil
+	return out, more, nil
 }
 
 // rankFused returns item ids ordered by fused score, ties broken by id for

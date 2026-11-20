@@ -2,6 +2,8 @@ package retrieve
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -135,4 +137,36 @@ func TestRecallKindBrowseSkipsInvalidated(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, hits, 1)
 	require.Equal(t, "live-fact", hits[0].Name)
+}
+
+// A listing is bounded by its limit alone, never by the search's token budget:
+// cut at the budget it returned part of a kind as if it were all of it (21 of
+// 39 constraints at limit=100), so agents asked for limits the schema refuses.
+// Past the limit it counts what it left out.
+func TestRecallKindBrowseListsUpToLimitAndCountsTheRest(t *testing.T) {
+	db := setupDB(t)
+	ctx := context.Background()
+	now := time.Now()
+	long := strings.Repeat("a description long enough to weigh on any token budget ", 4)
+	for i := range 40 {
+		insMemAt(t, db, fmt.Sprintf("01C%02d", i), "constraint", fmt.Sprintf("rule-%02d", i), long, "seam", now.Add(-time.Duration(i)*time.Minute))
+	}
+	insMemAt(t, db, "01GOT", "gotcha", "some-gotcha", long, "seam", now)
+	svc := New(db, nil, budgets(), nil)
+
+	hits, more, err := svc.RecallCounted(ctx, RecallInput{Kind: "constraint", Project: "seam", Limit: 100})
+	require.NoError(t, err)
+	require.Len(t, hits, 40, "the whole kind, though it weighs far more than RecallBudgetTokens")
+	require.Zero(t, more)
+	require.Equal(t, "rule-00", hits[0].Name, "still newest-first")
+
+	hits, more, err = svc.RecallCounted(ctx, RecallInput{Kind: "constraint", Project: "seam", Limit: 15})
+	require.NoError(t, err)
+	require.Len(t, hits, 15)
+	require.Equal(t, 25, more, "the matches past the limit, of this kind only")
+
+	// A search counts nothing: its ranking has no fixed tail.
+	_, more, err = svc.RecallCounted(ctx, RecallInput{Query: "description", Kind: "constraint", Project: "seam", Limit: 5})
+	require.NoError(t, err)
+	require.Zero(t, more)
 }

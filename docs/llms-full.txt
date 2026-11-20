@@ -4254,7 +4254,9 @@ a veto, which matters because each is confidently wrong in a different way.
 ([RRF for agent recall](/concepts/reciprocal-rank-fusion/) defines the method
 and the constant.)
 
-The result set is then packed into `budgets.recall_budget_tokens`.
+The result set is then packed into `budgets.recall_budget_tokens`. A kind
+listing (`kind` with no query) is not a ranking and is not packed: it returns
+every match up to its `limit` and counts the rest.
 
 ### About that brute-force scan
 
@@ -12818,8 +12820,11 @@ scope=tasks`) or carries no query, since only a memory kind can be browsed.
 
 With `kind` set, `query` becomes optional: a kind alone is the **browse mode**
 behind briefing hints like `recall kind=convention` - the scope's active
-memories of that kind, listed newest-first under the same limit and token
-budget. A browse is a listing, not a search: no fusion, no favorite or utility
+memories of that kind, listed newest-first up to `limit` (default 10, at most
+100). The search's token budget does not cut a listing short: when more
+matches lie past the limit, the result carries `more` (how many) and a `note`
+naming the limit that lists them all, or, past 100, a query to search within
+the kind. A browse is a listing, not a search: no fusion, no favorite or utility
 boost, its hits record as passive exposure (never query-gated demand), and an
 empty browse records no miss - "this project has no conventions yet" is not a
 missing memory.
@@ -12835,7 +12840,7 @@ is surfaced instead of hidden - the two cases are deliberately not treated alike
 | `session_start` | `session_id`, `name`, resolved `project`, explanatory `scope`, and `briefing`; resumed/adopted sessions also say `resumed: true`, and a `warning` flags a named `project` that was created or a remote `cwd` that could not be placed | Briefing assembly degrades to an empty string and logs; creating or binding the session itself still fails loudly, as does a `project` that contradicts the repository `cwd` is in. With `isolation.requests` on, a binding the conversation's home may not make is refused and binds nothing; into a fenced project the refusal names the request it filed |
 | `memory_write` | Stable `id`, canonical `name`, resolved `project`, `updated`, optional `similar`, and optional `superseded` | An occupied tombstone path is an error; if the new memory lands but supersession fails, the tool errors while naming the kept replacement and the still-active target |
 | `memory_edit` | `id`, `name`, `project`, the new `content_hash`, a unified `diff`, and a `stage_hint` when a `kind=stage` body still has no parseable `Status` | An `old_string` that matches zero or several places is an error naming the count, and **nothing** is written - the edits apply all-or-nothing. A stale `expect_hash` is refused rather than overwriting |
-| `recall` | `hits`, possibly empty | Remote embedder failures degrade to lexical-only; local request/config construction errors surface |
+| `recall` | `hits`, possibly empty; a kind listing adds `more` and `note` when matches lie past its limit | Remote embedder failures degrade to lexical-only; local request/config construction errors surface |
 | `session_end` | Confirmation of the close - `session_id`, `claims_released`, `mishaps_recorded`, and `commits_recorded` when it recorded commits; findings persist for the next briefing. With `isolation.requests` on, a session whose conversation holds content its project may not take still ends: its findings are not recorded, `findings_withheld` carries the line recorded in their place, and `mishaps_withheld` counts the mishaps not recorded | A missing/ambiguous session is an error rather than a fabricated successful close; so is a `commits` entry that is not a full commit id, which leaves the session open |
 
 ## session_start {#session_start}
@@ -12939,12 +12944,12 @@ Delete a memory by name: the markdown file leaves the disk and its index row goe
 
 ## recall {#recall}
 
-Search durable knowledge (memories, notes) and the work record (tasks, trials, session findings) by meaning and keyword (fused), scoped to the current project plus global items. This is the single search entry point. Work-record hits carry a status (a task's status, a trial's outcome) and match on keyword only. With kind set and no query it lists that memory kind newest-first instead (browse).
+Search durable knowledge (memories, notes) and the work record (tasks, trials, session findings) by meaning and keyword (fused), scoped to the current project plus global items. This is the single search entry point. Work-record hits carry a status (a task's status, a trial's outcome) and match on keyword only. With kind set and no query it lists that memory kind newest-first instead (browse): every match up to limit, and more counts the matches past it.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `kind` | string | no | only memories of this frontmatter kind (e.g. convention), not a hit's item type: scope selects notes, tasks, trials or sessions; implies memories-only, so any scope that excludes memories is rejected; with no query, lists the kind newest-first. One of: `constraint`, `convention`, `runbook`, `protocol`, `gotcha`, `decision`, `refuted`, `reference`, `stage`. |
-| `limit` | integer | no | maximum results (default 10, max 100) |
+| `limit` | integer | no | maximum results (default 10, max 100); a kind listing returns this many when that many match |
 | `project` | string | no | project slug; defaults to the bound session's project |
 | `query` | string | no | what you are looking for; required unless kind is set (kind alone lists that kind newest-first) |
 | `scope` | string | no | what to search (default all). One of: `all`, `memories`, `notes`, `tasks`, `trials`, `sessions`. |
@@ -17009,7 +17014,8 @@ budgets:
   # Hard token budget for the SessionStart briefing.
   # env: SEAMLESS_MAX_BRIEFING_TOKENS
   max_briefing_tokens: 1500
-  # Default token budget for a recall response.
+  # Default token budget for a recall search's response (a kind listing, recall
+  # kind=<kind> with no query, is bounded by its limit instead).
   # env: SEAMLESS_RECALL_BUDGET_TOKENS
   recall_budget_tokens: 1000
   # Per-field cap (in runes) on captured Interactions transport events (tool-call

@@ -173,3 +173,13 @@ func TestConventionCountLineSurvivesBudget(t *testing.T) {
 	require.NotContains(t, ids, "01CVA")
 	require.NotContains(t, ids, "01CVB")
 }
+
+// The count line's hint is a command that lists the whole pool: past the
+// listing's default limit a bare "recall kind=convention" returns only 10, so
+// the hint names the limit, capped where the listing's own more note takes over.
+func TestConventionCountLine_HintListsTheWholePool(t *testing.T) {
+	require.Equal(t, "(4 total, 2 shown -- recall kind=convention for the rest)\n", conventionCountLine(4, 2))
+	require.Equal(t, "(10 total -- recall kind=convention lists them)\n", conventionCountLine(10, 10))
+	require.Equal(t, "(18 total, 3 shown -- recall kind=convention limit=18 for the rest)\n", conventionCountLine(18, 3))
+	require.Equal(t, "(150 total, 0 shown -- recall kind=convention limit=100 for the rest)\n", conventionCountLine(150, 0))
+}

@@ -100,7 +100,8 @@ budgets:
   # Hard token budget for the SessionStart briefing.
   # env: SEAMLESS_MAX_BRIEFING_TOKENS
   max_briefing_tokens: 1500
-  # Default token budget for a recall response.
+  # Default token budget for a recall search's response (a kind listing, recall
+  # kind=<kind> with no query, is bounded by its limit instead).
   # env: SEAMLESS_RECALL_BUDGET_TOKENS
   recall_budget_tokens: 1000
   # Per-field cap (in runes) on captured Interactions transport events (tool-call

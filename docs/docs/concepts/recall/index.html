@@ -319,7 +319,9 @@ ranking contributes, and something both rank highly wins. Neither retriever gets
 a veto, which matters because each is confidently wrong in a different way.
 (<a href="../../concepts/reciprocal-rank-fusion/">RRF for agent recall</a> defines the method
 and the constant.)</p>
-<p>The result set is then packed into <code>budgets.recall_budget_tokens</code>.</p>
+<p>The result set is then packed into <code>budgets.recall_budget_tokens</code>. A kind
+listing (<code>kind</code> with no query) is not a ranking and is not packed: it returns
+every match up to its <code>limit</code> and counts the rest.</p>
 <h3 id="about-that-brute-force-scan">About that brute-force scan</h3>
 <p>Cosine similarity is computed by scanning every candidate vector. No ANN index,
 no approximate nearest neighbours, no vector database. For a personal knowledge

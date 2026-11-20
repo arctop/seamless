@@ -822,7 +822,7 @@
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "Search durable knowledge (memories, notes) and the work record (tasks, trials, session findings) by meaning and keyword (fused), scoped to the current project plus global items. This is the single search entry point. Work-record hits carry a status (a task's status, a trial's outcome) and match on keyword only. With kind set and no query it lists that memory kind newest-first instead (browse).",
+      "description": "Search durable knowledge (memories, notes) and the work record (tasks, trials, session findings) by meaning and keyword (fused), scoped to the current project plus global items. This is the single search entry point. Work-record hits carry a status (a task's status, a trial's outcome) and match on keyword only. With kind set and no query it lists that memory kind newest-first instead (browse): every match up to limit, and more counts the matches past it.",
       "inputSchema": {
         "properties": {
           "kind": {
@@ -841,7 +841,7 @@
             "type": "string"
           },
           "limit": {
-            "description": "maximum results (default 10, max 100)",
+            "description": "maximum results (default 10, max 100); a kind listing returns this many when that many match",
             "maximum": 100,
             "minimum": 1,
             "type": "integer"

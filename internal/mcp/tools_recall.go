@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/mark3labs/mcp-go/mcp"
 
@@ -19,13 +20,13 @@ const recallMissQueryMax = 500
 
 func recallTool() mcp.Tool {
 	return mcp.NewTool("recall", hintRead(),
-		mcp.WithDescription("Search durable knowledge (memories, notes) and the work record (tasks, trials, session findings) by meaning and keyword (fused), scoped to the current project plus global items. This is the single search entry point. Work-record hits carry a status (a task's status, a trial's outcome) and match on keyword only. With kind set and no query it lists that memory kind newest-first instead (browse)."),
+		mcp.WithDescription("Search durable knowledge (memories, notes) and the work record (tasks, trials, session findings) by meaning and keyword (fused), scoped to the current project plus global items. This is the single search entry point. Work-record hits carry a status (a task's status, a trial's outcome) and match on keyword only. With kind set and no query it lists that memory kind newest-first instead (browse): every match up to limit, and more counts the matches past it."),
 		mcp.WithString("query", mcp.Description("what you are looking for; required unless kind is set (kind alone lists that kind newest-first)")),
 		mcp.WithString("scope", enumOf(retrieve.RecallScopes), mcp.Description("what to search (default all)")),
 		mcp.WithString("kind", enumOf(core.MemoryKinds), mcp.Description("only memories of this frontmatter kind (e.g. convention), not a hit's item type: scope selects notes, tasks, trials or sessions; implies memories-only, so any scope that excludes memories is rejected; with no query, lists the kind newest-first")),
 		mcp.WithString("project", mcp.Description("project slug; defaults to the bound session's project")),
 		mcp.WithInteger("limit", mcp.Min(1), mcp.Max(retrieve.MaxRecallLimit),
-			mcp.Description("maximum results (default 10, max 100)")),
+			mcp.Description("maximum results (default 10, max 100); a kind listing returns this many when that many match")),
 	)
 }
 
@@ -71,11 +72,13 @@ func (s *Server) handleRecall(ctx context.Context, req mcp.CallToolRequest) (*mc
 		return errResult("recall", err)
 	}
 	hits := []retrieve.Hit{}
+	limit := argInt(req, "limit", retrieve.DefaultRecallLimit)
+	more := 0
 	if globalOK {
 		var err error
-		hits, err = s.cfg.Retrieve.Recall(ctx, retrieve.RecallInput{
+		hits, more, err = s.cfg.Retrieve.RecallCounted(ctx, retrieve.RecallInput{
 			Query: query, Project: project, Scope: argString(req, "scope"),
-			Kind: kind, Limit: argInt(req, "limit", retrieve.DefaultRecallLimit), Also: also,
+			Kind: kind, Limit: limit, Also: also,
 		})
 		if err != nil {
 			return errResult("recall", err)
@@ -112,16 +115,31 @@ func (s *Server) handleRecall(ctx context.Context, req mcp.CallToolRequest) (*mc
 		// demand for the pass to cluster, and "this project has no conventions
 		// yet" is not a missing memory.
 		payload := map[string]any{"query": events.Truncate(query, recallMissQueryMax), "scope": argString(req, "scope"),
-			"limit": argInt(req, "limit", retrieve.DefaultRecallLimit), "source": "recall"}
+			"limit": limit, "source": "recall"}
 		if kind != "" {
 			payload["kind"] = kind
 		}
 		s.record(ctx, core.EventRecallMiss, s.boundSession(ctx), project, "", payload)
 	}
 	out := map[string]any{"hits": hits}
+	if more > 0 {
+		out["more"] = more
+		out["note"] = browseMoreNote(kind, limit, more)
+	}
 	if locked != "" {
 		// Name only, never a count of what it holds (owner decision Q7).
 		out["locked"] = []string{lockedMayHold(locked)}
 	}
 	return jsonResult(out)
+}
+
+// browseMoreNote tells a kind listing's caller that the hits are not the whole
+// kind, and how to get the rest: a bigger limit while one fits, else a query
+// that searches within the kind, since a listing stops at MaxRecallLimit.
+func browseMoreNote(kind string, limit, more int) string {
+	if total := limit + more; total <= retrieve.MaxRecallLimit {
+		return fmt.Sprintf("%d more %s memories match past limit=%d; pass limit=%d to list all of them", more, kind, limit, total)
+	}
+	return fmt.Sprintf("%d more %s memories match past limit=%d, and a listing stops at %d; add a query to search within kind=%s, or memory_read name=<name> for one you know",
+		more, kind, limit, retrieve.MaxRecallLimit, kind)
 }

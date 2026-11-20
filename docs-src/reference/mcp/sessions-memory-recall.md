@@ -169,8 +169,11 @@ scope=tasks`) or carries no query, since only a memory kind can be browsed.
 
 With `kind` set, `query` becomes optional: a kind alone is the **browse mode**
 behind briefing hints like `recall kind=convention` - the scope's active
-memories of that kind, listed newest-first under the same limit and token
-budget. A browse is a listing, not a search: no fusion, no favorite or utility
+memories of that kind, listed newest-first up to `limit` (default 10, at most
+100). The search's token budget does not cut a listing short: when more
+matches lie past the limit, the result carries `more` (how many) and a `note`
+naming the limit that lists them all, or, past 100, a query to search within
+the kind. A browse is a listing, not a search: no fusion, no favorite or utility
 boost, its hits record as passive exposure (never query-gated demand), and an
 empty browse records no miss - "this project has no conventions yet" is not a
 missing memory.
@@ -186,5 +189,5 @@ is surfaced instead of hidden - the two cases are deliberately not treated alike
 | `session_start` | `session_id`, `name`, resolved `project`, explanatory `scope`, and `briefing`; resumed/adopted sessions also say `resumed: true`, and a `warning` flags a named `project` that was created or a remote `cwd` that could not be placed | Briefing assembly degrades to an empty string and logs; creating or binding the session itself still fails loudly, as does a `project` that contradicts the repository `cwd` is in. With `isolation.requests` on, a binding the conversation's home may not make is refused and binds nothing; into a fenced project the refusal names the request it filed |
 | `memory_write` | Stable `id`, canonical `name`, resolved `project`, `updated`, optional `similar`, and optional `superseded` | An occupied tombstone path is an error; if the new memory lands but supersession fails, the tool errors while naming the kept replacement and the still-active target |
 | `memory_edit` | `id`, `name`, `project`, the new `content_hash`, a unified `diff`, and a `stage_hint` when a `kind=stage` body still has no parseable `Status` | An `old_string` that matches zero or several places is an error naming the count, and **nothing** is written - the edits apply all-or-nothing. A stale `expect_hash` is refused rather than overwriting |
-| `recall` | `hits`, possibly empty | Remote embedder failures degrade to lexical-only; local request/config construction errors surface |
+| `recall` | `hits`, possibly empty; a kind listing adds `more` and `note` when matches lie past its limit | Remote embedder failures degrade to lexical-only; local request/config construction errors surface |
 | `session_end` | Confirmation of the close - `session_id`, `claims_released`, `mishaps_recorded`, and `commits_recorded` when it recorded commits; findings persist for the next briefing. With `isolation.requests` on, a session whose conversation holds content its project may not take still ends: its findings are not recorded, `findings_withheld` carries the line recorded in their place, and `mishaps_withheld` counts the mishaps not recorded | A missing/ambiguous session is an error rather than a fabricated successful close; so is a `commits` entry that is not a full commit id, which leaves the session open |

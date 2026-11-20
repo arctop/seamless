@@ -64,7 +64,9 @@ a veto, which matters because each is confidently wrong in a different way.
 ([RRF for agent recall](https://thereisnospoon.org/docs/concepts/reciprocal-rank-fusion/) defines the method
 and the constant.)
 
-The result set is then packed into `budgets.recall_budget_tokens`.
+The result set is then packed into `budgets.recall_budget_tokens`. A kind
+listing (`kind` with no query) is not a ranking and is not packed: it returns
+every match up to its `limit` and counts the rest.
 
 ### About that brute-force scan
 

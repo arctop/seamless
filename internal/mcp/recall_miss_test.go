@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -225,4 +226,29 @@ func TestRecall_HitKindReadsAsItsScope(t *testing.T) {
 	isErr, txt = callErr(t, ctx, cli, "recall", map[string]any{"query": "ledger", "kind": "notez"})
 	require.True(t, isErr)
 	require.Contains(t, txt, "valid values are constraint, convention")
+}
+
+// A kind listing says when it is not the whole kind, and how to get the rest.
+func TestRecall_KindListingCountsTheRest(t *testing.T) {
+	ctx := context.Background()
+	url, _ := newServer(t)
+	cli := dialClient(t, ctx, url, testKey)
+
+	callJSON(t, ctx, cli, "session_start", map[string]any{"cwd": "/work/demo"})
+	for i := range 3 {
+		callJSON(t, ctx, cli, "memory_write", map[string]any{
+			"name": fmt.Sprintf("rule-%d", i), "kind": "constraint",
+			"description": fmt.Sprintf("rule number %d", i), "body": "a rule\n",
+		})
+	}
+	rec := callJSON(t, ctx, cli, "recall", map[string]any{"kind": "constraint", "limit": 2})
+	require.Len(t, rec["hits"], 2)
+	require.EqualValues(t, 1, rec["more"])
+	require.Equal(t, "1 more constraint memories match past limit=2; pass limit=3 to list all of them", rec["note"])
+
+	rec = callJSON(t, ctx, cli, "recall", map[string]any{"kind": "constraint", "limit": 3})
+	require.Len(t, rec["hits"], 3)
+	require.NotContains(t, rec, "more", "a whole listing carries no more")
+	require.NotContains(t, rec, "note")
+
 }

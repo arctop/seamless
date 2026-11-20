@@ -519,12 +519,19 @@ func alsoBindingLine(compact []core.Memory) string {
 // alsoBindingLine it carries no names -- a count is the demotion -- so it is
 // cheap enough to render unconditionally, keeping the section discoverable
 // even when every full line was budget-dropped. The kind=convention hint is a
-// real command: recall with kind and no query lists the kind newest-first.
+// real command: recall with kind and no query lists the kind newest-first. Past
+// the listing's default limit the hint names a limit that lists the whole pool
+// (at most MaxRecallLimit, where the listing's own more note takes over):
+// a bare "recall kind=convention" returns only the default 10.
 func conventionCountLine(total, shown int) string {
-	if shown < total {
-		return fmt.Sprintf("(%d total, %d shown -- recall kind=convention for the rest)\n", total, shown)
+	cmd := "recall kind=convention"
+	if total > DefaultRecallLimit {
+		cmd += fmt.Sprintf(" limit=%d", min(total, MaxRecallLimit))
 	}
-	return fmt.Sprintf("(%d total -- recall kind=convention lists them)\n", total)
+	if shown < total {
+		return fmt.Sprintf("(%d total, %d shown -- %s for the rest)\n", total, shown, cmd)
+	}
+	return fmt.Sprintf("(%d total -- %s lists them)\n", total, cmd)
 }
 
 // conventionTiers splits ranked conventions at the full-tier boundary like

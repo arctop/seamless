@@ -744,3 +744,14 @@ func TestParamRedirects_QueryNamesRecallScopes(t *testing.T) {
 	require.EqualError(t, err, `unknown parameter "query": valid parameters are: id, plan; to search by text, use the recall tool `+
 		`(recall query=<text>; add scope=<memories|notes|tasks|trials|sessions> to search only that item type)`)
 }
+
+// Past the listing's ceiling a bigger limit cannot help, so the note names a
+// query instead of a limit the schema would refuse.
+func TestBrowseMoreNote_NamesALimitOnlyWhileOneFits(t *testing.T) {
+	require.Equal(t, "5 more convention memories match past limit=10; pass limit=15 to list all of them",
+		browseMoreNote("convention", 10, 5))
+	note := browseMoreNote("convention", 100, 7)
+	require.Contains(t, note, "a listing stops at 100; add a query to search within kind=convention")
+	require.NotContains(t, note, "pass limit=")
+	require.Contains(t, browseMoreNote("convention", 60, 41), "a listing stops at 100", "60+41 is past the ceiling")
+}

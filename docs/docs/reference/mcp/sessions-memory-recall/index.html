@@ -405,8 +405,11 @@ as <code>notes</code>, is read as the scope that selects them: <code>kind=note</
 a call is still refused when it names a different scope (<code>kind=note scope=tasks</code>) or carries no query, since only a memory kind can be browsed.</p>
 <p>With <code>kind</code> set, <code>query</code> becomes optional: a kind alone is the <strong>browse mode</strong>
 behind briefing hints like <code>recall kind=convention</code> - the scope's active
-memories of that kind, listed newest-first under the same limit and token
-budget. A browse is a listing, not a search: no fusion, no favorite or utility
+memories of that kind, listed newest-first up to <code>limit</code> (default 10, at most
+100). The search's token budget does not cut a listing short: when more
+matches lie past the limit, the result carries <code>more</code> (how many) and a <code>note</code>
+naming the limit that lists them all, or, past 100, a query to search within
+the kind. A browse is a listing, not a search: no fusion, no favorite or utility
 boost, its hits record as passive exposure (never query-gated demand), and an
 empty browse records no miss - &quot;this project has no conventions yet&quot; is not a
 missing memory.</p>
@@ -441,7 +444,7 @@ is surfaced instead of hidden - the two cases are deliberately not treated alike
 </tr>
 <tr>
 <td><code>recall</code></td>
-<td><code>hits</code>, possibly empty</td>
+<td><code>hits</code>, possibly empty; a kind listing adds <code>more</code> and <code>note</code> when matches lie past its limit</td>
 <td>Remote embedder failures degrade to lexical-only; local request/config construction errors surface</td>
 </tr>
 <tr>
@@ -839,7 +842,7 @@ is surfaced instead of hidden - the two cases are deliberately not treated alike
 </table>
 </div>
 <h2 id="recall">recall</h2>
-<p>Search durable knowledge (memories, notes) and the work record (tasks, trials, session findings) by meaning and keyword (fused), scoped to the current project plus global items. This is the single search entry point. Work-record hits carry a status (a task's status, a trial's outcome) and match on keyword only. With kind set and no query it lists that memory kind newest-first instead (browse).</p>
+<p>Search durable knowledge (memories, notes) and the work record (tasks, trials, session findings) by meaning and keyword (fused), scoped to the current project plus global items. This is the single search entry point. Work-record hits carry a status (a task's status, a trial's outcome) and match on keyword only. With kind set and no query it lists that memory kind newest-first instead (browse): every match up to limit, and more counts the matches past it.</p>
 <div class="table-wrap">
 <table>
 <thead>
@@ -861,7 +864,7 @@ is surfaced instead of hidden - the two cases are deliberately not treated alike
 <td><code>limit</code></td>
 <td>integer</td>
 <td>no</td>
-<td>maximum results (default 10, max 100)</td>
+<td>maximum results (default 10, max 100); a kind listing returns this many when that many match</td>
 </tr>
 <tr>
 <td><code>project</code></td>
