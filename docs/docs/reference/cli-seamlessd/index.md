@@ -434,11 +434,18 @@ installer.
 | `SEAMLESS_IMPORT_LOCKS=keep\|remove` | what that import does with the backup's locked projects when no passkey can open them, as `--keep-locks` and `--remove-locks` answer [`seamlessd import`](#seamlessd_import) |
 | `SEAMLESS_SERVER_NAME` | the name the other computers reach the Server at ([below](#seamlessd_setup_address)); with `SEAMLESS_SETUP=server` only |
 | `SEAMLESS_TLS_CERT`, `SEAMLESS_TLS_KEY` | that name's certificate and key, full paths; none for this computer's Tailscale name, whose certificate setup gets from the tailnet |
+| `SEAMLESS_PEER_AUTH=1` | turn locked projects on once the install is done, macOS and Linux: a first Standalone or Server install, or a re-run of one. Refused on Windows, for a Client, and with `SEAMLESS_NO_SERVICE` |
 
-A refusal stops the install before anything is installed. Setup does not turn
-locked projects on itself: the install ends by naming
-[`seamlessd peer-auth setup`](#seamlessd_peer_auth), which moves the daemon in
-one guided command, and the guide that sets them up by hand. A Server's install ends with what
+A refusal stops the install before anything is installed. Locked projects
+are turned on by [`seamlessd peer-auth setup`](#seamlessd_peer_auth), which
+moves the daemon to an account of its own; setup runs it, as a child of the
+same binary on the same terminal, once the installer's own steps are done,
+when you ask: choose **Turn on locked projects (peer_auth)** on a re-run, and
+it shows the move's plan and asks once, or set `SEAMLESS_PEER_AUTH=1`, which
+is the asking, so it runs `seamlessd peer-auth setup --yes`. `sudo` asks for
+your password at the terminal either way. A move that stops says where it
+stands, and `seamlessd peer-auth setup` continues it. An install that does not
+ask lists the step at its end, saying how. A Server's install ends with what
 each Client needs - its address, its certificate's fingerprint, how to get a
 pairing code, and the one-liners - as `seamlessd devices code` prints them.
 
@@ -1255,7 +1262,7 @@ by hand once you no longer need them.
 ## seamlessd console-open {#seamlessd_console_open}
 
 ```bash
-seamlessd console-open [--browser APP]
+seamlessd console-open [--browser APP] [--path /console/PAGE]
 seamlessd console-open --unlock PROJECT [--code CODE] [--for DURATION]
 seamlessd console-open --sign-in [--code CODE]
 ```
@@ -1270,6 +1277,12 @@ pasting a key.
 `"Google Chrome"`, so an agent driving Chrome gets the auth cookie even when
 another browser is the default). It is **macOS only** and is rejected with an
 error on other platforms rather than silently opening the default browser.
+
+`--path` lands on a console page instead of the console's home, for example
+`--path /console/approvers`, which `seamlessd peer-auth setup` ends by naming
+to enroll an approver. It takes only a path under `/console/`, by the rule the
+sign-in form's own `next` follows; anything else - another host, `//`, a dot
+segment, a backslash, a space - is refused rather than opened somewhere else.
 
 It refuses to run when `mcp.api_key` is empty, or when the server does not
 answer `/healthz` within two seconds - the page has nowhere to POST otherwise.

@@ -443,6 +443,10 @@ script</a> with no dependencies to audit.</p>
 <td>what a client pairs as: <code>relay</code>, the default on macOS and Linux, or <code>key</code>, for a computer where you have no root (a container, CI). Windows is always <code>key</code></td>
 </tr>
 <tr>
+<td><code>SEAMLESS_PEER_AUTH=1</code></td>
+<td>turn locked projects on once the install is done (macOS and Linux): setup runs <a href="../reference/cli-seamlessd/#seamlessd_peer_auth"><code>seamlessd peer-auth setup</code></a> <code>--yes</code>, which moves the daemon to an account of its own; <code>sudo</code> asks for your password. Not with <code>SEAMLESS_NO_SERVICE</code> or a client install, and refused on Windows</td>
+</tr>
+<tr>
 <td><code>SEAMLESS_NO_HOOKS=1</code></td>
 <td>skip agent hooks, MCP registration, and skills, and the client detection that would choose them</td>
 </tr>

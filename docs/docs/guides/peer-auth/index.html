@@ -1862,6 +1862,11 @@ showed it.</li>
 <p>On the computer that runs the daemon, as yourself:</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd peer-auth setup
 </span></span></code></pre></div>
+<p><code>seamlessd setup</code> runs the same command when you choose <strong>Turn on locked
+projects (peer_auth)</strong> on a re-run, and the installers do it once a first
+install or an upgrade is done when you set <code>SEAMLESS_PEER_AUTH=1</code>
+(<code>curl -fsSL https://thereisnospoon.org/install | SEAMLESS_PEER_AUTH=1 sh</code>),
+which is the confirmation, so the move does not ask again.</p>
 <p>It shows the whole move - the account, where the binaries come from, the config
 change, the services, your configs and the hooks - asks once, and runs steps 2 to 7
 below (and 10: its export goes straight into a file only root reads), asking for your password through <code>sudo</code> for those that need
@@ -1872,14 +1877,16 @@ stops says why and continues from that step when you run it again;
 <code>seamlessd peer-auth status</code> says where it stands, <code>--dry-run</code> prints every
 command first, and <code>seamlessd peer-auth undo</code> rolls back what ran. Fence the
 projects you will lock first (step 1), and enroll an approver and lock them
-afterwards (steps 8 and 9): it locks nothing itself.
+afterwards (steps 8 and 9): it locks nothing itself, and ends with the command
+that opens the console on its Approvers page
+(<code>SEAMLESS_CONFIG=~/.config/seamless/console.yaml seamlessd console-open --path /console/approvers</code>).
 <a href="../../reference/cli-seamlessd/#seamlessd_peer_auth">The reference</a> has every step
 and flag. The rest of this section is the same move by hand.</p>
 <h3 id="by-hand">By hand</h3>
-<p><code>seamlessd setup</code> names <code>seamlessd peer-auth setup</code> and this section for
-locked projects: a first Standalone or Server install lists them as a step for
-after the install, and a re-run offers <strong>Turn on locked projects (peer_auth)</strong>
-on a computer that runs the daemon. Two of setup's steps come first:</p>
+<p><code>seamlessd setup</code> runs <code>seamlessd peer-auth setup</code> when you ask for locked
+projects (above), and otherwise names it and this section: a first Standalone
+or Server install that did not ask lists them as a step for after the install.
+Two of setup's steps come first:</p>
 <ul>
 <li><strong>A Server's address.</strong> Set it up first, with setup
 (<a href="../../reference/cli-seamlessd/#seamlessd_setup_address">the Server's address</a>):

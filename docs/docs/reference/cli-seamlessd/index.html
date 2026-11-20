@@ -883,13 +883,23 @@ installer.</p>
 <td><code>SEAMLESS_TLS_CERT</code>, <code>SEAMLESS_TLS_KEY</code></td>
 <td>that name's certificate and key, full paths; none for this computer's Tailscale name, whose certificate setup gets from the tailnet</td>
 </tr>
+<tr>
+<td><code>SEAMLESS_PEER_AUTH=1</code></td>
+<td>turn locked projects on once the install is done, macOS and Linux: a first Standalone or Server install, or a re-run of one. Refused on Windows, for a Client, and with <code>SEAMLESS_NO_SERVICE</code></td>
+</tr>
 </tbody>
 </table>
 </div>
-<p>A refusal stops the install before anything is installed. Setup does not turn
-locked projects on itself: the install ends by naming
-<a href="#seamlessd_peer_auth"><code>seamlessd peer-auth setup</code></a>, which moves the daemon in
-one guided command, and the guide that sets them up by hand. A Server's install ends with what
+<p>A refusal stops the install before anything is installed. Locked projects
+are turned on by <a href="#seamlessd_peer_auth"><code>seamlessd peer-auth setup</code></a>, which
+moves the daemon to an account of its own; setup runs it, as a child of the
+same binary on the same terminal, once the installer's own steps are done,
+when you ask: choose <strong>Turn on locked projects (peer_auth)</strong> on a re-run, and
+it shows the move's plan and asks once, or set <code>SEAMLESS_PEER_AUTH=1</code>, which
+is the asking, so it runs <code>seamlessd peer-auth setup --yes</code>. <code>sudo</code> asks for
+your password at the terminal either way. A move that stops says where it
+stands, and <code>seamlessd peer-auth setup</code> continues it. An install that does not
+ask lists the step at its end, saying how. A Server's install ends with what
 each Client needs - its address, its certificate's fingerprint, how to get a
 pairing code, and the one-liners - as <code>seamlessd devices code</code> prints them.</p>
 <p><code>--state FILE</code> and <code>--finish</code> are the installers' hand-off, and
@@ -1802,7 +1812,7 @@ where it stopped, like <code>setup</code>. It keeps the account, the layout, the
 the daemon's config and the backup, which the next <code>setup</code> reuses; delete them
 by hand once you no longer need them.</p>
 <h2 id="seamlessd_console_open">seamlessd console-open</h2>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd console-open <span class="o">[</span>--browser APP<span class="o">]</span>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd console-open <span class="o">[</span>--browser APP<span class="o">]</span> <span class="o">[</span>--path /console/PAGE<span class="o">]</span>
 </span></span><span class="line"><span class="cl">seamlessd console-open --unlock PROJECT <span class="o">[</span>--code CODE<span class="o">]</span> <span class="o">[</span>--for DURATION<span class="o">]</span>
 </span></span><span class="line"><span class="cl">seamlessd console-open --sign-in <span class="o">[</span>--code CODE<span class="o">]</span>
 </span></span></code></pre></div>
@@ -1815,6 +1825,11 @@ pasting a key.</p>
 <code>&quot;Google Chrome&quot;</code>, so an agent driving Chrome gets the auth cookie even when
 another browser is the default). It is <strong>macOS only</strong> and is rejected with an
 error on other platforms rather than silently opening the default browser.</p>
+<p><code>--path</code> lands on a console page instead of the console's home, for example
+<code>--path /console/approvers</code>, which <code>seamlessd peer-auth setup</code> ends by naming
+to enroll an approver. It takes only a path under <code>/console/</code>, by the rule the
+sign-in form's own <code>next</code> follows; anything else - another host, <code>//</code>, a dot
+segment, a backslash, a space - is refused rather than opened somewhere else.</p>
 <p>It refuses to run when <code>mcp.api_key</code> is empty, or when the server does not
 answer <code>/healthz</code> within two seconds - the page has nowhere to POST otherwise.</p>
 <p>Under passkey sign-in (<code>console.sign_in: passkey</code>) it opens the console's
