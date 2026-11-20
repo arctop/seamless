@@ -40,9 +40,11 @@ for asset in $ASSETS; do
 	esc=$(printf '%s' "$asset" | sed 's/\./\\./g')
 	for page in $PAGES; do
 		tmp=$(mktemp)
-		# Rewrite static/<asset> or static/<asset>?v=xxxx -> static/<asset>?v=<h>.
-		# Matches ../static/ references too: the pattern is unanchored.
-		sed -E "s|(static/$esc)(\?v=[0-9a-f]+)?|\1?v=$h|g" "$page" >"$tmp"
+		# Rewrite ="static/<asset>" or ="../static/<asset>?v=xxxx" -> ...?v=<h>.
+		# Only an attribute value is a reference: a comment or a record on
+		# /example/ that names static/<asset> stays as written, which is also
+		# what scripts/example/build.py's stamp leaves alone.
+		sed -E "s|(=\"(\.\./)?static/$esc)(\?v=[0-9a-f]+)?|\1?v=$h|g" "$page" >"$tmp"
 		mv "$tmp" "$page"
 	done
 	echo "site-stamp: static/$asset?v=$h"
