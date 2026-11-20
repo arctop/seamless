@@ -304,6 +304,9 @@ pnpm add playwright-core     # once, anywhere; NODE_PATH must point at its
                              # directory, not the cwd
 SEAMLESS_SHOT_BASE=http://127.0.0.1:8090 SEAMLESS_MCP_API_KEY=<same key> \
   node scripts/branding/console-shots.js /tmp/shots
+# SEAMLESS_SHOT_CHANNEL= (empty) drives the Chromium build playwright-core
+# installs itself (npx playwright-core install --only-shell chromium) instead
+# of the installed Chrome.
 
 # 4. convert into place
 for f in /tmp/shots/*.png; do
@@ -317,7 +320,8 @@ make site-stamp && make site-check
 `console-shots.js` mints the console cookie from the API key itself (the same
 `sha256("seamless-console\0" + key)` digest `internal/console` expects), so no
 login step is needed. Before capturing it dismisses the Overview's first-run
-level-choice card through its own form: a freshly seeded instance has never
+level-choice card through the card's own Dismiss button (a submit button whose
+`formaction` posts to `/console/settings/level/welcome`): a freshly seeded instance has never
 been welcomed, and the card pushes the Knowledge sky below the fold. It waits on `load` rather than `networkidle` because the
 console's SSE stream never goes idle.
 

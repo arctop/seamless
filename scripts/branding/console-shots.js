@@ -57,11 +57,13 @@ async function dismissWelcome(browser) {
   await context.addCookies([{ name: 'seamless_console', value: COOKIE, url: BASE }]);
   const page = await context.newPage();
   await page.goto(BASE + '/console/', { waitUntil: 'load' });
-  const form = page.locator('form[action="/console/settings/level/welcome"]');
-  if (await form.count()) {
+  // The card's Dismiss is a submit button posting to the welcome route through
+  // formaction (its form's own action picks a level).
+  const dismiss = page.locator('button[formaction="/console/settings/level/welcome"]');
+  if (await dismiss.count()) {
     await Promise.all([
       page.waitForNavigation({ waitUntil: 'load' }),
-      form.locator('button').first().click(),
+      dismiss.first().click(),
     ]);
     console.log('dismissed the welcome card');
   }
@@ -70,7 +72,11 @@ async function dismissWelcome(browser) {
 
 (async () => {
   const outDir = process.argv[2] || '.';
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  // SEAMLESS_SHOT_CHANNEL picks the browser: the installed Chrome by default,
+  // or an empty value for the Chromium build playwright-core installs itself
+  // (`npx playwright-core install --only-shell chromium`).
+  const channel = process.env.SEAMLESS_SHOT_CHANNEL ?? 'chrome';
+  const browser = await chromium.launch(channel ? { channel, headless: true } : { headless: true });
   await dismissWelcome(browser);
   for (const theme of ['dark', 'light']) {
     const context = await browser.newContext({
