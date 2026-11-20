@@ -156,6 +156,12 @@ const (
 	setupKnobServerName  = "SEAMLESS_SERVER_NAME"
 	setupKnobTLSCert     = "SEAMLESS_TLS_CERT"
 	setupKnobTLSKey      = "SEAMLESS_TLS_KEY"
+	// setupKnobPeerAuth=1 turns locked projects on once the install is done:
+	// the installers' --peer-auth, in their own convention (an environment
+	// answer). It is consent to the move setup then runs without asking
+	// again (seamlessd peer-auth setup --yes); sudo still asks for the
+	// password at the terminal.
+	setupKnobPeerAuth = "SEAMLESS_PEER_AUTH"
 )
 
 // setupDocs is the docs site every by-hand pointer links into.
@@ -239,6 +245,10 @@ type setupStep struct {
 	peerAuth bool
 	after    bool
 	run      func(*setupRun, *setupState) error
+	// wanted, when set, says whether this run does a built step the owner
+	// opts into; one it does not do is listed with the by-hand steps, its
+	// manual line saying how to have setup do it.
+	wanted func(*setupRun, setupState) bool
 }
 
 // setupSteps are the branch steps setup hands off to, by id. Their tasks:
@@ -257,7 +267,9 @@ var setupSteps = map[string]setupStep{
 	"locked-projects": {id: "locked-projects", label: "locked", peerAuth: true, after: true,
 		what: "locked projects (peer_auth): a project only the agents you approve can open",
 		manual: "seamlessd peer-auth setup moves the daemon to an account of its own in one guided command, " +
-			"once this install is done (or by hand: " + setupDocs + "guides/peer-auth/#move-an-existing-install-over)"},
+			"once this install is done; seamlessd setup offers it then, and the installer does it with " + setupKnobPeerAuth + "=1 " +
+			"(or by hand: " + setupDocs + "guides/peer-auth/#move-an-existing-install-over)",
+		run: setupLockedProjectsStep, wanted: setupLockedProjectsWanted},
 	"clients": {id: "clients", label: "clients", after: true,
 		what:   "what each {client} needs: this computer's address, its certificate's fingerprint and a pairing code",
 		manual: "seamlessd devices code prints it, with a code (" + setupDocs + "guides/network-install/#step-3-pair-a-client)",
@@ -399,6 +411,10 @@ type setupRun struct {
 	now           func() time.Time
 	daemonAccount func() string
 	ensureServer  func(config.ServerAddress) (string, error)
+
+	// peerAuthSetup runs `seamlessd peer-auth setup` with args, as a child
+	// of this binary on this terminal (setup_peerauth.go).
+	peerAuthSetup func(args []string) error
 }
 
 // realSetupRun is a run on this process's terminal and machine.
@@ -428,6 +444,7 @@ func realSetupRun() *setupRun {
 			_, wrote, err := config.EnsureServerConfig(a)
 			return wrote, err
 		},
+		peerAuthSetup: runPeerAuthSetupChild,
 	}
 	return r
 }
@@ -503,6 +520,9 @@ func setupDecideKind(r *setupRun) (setupState, error) {
 		return st, err
 	}
 	if err := setupPairingKnobs(r, want); err != nil {
+		return st, err
+	}
+	if err := setupPeerAuthKnobs(r, in, want); err != nil {
 		return st, err
 	}
 	if url := r.serverKnob(); url != "" {
@@ -583,6 +603,14 @@ func setupOnInstalled(r *setupRun, st setupState, in setupInstall, want setupKin
 	if strings.ContainsFunc(in.serverURL, setupControl) {
 		return st, setupRefusal("%s's server_url holds a control character", tildePath(r.facts.configPath))
 	}
+	if r.env(setupKnobPeerAuth) != "" && (want == setupNone || want == in.kind) {
+		// The knob asks for the change a person would choose: locked projects
+		// on, once the install is done. Already on, there is nothing to change.
+		if c, ok := setupChangeByID(in, r.goos, "locked-projects"); ok {
+			st.kind, st.answer, st.change = c.to, setupFromEnv, c.id
+			return st, nil
+		}
+	}
 	switch want {
 	case setupNone:
 		st.kind, st.answer = in.kind, setupKept
@@ -640,7 +668,7 @@ func setupOnFresh(r *setupRun, st setupState, want setupKind) (setupState, error
 	}
 	if !r.asks() {
 		st.kind, st.answer = setupStandalone, setupDefault
-		if r.env(setupKnobImport) != "" {
+		if r.env(setupKnobImport) != "" || r.env(setupKnobPeerAuth) != "" {
 			st.answer = setupFromEnv
 		}
 		return st, nil
@@ -894,6 +922,8 @@ func setupSummary(r *setupRun, st setupState) {
 			knob = setupKnobServer
 		case r.env(setupKnobImport) != "":
 			knob = setupKnobImport
+		case r.env(setupKnobPeerAuth) != "":
+			knob = setupKnobPeerAuth
 		}
 		desc += dim(" (" + knob + ")")
 	}
@@ -926,14 +956,17 @@ func setupStepsLeft(st setupState, goos string) []setupStep {
 // how to do it by hand: one row each.
 func setupHandOff(r *setupRun, st *setupState, steps []setupStep, after bool) error {
 	var manual []setupStep
+	unbuilt := false
 	for _, s := range steps {
+		skipped := s.wanted != nil && !s.wanted(r, *st)
 		switch {
-		case s.run != nil && s.after == after:
+		case s.run != nil && s.after == after && !skipped:
 			if err := s.run(r, st); err != nil {
 				return fmt.Errorf("seamlessd.setup: %s: %w", s.id, err)
 			}
-		case s.run == nil && after:
+		case after && (s.run == nil || skipped):
 			manual = append(manual, s)
+			unbuilt = unbuilt || s.run == nil
 		}
 	}
 	if len(manual) == 0 {
@@ -943,8 +976,12 @@ func setupHandOff(r *setupRun, st *setupState, steps []setupStep, after bool) er
 	if len(manual) == 1 {
 		which = "this " + setupWords[st.kind].name + " step"
 	}
+	when := " unless asked:"
+	if unbuilt {
+		when = " yet:"
+	}
 	fmt.Fprintln(r.out)
-	setupRow(r.out, "by hand", "setup does not do "+which+" yet:")
+	setupRow(r.out, "by hand", "setup does not do "+which+when)
 	for _, s := range manual {
 		setupRow(r.out, s.label, setupText(s.what))
 		fmt.Fprintf(r.out, "%s%s\n", setupRowCont, dim(setupText(s.manual)))
@@ -1014,6 +1051,7 @@ will be used, and a script answers it in the environment:
 		{setupKnobImportLocks + "=keep|remove", "what that import does with the backup's locked projects"},
 		{setupKnobServerName, "the name the other computers reach the {server} at"},
 		{setupKnobTLSCert + ", " + setupKnobTLSKey, "that name's certificate and key (none for this computer's Tailscale name)"},
+		{setupKnobPeerAuth + "=1", "turn locked projects on once the install is done (macOS and Linux): seamlessd peer-auth setup, not asked again"},
 	} {
 		fmt.Fprintf(w, "  %-42s %s\n", row[0], setupText(row[1]))
 	}
@@ -1066,6 +1104,9 @@ func setupDirect(r *setupRun) error {
 			return err
 		}
 		if err := setupPairingKnobs(r, want); err != nil {
+			return err
+		}
+		if err := setupPeerAuthKnobs(r, in, want); err != nil {
 			return err
 		}
 		// The address knobs, judged as the installer's run would judge them.

@@ -801,8 +801,8 @@ func pasShowCommands(x *pasRun, st pasState) error {
 // pasShowFinish is what comes after the move.
 func pasShowFinish(w io.Writer, p pasPlan) {
 	fmt.Fprintf(w, "\nLocked projects are ready to turn on. Next:\n")
-	fmt.Fprintf(w, "  1. Enroll an approver: open the console with\n       SEAMLESS_CONFIG=%s seamlessd console-open\n"+
-		"     and go to /console/approvers. Then lock a project from its Overview (Isolation card); it must be confidential or sealed first.\n",
+	fmt.Fprintf(w, "  1. Enroll an approver on the console's Approvers page, which this opens:\n       SEAMLESS_CONFIG=%s seamlessd console-open --path /console/approvers\n"+
+		"     Then lock a project from its Overview (Isolation card); it must be confidential or sealed first.\n",
 		shellcmd.PosixArg(pasConsoleConfig(p)))
 	fmt.Fprintf(w, "  2. Restart your agents (Claude Code, Codex) so their hooks and MCP bridge use the socket.\n")
 	fmt.Fprintf(w, "  3. An outbound firewall (LuLu, Little Snitch) sees %s/seamlessd as a new program: allow it to reach your LLM provider and GitHub.\n", pasBin)

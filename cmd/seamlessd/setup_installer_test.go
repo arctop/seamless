@@ -122,7 +122,10 @@ setup)
 		;;
 	esac
 	if [ "${2:-}" = -h ]; then
-		printf 'usage: seamlessd setup\n\ninstaller protocol: 1\n'
+		case ${SETUP_E2E_SETUP:-} in
+		nopeer) printf 'usage: seamlessd setup\n\ninstaller protocol: 1\n' ;;
+		*) printf 'usage: seamlessd setup\n\n  SEAMLESS_PEER_AUTH=1\n\ninstaller protocol: 1\n' ;;
+		esac
 		exit 0
 	fi
 	state=
@@ -437,6 +440,26 @@ func TestSetupInstaller_SetupKnobsRunSetup(t *testing.T) {
 			require.Contains(t, out, "predates seamlessd setup")
 			require.NoFileExists(t, filepath.Join(w.installDir, "seamlessd"), "nothing is installed")
 			require.Empty(t, setupCallsWithin(t, w))
+		})
+
+		t.Run("a setup from before SEAMLESS_PEER_AUTH cannot take it", func(t *testing.T) {
+			w := newSetupInstallerWorld(t, shell, installer)
+			out, err := w.run(t, append(scripted, "SEAMLESS_PEER_AUTH=1", "SETUP_E2E_SETUP=nopeer")...)
+			require.Error(t, err, out)
+			require.Contains(t, out, "setup predates SEAMLESS_PEER_AUTH; nothing was installed")
+			require.NoFileExists(t, filepath.Join(w.installDir, "seamlessd"), "nothing is installed")
+			require.Empty(t, setupCallsWithin(t, w))
+		})
+
+		t.Run("SEAMLESS_PEER_AUTH alone runs setup, and its --finish after the install", func(t *testing.T) {
+			w := newSetupInstallerWorld(t, shell, installer)
+			out, err := w.run(t, append(scripted, "SEAMLESS_PEER_AUTH=1", "SETUP_E2E_STATE="+setupStateServer)...)
+			require.NoError(t, err, out)
+			require.Equal(t, []string{
+				"seamlessd [setup] [--state] [<state>]",
+				w.hooksCall("claude"),
+				"seamlessd [setup] [--state] [<state>] [--finish]",
+			}, setupCallsWithin(t, w), out)
 		})
 
 		t.Run("a setup that stops stops the install before anything is installed", func(t *testing.T) {

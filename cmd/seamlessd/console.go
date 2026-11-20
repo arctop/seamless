@@ -49,7 +49,7 @@ var consoleLoginTmpl = template.Must(template.New("console-login").Parse(`<!doct
 <p>Signing in to the Seamless console...</p>
 <form id="login" method="post" action="{{.Base}}/console/login">
 <input type="hidden" name="key" value="{{.Key}}">
-<input type="hidden" name="next" value="/console/">
+<input type="hidden" name="next" value="{{.Next}}">
 <noscript><button type="submit">Continue to console</button></noscript>
 </form>
 <script>document.getElementById("login").submit();</script>
@@ -79,8 +79,16 @@ func runConsoleOpen(args []string) error {
 	signIn := fs.Bool("sign-in", false, "approve the terminal sign-in a browser began on the console's sign-in page, under passkey sign-in, after it shows that browser and asks (at a terminal; run as the daemon's account, through sudo -k)")
 	code := fs.String("code", "", "the code that browser's unlock or sign-in page shows (with --unlock or --sign-in; asked for when absent and stdin is a terminal)")
 	forFlag := fs.String("for", "", "how long the unlock lasts once approved (with --unlock; at most and by default 3h, capped by peer_auth.max_lease)")
+	pathFlag := fs.String("path", "", "the console page to land on, a path under /console/ (e.g. /console/approvers; default the console's home; not with --unlock or --sign-in)")
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("seamlessd.console-open: %w", err)
+	}
+	next, err := consoleOpenPath(*pathFlag)
+	if err != nil {
+		return fmt.Errorf("seamlessd.console-open: %w", err)
+	}
+	if *pathFlag != "" && (*signIn || *unlock != "" || *forFlag != "" || *code != "") {
+		return errors.New("seamlessd.console-open: --path opens a console page; --unlock and --sign-in approve in a browser that is open already")
 	}
 	cfg, err := config.Load()
 	if err != nil {
@@ -110,7 +118,7 @@ func runConsoleOpen(args []string) error {
 	// Passkey sign-in: the key signs no browser in, so there is no page to
 	// pre-sign. console-open opens the console's sign-in page and writes
 	// nothing anywhere.
-	if handled, err := openSignInPage(cfg, *browser, systemSignInOpen); handled {
+	if handled, err := openSignInPage(cfg, *browser, next, systemSignInOpen); handled {
 		if err != nil {
 			return fmt.Errorf("seamlessd.console-open: %w", err)
 		}
@@ -124,7 +132,7 @@ func runConsoleOpen(args []string) error {
 		return fmt.Errorf("seamlessd.console-open: console not reachable at %s -- start it with `make run` or `make start`", base)
 	}
 
-	page, err := renderConsoleLoginPage(base, cfg.MCP.APIKey)
+	page, err := renderConsoleLoginPageAt(base, cfg.MCP.APIKey, next)
 	if err != nil {
 		return fmt.Errorf("seamlessd.console-open: %w", err)
 	}
@@ -158,7 +166,7 @@ func runConsoleOpen(args []string) error {
 	if *browser != "" {
 		where = *browser
 	}
-	fmt.Printf("opened pre-authenticated console at %s/console/ in %s\n", base, where)
+	fmt.Printf("opened pre-authenticated console at %s%s in %s\n", base, next, where)
 	return nil
 }
 
@@ -183,9 +191,9 @@ var systemSignInOpen = signInOpen{signsIn: daemonSignsInWithPasskey, reachable: 
 // that signs a browser in without the passkey would be one more way in
 // (constraint console-unlock-begun-by-the-browser-it-opens). handled is false
 // while the key signs browsers in: the pre-signed key page, as before.
-func openSignInPage(cfg config.Config, browser string, d signInOpen) (handled bool, err error) {
+func openSignInPage(cfg config.Config, browser, next string, d signInOpen) (handled bool, err error) {
 	base := consoleOpenBase(cfg)
-	page, ok := consoleSignInPage(cfg, base, d.signsIn)
+	page, ok := consoleSignInPage(cfg, base, next, d.signsIn)
 	if !ok {
 		return false, nil
 	}
@@ -253,11 +261,50 @@ func sweepStaleLoginPages() {
 // renderConsoleLoginPage returns the self-submitting login HTML posting key to
 // the console at base (a config.ServerURL).
 func renderConsoleLoginPage(base, key string) (string, error) {
+	return renderConsoleLoginPageAt(base, key, consoleHome)
+}
+
+// renderConsoleLoginPageAt is the login page that lands on next, a path
+// consoleOpenPath accepted.
+func renderConsoleLoginPageAt(base, key, next string) (string, error) {
 	var b strings.Builder
-	if err := consoleLoginTmpl.Execute(&b, struct{ Base, Key string }{Base: base, Key: key}); err != nil {
+	if err := consoleLoginTmpl.Execute(&b, struct{ Base, Key, Next string }{Base: base, Key: key, Next: next}); err != nil {
 		return "", err
 	}
 	return b.String(), nil
+}
+
+// consoleHome is where console-open lands without --path.
+const consoleHome = "/console/"
+
+// consoleOpenPath checks --path: a console page, by the rule the login form's
+// next follows (safeNext in internal/console: a path under /console/, never
+// one that starts //, which a browser reads as another host), and nothing a
+// browser would rewrite into another path or another site -- a backslash, a
+// dot segment, a control or space character. A path the console would have
+// replaced with /console/ is refused here instead of opening somewhere else
+// than asked. "" is the console's home.
+func consoleOpenPath(raw string) (string, error) {
+	if raw == "" {
+		return consoleHome, nil
+	}
+	bad := !strings.HasPrefix(raw, consoleHome) || strings.HasPrefix(raw, "/console//") ||
+		strings.ContainsAny(raw, "\\") || strings.ContainsFunc(raw, func(r rune) bool { return r <= ' ' || r == 0x7f })
+	if !bad {
+		path := raw
+		if i := strings.IndexAny(path, "?#"); i >= 0 {
+			path = path[:i]
+		}
+		for _, seg := range strings.Split(path, "/") {
+			if seg == "." || seg == ".." {
+				bad = true
+			}
+		}
+	}
+	if bad {
+		return "", fmt.Errorf("--path %q is not a console page: give a path under /console/, such as /console/approvers", raw)
+	}
+	return raw, nil
 }
 
 // a2aEndpoint returns the usable discovery URL for the daemon's A2A endpoint.

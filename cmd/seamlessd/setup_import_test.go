@@ -679,7 +679,7 @@ func TestSetupImport_TheHandOff(t *testing.T) {
 	text := out.String()
 	require.NotContains(t, text, "import")
 	if setupPeerAuthOS(runtime.GOOS) {
-		require.Contains(t, text, "setup does not do this Standalone step yet:")
+		require.Contains(t, text, "setup does not do this Standalone step unless asked:")
 		require.Contains(t, text, "locked")
 	} else {
 		require.Empty(t, text, "on Windows nothing is left by hand")

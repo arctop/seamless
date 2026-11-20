@@ -87,14 +87,15 @@ func daemonSignsInWithPasskey(cfg config.Config) bool {
 }
 
 // consoleSignInPage is where console-open sends a browser under passkey
-// sign-in: the console's own login page on base, which takes no key. ok is
+// sign-in: the console's own login page on base, which takes no key, landing
+// on next (consoleOpenPath). ok is
 // false while the console signs browsers in with the key, which this config
 // says (console.sign_in) or the daemon it dials does (signsIn).
-func consoleSignInPage(cfg config.Config, base string, signsIn func(config.Config) bool) (string, bool) {
+func consoleSignInPage(cfg config.Config, base, next string, signsIn func(config.Config) bool) (string, bool) {
 	if !cfg.Console.PasskeySignIn() && !signsIn(cfg) {
 		return "", false
 	}
-	return strings.TrimSuffix(base, "/") + "/console/login?next=" + url.QueryEscape("/console/"), true
+	return strings.TrimSuffix(base, "/") + "/console/login?next=" + url.QueryEscape(next), true
 }
 
 // signInOffAdvice is `approvers add` while the key signs browsers in: there

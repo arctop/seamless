@@ -1671,6 +1671,12 @@ On the computer that runs the daemon, as yourself:
 seamlessd peer-auth setup
 ```
 
+`seamlessd setup` runs the same command when you choose **Turn on locked
+projects (peer_auth)** on a re-run, and the installers do it once a first
+install or an upgrade is done when you set `SEAMLESS_PEER_AUTH=1`
+(`curl -fsSL https://thereisnospoon.org/install | SEAMLESS_PEER_AUTH=1 sh`),
+which is the confirmation, so the move does not ask again.
+
 It shows the whole move - the account, where the binaries come from, the config
 change, the services, your configs and the hooks - asks once, and runs steps 2 to 7
 below (and 10: its export goes straight into a file only root reads), asking for your password through `sudo` for those that need
@@ -1681,16 +1687,18 @@ stops says why and continues from that step when you run it again;
 `seamlessd peer-auth status` says where it stands, `--dry-run` prints every
 command first, and `seamlessd peer-auth undo` rolls back what ran. Fence the
 projects you will lock first (step 1), and enroll an approver and lock them
-afterwards (steps 8 and 9): it locks nothing itself.
+afterwards (steps 8 and 9): it locks nothing itself, and ends with the command
+that opens the console on its Approvers page
+(`SEAMLESS_CONFIG=~/.config/seamless/console.yaml seamlessd console-open --path /console/approvers`).
 [The reference](/reference/cli-seamlessd/#seamlessd_peer_auth) has every step
 and flag. The rest of this section is the same move by hand.
 
 ### By hand
 
-`seamlessd setup` names `seamlessd peer-auth setup` and this section for
-locked projects: a first Standalone or Server install lists them as a step for
-after the install, and a re-run offers **Turn on locked projects (peer_auth)**
-on a computer that runs the daemon. Two of setup's steps come first:
+`seamlessd setup` runs `seamlessd peer-auth setup` when you ask for locked
+projects (above), and otherwise names it and this section: a first Standalone
+or Server install that did not ask lists them as a step for after the install.
+Two of setup's steps come first:
 
 - **A Server's address.** Set it up first, with setup
   ([the Server's address](/reference/cli-seamlessd/#seamlessd_setup_address)):

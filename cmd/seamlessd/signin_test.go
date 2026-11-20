@@ -285,7 +285,7 @@ func TestConsoleOpen_PasskeySignInOpensTheSignInPage(t *testing.T) {
 	}
 	cfg := signinConfig()
 	cfg.MCP.APIKey = "signin-console-open-key"
-	handled, err := openSignInPage(cfg, "Example Browser", deps)
+	handled, err := openSignInPage(cfg, "Example Browser", consoleHome, deps)
 	require.NoError(t, err)
 	require.True(t, handled)
 	require.Equal(t, []string{cfg.ServerURL() + "/console/login?next=%2Fconsole%2F|Example Browser"}, opened)
@@ -300,23 +300,23 @@ func TestConsoleOpen_PasskeySignInOpensTheSignInPage(t *testing.T) {
 	client := config.Defaults()
 	client.Addr = "127.0.0.1:9123"
 	opened = nil
-	handled, err = openSignInPage(client, "", deps)
+	handled, err = openSignInPage(client, "", consoleHome, deps)
 	require.NoError(t, err)
 	require.False(t, handled, "the key's sign-in: the pre-signed page, as before")
 	require.Empty(t, opened)
 	deps.signsIn = func(config.Config) bool { return true }
-	handled, err = openSignInPage(client, "", deps)
+	handled, err = openSignInPage(client, "", consoleHome, deps)
 	require.NoError(t, err)
 	require.True(t, handled)
 	require.Len(t, opened, 1)
 
 	deps.reachable = func(string) bool { return false }
-	handled, err = openSignInPage(cfg, "", deps)
+	handled, err = openSignInPage(cfg, "", consoleHome, deps)
 	require.True(t, handled)
 	require.ErrorContains(t, err, "console not reachable")
 	deps.reachable = func(string) bool { return true }
 	deps.open = func(string, string) error { return errors.New("no browser here") }
-	_, err = openSignInPage(cfg, "", deps)
+	_, err = openSignInPage(cfg, "", consoleHome, deps)
 	require.ErrorContains(t, err, "no browser here")
 }
 

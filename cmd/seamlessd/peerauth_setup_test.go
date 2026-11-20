@@ -794,3 +794,15 @@ func TestPeerAuthSetup_DoctorRow(t *testing.T) {
 	rows = pasStatusDoctor(func(string) ([]byte, error) { return []byte("junk\n"), nil })
 	require.Equal(t, statusWarn, rows[0].status)
 }
+
+// The move ends with the command that opens the console on its Approvers
+// page, through the console's own config: the owner's is a socket client's now,
+// which console-open refuses.
+func TestPeerAuthSetup_EndsWithTheApproversPageCommand(t *testing.T) {
+	f := newPasFake(t, "darwin")
+	require.NoError(t, pasSetup(context.Background(), f.h, pasOptions{yes: true}))
+	want := "SEAMLESS_CONFIG=" + shellcmd.PosixArg(pasConsoleConfig(*f.st().plan)) + " seamlessd console-open --path /console/approvers"
+	require.Contains(t, f.out(), want)
+	_, err := consoleOpenPath("/console/approvers")
+	require.NoError(t, err, "the page it names is one console-open opens")
+}

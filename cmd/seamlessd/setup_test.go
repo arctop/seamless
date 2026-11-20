@@ -136,6 +136,12 @@ func setupTestRun(t *testing.T, goos string, environ []string, facts setupFacts,
 			t.Fatal("setup wrote a Server config on a run whose test arranged none")
 			return "", nil
 		},
+		// The move to peer_auth runs only where a test arranges it.
+		peerAuthSetup: func(args []string) error {
+			t.Helper()
+			t.Fatalf("setup ran seamlessd %v on a run whose test arranged none", args)
+			return nil
+		},
 	}
 	return r, out, &calls
 }
@@ -658,10 +664,10 @@ func TestSetupHandOff_SaysWhatSetupDoesNotDoYet(t *testing.T) {
 		none bool
 	}{
 		{name: "a first Server: the address, the import and the closing are setup's own now", st: setupState{kind: setupServer, role: config.RoleServer, answer: setupAsked},
-			want: []string{"by hand", "setup does not do this Server step yet:", "peer-auth/#move-an-existing-install-over",
+			want: []string{"by hand", "setup does not do this Server step unless asked:", "peer-auth/#move-an-existing-install-over",
 				"This Server serves no other computer yet"}},
 		{name: "a first Standalone: locked projects", st: setupState{kind: setupStandalone, role: config.RoleServer, answer: setupFromEnv},
-			want: []string{"setup does not do this Standalone step yet:", "locked"}},
+			want: []string{"setup does not do this Standalone step unless asked:", "locked"}},
 		{name: "a first Standalone on Windows: no locked projects there, and the import is built", goos: "windows",
 			st: setupState{kind: setupStandalone, role: config.RoleServer, answer: setupAsked}, none: true},
 		{name: "a Client of its Server's key: nothing by hand, nothing to pair", st: setupState{kind: setupClient, role: config.RoleClient,
@@ -748,7 +754,7 @@ func TestSetupForInstallerAndFinish(t *testing.T) {
 			return cfg, nil
 		}
 		require.NoError(t, setupFinish(r, path))
-		require.Contains(t, out.String(), "setup does not do this Server step yet:")
+		require.Contains(t, out.String(), "setup does not do this Server step unless asked:")
 		require.Contains(t, out.String(), "To connect another computer to this server:")
 		require.Contains(t, out.String(), "Address:                 https://"+setupAddrDomain+":8081")
 	}
@@ -846,7 +852,7 @@ func TestSetupProtocol_TheInstallersSpeakIt(t *testing.T) {
 	require.Contains(t, string(ps), "$line.StartsWith('role='")
 	require.Contains(t, string(ps), "$line.StartsWith('server_url='")
 	for _, knob := range []string{setupKnobKind, setupKnobPairCode, setupKnobFingerprint, setupKnobPairAs, setupKnobImport, setupKnobImportLocks,
-		setupKnobServerName, setupKnobTLSCert, setupKnobTLSKey} {
+		setupKnobServerName, setupKnobTLSCert, setupKnobTLSKey, setupKnobPeerAuth} {
 		require.Contains(t, string(sh), "${"+knob+":-}", "docs/install looks for %s", knob)
 		// \b: $env:SEAMLESS_IMPORT must not pass on $env:SEAMLESS_IMPORT_LOCKS alone.
 		require.Regexp(t, `\$env:`+knob+`\b`, string(ps), "docs/install.ps1 looks for %s", knob)

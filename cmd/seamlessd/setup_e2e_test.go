@@ -122,6 +122,15 @@ func TestSetupInstaller_RealSetup(t *testing.T) {
 		installer := filepath.Join("..", "..", "docs", "install")
 		scripted := []string{"SETUP_E2E_SETUP=real", "SEAMLESS_VERSION=" + setupE2EVersion, "SEAMLESS_CLIENT=claude", "SEAMLESS_NO_SERVICE=1"}
 
+		t.Run("SEAMLESS_PEER_AUTH with SEAMLESS_NO_SERVICE stops the install: no service to move", func(t *testing.T) {
+			w := newSetupInstallerWorld(t, shell, installer)
+			out, err := w.run(t, append(scripted, "SEAMLESS_PEER_AUTH=1")...)
+			require.Error(t, err, out)
+			require.Contains(t, out, "SEAMLESS_PEER_AUTH: locked projects move the per-user service to a system one, and SEAMLESS_NO_SERVICE installs none")
+			require.Contains(t, out, "seamlessd setup stopped the install; nothing was installed")
+			require.NoFileExists(t, filepath.Join(w.installDir, "seamlessd"))
+		})
+
 		t.Run("SEAMLESS_SETUP=server alone: the address it needs stops the install", func(t *testing.T) {
 			w := newSetupInstallerWorld(t, shell, installer)
 			out, err := w.run(t, append(scripted, "SEAMLESS_SETUP=server")...)
@@ -155,7 +164,7 @@ func TestSetupInstaller_RealSetup(t *testing.T) {
 			require.Contains(t, out, "Certificate fingerprint: "+fp)
 			require.Greater(t, strings.Index(out, "To connect another computer"), strings.Index(out, "skipped (SEAMLESS_NO_SERVICE)"),
 				"the closing ends the install")
-			require.Contains(t, out, "setup does not do this Server step yet:")
+			require.Contains(t, out, "setup does not do this Server step unless asked:")
 		})
 
 		t.Run("SEAMLESS_SETUP=client with the existing client knobs", func(t *testing.T) {
@@ -240,7 +249,7 @@ func TestSetupInstaller_Import(t *testing.T) {
 			require.Contains(t, out, "imported     1 memory, 1 note")
 			require.Less(t, strings.Index(out, "imported "), strings.Index(out, "installed "), "the backup is in place before anything is installed")
 			require.Contains(t, w.calls(t), w.hooksCall("claude"))
-			require.Contains(t, out, "setup does not do this Standalone step yet:", "locked projects close the install, by hand")
+			require.Contains(t, out, "setup does not do this Standalone step unless asked:", "locked projects close the install, by hand")
 			require.NotContains(t, out, "seamlessd restore")
 		})
 

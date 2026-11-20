@@ -304,3 +304,31 @@ func TestConsoleOpenSignIn_Refusals(t *testing.T) {
 		require.ErrorContains(t, runConsoleOpen(args), "--sign-in takes only --code")
 	}
 }
+
+// --path lands on a console page, by the rule the login form's next follows:
+// anything the console would replace with its home, or a browser would
+// rewrite into another path or site, is refused up front instead.
+func TestConsoleOpenPath_OnlyAConsolePage(t *testing.T) {
+	for _, ok := range []string{"", "/console/", "/console/approvers", "/console/settings?s=updates", "/console/projects/demo#isolation"} {
+		got, err := consoleOpenPath(ok)
+		require.NoError(t, err, ok)
+		if ok == "" {
+			require.Equal(t, "/console/", got)
+		} else {
+			require.Equal(t, ok, got)
+		}
+	}
+	for _, bad := range []string{"approvers", "/console", "/other", "//evil.example/console/", "/console//evil.example",
+		"https://evil.example/console/", "/console/../logout", "/console/./x", "/console/a\\b", "/console/a b", "/console/a\nb"} {
+		_, err := consoleOpenPath(bad)
+		require.ErrorContains(t, err, "is not a console page", bad)
+	}
+
+	page, err := renderConsoleLoginPageAt("http://127.0.0.1:8081", "k", "/console/approvers")
+	require.NoError(t, err)
+	require.Contains(t, page, `name="next" value="/console/approvers"`)
+	got, ok := consoleSignInPage(config.Config{Console: config.Console{SignIn: "passkey"}}, "http://127.0.0.1:8081", "/console/approvers",
+		func(config.Config) bool { return false })
+	require.True(t, ok)
+	require.Equal(t, "http://127.0.0.1:8081/console/login?next=%2Fconsole%2Fapprovers", got)
+}

@@ -74,6 +74,9 @@
 #                                     the backup's locked projects when no
 #                                     passkey can open them here (without it, it
 #                                     stops and says why)
+#   $env:SEAMLESS_PEER_AUTH           locked projects (peer_auth) run on macOS
+#                                     and Linux only: setup refuses it on
+#                                     Windows, saying why
 #   $env:SEAMLESS_SERVER_NAME         the name the other computers reach a
 #   $env:SEAMLESS_TLS_CERT            server at, and its certificate and key:
 #   $env:SEAMLESS_TLS_KEY             answers for a server's setup, which is
@@ -661,7 +664,8 @@ function Install-Binaries {
 # script has always given them, but they alone never make it run.
 function Test-SetupKnobs {
     return [bool]($env:SEAMLESS_SETUP -or $env:SEAMLESS_PAIR_CODE -or $env:SEAMLESS_SERVER_FINGERPRINT -or $env:SEAMLESS_PAIR_AS -or
-        $env:SEAMLESS_IMPORT -or $env:SEAMLESS_IMPORT_LOCKS -or $env:SEAMLESS_SERVER_NAME -or $env:SEAMLESS_TLS_CERT -or $env:SEAMLESS_TLS_KEY)
+        $env:SEAMLESS_IMPORT -or $env:SEAMLESS_IMPORT_LOCKS -or $env:SEAMLESS_SERVER_NAME -or $env:SEAMLESS_TLS_CERT -or $env:SEAMLESS_TLS_KEY -or
+        $env:SEAMLESS_PEER_AUTH)
 }
 
 # Resolve-ImportPath: SEAMLESS_IMPORT names the backup a first install starts
@@ -755,7 +759,7 @@ function Invoke-SetupFront {
     if (-not $probe.Contains($SetupProtocol)) {
         if ($knobs) {
             if (-not $probe.Trim()) { Die "could not run $fresh to ask seamlessd setup; nothing was installed" }
-            Die "seamless $Version predates seamlessd setup, which reads SEAMLESS_SETUP, SEAMLESS_PAIR_CODE, SEAMLESS_SERVER_FINGERPRINT, SEAMLESS_PAIR_AS, SEAMLESS_IMPORT, SEAMLESS_IMPORT_LOCKS, SEAMLESS_SERVER_NAME, SEAMLESS_TLS_CERT and SEAMLESS_TLS_KEY; unset them, or drop SEAMLESS_VERSION to get the latest"
+            Die "seamless $Version predates seamlessd setup, which reads SEAMLESS_SETUP, SEAMLESS_PAIR_CODE, SEAMLESS_SERVER_FINGERPRINT, SEAMLESS_PAIR_AS, SEAMLESS_IMPORT, SEAMLESS_IMPORT_LOCKS, SEAMLESS_SERVER_NAME, SEAMLESS_TLS_CERT, SEAMLESS_TLS_KEY and SEAMLESS_PEER_AUTH; unset them, or drop SEAMLESS_VERSION to get the latest"
         }
         return
     }
