@@ -68,6 +68,9 @@ func (s *Server) validateMiddleware(next mcpserver.ToolHandlerFunc) mcpserver.To
 		if err != nil {
 			return errResult(req.Params.Name, err)
 		}
+		if raw, err = rewriteArgs(req.Params.Name, raw); err != nil {
+			return errResult(req.Params.Name, err)
+		}
 		normalized, err := normalizeArgs(schema, raw)
 		if err != nil {
 			return errResult(req.Params.Name, err)

@@ -171,3 +171,58 @@ func TestRecall_BrowseRecordsExposureNotDemand(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, res.IsError)
 }
+
+// Every recall hit names its item type under "kind" (note, task, ...), so an
+// agent sends kind=note to search notes. recall reads that as scope=notes instead
+// of refusing it as an unknown memory kind (the gardener's recurring tool error
+// 01M7X4PQXCZ0ZEKDARZJ9ZJ76V), and refuses it only where a scope would be a
+// guess: against a contradicting scope, or with no query to search for.
+func TestRecall_HitKindReadsAsItsScope(t *testing.T) {
+	ctx := context.Background()
+	url, db := newServer(t)
+	cli := dialClient(t, ctx, url, testKey)
+
+	callJSON(t, ctx, cli, "session_start", map[string]any{"cwd": "/work/demo"})
+	callJSON(t, ctx, cli, "memory_write", map[string]any{
+		"name": "ledger-rule", "kind": "gotcha",
+		"description": "ledger reconciliation order", "body": "ledger reconciliation\n",
+	})
+	callJSON(t, ctx, cli, "notes_create", map[string]any{"title": "ledger reconciliation design", "body": "ledger reconciliation\n"})
+	callJSON(t, ctx, cli, "tasks_add", map[string]any{"title": "ledger reconciliation fix", "body": "ledger reconciliation\n"})
+
+	kindsOf := func(rec map[string]any) []string {
+		var out []string
+		for _, h := range rec["hits"].([]any) {
+			out = append(out, h.(map[string]any)["kind"].(string))
+		}
+		return out
+	}
+	all := kindsOf(callJSON(t, ctx, cli, "recall", map[string]any{"query": "ledger reconciliation"}))
+	require.ElementsMatch(t, []string{"memory", "note", "task"}, all, "the unfiltered recall sees all three")
+
+	for _, kind := range []string{"note", "task", "memory"} {
+		got := kindsOf(callJSON(t, ctx, cli, "recall", map[string]any{"query": "ledger reconciliation", "kind": kind}))
+		require.Equal(t, []string{kind}, got, "kind=%s searches only %s hits", kind, kind)
+	}
+
+	// A miss under the rewrite records the scope it searched, not a kind.
+	before := len(missEvents(t, db))
+	require.Empty(t, callJSON(t, ctx, cli, "recall", map[string]any{"query": "nothing like this", "kind": "session"})["hits"])
+	misses := missEvents(t, db)
+	require.Len(t, misses, before+1)
+	require.Equal(t, "sessions", misses[len(misses)-1]["scope"])
+	require.NotContains(t, misses[len(misses)-1], "kind")
+
+	isErr, txt := callErr(t, ctx, cli, "recall", map[string]any{"query": "ledger", "kind": "note", "scope": "tasks"})
+	require.True(t, isErr)
+	require.Contains(t, txt, `kind "note" selects scope notes, but scope is tasks`)
+
+	isErr, txt = callErr(t, ctx, cli, "recall", map[string]any{"kind": "note"})
+	require.True(t, isErr)
+	require.Contains(t, txt, "pass scope=notes with a query")
+
+	// A genuinely unknown kind is still refused with the memory kinds named.
+	isErr, txt = callErr(t, ctx, cli, "recall", map[string]any{"query": "ledger", "kind": "notez"})
+	require.True(t, isErr)
+	require.Contains(t, txt, "valid values are constraint, convention")
+}

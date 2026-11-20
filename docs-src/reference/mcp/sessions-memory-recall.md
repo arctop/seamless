@@ -160,6 +160,13 @@ It implies memories-only: combining it with `scope=notes` is rejected as
 contradictory rather than returning a misleading empty result, and a
 kind-filtered miss still counts as memory-wanted demand.
 
+Each hit also names its item type under `kind` (`memory`, `note`, `task`,
+`trial`, `session`), so `kind` given one of those words, or a scope word such
+as `notes`, is read as the scope that selects them: `kind=note` searches
+`scope=notes`. Those words are not memory kinds, so nothing is guessed. Such
+a call is still refused when it names a different scope (`kind=note
+scope=tasks`) or carries no query, since only a memory kind can be browsed.
+
 With `kind` set, `query` becomes optional: a kind alone is the **browse mode**
 behind briefing hints like `recall kind=convention` - the scope's active
 memories of that kind, listed newest-first under the same limit and token

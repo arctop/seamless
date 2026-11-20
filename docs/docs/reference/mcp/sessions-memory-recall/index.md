@@ -148,6 +148,13 @@ It implies memories-only: combining it with `scope=notes` is rejected as
 contradictory rather than returning a misleading empty result, and a
 kind-filtered miss still counts as memory-wanted demand.
 
+Each hit also names its item type under `kind` (`memory`, `note`, `task`,
+`trial`, `session`), so `kind` given one of those words, or a scope word such
+as `notes`, is read as the scope that selects them: `kind=note` searches
+`scope=notes`. Those words are not memory kinds, so nothing is guessed. Such
+a call is still refused when it names a different scope (`kind=note
+scope=tasks`) or carries no query, since only a memory kind can be browsed.
+
 With `kind` set, `query` becomes optional: a kind alone is the **browse mode**
 behind briefing hints like `recall kind=convention` - the scope's active
 memories of that kind, listed newest-first under the same limit and token
@@ -275,7 +282,7 @@ Search durable knowledge (memories, notes) and the work record (tasks, trials, s
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `kind` | string | no | only memories of this frontmatter kind (e.g. convention); implies memories-only, so any scope that excludes memories is rejected; with no query, lists the kind newest-first. One of: `constraint`, `convention`, `runbook`, `protocol`, `gotcha`, `decision`, `refuted`, `reference`, `stage`. |
+| `kind` | string | no | only memories of this frontmatter kind (e.g. convention), not a hit's item type: scope selects notes, tasks, trials or sessions; implies memories-only, so any scope that excludes memories is rejected; with no query, lists the kind newest-first. One of: `constraint`, `convention`, `runbook`, `protocol`, `gotcha`, `decision`, `refuted`, `reference`, `stage`. |
 | `limit` | integer | no | maximum results (default 10, max 100) |
 | `project` | string | no | project slug; defaults to the bound session's project |
 | `query` | string | no | what you are looking for; required unless kind is set (kind alone lists that kind newest-first) |

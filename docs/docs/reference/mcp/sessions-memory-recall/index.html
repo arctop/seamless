@@ -394,6 +394,11 @@ gardener's <a href="../../../concepts/gardener/#what-it-looks-for">memory-wanted
 It implies memories-only: combining it with <code>scope=notes</code> is rejected as
 contradictory rather than returning a misleading empty result, and a
 kind-filtered miss still counts as memory-wanted demand.</p>
+<p>Each hit also names its item type under <code>kind</code> (<code>memory</code>, <code>note</code>, <code>task</code>,
+<code>trial</code>, <code>session</code>), so <code>kind</code> given one of those words, or a scope word such
+as <code>notes</code>, is read as the scope that selects them: <code>kind=note</code> searches
+<code>scope=notes</code>. Those words are not memory kinds, so nothing is guessed. Such
+a call is still refused when it names a different scope (<code>kind=note scope=tasks</code>) or carries no query, since only a memory kind can be browsed.</p>
 <p>With <code>kind</code> set, <code>query</code> becomes optional: a kind alone is the <strong>browse mode</strong>
 behind briefing hints like <code>recall kind=convention</code> - the scope's active
 memories of that kind, listed newest-first under the same limit and token
@@ -846,7 +851,7 @@ is surfaced instead of hidden - the two cases are deliberately not treated alike
 <td><code>kind</code></td>
 <td>string</td>
 <td>no</td>
-<td>only memories of this frontmatter kind (e.g. convention); implies memories-only, so any scope that excludes memories is rejected; with no query, lists the kind newest-first. One of: <code>constraint</code>, <code>convention</code>, <code>runbook</code>, <code>protocol</code>, <code>gotcha</code>, <code>decision</code>, <code>refuted</code>, <code>reference</code>, <code>stage</code>.</td>
+<td>only memories of this frontmatter kind (e.g. convention), not a hit's item type: scope selects notes, tasks, trials or sessions; implies memories-only, so any scope that excludes memories is rejected; with no query, lists the kind newest-first. One of: <code>constraint</code>, <code>convention</code>, <code>runbook</code>, <code>protocol</code>, <code>gotcha</code>, <code>decision</code>, <code>refuted</code>, <code>reference</code>, <code>stage</code>.</td>
 </tr>
 <tr>
 <td><code>limit</code></td>

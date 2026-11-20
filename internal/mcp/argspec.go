@@ -117,6 +117,73 @@ func dropRetired(tool string, raw map[string]any) (map[string]any, error) {
 	return out, nil
 }
 
+// recallKindScopes maps the item kinds recall's hits carry -- every hit says
+// "kind":"note" (or memory, task, trial, session) -- to the scope that selects
+// them, and each scope word to itself. recall's own kind parameter takes only a
+// memory's frontmatter kind, but an agent that has just read a hit labelled
+// kind note sends kind=note to search notes: the tool's output taught it that
+// word under that name. The two vocabularies are disjoint
+// (TestRecallKindScopes_DisjointFromMemoryKinds), so the value names its scope
+// without a guess, and reading it as that scope loses nothing. The gardener's
+// tool-error pass found agents sending kind=note, task and session across
+// sessions, each one a refused call.
+var recallKindScopes = map[string]string{
+	core.ItemKindMemory: "memories", "memories": "memories",
+	core.ItemKindNote: "notes", "notes": "notes",
+	core.ItemKindTask: "tasks", "tasks": "tasks",
+	core.ItemKindTrial: "trials", "trials": "trials",
+	core.ItemKindSession: "sessions", "sessions": "sessions",
+}
+
+// recallKindAsScope rewrites recall's kind, when it names an item kind or a
+// scope rather than a memory kind, into the scope it selects (see
+// recallKindScopes). It refuses rather than picks when that scope contradicts
+// an explicit one (only all, the default, and the same scope agree with it),
+// and when no query rides along: kind alone browses a memory kind, and a scope
+// has no browse to read it as. raw is not mutated (see dropRetired).
+func recallKindAsScope(raw map[string]any) (map[string]any, error) {
+	kind, ok := raw["kind"].(string)
+	if !ok {
+		return raw, nil
+	}
+	scope, ok := recallKindScopes[kind]
+	if !ok {
+		return raw, nil
+	}
+	if q, ok := raw["query"]; !ok || q == "" {
+		kinds := make([]string, len(core.MemoryKinds))
+		for i, k := range core.MemoryKinds {
+			kinds[i] = string(k)
+		}
+		return nil, fmt.Errorf("invalid kind %q: kind with no query lists one memory kind (%s); to search %s, pass scope=%s with a query",
+			kind, strings.Join(kinds, ", "), scope, scope)
+	}
+	if s, present := raw["scope"]; present && s != "" && s != "all" && s != scope {
+		return nil, fmt.Errorf("conflicting values for scope: kind %q selects scope %s, but scope is %v; pass scope alone",
+			kind, scope, s)
+	}
+	out := maps.Clone(raw)
+	delete(out, "kind")
+	out["scope"] = scope
+	return out, nil
+}
+
+// argRewrites are per-tool rewrites applied before normalizeArgs, each for a
+// value the tool's own vocabulary teaches agents to send under the wrong
+// parameter. A rewrite must have exactly one reading of the value it rewrites;
+// a value it cannot read without a guess is left for normalizeArgs to refuse.
+var argRewrites = map[string]func(map[string]any) (map[string]any, error){
+	"recall": recallKindAsScope,
+}
+
+// rewriteArgs applies tool's rewrite (see argRewrites), if it has one.
+func rewriteArgs(tool string, raw map[string]any) (map[string]any, error) {
+	if rw, ok := argRewrites[tool]; ok {
+		return rw(raw)
+	}
+	return raw, nil
+}
+
 // aliasesFor returns the alternate names accepted for a canonical parameter.
 func aliasesFor(prop string) []string {
 	return aliasGroups[prop]

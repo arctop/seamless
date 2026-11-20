@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"maps"
 	"math"
 	"testing"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -601,4 +603,89 @@ func TestEnumOf_DerivesFromCanonicalSets(t *testing.T) {
 	}
 
 	require.Contains(t, store.ProposalKinds, "abandon_plan", "the drift this derivation exists to fix")
+}
+
+// recall's kind takes a memory kind, and recallKindScopes reads an item kind or
+// a scope sent there as the scope it selects. That reading is a guess unless the
+// vocabularies are disjoint, and it is a dead end unless every key lands on a
+// real scope: a new memory kind named like an item kind, or a new item kind
+// without an entry, fails here first.
+func TestRecallKindScopes_DisjointFromMemoryKinds(t *testing.T) {
+	for k, scope := range recallKindScopes {
+		require.False(t, core.MemoryKind(k).Valid(), "%q is a memory kind: kind=%s must keep filtering memories", k, k)
+		require.Contains(t, retrieve.RecallScopes, scope, "%q maps to %q, which is not a recall scope", k, scope)
+	}
+	for _, item := range append(append([]string{}, core.KnowledgeItemKinds...), core.WorkItemKinds...) {
+		require.Contains(t, recallKindScopes, item, "recall hits carry kind %q, so kind=%s must read as its scope", item, item)
+	}
+	for _, scope := range retrieve.RecallScopes {
+		if scope == "all" {
+			continue
+		}
+		require.Equal(t, scope, recallKindScopes[scope], "scope word %q sent as kind must read as itself", scope)
+	}
+}
+
+func TestRecallKindAsScope(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		raw     map[string]any
+		want    map[string]any
+		wantErr string
+	}{
+		{"an item kind becomes its scope",
+			map[string]any{"query": "q", "kind": "note"},
+			map[string]any{"query": "q", "scope": "notes"}, ""},
+		{"a session hit's kind searches sessions",
+			map[string]any{"query": "q", "kind": "session", "limit": float64(3)},
+			map[string]any{"query": "q", "scope": "sessions", "limit": float64(3)}, ""},
+		{"a scope word sent as kind",
+			map[string]any{"query": "q", "kind": "tasks"},
+			map[string]any{"query": "q", "scope": "tasks"}, ""},
+		{"scope all agrees: the kind narrows it",
+			map[string]any{"query": "q", "kind": "task", "scope": "all"},
+			map[string]any{"query": "q", "scope": "tasks"}, ""},
+		{"the same scope agrees",
+			map[string]any{"query": "q", "kind": "trial", "scope": "trials"},
+			map[string]any{"query": "q", "scope": "trials"}, ""},
+		{"an empty scope is absent",
+			map[string]any{"query": "q", "kind": "memory", "scope": ""},
+			map[string]any{"query": "q", "scope": "memories"}, ""},
+		{"a memory kind is left alone",
+			map[string]any{"query": "q", "kind": "convention", "scope": "notes"},
+			map[string]any{"query": "q", "kind": "convention", "scope": "notes"}, ""},
+		{"an unknown kind is left for the enum to refuse",
+			map[string]any{"query": "q", "kind": "notez"},
+			map[string]any{"query": "q", "kind": "notez"}, ""},
+		{"a non-string kind is left for coercion to refuse",
+			map[string]any{"query": "q", "kind": float64(1)},
+			map[string]any{"query": "q", "kind": float64(1)}, ""},
+		{"a contradicting scope is refused, not picked",
+			map[string]any{"query": "q", "kind": "note", "scope": "tasks"},
+			nil, `conflicting values for scope: kind "note" selects scope notes, but scope is tasks; pass scope alone`},
+		{"no query has no browse to read it as",
+			map[string]any{"kind": "task"},
+			nil, `invalid kind "task": kind with no query lists one memory kind (constraint, convention, runbook, protocol, gotcha, decision, refuted, reference, stage); to search tasks, pass scope=tasks with a query`},
+		{"an empty query is no query",
+			map[string]any{"query": "", "kind": "note"},
+			nil, "to search notes, pass scope=notes with a query"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before := maps.Clone(tc.raw)
+			got, err := rewriteArgs("recall", tc.raw)
+			require.Equal(t, before, tc.raw, "the raw arguments are the interactions feed's evidence and must not be mutated")
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+
+	// Only recall is rewritten: kind=note on another tool is that tool's to refuse.
+	raw := map[string]any{"kind": "note"}
+	got, err := rewriteArgs("memory_write", raw)
+	require.NoError(t, err)
+	require.Equal(t, raw, got)
 }
