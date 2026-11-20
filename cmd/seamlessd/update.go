@@ -512,7 +512,7 @@ func (p attendedPlan) printRows(w io.Writer, d updaterDeps, cfg config.Config) {
 			fieldRowTo(w, "owner", dim(fmt.Sprintf("checksums.txt.sshsig, by a key %s lists", tildePath(cfg.Update.ReleaseSigners))))
 		}
 		fieldRowTo(w, "install", tildePath(p.dir)+dim(" (seamlessd and seam swapped in place; the service starts the daemon again)"))
-		fieldRowTo(w, "backup", dim(tildePath(filepath.Join(backupDir(cfg.DataDir), backupName(p.from, d.now())))))
+		fieldRowTo(w, "backup", dim(tildePath(filepath.Join(backupDir(cfg.DataDir), backupNamePattern(p.from)))))
 		fieldRowTo(w, "confirm", dim(fmt.Sprintf("v%s must then serve, or v%s's binaries go back", p.target, p.from)))
 		return
 	}
@@ -532,8 +532,7 @@ func (p attendedPlan) printRows(w io.Writer, d updaterDeps, cfg config.Config) {
 	}
 	if p.managed {
 		fieldRowTo(w, "install", tildePath(p.dir))
-		at := d.now()
-		fieldRowTo(w, "backup", dim(tildePath(filepath.Join(backupDir(cfg.DataDir), backupName(p.from, at)))))
+		fieldRowTo(w, "backup", dim(tildePath(filepath.Join(backupDir(cfg.DataDir), backupNamePattern(p.from)))))
 		fieldRowTo(w, "confirm", dim(fmt.Sprintf("v%s must then serve, or v%s is reinstalled", p.target, p.from)))
 	} else {
 		fieldRowTo(w, "backup", yellow("none")+dim(" -- "+p.reason+"; the installer runs without a backup, a rollback or a record"))

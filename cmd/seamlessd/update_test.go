@@ -358,12 +358,22 @@ func TestAttendedUpdate_DryRunTouchesNothing(t *testing.T) {
 
 	out, err := runAttended(t, w, w.deps(nil), "--dry-run")
 	require.NoError(t, err)
-	for _, want := range []string{"(dry run)", "v0.7.3", "/releases/download/v0.7.3/install", "pre-update-v0.7.2-",
+	for _, want := range []string{"(dry run)", "v0.7.3", "/releases/download/v0.7.3/install", "pre-update-v0.7.2-<UTC time>.tar.gz",
 		"SEAMLESS_VERSION=0.7.3 sh", "no changes made"} {
 		require.Contains(t, out, want)
 	}
 	require.Empty(t, w.installs)
 	requireNothingRecorded(t, w)
+}
+
+// The plan's backup row names no stamp of its own: the backup is stamped when
+// it starts, seconds after the plan prints, so a plan-time stamp named a file
+// that never existed (seen live 2026-11-20: 205347Z planned, 205357Z written).
+func TestBackupNamePattern_LeavesTheStampToTheBackup(t *testing.T) {
+	from := mustVersion(t, "0.10.3")
+	require.Equal(t, "pre-update-v0.10.3-<UTC time>.tar.gz", backupNamePattern(from))
+	_, ok := backupTime(backupNamePattern(from))
+	require.False(t, ok, "the pattern is never mistaken for a backup the updater wrote")
 }
 
 // --url keeps its escape hatch: TLS only, run as is, nothing recorded.

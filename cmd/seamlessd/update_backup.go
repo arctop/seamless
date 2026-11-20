@@ -67,6 +67,15 @@ func backupName(from update.Version, at time.Time) string {
 	return backupPrefix + from.String() + "-" + at.UTC().Format(backupStamp) + backupSuffix
 }
 
+// backupNamePattern is the name a backup from from will carry, its stamp left
+// as a placeholder. The plan prints it before anything runs, and the stamp is
+// the moment the backup starts, after the download and the checks: a name
+// stamped at the plan's time was one no backup ever had. The backup's own row
+// then prints the real name.
+func backupNamePattern(from update.Version) string {
+	return backupPrefix + from.String() + "-<UTC time>" + backupSuffix
+}
+
 // backupTime parses a name backupName wrote, ok false for any other file.
 func backupTime(name string) (time.Time, bool) {
 	rest, ok := strings.CutPrefix(name, backupPrefix)
