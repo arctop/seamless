@@ -26,7 +26,7 @@ GOLANGCI_INSTALL := github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOL
 # appends still pins the exact build.
 COMMIT    := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 BUILDDATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
-VERSION   := $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || true)
+VERSION   := $(shell git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null | sed 's/^v//' || true)
 VERSION   := $(if $(VERSION),$(VERSION),0.0.0-dev)
 LDFLAGS   := -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.buildDate=$(BUILDDATE)
 
