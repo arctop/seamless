@@ -1,0 +1,248 @@
+{
+ "plan": {
+  "slug": "plan-background-update-check-automatic-updates-claude-code-style",
+  "title": "Plan: Background update check + automatic updates (Claude Code-style)",
+  "status": "approved",
+  "iteration": 38,
+  "agents": 4,
+  "tasksDone": 37,
+  "tasksTotal": 38,
+  "tokenSessions": 11,
+  "updated": "2026-10-12T22:24:10.930718Z",
+  "basename": "temporal-yawning-cupcake",
+  "attached": [
+   {
+    "slug": "2-15-docs-inputs-from-the-cc-095a86b1-fanout-wave-2-13-wiring-shared-wording-2-1",
+    "title": "2.15 docs inputs from the cc/095a86b1 fanout wave (2.13 wiring, shared wording, 2.14 os-smoke CI)",
+    "agent": false
+   },
+   {
+    "slug": "2-15-docs-inputs-from-the-cc-90aaef39-fanout-wave-2-09-2-12-windows-restart-linu",
+    "title": "2.15 docs inputs from the cc/90aaef39 fanout wave (2.09, 2.12, Windows restart, Linux spike)",
+    "agent": false
+   },
+   {
+    "slug": "windows-task-scheduler-spike-harness-for-the-detached-updater-2-01-recipe-key-co",
+    "title": "Windows Task Scheduler spike harness for the detached updater (2.01) -- recipe + key code",
+    "agent": false
+   },
+   {
+    "slug": "macos-launchd-spike-harness-for-the-detached-updater-2-01-recipe-source",
+    "title": "macOS launchd spike harness for the detached updater (2.01) -- recipe + source",
+    "agent": false
+   },
+   {
+    "slug": "cc-agent-a549ce5cfa793414a",
+    "title": "[Plan] You are reviewing and completing the APPLY-PATH design for a Claude-Code-style auto-update feature in Seamless (repo /Us",
+    "agent": true
+   },
+   {
+    "slug": "cc-agent-ae07a77f94577089a",
+    "title": "[Plan] You are completing the DAEMON-SIDE, TESTING and ROLLOUT design for a Claude-Code-style background version check + auto-u",
+    "agent": true
+   },
+   {
+    "slug": "cc-agent-a2afa077b79e5a256",
+    "title": "[Explore] Context: I'm planning an automatic version-check + auto-update feature for Seamless (Go daemon `seamlessd` + `seam` CLI,",
+    "agent": true
+   },
+   {
+    "slug": "cc-agent-a837ee9ff1f5d5ae8",
+    "title": "[Explore] Context: I'm planning an automatic version-check + auto-update feature for Seamless (Go daemon `seamlessd` + `seam` CLI,",
+    "agent": true
+   }
+  ]
+ },
+ "steps": [
+  {
+   "id": "01M4GMCCV79Y3C0Z7F3DA23WKF",
+   "title": "Implement plan: Plan: Background update check + automatic updates (Claude Code-style)",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMD7A86E1TVFVXJ0R20W8R",
+   "title": "1.01 cross-check target in make check (GOOS=darwin/windows go vet)",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMD7B37XZ7J9QP7J3XCQ30",
+   "title": "1.02 internal/update foundations: version, release Filter/Newest, GitHub fetcher, https helpers; update --check via the list",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMD7BNY5F3DH6PA0TMCKCA",
+   "title": "1.03 distribution stamp + install Detect + OS probes",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMD7C1HT1QVGEM45M5SAB9",
+   "title": "1.04 config update block (check, check_interval), config.Duration, update_config override, example, docsgen",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMD7CGBJRKGBRXFDNAXWGM",
+   "title": "1.05 briefing update-notice slot (nil provider by default)",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMD7CW99V8Y60JMPJN2X2A",
+   "title": "2.01 OS spikes for the detached updater (macOS, Linux, Windows) as a research lab",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMD7D67ZBX7BNH76CJ2Z9F",
+   "title": "2.03 installer edits (role/server_url from config, NO_HOOKS, checksums pin, launchd reload, version-checked health, reorder) + knob contract test",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMD7DQ1DNAHGATJQ57NJRP",
+   "title": "2.05 seam mcp-proxy + seam hook dial-phase retry across a daemon restart",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMD7E1D4AYDNTR6BZTTZVD",
+   "title": "2.10 activity middleware (in-flight count + last activity)",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMDHBQ38N1J0674EQKVV58",
+   "title": "1.06 update state.json, Effective settings, Status + briefing notice text",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMDHCMTJV21Z5GKSXGJD0P",
+   "title": "2.04 release pipeline: checksums sigstore bundle, prerelease/skip_upload auto, post-release verify",
+   "status": "done"
+  },
+  {
+   "id": "01M4GME0TP0BSTKABV491WTMTY",
+   "title": "1.07 update Checker loop + update.available / update.applied events",
+   "status": "done"
+  },
+  {
+   "id": "01M4GME0VFHY59B44YMXG519P3",
+   "title": "1.08 console Settings: Updates section (status, toggles, locks, Check now)",
+   "status": "done"
+  },
+  {
+   "id": "01M4GME0W1SPHZCXVV36QQHXWB",
+   "title": "1.09 doctor updates row, update --check rows, seam version/status lines",
+   "status": "done"
+  },
+  {
+   "id": "01M4GME0WA9G3763FMDSARN25Z",
+   "title": "2.06 config auto / max_defer / min_age + Effective auto lock",
+   "status": "done"
+  },
+  {
+   "id": "01M4GME0WPTR1B3BJNWZ900V3N",
+   "title": "2.07 attempt / Spawner contract (attempt.json, attempts.jsonl)",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMEGR4F7BX4905J8P8QM34",
+   "title": "1.10 console chrome: health strip tone, 24h updated banner, event labels, update.available toast",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMEGSABBPMNAJJBX9495CC",
+   "title": "1.11 daemon wiring: update_wiring.go, listen-then-serve bind order, instance id, /healthz keys",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMEGSM57BT3H5TXKC4PD8S",
+   "title": "2.09 detach the updater per OS + uninstall teardown",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMEGSX79QMPW3A54V39DJF",
+   "title": "2.11 Decide / Target / fold / holds / blocks, apply loop, ApplyNow, Codex hook hash",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMEZXW09CJSP0QZS76YV1Q",
+   "title": "1.12 Phase 1 docs, CLAUDE.md/AGENTS.md, memories",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMEZYTA8XQ5MT7HV7KVC6A",
+   "title": "2.02 housekeeping: install-hooks OpenExisting, data-dir flock, schema-newer WARN, archive TmpDir, skills.Delivered",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMEZZG1GRHYFMMEWBY817K",
+   "title": "2.08 updater engine: seamlessd update --auto --attempt (verify, rollback preflight, backup, run installer, confirm, rollback) + manual path",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMF006AYK9JGCW04QESVX6",
+   "title": "2.14 os-smoke CI job (macos-latest, windows-latest)",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMFBTK1D934E678HB4AKM3",
+   "title": "gate: cut a Phase 1 release and smoke it on a release install",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMFBVRD6K0G4KN9W69D3QZ",
+   "title": "2.12 console + doctor Phase 2 controls (Auto toggle, Update now, Resume, wait reason, last attempt)",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMFBWBW4Z8114R50V2918G",
+   "title": "2.13 daemon wiring Phase 2 (activity middleware, LiveSessions, Spawner)",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMFHTCFJ0ZWWH2JZRSM58F",
+   "title": "2.15 Phase 2 docs, runbooks, AGENTS.md release-discipline rules",
+   "status": "done"
+  },
+  {
+   "id": "01M4GMFQ4BS6JHQ2PAZJJBKQNE",
+   "title": "2.16 live E2E of auto-update on macOS, Linux and Windows (needs releases vN and vN+1 carrying Phase 2)",
+   "status": "done"
+  },
+  {
+   "id": "01M4GVGFV5PJVT9ZPG8RKGWNSM",
+   "title": "seam hook: per-event dial-retry budget (5s per hook when the daemon is down for good)",
+   "status": "done"
+  },
+  {
+   "id": "01M4HAFE6QHTH6ZK4VTF4TNJ1C",
+   "title": "launchd reload: retry bootstrap every 0.1s, not 1s (docs/install + Makefile; ~0.9s per restart)",
+   "status": "done"
+  },
+  {
+   "id": "01M4HAFE73Y4V844VKGEY7GMVX",
+   "title": "owner decision: macOS shows a Background Items notice after every automatic update -- Developer ID-sign darwin binaries, or document it",
+   "status": "done"
+  },
+  {
+   "id": "01M4HCZR20Q34NZYNHJNVBAK6X",
+   "title": "Windows serviceControl restart races the old process: wait for the serve process to exit between schtasks /End and /Run",
+   "status": "done"
+  },
+  {
+   "id": "01M4HCZR2W47BZAA5FRNRS1HT5",
+   "title": "post-release (human): a Windows user checks for console / Windows Terminal windows from the Seamless task and an automatic update",
+   "status": "dropped"
+  },
+  {
+   "id": "01M4HK7KKPZVZ98NBSQYDJ4CSQ",
+   "title": "Share the automatic-update wording: export it from internal/update, drop the console and CLI copies",
+   "status": "done"
+  },
+  {
+   "id": "01M4HPJA1HP18P04EKKVTRKXDE",
+   "title": "Developer ID sign + notarize the darwin binaries in the release",
+   "status": "done"
+  },
+  {
+   "id": "01M4HV202NQJD92G1GB1NW80Y7",
+   "title": "Typed reason for the updater's gate refusals (attempt.Refusal), so surfaces can say \"restart the service\"",
+   "status": "done"
+  }
+ ]
+}

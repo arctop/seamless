@@ -1,0 +1,46 @@
+<seam-briefing>
+Seam project: seamless -- 64 memories (39 constraints, 18 conventions, 1 stage), 3 recent findings.
+LOCK seamless main: free
+Also live in this repository: cc/49e1eb9a-1483baf1bebb29e5 (idle 7 min)
+
+Constraints (binding for every session):
+- zsh-equals-expansion-breaks-bare-double-equals: The shell is zsh: any unquoted word starting with = is equals-expanded, so a bare == argument dies with "= not found". [agent-written]
+- […]
+- stay-on-current-branch-own-worktree-in-shared-repos: Commit and push on the branch you are on, main included; never create or switch branches unless asked; in shared repos work in a detached worktree [agent-written]
+- +36 more, equally binding -- memory_read name=<name> before working near one: console-mutation-follow-contract, console-unlock-begun-by-the-browser-it-opens, seamless-is-public-owner-language-optional-features, mcp-clients-refuse-redirects, […]
+
+Stages (world-state gates):
+- landing-redesign-awaiting-owner-review -- blocked, gate human [agent-written, session cc/a92390d5-aced1f16815f0bf5]
+(details: memory_read name=<stage>)
+
+Plans:
+- […]
+- search-visibility -- 15/16 done, 1 claimable, 0 in flight -- one step from shipped
+(steps: tasks_ready plan=<slug>; claim: tasks_claim id=<task id> session=<your Seam session>; attach work via the plan:<slug> tag)
+
+Conventions (project-local choices):
+- landing-page-gate-is-site-check: docs/index.html is hand-written: docs-check cannot see it, `make site-check` gates it (commands only, not prose). Edit the page, run site-check. [agent-written, session cc/09956706-55c6ae4ea8e4c864]
+- site-publishes-from-tags-via-actions: Since 2026-11-13 thereisnospoon.org deploys via Actions (pages.yml) only from a release's v* tag or an admin-only site-* tag; a main push changes… [agent-written]
+- owner-wants-exact-paste-ready-commands: When the owner must run something, hand exact, complete, paste-ready commands with full paths, never prose like "run ls -l on the two outboxes" [agent-written]
+(18 total, 3 shown -- recall kind=convention for the rest)
+
+Recent findings:
+- cc/a92390d5-aced1f16815f0bf5 (just now): (auto-harvested) The redesign is built and passing the repo's gates, but it is not committed, landed or live. It sits in a separate worktree for you to look at first: - **Preview:**…
+- cc/09956706-55c6ae4ea8e4c864 (1h): 2026-11-20 site and docs refresh, landed on main f6b2d83e..1cc95624 (8 commits); CI run 44815924611 green on every job, including Windows os-smoke and the install.ps1 pwsh parse. NOT LIVE YET: the…
+- sess/qwfb67qs (2h): 2026-11-20. This session held the claims on the four gardener error tasks […]
+
+Ready tasks (7):
+- Touch ID approval for console lock changes (follow-up to…
+- Future: make confidential and sealed projects locked by…
+- […]
+(full queue with ids: tasks_ready; claim: tasks_claim id=<id> session=<your Seam session>)
+
+Memories (seamless):
+- fanout-protocol-core: Fan-out protocol core: partition, prompts, co-tenant gates, landing and records for parallel subagents; load with the host-traps and repo annexes [agent-written]
+- site-identity-knowledge-sky: 2026-10-08 owner-directed redesign: public site identity is the "knowledge sky" (night sky / star atlas, Fraunces+Instrument Sans+Plex Mono)… [agent-written, session cc/09956706-55c6ae4ea8e4c864]
+- lima-macos-guest-for-live-update-tests: Throwaway macOS guest (Lima template:macos-26) for installer/update tests: hand-written /etc/kcpassword for a GUI session; VZ guests cannot sleep [agent-written, session cc/49e1eb9a-1483baf1bebb29e5]
+- macos-port-stays-the-old-accounts-after-a-daemon-switch: macOS: after a daemon on 127.0.0.1:8081 stops, another account cannot bind that port for ~30-40 s (same account can); launchd retries every 10 s [agent-written, session cc/49e1eb9a-1483baf1bebb29e5]
+- (+184 older -- recall query=<topic>, optionally kind=<kind>)
+Recall on demand with recall; read a memory with memory_read. Trust a tool's inputSchema (required + enums) over prose when building a call.
+Seam session: cc/d14e0401-c715329af73db8a7 (ambient) -- this agent's Seamless tool calls bind to it automatically; no session_start needed
+</seam-briefing>

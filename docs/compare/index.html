@@ -36,11 +36,12 @@
 <link rel="preload" as="font" type="font/woff2" href="../static/fonts/fraunces-italic.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="../static/fonts/instrument-sans.woff2" crossorigin>
 <script>(function(){var d=document.documentElement,t=localStorage.getItem("theme");if(t)d.dataset.theme=t;var o=localStorage.getItem("os");if(o==="macos"||o==="linux")o="unix";if(o!=="unix"&&o!=="windows")o=/Windows/i.test(navigator.userAgent)?"windows":"unix";d.dataset.os=o;d.className+=" js";})();</script>
-<link rel="stylesheet" href="../static/home.css?v=9ca08b5d">
+<link rel="stylesheet" href="../static/home.css?v=ec5dfd94">
 <style>
 /* /compare/ -- built on the landing's home.css (header, chapters, data
    tables, footer); only the comparison's own pieces are styled here. */
-.cmp-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 18px; }
+.cmp-words { margin: clamp(56px, 8vh, 84px) 0 16px; font-family: var(--serif); font-style: italic; font-weight: 400; font-size: 21px; color: var(--muted); font-variation-settings: "opsz" 36; }
+.cmp-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 30px; }
 .cmp-tabs a { padding: 8px 15px 9px; border: 1px solid var(--hair); border-radius: 999px; font-size: 14.5px; font-weight: 500; color: var(--muted); text-decoration: none; transition: color 0.25s, border-color 0.25s, background-color 0.25s; }
 .cmp-tabs a:hover { color: var(--ink); border-color: var(--hair-2); background: var(--panel-a); }
 .cmp-block { scroll-margin-top: calc(var(--head-h) + 16px); }
@@ -67,6 +68,7 @@
 .choose p { margin: 0; font-size: 15.5px; }
 .cmp-aside { max-width: 820px; margin: 48px 0 0; padding: 18px 22px; border: 1px dashed var(--hair-2); border-radius: 16px; font-size: 15px; line-height: 1.65; color: var(--muted); }
 .cmp-aside b { color: var(--ink); font-weight: 600; }
+.cmp-install { display: grid; justify-items: start; gap: 12px; margin: 30px 0 0; }
 .cta-row { display: flex; flex-wrap: wrap; gap: 14px 30px; margin: 26px 0 0; }
 @media (max-width: 760px) {
   .dtable.cmp tbody th { white-space: normal; }
@@ -106,6 +108,7 @@
         <a href="#glance">At a glance</a>
         <a href="#field">Every alternative</a>
         <a href="../">Home</a>
+        <a href="../example/">A real project</a>
         <a href="../security/">Security</a>
         <a href="../claude-app/">Claude app</a>
         <a href="../docs/">Docs</a>
@@ -115,6 +118,7 @@
     <nav class="head-nav" aria-label="Site">
       <a href="../#how">How it works</a>
       <a href="../#scenes">Demo</a>
+      <a href="../example/">Example</a>
       <a href="../security/">Security</a>
       <a href="./" class="is-current" aria-current="page">Compare</a>
       <a href="../claude-app/">Claude app</a>
@@ -148,11 +152,10 @@
   <div class="wrap">
     <p class="hero-pre"><svg aria-hidden="true"><use href="#i-mark"/></svg> Fair questions, longer answers</p>
     <h1 class="h1" data-split>Seamless and the <em>alternatives.</em></h1>
-    <p class="hero-sub">Seamless is shared memory and coordination for the agents you run: rules, decisions and plans kept as markdown files on your own computer, a briefing at every session start, and a task queue parallel agents claim from, behind walls you choose. This page sets it beside the tools people actually weigh it against. Several are excellent, and each section ends with when to pick it instead.</p>
+    <p class="hero-sub">Seamless is shared memory and coordination for the agents you run, kept as markdown files on your own computer. This page sets it beside the tools people weigh it against. Several are excellent, and each entry ends with when to pick it instead.</p>
     <ul class="hero-facts">
       <li>Checked November 2026</li>
       <li>Nine alternatives</li>
-      <li>Privacy and security included</li>
       <li>No benchmark claims</li>
     </ul>
   </div>
@@ -163,9 +166,186 @@
   <div class="wrap">
     <header class="ch-head">
       <p class="ch-mark"><em>i.</em> at a glance</p>
-      <h2 class="h2 rv">Ten tools, three questions.</h2>
-      <p class="lede rv">How each one runs, what it keeps, and what it does with your data. Facts, no adjectives. What you will not find is an accuracy benchmark: memory benchmarks in this category are self-refereed, every vendor publishes one where they win, and we would rather you open the folder and read what your agents wrote.</p>
+      <h2 class="h2 rv">Ten tools on one chart.</h2>
+      <p class="lede rv">Pick a tool to set it beside Seamless and read when to choose it instead. What you will not find is an accuracy benchmark: in this category they are self-refereed, and every vendor publishes one where they win.</p>
     </header>
+    <!-- The matrix is generated from one table shared with the landing page;
+         every mark restates a cell of the three tables below. site.js runs
+         it. Without JS the whole table shows and scrolls sideways. -->
+    <div class="mtx mtx-dense rv" data-mtx data-focus="built-in">
+      <div class="mtx-picks" role="group" aria-label="Set Seamless beside">
+        <button type="button" data-mtx-pick="built-in" aria-pressed="false">Built-in memory</button>
+        <button type="button" data-mtx-pick="agent-teams" aria-pressed="false">Agent Teams</button>
+        <button type="button" data-mtx-pick="claude-mem" aria-pressed="false">claude-mem</button>
+        <button type="button" data-mtx-pick="anthropic-memory" aria-pressed="false">Platform memory</button>
+        <button type="button" data-mtx-pick="beads" aria-pressed="false">Beads</button>
+        <button type="button" data-mtx-pick="basic-memory" aria-pressed="false">Basic Memory</button>
+        <button type="button" data-mtx-pick="agentmemory" aria-pressed="false">agentmemory</button>
+        <button type="button" data-mtx-pick="mem0-zep" aria-pressed="false">Mem0 / Zep</button>
+        <button type="button" data-mtx-pick="supermemory" aria-pressed="false">Supermemory</button>
+      </div>
+      <div class="mtx-scroll">
+        <table class="mtx-t">
+          <thead>
+            <tr>
+              <th scope="col" class="mtx-corner"><span class="sr-only">What you get</span></th>
+              <th scope="col" class="mtx-self" data-col="seamless"><span class="mtx-name"><svg aria-hidden="true"><use href="#i-mark"/></svg>Seamless</span></th>
+              <th scope="col" data-col="built-in" data-what="the memory you already have" data-href="#built-in" data-pick="You use one client, in one repository at a time, on one computer, and notes the model keeps for itself are enough."><button type="button" class="mtx-name" data-mtx-pick="built-in" aria-pressed="false">Built-in memory<small>Claude Code, Codex</small></button></th>
+              <th scope="col" data-col="agent-teams" data-what="first-party coordination inside a session" data-href="#agent-teams" data-pick="Everything you need coordinated happens inside one Claude Code session and nothing has to outlive it."><button type="button" class="mtx-name" data-mtx-pick="agent-teams" aria-pressed="false">Agent Teams<small>Claude Code</small></button></th>
+              <th scope="col" data-col="claude-mem" data-what="transcript memory for Claude Code and friends" data-href="#claude-mem" data-pick="You want effortless recall of what past sessions did, today, with the largest community behind it, and you don&rsquo;t need shared tasks or a store you author yourself."><button type="button" class="mtx-name" data-mtx-pick="claude-mem" aria-pressed="false">claude-mem</button></th>
+              <th scope="col" data-col="anthropic-memory" data-what="memory for agents you build on the Claude API" data-href="#anthropic-memory" data-pick="You are building an agent on the Claude API and want memory managed with it."><button type="button" class="mtx-name" data-mtx-pick="anthropic-memory" aria-pressed="false">Platform memory<small>Claude API</small></button></th>
+              <th scope="col" data-col="beads" data-what="a git-native issue graph for coding agents" data-href="#beads" data-pick="A dependency-aware queue in the repository is all you need, and the knowledge can live in your docs."><button type="button" class="mtx-name" data-mtx-pick="beads" aria-pressed="false">Beads</button></th>
+              <th scope="col" data-col="basic-memory" data-what="markdown notes as an AI&rsquo;s memory" data-href="#basic-memory" data-pick="You want a markdown knowledge base for one assistant, and coordination is not your problem."><button type="button" class="mtx-name" data-mtx-pick="basic-memory" aria-pressed="false">Basic Memory</button></th>
+              <th scope="col" data-col="agentmemory" data-what="the feature-maximal local memory runtime" data-href="#agentmemory" data-pick="You want the most automated local memory available, and you are comfortable letting a decay curve do the forgetting."><button type="button" class="mtx-name" data-mtx-pick="agentmemory" aria-pressed="false">agentmemory</button></th>
+              <th scope="col" data-col="mem0-zep" data-what="memory engines for products you build" data-href="#mem0-zep" data-pick="You are building a product whose users need memory. That is what they are for."><button type="button" class="mtx-name" data-mtx-pick="mem0-zep" aria-pressed="false">Mem0 / Zep</button></th>
+              <th scope="col" data-col="supermemory" data-what="a memory API for your whole digital life" data-href="#supermemory" data-pick="You want one memory across your tools and your life, and a cloud service holding it is acceptable."><button type="button" class="mtx-name" data-mtx-pick="supermemory" aria-pressed="false">Supermemory</button></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Memory you can open as files</th>
+              <td class="mtx-self" data-row="files" data-col="seamless"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">one markdown file each</span></td>
+              <td data-row="files" data-col="built-in"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">MEMORY.md and topic files</span></td>
+              <td data-row="files" data-col="agent-teams"><span class="m m-x"><span class="sr-only">Not its job:</span></span><span class="mtx-note">a task list, no memory</span></td>
+              <td data-row="files" data-col="claude-mem"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">SQLite and Chroma</span></td>
+              <td data-row="files" data-col="anthropic-memory"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">your storage, or Anthropic&rsquo;s</span></td>
+              <td data-row="files" data-col="beads"><span class="m m-x"><span class="sr-only">Not its job:</span></span><span class="mtx-note">issues, in a Dolt database</span></td>
+              <td data-row="files" data-col="basic-memory"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">markdown notes</span></td>
+              <td data-row="files" data-col="agentmemory"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">its own store; Obsidian export</span></td>
+              <td data-row="files" data-col="mem0-zep"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">a vector store or a graph</span></td>
+              <td data-row="files" data-col="supermemory"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">a cloud memory graph</span></td>
+            </tr>
+            <tr>
+              <th scope="row">One store for every agent you run</th>
+              <td class="mtx-self" data-row="clients" data-col="seamless"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">Claude Code, Codex, Claude app</span></td>
+              <td data-row="clients" data-col="built-in"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">one client, one repository</span></td>
+              <td data-row="clients" data-col="agent-teams"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">Claude Code only</span></td>
+              <td data-row="clients" data-col="claude-mem"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">Codex, Cursor and others too</span></td>
+              <td data-row="clients" data-col="anthropic-memory"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">agents on the Claude API</span></td>
+              <td data-row="clients" data-col="beads"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">a CLI any agent can run</span></td>
+              <td data-row="clients" data-col="basic-memory"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">an MCP server</span></td>
+              <td data-row="clients" data-col="agentmemory"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">hooks and MCP tools</span></td>
+              <td data-row="clients" data-col="mem0-zep"><span class="m m-x"><span class="sr-only">Not its job:</span></span><span class="mtx-note">an API for your own app</span></td>
+              <td data-row="clients" data-col="supermemory"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">plugins for Claude Code, Cursor</span></td>
+            </tr>
+            <tr>
+              <th scope="row">A task queue agents claim from</th>
+              <td class="mtx-self" data-row="queue" data-col="seamless"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">leases, plans, repo locks</span></td>
+              <td data-row="queue" data-col="built-in"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">none</span></td>
+              <td data-row="queue" data-col="agent-teams"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">inside one team&rsquo;s session</span></td>
+              <td data-row="queue" data-col="claude-mem"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">none locally</span></td>
+              <td data-row="queue" data-col="anthropic-memory"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">a shared store only</span></td>
+              <td data-row="queue" data-col="beads"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">bd ready, atomic claims</span></td>
+              <td data-row="queue" data-col="basic-memory"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">none</span></td>
+              <td data-row="queue" data-col="agentmemory"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">shared scopes only</span></td>
+              <td data-row="queue" data-col="mem0-zep"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">none</span></td>
+              <td data-row="queue" data-col="supermemory"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">none documented</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Forgetting waits for your approval</th>
+              <td class="mtx-self" data-row="forget" data-col="seamless"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">replaced, never overwritten</span></td>
+              <td data-row="forget" data-col="built-in"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">the model prunes</span></td>
+              <td data-row="forget" data-col="agent-teams"><span class="m m-x"><span class="sr-only">Not its job:</span></span><span class="mtx-note">no memory to forget</span></td>
+              <td data-row="forget" data-col="claude-mem"><span class="m m-x"><span class="sr-only">Not its job:</span></span><span class="mtx-note">no forgetting documented</span></td>
+              <td data-row="forget" data-col="anthropic-memory"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">the model edits; versioned</span></td>
+              <td data-row="forget" data-col="beads"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">old issues are summarized</span></td>
+              <td data-row="forget" data-col="basic-memory"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">you edit or delete</span></td>
+              <td data-row="forget" data-col="agentmemory"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">automatic decay and eviction</span></td>
+              <td data-row="forget" data-col="mem0-zep"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">automatic consolidation</span></td>
+              <td data-row="forget" data-col="supermemory"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">automatic expiry</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Runs on your computer, no new account</th>
+              <td class="mtx-self" data-row="local" data-col="seamless"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">or a server of your own</span></td>
+              <td data-row="local" data-col="built-in"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">inside the client</span></td>
+              <td data-row="local" data-col="agent-teams"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">inside Claude Code</span></td>
+              <td data-row="local" data-col="claude-mem"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">cloud sync is opt-in</span></td>
+              <td data-row="local" data-col="anthropic-memory"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">a Claude API account</span></td>
+              <td data-row="local" data-col="beads"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">syncs through your git remote</span></td>
+              <td data-row="local" data-col="basic-memory"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">hosted version is opt-in</span></td>
+              <td data-row="local" data-col="agentmemory"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">local, embeds offline</span></td>
+              <td data-row="local" data-col="mem0-zep"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">cloud-first; self-host paths</span></td>
+              <td data-row="local" data-col="supermemory"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">cloud-first; closed local binary</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Nothing leaves it by default</th>
+              <td class="mtx-self" data-row="leaves" data-col="seamless"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">one anonymous update check</span></td>
+              <td data-row="leaves" data-col="built-in"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">files stay local</span></td>
+              <td data-row="leaves" data-col="agent-teams"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">team state stays local</span></td>
+              <td data-row="leaves" data-col="claude-mem"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">usage analytics on by default</span></td>
+              <td data-row="leaves" data-col="anthropic-memory"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">Managed stores sit with Anthropic</span></td>
+              <td data-row="leaves" data-col="beads"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">nothing</span></td>
+              <td data-row="leaves" data-col="basic-memory"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">usage events on by default</span></td>
+              <td data-row="leaves" data-col="agentmemory"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">nothing</span></td>
+              <td data-row="leaves" data-col="mem0-zep"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">the cloud holds your data</span></td>
+              <td data-row="leaves" data-col="supermemory"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">the cloud holds your data</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Walls between projects</th>
+              <td class="mtx-self" data-row="walls" data-col="seamless"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">fences, and locks you approve</span></td>
+              <td data-row="walls" data-col="built-in"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">a directory per repository</span></td>
+              <td data-row="walls" data-col="agent-teams"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">the lead&rsquo;s permissions</span></td>
+              <td data-row="walls" data-col="claude-mem"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">private tags</span></td>
+              <td data-row="walls" data-col="anthropic-memory"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">workspace stores, read-only</span></td>
+              <td data-row="walls" data-col="beads"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">none documented</span></td>
+              <td data-row="walls" data-col="basic-memory"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">separate projects</span></td>
+              <td data-row="walls" data-col="agentmemory"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">per-agent scopes</span></td>
+              <td data-row="walls" data-col="mem0-zep"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">compliance on paid tiers</span></td>
+              <td data-row="walls" data-col="supermemory"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">access by tag</span></td>
+            </tr>
+            <tr>
+              <th scope="row">A guard against planted memories</th>
+              <td class="mtx-self" data-row="planted" data-col="seamless"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">optional write screening</span></td>
+              <td data-row="planted" data-col="built-in"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">the client&rsquo;s own defenses</span></td>
+              <td data-row="planted" data-col="agent-teams"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">messages can&rsquo;t approve actions</span></td>
+              <td data-row="planted" data-col="claude-mem"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">none documented</span></td>
+              <td data-row="planted" data-col="anthropic-memory"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">read-only stores, versions</span></td>
+              <td data-row="planted" data-col="beads"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">none documented</span></td>
+              <td data-row="planted" data-col="basic-memory"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">none documented</span></td>
+              <td data-row="planted" data-col="agentmemory"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">strips secrets, private tags</span></td>
+              <td data-row="planted" data-col="mem0-zep"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">none documented</span></td>
+              <td data-row="planted" data-col="supermemory"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">none documented</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Free and open source</th>
+              <td class="mtx-self" data-row="free" data-col="seamless"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">MIT</span></td>
+              <td data-row="free" data-col="built-in"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">included with the client</span></td>
+              <td data-row="free" data-col="agent-teams"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">included, experimental</span></td>
+              <td data-row="free" data-col="claude-mem"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">Apache-2.0; hosted parts paid</span></td>
+              <td data-row="free" data-col="anthropic-memory"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">API usage</span></td>
+              <td data-row="free" data-col="beads"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">MIT</span></td>
+              <td data-row="free" data-col="basic-memory"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">AGPL-3.0; hosted plan paid</span></td>
+              <td data-row="free" data-col="agentmemory"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">Apache-2.0</span></td>
+              <td data-row="free" data-col="mem0-zep"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">open cores; paid plans</span></td>
+              <td data-row="free" data-col="supermemory"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">closed engine; paid past the free tier</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Nothing to install</th>
+              <td class="mtx-self" data-row="builtin" data-col="seamless"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">one command</span></td>
+              <td data-row="builtin" data-col="built-in"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">built into the client</span></td>
+              <td data-row="builtin" data-col="agent-teams"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">built in, off until enabled</span></td>
+              <td data-row="builtin" data-col="claude-mem"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">Node, Bun and uv</span></td>
+              <td data-row="builtin" data-col="anthropic-memory"><span class="m m-x"><span class="sr-only">Not its job:</span></span><span class="mtx-note">part of the Claude API</span></td>
+              <td data-row="builtin" data-col="beads"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">a Go CLI</span></td>
+              <td data-row="builtin" data-col="basic-memory"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">Python 3.12+</span></td>
+              <td data-row="builtin" data-col="agentmemory"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">Node and its own engine</span></td>
+              <td data-row="builtin" data-col="mem0-zep"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">a service, or one you host</span></td>
+              <td data-row="builtin" data-col="supermemory"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">a cloud service</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="mtx-foot">
+        <p class="mtx-out" data-mtx-out aria-live="polite"></p>
+        <ul class="mtx-key" aria-label="Key">
+          <li><span class="m m-y"></span>yes</li>
+          <li><span class="m m-p"></span>partly</li>
+          <li><span class="m m-n"></span>no</li>
+          <li><span class="m m-x"></span>not its job</li>
+        </ul>
+      </div>
+    </div>
+    <h3 class="cmp-words" id="words">The same facts, in words</h3>
     <nav class="cmp-tabs" aria-label="Tables">
       <a href="#runs">How it runs</a>
       <a href="#keeps">What it keeps</a>
@@ -335,8 +515,18 @@
       <p class="ch-mark">see for yourself</p>
       <h2 class="h2 rv">The folder is the argument.</h2>
       <p class="lede rv">Install it, run two sessions, then open <code>~/.seamless/memory</code> and read what got written.</p>
+      <div class="cmp-install rv">
+        <div class="os-switch" role="group" aria-label="Show the install command for">
+          <button type="button" data-os-pick="unix" aria-pressed="false">macOS / Linux</button>
+          <button type="button" data-os-pick="windows" aria-pressed="false">Windows</button>
+        </div>
+        <p class="os-cap" data-os-block="unix">macOS / Linux</p>
+        <span class="install-pill" data-os-block="unix"><span class="p" aria-hidden="true">$</span><span class="cmd" data-copy="curl -fsSL https://thereisnospoon.org/install | sh">curl -fsSL https://thereisnospoon.org/install | sh</span><button class="copy-btn" type="button" aria-label="Copy install command">copy</button></span>
+        <p class="os-cap" data-os-block="windows">Windows</p>
+        <span class="install-pill" data-os-block="windows"><span class="p" aria-hidden="true">PS&gt;</span><span class="cmd" data-copy="irm https://thereisnospoon.org/install.ps1 | iex">irm https://thereisnospoon.org/install.ps1 | iex</span><button class="copy-btn" type="button" aria-label="Copy install command">copy</button></span>
+      </div>
       <div class="cta-row rv">
-        <a class="lnk" href="../#quickstart">Install <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+        <a class="lnk" href="../#quickstart">What it installs, and how to leave <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
         <a class="lnk" href="../security/">The security model <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
         <a class="lnk" href="../docs/">Docs <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
       </div>
@@ -361,6 +551,7 @@
         <b>Project</b>
         <a href="../">Home</a>
         <a href="../docs/">Docs</a>
+        <a href="../example/">An example project</a>
         <a href="../security/">Security</a>
         <a href="https://github.com/arctop/seamless">GitHub</a>
         <a href="https://github.com/arctop/seamless/issues">Issues</a>
@@ -377,7 +568,7 @@
   </div>
 </footer>
 
-<script src="../static/site.js?v=4b8fbf31"></script>
+<script src="../static/site.js?v=943ef286"></script>
 <script src="../static/page.js?v=218340c4"></script>
 <script src="../static/webmcp.js?v=c9b44136"></script>
 </body>

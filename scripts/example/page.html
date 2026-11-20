@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A real project's agent memory, open to read - Seamless is built with Seamless</title>
+<meta name="description" content="A read-only copy of part of the Seamless project's own Seamless: the briefing a session starts from, 24 memory files, one plan with its 38 steps, 48 research trials across macOS, Linux and Windows, and the handoffs between sessions. Copied on 20 November 2026.">
+<link rel="canonical" href="https://thereisnospoon.org/example/">
+<meta name="robots" content="max-image-preview:large, max-snippet:-1">
+<meta property="og:site_name" content="Seamless">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://thereisnospoon.org/example/">
+<meta property="og:title" content="Seamless is built with Seamless - read its own memory">
+<meta property="og:description" content="What an AI coding agent is told when it starts work on Seamless, what earlier sessions wrote down, and one feature followed from an approved plan to a release twelve hours later. A read-only copy of real data.">
+<meta property="og:image" content="https://thereisnospoon.org/static/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Seamless - sessions end. What they learned doesn't.">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "@id": "https://thereisnospoon.org/example/",
+  "url": "https://thereisnospoon.org/example/",
+  "name": "A real project's agent memory, open to read - Seamless is built with Seamless",
+  "description": "A read-only copy of part of the Seamless project's own Seamless instance: a session-start briefing, memory files written by agents, a captured plan with its steps, a research lab of operating-system trials, and session handoffs.",
+  "isPartOf": {"@id": "https://thereisnospoon.org/#website"},
+  "about": {"@id": "https://thereisnospoon.org/#app"}
+}
+</script>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f5">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#070a13">
+<link rel="icon" type="image/svg+xml" href="../static/favicon.svg">
+<link rel="preload" as="font" type="font/woff2" href="../static/fonts/fraunces.woff2" crossorigin>
+<link rel="preload" as="font" type="font/woff2" href="../static/fonts/fraunces-italic.woff2" crossorigin>
+<link rel="preload" as="font" type="font/woff2" href="../static/fonts/instrument-sans.woff2" crossorigin>
+<script>(function(){var d=document.documentElement,t=localStorage.getItem("theme");if(t)d.dataset.theme=t;var o=localStorage.getItem("os");if(o==="macos"||o==="linux")o="unix";if(o!=="unix"&&o!=="windows")o=/Windows/i.test(navigator.userAgent)?"windows":"unix";d.dataset.os=o;d.className+=" js";})();</script>
+<link rel="stylesheet" href="../static/home.css">
+<style>
+/* /example/ -- built on the landing's home.css (header, page hero, chapters,
+   install pill, footer); only this page's own pieces are styled here: the
+   explorer and what it shows. static/example.js turns the explorer's stacked
+   sections into panes; without it the page reads top to bottom, complete. */
+.ex-hero .h1 { max-width: 13ch; }
+.ex-hero .hero-sub { max-width: 660px; }
+.ex-wrap { padding-top: clamp(8px, 2vh, 24px); }
+
+/* the explorer: a frame, a row of sections, then a list beside a reader */
+.ex {
+  --ex-h: clamp(560px, calc(100svh - 132px), 900px);
+  border: 1px solid var(--hair-2); border-radius: 20px;
+  background: var(--panel); box-shadow: var(--shadow-lg);
+  overflow: hidden; scroll-margin-top: calc(var(--head-h) + 14px);
+}
+.ex-bar {
+  margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px;
+  padding: 11px 18px; border-bottom: 1px solid var(--hair);
+  font-family: var(--mono); font-size: 12px; color: var(--muted);
+}
+.ex-bar b { font-weight: 500; color: var(--ink); }
+.ex-ro { margin-left: auto; padding: 3px 12px; border-radius: 999px; background: var(--accent-soft); }
+.ex-tabs {
+  display: flex; gap: 2px; padding: 0 10px; border-bottom: 1px solid var(--hair);
+  overflow-x: auto; scrollbar-width: none;
+}
+.ex-tabs::-webkit-scrollbar { display: none; }
+.ex-tab {
+  flex: none; display: inline-flex; align-items: baseline; gap: 8px;
+  padding: 14px 13px 12px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  font-size: 14.5px; font-weight: 600; color: var(--muted); text-decoration: none;
+  transition: color 0.25s, border-color 0.25s;
+}
+.ex-tab em { font-family: var(--mono); font-size: 11.5px; font-style: normal; font-weight: 400; color: var(--faint); }
+.ex-tab:hover { color: var(--ink); }
+.ex-tab.is-on { color: var(--ink); border-bottom-color: var(--accent); }
+
+.ex-sec { border-top: 1px solid var(--hair); scroll-margin-top: calc(var(--head-h) + 14px); }
+.ex-sec:first-of-type { border-top: 0; }
+.ex-sech { margin: 0; padding: 26px clamp(18px, 3vw, 40px) 4px; font-family: var(--serif); font-size: 28px; font-weight: 400; line-height: 1.15; color: var(--ink); font-variation-settings: "opsz" 60; }
+.ex-list { padding: 10px 8px 14px; }
+.ex-g {
+  display: flex; align-items: center; gap: 9px;
+  margin: 16px 12px 5px; font-family: var(--serif); font-style: italic; font-size: 16px; color: var(--muted);
+  font-variation-settings: "opsz" 24;
+}
+.ex-g:first-child { margin-top: 6px; }
+.ex-g em { font-family: var(--mono); font-size: 11.5px; font-style: normal; color: var(--faint); }
+.ex-g[data-kind]::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--kc); }
+[data-kind="gotcha"] { --kc: var(--k-gotcha); }
+[data-kind="decision"] { --kc: var(--k-decision); }
+[data-kind="constraint"] { --kc: var(--k-constraint); }
+[data-kind="convention"] { --kc: var(--k-convention); }
+[data-kind="runbook"] { --kc: var(--k-runbook); }
+[data-kind="protocol"] { --kc: var(--k-reference); }
+[data-kind="reference"] { --kc: var(--k-reference); }
+[data-kind="stage"] { --kc: var(--k-stage); }
+.ex-row {
+  display: block; margin: 0; padding: 9px 12px 10px; border-radius: 10px;
+  color: var(--text); text-decoration: none; transition: background-color 0.2s;
+}
+.ex-row b { display: block; font-family: var(--mono); font-size: 12.5px; font-weight: 500; line-height: 1.45; color: var(--ink); overflow-wrap: anywhere; }
+.ex-row span {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+  margin-top: 3px; font-size: 13px; line-height: 1.42; color: var(--muted);
+}
+a.ex-row:hover { background: var(--accent-soft); color: var(--text); }
+.ex-row.is-on { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.ex-step { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 9px; align-items: baseline; padding: 6px 12px; }
+.ex-step b { font-family: var(--sans); font-size: 13.5px; font-weight: 500; line-height: 1.4; }
+.ex-step.is-flat b { font-weight: 400; color: var(--muted); }
+a.ex-step b { text-decoration: underline; text-decoration-color: var(--hair-2); text-underline-offset: 3px; }
+/* a step's or a trial's state: a filled star is done or passed, a ring is
+   dropped or failed, a half star is partial */
+.st { position: relative; top: 1px; width: 9px; height: 9px; border-radius: 50%; }
+.st-ok { background: var(--ok); }
+.st-no { border: 1.5px solid var(--bad); }
+.st-half { background: linear-gradient(90deg, var(--accent) 50%, transparent 50%); border: 1.5px solid var(--accent); }
+.st-wait { border: 1.5px solid var(--faint); }
+
+/* the reader */
+.ex-item { padding: 24px clamp(18px, 3vw, 40px) 44px; border-top: 1px solid var(--hair); scroll-margin-top: calc(var(--head-h) + 14px); }
+.ex-item:focus { outline: none; }
+.ex-file { margin: 0 0 16px; font-family: var(--mono); font-size: 12.5px; line-height: 1.5; color: var(--ink); overflow-wrap: anywhere; }
+.ex-file span { color: var(--faint); }
+.ex-file-2 { margin-top: 30px; padding-top: 22px; border-top: 1px solid var(--hair); }
+.ex-h { margin: 0 0 14px; max-width: 24ch; font-family: var(--serif); font-size: clamp(26px, 2.5vw, 34px); font-weight: 400; line-height: 1.12; letter-spacing: -0.015em; color: var(--ink); font-variation-settings: "opsz" 72; text-wrap: balance; }
+.ex-h-s { max-width: 44ch; font-size: clamp(20px, 1.8vw, 24px); line-height: 1.25; letter-spacing: -0.008em; }
+.ex-sub { max-width: 68ch; margin: 0 0 14px; font-size: 15.5px; line-height: 1.6; color: var(--text); }
+.ex-lead { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.ex-facts { list-style: none; margin: 0 0 18px; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 14px; color: var(--muted); }
+.ex-facts b { font-family: var(--mono); font-weight: 500; color: var(--ink); }
+.ex-att { max-width: 72ch; margin: 0 0 6px; padding-left: 20px; font-size: 14px; line-height: 1.55; color: var(--muted); }
+.ex-fm {
+  margin: 0 0 22px; padding: 12px 16px; max-width: 86ch;
+  border-left: 2px solid var(--kc, var(--hair-2)); border-radius: 0 10px 10px 0;
+  background: color-mix(in oklab, var(--bg) 62%, transparent);
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.65; color: var(--muted);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.ex-fm .k { color: var(--key); }
+.ex-fm .r { color: var(--faint); }
+.ex-md { max-width: 74ch; font-size: 15.5px; line-height: 1.62; color: var(--text); overflow-wrap: break-word; }
+.ex-md > :first-child { margin-top: 0; }
+.ex-md p { margin: 0 0 14px; }
+.ex-md h4 { margin: 30px 0 10px; font-family: var(--serif); font-size: 22px; font-weight: 400; line-height: 1.2; color: var(--ink); font-variation-settings: "opsz" 48; }
+.ex-md h5 { margin: 22px 0 8px; font-size: 15.5px; font-weight: 600; color: var(--ink); }
+.ex-md ul, .ex-md ol { margin: 0 0 14px; padding-left: 22px; }
+.ex-md li { margin: 5px 0; }
+.ex-md li > ul, .ex-md li > ol { margin: 5px 0 6px; }
+.ex-md li > p { margin: 6px 0 0; }
+.ex-md .md-plain { list-style: none; padding-left: 0; }
+.ex-md strong { font-weight: 600; color: var(--ink); }
+.ex-md code, .tr code { white-space: normal; overflow-wrap: anywhere; font-size: 0.84em; }
+.md-pre {
+  margin: 0 0 16px; padding: 13px 16px; border-radius: 12px; overflow-x: auto;
+  background: var(--term-bg); border: 1px solid var(--term-line);
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.6; color: var(--term-ink);
+}
+.md-pre code, .ex-md .md-pre code, .tr .md-pre code { padding: 0; background: none; color: inherit; font-size: inherit; white-space: pre; overflow-wrap: normal; }
+.ex-md blockquote { margin: 0 0 16px; padding: 4px 0 4px 14px; border-left: 2px solid var(--hair-2); font-family: var(--mono); font-size: 12.5px; line-height: 1.6; color: var(--muted); overflow-wrap: anywhere; }
+.md-tw { margin: 0 0 16px; overflow-x: auto; }
+.ex-md table { border-collapse: collapse; min-width: 480px; font-size: 14px; line-height: 1.5; }
+.ex-md th, .ex-md td { padding: 8px 14px 8px 0; border-bottom: 1px solid var(--hair); text-align: left; vertical-align: top; }
+.ex-md th { font-family: var(--serif); font-style: italic; font-weight: 400; font-size: 15.5px; color: var(--muted); }
+.wl { color: var(--link); text-decoration: underline; text-decoration-style: dotted; text-decoration-color: var(--hair-2); text-underline-offset: 3px; overflow-wrap: anywhere; }
+a.wl:hover { color: var(--ink); text-decoration-style: solid; }
+.wl-out { color: var(--muted); cursor: help; }
+.cut { font-family: var(--mono); font-size: 0.9em; color: var(--accent); cursor: help; }
+
+/* a trial: what was expected beside what happened */
+.tr-out { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 18px; padding: 4px 12px 4px 10px; border-radius: 999px; font-family: var(--mono); font-size: 12px; }
+.tr-out::before { content: ""; width: 8px; height: 8px; border-radius: 50%; }
+.tr-ok { color: var(--ok); background: color-mix(in oklab, var(--ok) 12%, transparent); }
+.tr-ok::before { background: var(--ok); }
+.tr-no { color: var(--bad); background: color-mix(in oklab, var(--bad) 12%, transparent); }
+.tr-no::before { border: 1.5px solid var(--bad); width: 5px; height: 5px; }
+.tr-half { color: var(--accent); background: var(--accent-soft); }
+.tr-half::before { background: var(--accent); }
+.tr { max-width: 78ch; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; }
+.tr dt { margin: 0 0 6px; font-family: var(--serif); font-style: italic; font-size: 17px; color: var(--muted); font-variation-settings: "opsz" 24; }
+.tr dd { margin: 0 0 20px; font-size: 15px; line-height: 1.62; color: var(--text); overflow-wrap: break-word; }
+
+/* start here: one feature, stop by stop along a line of stars */
+.trail-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 26px; }
+.trail-say .ex-sub { max-width: 46ch; }
+.trail-say .fine { max-width: 46ch; margin: 18px 0 0; }
+.trail { list-style: none; margin: 0; padding: 0; max-width: 640px; }
+.trail li { position: relative; padding: 0 0 24px 32px; }
+.trail li::before { content: ""; position: absolute; left: 4px; top: 13px; bottom: -11px; width: 1px; background: var(--hair-2); }
+.trail li:last-child { padding-bottom: 0; }
+.trail li:last-child::before { content: none; }
+.trail li::after {
+  content: ""; position: absolute; left: 0; top: 5px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--panel); border: 1.5px solid var(--accent);
+}
+.trail li.is-key::after { background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft), 0 0 14px var(--glow); }
+.tl-w { margin: 0 0 3px; font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+.tl-h { margin: 0 0 5px; font-family: var(--serif); font-size: 21px; font-weight: 400; line-height: 1.22; color: var(--ink); font-variation-settings: "opsz" 48; }
+.tl-p { margin: 0 0 7px; max-width: 54ch; font-size: 15px; line-height: 1.55; color: var(--text); }
+.tl-a { font-size: 14px; }
+.tl-a svg { width: 15px; height: 15px; }
+
+/* the briefing, as the hook printed it, beside what each part is */
+.brief-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; }
+.brief {
+  margin: 0; padding: 16px 18px; border-radius: 14px;
+  background: var(--term-bg); border: 1px solid var(--term-line);
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.6; color: var(--term-muted);
+}
+.brief .bf { margin: 0 -8px 12px; padding: 2px 8px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--term-muted); }
+.brief .bf:last-child { margin-bottom: 0; }
+.brief .bf-h { color: var(--term-ink); }
+.brief .bf-tag { color: var(--term-str); margin-bottom: 4px; }
+.brief .bf.is-hot { background: var(--term-mark); color: var(--term-ink); }
+.brief .cut { color: var(--term-str); }
+.brief-notes { position: static; }
+.brief-notes .file-notes { border-top: 0; padding-top: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin: 0; padding: 0; list-style: none; font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+
+.ex-prov { max-width: 900px; margin: 22px 0 0; }
+.ex-prov a { text-decoration-color: var(--hair-2); }
+
+/* live: static/example.js marks the explorer and the panes take over */
+.ex [hidden] { display: none !important; }
+.ex.is-live .ex-sech { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.ex.is-live .ex-sec { border-top: 0; }
+.ex.is-live .ex-item { border-top: 0; }
+.ex.is-live .ex-list { border-bottom: 1px solid var(--hair); max-height: 264px; overflow-y: auto; overscroll-behavior: contain; }
+@media (min-width: 1000px) {
+  .trail-grid { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(28px, 4vw, 60px); align-items: start; }
+  .trail-say { position: sticky; top: 24px; }
+  .brief-grid { grid-template-columns: minmax(0, 13fr) minmax(0, 7fr); gap: clamp(22px, 2.6vw, 38px); align-items: start; }
+  .brief-notes { position: sticky; top: 24px; }
+  .ex.is-live .ex-sec { height: var(--ex-h); display: grid; grid-template-columns: minmax(0, 1fr); }
+  .ex.is-live .ex-sec[hidden] { display: none; }
+  .ex.is-live .ex-sec.has-list { grid-template-columns: clamp(300px, 27vw, 372px) minmax(0, 1fr); }
+  .ex.is-live .ex-list { max-height: none; border-bottom: 0; border-right: 1px solid var(--hair); }
+  .ex.is-live .ex-read { overflow-y: auto; overscroll-behavior: contain; min-height: 0; }
+}
+@media (max-width: 720px) {
+  .ex { border-radius: 16px; margin: 0 calc(-1 * var(--gutter) + 10px); }
+  .ex-ro { margin-left: 0; }
+  .ex-tab { padding: 13px 10px 11px; font-size: 14px; }
+  .ex-md { font-size: 15px; }
+}
+.yours-act { display: grid; justify-items: start; gap: 12px; margin: 0 0 22px; }
+.yours-links { display: flex; flex-wrap: wrap; gap: 12px 30px; margin: 0; }
+</style>
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="starfield" aria-hidden="true"></div>
+<p class="sr-only" id="announce" aria-live="polite"></p>
+
+<!-- Shared glyphs, as on the landing page. -->
+<svg class="defs" width="0" height="0" aria-hidden="true" focusable="false">
+  <symbol id="i-mark" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="8.6" fill="none" stroke="currentColor" stroke-width="1.9"/>
+    <path d="M6.2 25.8 24.6 7.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+    <circle cx="25.6" cy="6.4" r="2.6" style="fill:var(--mark-star,currentColor)"/>
+  </symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h13m-5-5 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-gh" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 13.4A8.5 8.5 0 1 1 10.6 3.5a6.6 6.6 0 0 0 9.9 9.9z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.5v2.2m0 14.6v2.2M4.6 4.6l1.6 1.6m11.6 11.6 1.6 1.6M2.5 12h2.2m14.6 0h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2c.6 6 4 9.400 10 10-6 .6-9.400 4-10 10-.6-6-4-9.400-10-10 6-.6 9.400-4 10-10z"/></symbol>
+</svg>
+
+<header class="site-head" data-head>
+  <div class="head-in">
+    <a class="brand" href="../" aria-label="Seamless home">
+      <svg class="brand-mark" aria-hidden="true"><use href="#i-mark"/></svg>
+      <span class="brand-word">seamless</span>
+    </a>
+    <details class="nav-menu">
+      <summary aria-label="Menu"><span></span><span></span></summary>
+      <nav class="nav-panel" aria-label="Menu">
+        <a href="#project">Open the project</a>
+        <a href="#yours">Install</a>
+        <a href="../">Home</a>
+        <a href="../#how">How it works</a>
+        <a href="../compare/">Compare</a>
+        <a href="../security/">Security</a>
+        <a href="../claude-app/">Claude app</a>
+        <a href="../docs/">Docs</a>
+      </nav>
+    </details>
+    <nav class="head-nav" aria-label="Site">
+      <a href="../#how">How it works</a>
+      <a href="../#scenes">Demo</a>
+      <a href="./" class="is-current" aria-current="page">Example</a>
+      <a href="../compare/">Compare</a>
+      <a href="../security/">Security</a>
+      <a href="../claude-app/">Claude app</a>
+      <a href="../docs/">Docs</a>
+    </nav>
+    <div class="head-tools">
+      <button class="theme-toggle" type="button" aria-label="Toggle color theme">
+        <svg class="icon-moon" aria-hidden="true"><use href="#i-moon"/></svg>
+        <svg class="icon-sun" aria-hidden="true"><use href="#i-sun"/></svg>
+      </button>
+      <a class="gh-link" href="https://github.com/arctop/seamless" aria-label="Seamless on GitHub">
+        <svg aria-hidden="true"><use href="#i-gh"/></svg>
+      </a>
+      <a class="head-cta" href="../#quickstart">Install</a>
+    </div>
+  </div>
+  <div class="head-progress" aria-hidden="true"><i></i></div>
+</header>
+
+<main id="main">
+
+<!-- ================================================================ HERO -->
+<section class="pg-hero ex-hero" id="top" data-hero>
+  <svg class="pg-arc" viewBox="0 0 600 600" aria-hidden="true" focusable="false">
+    <circle class="a-ring a-faint" cx="300" cy="300" r="268"/>
+    <circle class="a-ring" cx="300" cy="300" r="196"/>
+    <circle class="a-ring a-faint" cx="300" cy="300" r="122"/>
+    <path class="a-cut" d="M70 530 512 88"/>
+    <circle class="a-star" cx="520" cy="80" r="7"/>
+  </svg>
+  <div class="wrap">
+    <p class="hero-pre"><svg aria-hidden="true"><use href="#i-mark"/></svg> An example with real data</p>
+    <h1 class="h1" data-split>Seamless is built with <em>Seamless.</em></h1>
+    <p class="hero-sub">The agents that write Seamless start every session from its own memory, and have since July 2026. This is a read-only copy of part of that project, taken on 20 November 2026. Read what a session is told, what earlier sessions wrote down, and how one feature went from an approved plan to a release in twelve hours.</p>
+    <ul class="hero-facts">
+      <li>54 plans on file</li>
+      <li>421 of their 428 steps closed</li>
+      <li>48 trials in one research lab</li>
+      <li><a href="#copy">What was cut from the copy</a></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================================================================ THE PROJECT -->
+<!-- The explorer. Every record below is generated by scripts/example/build.py
+     from scripts/example/corpus; edit the corpus or page.html there, never
+     this file. Each section is a list beside its records, and reads complete
+     without scripts. static/example.js shows one section and one record at a
+     time and keeps the address bar on the record that is open. -->
+<section class="chapter ex-wrap" id="project">
+  <div class="wrap">
+    <div class="ex" data-ex>
+      <p class="ex-bar"><span>~/.seamless</span><span>project <b>seamless</b></span><span class="ex-ro">a read-only copy, 20 Nov 2026</span></p>
+      <nav class="ex-tabs" aria-label="The project">
+        <a class="ex-tab" href="#start" data-sec="start">Start here</a>
+        <a class="ex-tab" href="#briefing" data-sec="briefing">The briefing</a>
+        <a class="ex-tab" href="#memories" data-sec="memories">Memories <em>{{N_MEMORIES}}</em></a>
+        <a class="ex-tab" href="#plan" data-sec="plan">One plan <em>{{N_STEPS}} steps</em></a>
+        <a class="ex-tab" href="#lab" data-sec="lab">Research lab <em>{{N_TRIALS}} trials</em></a>
+        <a class="ex-tab" href="#handoffs" data-sec="handoffs">Handoffs <em>{{N_SESSIONS}}</em></a>
+      </nav>
+
+      <section class="ex-sec" id="start" data-sec="start">
+        <h2 class="ex-sech">Start here</h2>
+        <div class="ex-read">
+          <div class="ex-item trail-grid" id="start-trail">
+            <div class="trail-say">
+              <p class="ex-file">one feature, <span>followed through the record</span></p>
+              <h3 class="ex-h">Automatic updates, from the plan to the release.</h3>
+              <p class="ex-sub">The plan was approved at 15:22 UTC on 9 October 2026. The release that carried it, v0.7.0, was tagged at 03:40 UTC on 10 October.</p>
+              <p class="ex-sub">Every stop on the right is a record in this project. No session held the whole job in its head. Each one read what the last left, did its part, and wrote down what it found.</p>
+              <p class="fine">The live checks on Linux and macOS finished the next day. One step, a check on a Windows desktop, was dropped. Both are in the record too.</p>
+            </div>
+            <ol class="trail">
+              <li class="is-key">
+                <p class="tl-w">a plan · 9 Oct, 15:22 UTC</p>
+                <h4 class="tl-h">The plan is approved on its 38th draft.</h4>
+                <p class="tl-p">It was drafted in Claude Code's plan mode. Seamless kept each draft as a note and attached the reports of four planning subagents.</p>
+                <a class="lnk tl-a" href="#p-plan" data-open="p-plan">Read the plan <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+              </li>
+              <li>
+                <p class="tl-w">a decision</p>
+                <h4 class="tl-h">The owner's five decisions go on file.</h4>
+                <p class="tl-p">Where the check runs, which installs update themselves, when the daemon may restart. A later session finds them in its briefing or with one recall.</p>
+                <a class="lnk tl-a" href="#m-auto-update-architecture-and-policy" data-open="m-auto-update-architecture-and-policy">Open the memory <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+              </li>
+              <li>
+                <p class="tl-w">{{N_STEPS}} tasks on one queue</p>
+                <h4 class="tl-h">Parallel agents take the steps, up to seven at a time.</h4>
+                <p class="tl-p">Five waves ran before the release. A claim is atomic and leased, so no two agents held the same step. The first wave's handoff opens: 7 agents, 7 tasks, zero file conflicts.</p>
+                <a class="lnk tl-a" href="#s-8234de8d" data-open="s-8234de8d">Read that handoff <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+              </li>
+              <li>
+                <p class="tl-w">a research lab · {{N_TRIALS}} trials</p>
+                <h4 class="tl-h">The risky part is tried on three operating systems first.</h4>
+                <p class="tl-p">Can an updater outlive the service that started it? Each trial records what the agent expected and what happened. {{N_PASS}} passed, {{N_FAIL}} failed, {{N_PARTIAL}} were partial.</p>
+                <a class="lnk tl-a" href="#lab-about" data-open="lab-about">Open the lab <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+              </li>
+              <li>
+                <p class="tl-w">a task</p>
+                <h4 class="tl-h">A failed trial becomes a step. Then its premise is refuted.</h4>
+                <p class="tl-p">A Windows trial showed a restart leaving the daemon down. The agent that took the fix measured the real daemon and found the race came from the trial's stand-in.</p>
+                <a class="lnk tl-a" href="#t-01M4HCZR20Q34NZYNHJNVBAK6X" data-open="t-01M4HCZR20Q34NZYNHJNVBAK6X">Read the step <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+              </li>
+              <li>
+                <p class="tl-w">a stage · gate: human</p>
+                <h4 class="tl-h">Thirty-four commits wait for the owner's word.</h4>
+                <p class="tl-p">A stage memory told every session not to push or tag until the owner chose the release point. Session after session added to it as the commits piled up.</p>
+                <a class="lnk tl-a" href="#m-phase2-prereqs-on-local-main-release-hold" data-open="m-phase2-prereqs-on-local-main-release-hold">Open the stage <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+              </li>
+              <li class="is-key">
+                <p class="tl-w">a handoff · 10 Oct, 03:40 UTC</p>
+                <h4 class="tl-h">v0.7.0 is tagged: the first release that updates itself.</h4>
+                <p class="tl-p">The session's handoff lists what shipped, what was tested on a Linux virtual machine, and what was still open.</p>
+                <a class="lnk tl-a" href="#s-448e543f" data-open="s-448e543f">Read the handoff <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+              </li>
+              <li>
+                <p class="tl-w">two runbooks</p>
+                <h4 class="tl-h">What stays for next time.</h4>
+                <p class="tl-p">How to rehearse a rollback, and how to recover when an update does not apply. The next session that needs either finds it by name.</p>
+                <a class="lnk tl-a" href="#m-recover-from-failed-auto-update" data-open="m-recover-from-failed-auto-update">Open a runbook <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+              </li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <section class="ex-sec" id="briefing" data-sec="briefing">
+        <h2 class="ex-sech">The briefing</h2>
+        <div class="ex-read">
+          <div class="ex-item" id="briefing-text">
+            <p class="ex-file">SessionStart hook, <span>20 Nov 2026, in the Seamless repository</span></p>
+            <h3 class="ex-h">What a session is told before its first prompt.</h3>
+            <p class="ex-sub">A hook prints this when an agent starts in the repository. This one went to the session that built the page you are reading. It names rules, gates and work in a line each. The agent reads a full record only when the work comes near it.</p>
+            <div class="brief-grid">
+              <div class="brief">
+{{BRIEFING}}
+              </div>
+              <div class="brief-notes">
+                <ol class="file-notes">
+                  <li data-for="who"><b>the lock and the neighbors</b> Whether the main branch is free to land on, and which other sessions have this repository open.</li>
+                  <li data-for="rules"><b>constraints and conventions</b> Rules an earlier session, or the owner, wrote down. Constraints are in every briefing.</li>
+                  <li data-for="stage"><b>stages</b> A state of the world every session must know while it holds. This one waits on a person.</li>
+                  <li data-for="plans"><b>plans</b> Work in flight, with what can be claimed this minute.</li>
+                  <li data-for="found"><b>recent findings</b> The last sessions' handoffs, newest first.</li>
+                  <li data-for="queue"><b>ready tasks</b> The queue of work with no open blocker.</li>
+                  <li data-for="index"><b>the index</b> A name and one line for each memory. The body is one call away.</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="ex-sec has-list" id="memories" data-sec="memories">
+        <h2 class="ex-sech">Memories</h2>
+        <nav class="ex-list" aria-label="Memories">
+{{MEMORY_ROWS}}
+        </nav>
+        <div class="ex-read">
+{{MEMORY_ITEMS}}
+        </div>
+      </section>
+
+      <section class="ex-sec has-list" id="plan" data-sec="plan">
+        <h2 class="ex-sech">One plan</h2>
+        <nav class="ex-list" aria-label="The plan and its steps">
+{{PLAN_ROWS}}
+        </nav>
+        <div class="ex-read">
+{{PLAN_ITEMS}}
+        </div>
+      </section>
+
+      <section class="ex-sec has-list" id="lab" data-sec="lab">
+        <h2 class="ex-sech">Research lab</h2>
+        <nav class="ex-list" aria-label="The lab and its trials">
+{{LAB_ROWS}}
+        </nav>
+        <div class="ex-read">
+{{LAB_ITEMS}}
+        </div>
+      </section>
+
+      <section class="ex-sec has-list" id="handoffs" data-sec="handoffs">
+        <h2 class="ex-sech">Handoffs</h2>
+        <nav class="ex-list" aria-label="Session handoffs">
+{{SESSION_ROWS}}
+        </nav>
+        <div class="ex-read">
+{{SESSION_ITEMS}}
+        </div>
+      </section>
+    </div>
+
+    <p class="fine ex-prov" id="copy">Copied from the project's own Seamless on 20 November 2026 with the <code>seam</code> command. Each record is as an agent wrote it, except where a cut is marked <span class="cut">[…]</span> or a machine's name was replaced with a plain phrase: the owner's computers and accounts, one vendor, and a few lines about private or unreleased work. {{N_MEMORIES}} of the project's memories are here, one plan of 54, and five handoffs. The frontmatter shows the fields the copy kept. The files this page is built from are <a href="https://github.com/arctop/seamless/tree/main/scripts/example/corpus">in the repository</a>.</p>
+  </div>
+</section>
+
+<!-- ================================================================ YOURS -->
+<section class="chapter" id="yours">
+  <div class="wrap">
+    <header class="ch-head">
+      <p class="ch-mark">your project</p>
+      <h2 class="h2 rv">Yours starts empty and fills as your agents work.</h2>
+      <p class="lede rv">Install it on one repository. The first session writes down what it learns, and the second one starts from it.</p>
+    </header>
+    <div class="yours-act rv">
+      <div class="os-switch" role="group" aria-label="Show the install command for">
+        <button type="button" data-os-pick="unix" aria-pressed="false">macOS / Linux</button>
+        <button type="button" data-os-pick="windows" aria-pressed="false">Windows</button>
+      </div>
+      <p class="os-cap" data-os-block="unix">macOS / Linux</p>
+      <span class="install-pill" data-os-block="unix"><span class="p" aria-hidden="true">$</span><span class="cmd" data-copy="curl -fsSL https://thereisnospoon.org/install | sh">curl -fsSL https://thereisnospoon.org/install | sh</span><button class="copy-btn" type="button" aria-label="Copy install command">copy</button></span>
+      <p class="os-cap" data-os-block="windows">Windows</p>
+      <span class="install-pill" data-os-block="windows"><span class="p" aria-hidden="true">PS&gt;</span><span class="cmd" data-copy="irm https://thereisnospoon.org/install.ps1 | iex">irm https://thereisnospoon.org/install.ps1 | iex</span><button class="copy-btn" type="button" aria-label="Copy install command">copy</button></span>
+    </div>
+    <p class="yours-links rv">
+      <a class="lnk" href="../#how">How it works <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      <a class="lnk" href="../#asks">What to ask first <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      <a class="lnk" href="../docs/quickstart/">The quickstart <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+    </p>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-foot">
+  <div class="wrap foot-grid">
+    <div class="foot-brand">
+      <a class="brand" href="../" aria-label="Seamless home">
+        <svg class="brand-mark" aria-hidden="true"><use href="#i-mark"/></svg>
+        <span class="brand-word">seamless</span>
+      </a>
+      <p class="foot-tag">No seams. No spoons.</p>
+      <p class="colophon">Seamless is published by <a href="https://arctop.com">Arctop</a>. Set in Fraunces, Instrument Sans &amp; IBM Plex Mono, self-hosted (<a href="../static/fonts/OFL-NOTICE.txt">OFL</a>). This page loads nothing from other sites and has no trackers or cookies. Your theme stays in your browser. Naturally, the source is <a href="https://github.com/arctop/seamless/tree/main/docs">in the repo</a>.</p>
+    </div>
+    <nav class="foot-nav" aria-label="Footer">
+      <div>
+        <b>Project</b>
+        <a href="../docs/">Docs</a>
+        <a href="./">An example project</a>
+        <a href="../security/">Security</a>
+        <a href="../compare/">Compare</a>
+        <a href="../docs/changelog/">Changelog</a>
+        <a href="https://github.com/arctop/seamless">GitHub</a>
+      </div>
+      <div>
+        <b>Start</b>
+        <a href="../#quickstart">Install</a>
+        <a href="../#asks">What to ask first</a>
+        <a href="../docs/quickstart/">Quickstart</a>
+        <a href="../claude-app/">In the Claude app</a>
+        <a href="../docs/updating/#uninstall">Uninstall</a>
+        <a href="../scenarios/cold-start/">Transcripts</a>
+      </div>
+    </nav>
+  </div>
+</footer>
+
+<script src="../static/site.js"></script>
+<script src="../static/page.js"></script>
+<script src="../static/example.js"></script>
+<script src="../static/webmcp.js"></script>
+</body>
+</html>

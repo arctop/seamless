@@ -22,9 +22,9 @@ set -eu
 # Every local script/stylesheet the hand-written pages load by name. Fonts and
 # images are omitted: they change by getting a new filename, not by mutating in
 # place.
-PAGES="docs/index.html docs/compare/index.html docs/claude-app/index.html docs/security/index.html"
+PAGES="docs/index.html docs/compare/index.html docs/claude-app/index.html docs/security/index.html docs/example/index.html"
 DIR=docs/static
-ASSETS="home.css home.js site.css site.js page.js scenes.js scenes-player.js webmcp.js"
+ASSETS="home.css home.js site.css site.js page.js example.js scenes.js scenes-player.js webmcp.js"
 
 # First 8 hex of the file's sha256. sha256sum on Linux/CI, shasum on macOS.
 sha8() {

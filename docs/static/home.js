@@ -2,22 +2,28 @@
    No dependencies, no network. The page reads complete without it: every
    element here starts in its finished state unless this file arms it first.
 
-   1. the sky        hero canvas: sessions streak in as meteors, write memories
-                     as stars or recall old ones; point at a star to read it
+   1. the sky        the folder section's canvas: sessions streak in as
+                     meteors, write memories as stars or recall old ones;
+                     point at a star to read it
    2. reveals        the two headline word-rises, staggered .rv siblings
-   3. the rail       chapter stars + header progress, current chapter tracking
-   4. the week       the same three sessions without Seamless, then with it (i)
-   5. the orbit      write -> brief -> recall -> curate, pinned to scroll (ii)
-   6. the board      two agents race for one plan step, once (iv)
-   7. the folder     a star opens into a file; the gardener asks first (v)
-   8. the console    an annotated screen and a lightbox for the others (vi)
-   9. the asks       day-one requests: an index beside the one on show (viii)
+   3. the header     the progress line, the current section in the nav
+   4. the duel       the hero figure: Monday, then one Tuesday prompt down
+                     two lanes, without Seamless and with it
+   5. the loop       write -> brief -> recall -> curate: a tablist beside
+                     the orbit that plays one lap by itself
+   6. the board      two agents race for one plan step, once
+   7. the keys       a planted write held, a locked project opened; the
+                     layers line
+   8. the folder     a star opens into a file; the gardener asks first
+   9. the console    an annotated screen and a lightbox for the others
    10. the finale    the empty-set mark draws itself
    11. memory        the page remembers how far you read, in your browser only
-   12. small things  copy confirmations, the copy meteor, the phone menu
+   12. small things  the dock, copy confirmations, the copy meteor, the
+                     phone menu
 
-   site.js (shared with the docs) still owns the theme toggle, the OS switch,
-   copy buttons, the phone menu's close-on-pick, and the .rv -> .in reveal. */
+   site.js (shared with the other hand-written pages) still owns the theme
+   toggle, the OS switch, copy buttons, the comparison matrix, the phone
+   menu's close-on-pick, and the .rv -> .in reveal. */
 (function () {
   "use strict";
 
@@ -117,7 +123,8 @@
   /* the tooltip is always a dark card, so its kind chips use the night palette */
   var NIGHT_KIND = { gotcha: "#ff8f73", constraint: "#9aa8ff", convention: "#ff7fc8", reference: "#5fdcbf", decision: "#c39bff", runbook: "#f3c46b", stage: "#6fc8ff" };
   /* the side-by-side layout needs this much room; below it the chart gets a
-     band of its own under the copy (home.css matches at 1179px) */
+     band of its own under the copy, the host's bottom padding (home.css
+     matches at 1179px) */
   var SKY_SIDE_MIN = 1180;
 
   function rng(seed) {
@@ -129,18 +136,22 @@
     };
   }
 
+  /* Sky(host): host carries the .sky canvas and the .sky-tip, and marks the
+     column the chart must stay clear of with data-sky-keep. data-sky-side
+     says which half the chart takes on wide screens. */
   function Sky(hero) {
     var canvas = $(".sky", hero);
     var tip = $(".sky-tip", hero);
-    var copy = $(".hero-copy", hero);
-    if (!canvas || !canvas.getContext) return null;
+    var copy = $("[data-sky-keep]", hero);
+    if (!canvas || !canvas.getContext || !tip || !copy) return null;
+    var leftSide = hero.dataset.skySide === "left";
     var ctx = canvas.getContext("2d");
     var rand = rng(20261008);
     var W = 0, H = 0, dpr = 1, cx = 0, cy = 0, R = 0, dim = 1;
     var col = {}, sprites = {}, night = true;
     var dust = [], inner = [], stars = [], meteors = [], ripples = [], flashes = [], labels = [], links = [];
     var rot = 0, last = 0, clock = 0, nextAt = 1400, incomingIdx = 0;
-    var running = false, raf = 0, onScreen = true;
+    var running = false, raf = 0, onScreen = false, pendingVisit = null;
     var mx = 0, my = 0, pmx = 0, pmy = 0, hover = null, pinned = null;
     var keep = { l: 0, t: 0, r: 0, b: 0 }; /* the copy's box: the sky stays quiet there */
     var TAU = Math.PI * 2;
@@ -190,15 +201,19 @@
       canvas.width = Math.round(W * dpr);
       canvas.height = Math.round(H * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      var c = copy.getBoundingClientRect();
+      keep = { l: c.left - r.left - 12, t: c.top - r.top - 12, r: c.right - r.left + 12, b: c.bottom - r.top + 12 };
       if (W >= SKY_SIDE_MIN) {
-        cx = W * 0.76; cy = H * 0.5; R = Math.min(H * 0.33, W * 0.245); dim = 1;
+        /* the chart takes the half the copy leaves free */
+        var free = leftSide ? c.left - r.left : W - (c.right - r.left);
+        R = Math.min(H * 0.34, free * 0.4);
+        cx = leftSide ? free * 0.5 : W - free * 0.5;
+        cy = H * 0.5; dim = 1;
       } else {
-        /* the band under the copy (the hero's bottom padding) holds the chart */
+        /* the band under the copy (the host's bottom padding) holds the chart */
         var pb = parseFloat(getComputedStyle(hero).paddingBottom) || W * 0.8;
         cx = W / 2; cy = H - pb * 0.54; R = Math.min(W * 0.4, pb * 0.3); dim = 0.95;
       }
-      var c = copy.getBoundingClientRect();
-      keep = { l: c.left - r.left - 12, t: c.top - r.top - 12, r: c.right - r.left + 12, b: c.bottom - r.top + 12 };
       if (!dust.length) seed();
     }
     function inKeep(x, y) { return x > keep.l && x < keep.r && y > keep.t && y < keep.b; }
@@ -627,7 +642,7 @@
       hover = null; mx = W / 2; my = H / 2; showTip(pinned); hero.style.cursor = "";
     });
     hero.addEventListener("click", function (e) {
-      if (e.target.closest("a, button, .hero-copy")) return;
+      if (e.target.closest("a, button, [data-sky-keep]")) return;
       var r = hero.getBoundingClientRect();
       var s = pick(e.clientX - r.left, e.clientY - r.top, 26);
       pinned = s && s !== pinned ? s : null;
@@ -640,26 +655,37 @@
     mx = W / 2; my = H / 2;
     onTheme(function () { readColors(); redrawOnce(); });
     var rz = 0;
-    window.addEventListener("resize", function () {
+    function relayout() {
       clearTimeout(rz);
       rz = setTimeout(function () { layout(); redrawOnce(); }, 120);
-    });
+    }
+    window.addEventListener("resize", relayout);
+    /* the section grows as its own fonts and figures settle */
+    if (window.ResizeObserver) new ResizeObserver(relayout).observe(hero);
     /* fonts settling can move the copy box */
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { layout(); redrawOnce(); });
 
     var api = {
       /* the visitor copied the install command: their own session streaks in
-         from the button and leaves a star behind */
+         and leaves a star behind. From the button if the sky is on screen;
+         otherwise it arrives the next time the sky is. */
       visit: function (clientX, clientY) {
-        if (api.visited || reduced || !onScreen) return;
+        if (api.visited || reduced) return;
         api.visited = true;
-        var r = hero.getBoundingClientRect();
         var star = makeStar([5, "reference", "you-were-here", "You copied the install command. This star is yours; the next ones will be your agents'."], 0.03, 0.5);
         star.incoming = true;
         star.mine = true;
-        stars.push(star);
-        meteors.push({ sx: clientX - r.left, sy: clientY - r.top, star: star, write: true, t: 0, dur: 1700, bend: 0.28, label: "+ you-were-here.md" });
-        start();
+        function send(x, y) {
+          stars.push(star);
+          meteors.push({ sx: x, sy: y, star: star, write: true, t: 0, dur: 1700, bend: 0.28, label: "+ you-were-here.md" });
+          start();
+        }
+        if (onScreen) {
+          var r = hero.getBoundingClientRect();
+          send(clientX - r.left, clientY - r.top);
+        } else {
+          pendingVisit = function () { send(W * 0.5, -30); };
+        }
       }
     };
 
@@ -668,13 +694,16 @@
       requestAnimationFrame(frame);
       return api;
     }
-    watchVisible(hero, function (v) { onScreen = v; if (v && !document.hidden) start(); else stop(); });
+    watchVisible(hero, function (v) {
+      onScreen = v;
+      if (v && !document.hidden) start(); else stop();
+      if (v && pendingVisit) { var go = pendingVisit; pendingVisit = null; setTimeout(go, 700); }
+    });
     document.addEventListener("visibilitychange", function () {
       if (document.hidden) stop(); else if (onScreen) start();
     });
-    /* the first session arrives soon after the page does */
+    /* the first session arrives soon after the sky does */
     nextAt = 900;
-    start();
     return api;
   }
 
@@ -729,19 +758,14 @@
   }
 
   /* ======================================================================
-     3. THE RAIL, THE HEADER, THE PROGRESS LINE
+     3. THE HEADER, THE PROGRESS LINE, THE CURRENT SECTION
      ====================================================================== */
   var head = $("[data-head]");
   var progress = head && $(".head-progress i", head);
-  var rail = $(".rail");
-  var railLinks = rail ? $$("a[data-rail]", rail) : [];
-  var railFill = rail && $(".rail-line i", rail);
   var chapters = $$("[data-chapter]");
   var horizons = $$(".chapter");
   var navLinks = $$(".head-nav a[href^='#']");
   var starfield = $(".starfield");
-  var heroEl = $(".hero");
-  var finaleEl = $(".finale");
   var furthest = -1;
   var scrollHooks = [];
 
@@ -752,28 +776,19 @@
     if (head) head.classList.toggle("is-solid", y > 24);
     if (progress) progress.style.setProperty("--p", clamp(y / Math.max(1, docH - vh), 0, 1).toFixed(4));
 
-    var line = vh * 0.42, cur = -1, frac = 0;
+    var line = vh * 0.42, cur = -1;
     for (var i = 0; i < chapters.length; i++) {
-      var r = chapters[i].getBoundingClientRect();
-      if (r.top <= line) { cur = i; frac = clamp((line - r.top) / Math.max(1, r.height), 0, 1); }
+      if (chapters[i].getBoundingClientRect().top <= line) cur = i;
     }
     if (cur > furthest) { furthest = cur; memory.reached(chapters[cur].id); }
     for (var c = 0; c < horizons.length; c++) horizons[c].classList.toggle("is-reached", horizons[c].getBoundingClientRect().top <= line);
     var curId = cur >= 0 ? chapters[cur].id : "";
-    railLinks.forEach(function (a, k) {
-      a.classList.toggle("is-current", k === cur);
-      a.classList.toggle("is-past", k < cur);
-      if (k === cur) a.setAttribute("aria-current", "true"); else a.removeAttribute("aria-current");
+    navLinks.forEach(function (a) {
+      var on = a.getAttribute("href") === "#" + curId;
+      a.classList.toggle("is-current", on);
+      if (on) a.setAttribute("aria-current", "true"); else a.removeAttribute("aria-current");
     });
-    if (railFill) railFill.style.setProperty("--fill", clamp((cur + frac) / Math.max(1, chapters.length - 1), 0, 1).toFixed(4));
-    var pastHero = heroEl ? heroEl.getBoundingClientRect().bottom < vh * 0.5 : true;
-    var atEnd = finaleEl ? finaleEl.getBoundingClientRect().top < vh * 0.55 : false;
-    if (rail) rail.classList.toggle("is-on", pastHero && !atEnd && cur >= 0);
-    navLinks.forEach(function (a) { a.classList.toggle("is-current", a.getAttribute("href") === "#" + curId); });
-    if (starfield) {
-      starfield.classList.toggle("is-on", pastHero);
-      if (!reduced) starfield.style.transform = "translate3d(0," + (-y * 0.02).toFixed(1) + "px,0)";
-    }
+    if (starfield && !reduced) starfield.style.transform = "translate3d(0," + (-y * 0.02).toFixed(1) + "px,0)";
     scrollHooks.forEach(function (fn) { fn(y, vh); });
   }
   var ticking = false;
@@ -783,189 +798,77 @@
     requestAnimationFrame(function () { ticking = false; onScroll(); });
   }
 
-  /* ======================================================================
-     4. THE WEEK -- without Seamless, then the same three sessions with it
-     ====================================================================== */
-  function Week(fig) {
-    var days = $$(".day", fig);
-    var row = $(".days", fig);
-    var replay = $(".week-replay", fig);
-    var modeBtns = $$("[data-week-mode]", fig);
-    var mode = fig.dataset.mode || "without";
-
-    function setMode(m) {
-      mode = m;
-      fig.dataset.mode = m;
-      modeBtns.forEach(function (b) {
-        b.setAttribute("aria-pressed", b.dataset.weekMode === m ? "true" : "false");
-        b.classList.remove("is-beckoning");
-      });
-    }
-    function inMode(el) { return !el.dataset.forMode || el.dataset.forMode === mode; }
-
-    if (reduced) {
-      /* no motion: the toggle simply shows the other week */
-      modeBtns.forEach(function (b) {
-        b.addEventListener("click", function () { setMode(b.dataset.weekMode); });
-      });
-      return;
-    }
-
-    /* every word becomes a mote that can drift away */
-    days.forEach(function (day) {
-      $$(".dl", day).forEach(function (dl) {
-        if (dl.hasAttribute("data-brief") || dl.hasAttribute("data-save")) return;
-        (function walk(node) {
-          Array.prototype.slice.call(node.childNodes).forEach(function (n) {
-            if (n.nodeType === 3) {
-              var frag = document.createDocumentFragment();
-              n.textContent.split(/(\s+)/).forEach(function (part) {
-                if (!part) return;
-                var s = document.createElement("span");
-                s.className = "wd";
-                s.textContent = part;
-                s.style.setProperty("--dx", (Math.random() * 8 - 4).toFixed(1) + "px");
-                s.style.setProperty("--dy", (-2 - Math.random() * 7).toFixed(1) + "px");
-                s.style.setProperty("--dr", (Math.random() * 6 - 3).toFixed(1) + "deg");
-                s.style.setProperty("--wd", Math.round(Math.random() * 600) + "ms");
-                frag.appendChild(s);
-              });
-              n.parentNode.replaceChild(frag, n);
-            } else if (n.nodeType === 1 && n.tagName.toLowerCase() !== "svg") {
-              walk(n);
-            }
-          });
-        })(dl);
+  /* arrow keys, Home and End move between the tabs of a tablist */
+  function rove(tabs, pick) {
+    tabs.forEach(function (t, i) {
+      t.addEventListener("keydown", function (ev) {
+        var k = ev.key;
+        var j = k === "ArrowDown" || k === "ArrowRight" ? i + 1
+          : k === "ArrowUp" || k === "ArrowLeft" ? i - 1
+          : k === "Home" ? 0 : k === "End" ? tabs.length - 1 : null;
+        if (j === null) return;
+        ev.preventDefault();
+        pick((j + tabs.length) % tabs.length, true);
       });
     });
-    var undo = $("[data-undo]", fig);
-    if (undo) {
-      /* Tuesday's "cleanup" is the bug: mark the words that undo Monday */
-      var motes = $$(".wd", undo);
-      var mark = document.createElement("span");
-      mark.className = "bad-mark";
-      motes.slice(-3).forEach(function (m) { mark.appendChild(m); });
-      undo.appendChild(mark);
-    }
-    var save = $("[data-save]", fig);
-    var brief = $("[data-brief]", fig);
-    fig.classList.add("is-armed");
-
-    var token = 0, autoWith = false, inView = false;
-    function reset() {
-      /* snap back without animating: words drifting home look like a glitch */
-      fig.classList.add("is-resetting");
-      days.forEach(function (d) {
-        d.classList.remove("is-live", "is-gone", "is-kept");
-        $$(".dl, .day-end", d).forEach(function (l) { l.classList.remove("is-on", "dl-bad", "is-landed"); });
-      });
-      $$(".week-star", fig).forEach(function (s) { s.remove(); });
-      void fig.offsetWidth;
-      fig.classList.remove("is-resetting");
-    }
-    function narrow() { return row && getComputedStyle(row).display === "flex"; }
-    function focusDay(i) {
-      if (!narrow()) return;
-      var first = days[0];
-      row.scrollTo({ left: days[i].offsetLeft - first.offsetLeft, behavior: "smooth" });
-    }
-    /* Monday's lesson travels to Tuesday's briefing as a star */
-    function fly(from, to) {
-      return new Promise(function (resolve) {
-        var fr = fig.getBoundingClientRect();
-        var a = from.getBoundingClientRect(), b = to.getBoundingClientRect();
-        var onScreen = function (r) { return r.right > 0 && r.left < window.innerWidth && r.bottom > 0 && r.top < window.innerHeight; };
-        if (!onScreen(a) || !onScreen(b) || !from.animate) { resolve(); return; }
-        var x0 = a.left - fr.left + 10, y0 = a.top - fr.top + a.height / 2;
-        var x1 = b.left - fr.left + 8, y1 = b.top - fr.top + b.height / 2;
-        var lift = Math.max(70, Math.abs(x1 - x0) * 0.35);
-        var star = document.createElement("span");
-        star.className = "week-star";
-        fig.appendChild(star);
-        var frames = [];
-        for (var k = 0; k <= 16; k++) {
-          var t = k / 16, u = 1 - t;
-          var cx = (x0 + x1) / 2, cy = Math.min(y0, y1) - lift;
-          var x = u * u * x0 + 2 * u * t * cx + t * t * x1;
-          var y = u * u * y0 + 2 * u * t * cy + t * t * y1;
-          frames.push({ transform: "translate(" + x.toFixed(1) + "px," + y.toFixed(1) + "px) scale(" + (1 + Math.sin(t * Math.PI) * 0.6).toFixed(2) + ")" });
-        }
-        var anim = star.animate(frames, { duration: 1100, easing: "cubic-bezier(0.45, 0, 0.25, 1)", fill: "forwards" });
-        anim.onfinish = function () { star.remove(); resolve(); };
-      });
-    }
-    async function play(m) {
-      var my = ++token;
-      setMode(m);
-      reset();
-      if (replay) replay.hidden = true;
-      for (var i = 0; i < days.length; i++) {
-        var d = days[i];
-        focusDay(i);
-        d.classList.add("is-live");
-        var lines = $$(".dl", d).filter(inMode);
-        for (var j = 0; j < lines.length; j++) {
-          var ln = lines[j];
-          if (ln === brief && save) {
-            await wait(300);
-            if (my !== token) return;
-            await fly(save, brief);
-            if (my !== token) return;
-            ln.classList.add("is-on", "is-landed");
-            await wait(700);
-            continue;
-          }
-          await wait(j === 0 ? 380 : 720);
-          if (my !== token) return;
-          ln.classList.add("is-on");
-        }
-        if (m === "without" && undo && d.contains(undo)) {
-          await wait(650);
-          if (my !== token) return;
-          undo.classList.add("dl-bad");
-        }
-        await wait(760);
-        if (my !== token) return;
-        $$(".day-end", d).filter(inMode).forEach(function (e) { e.classList.add("is-on"); });
-        if (i < days.length - 1) {
-          await wait(520);
-          if (my !== token) return;
-          d.classList.remove("is-live");
-          d.classList.add(m === "without" ? "is-gone" : "is-kept");
-          await wait(m === "without" ? 950 : 500);
-          if (my !== token) return;
-        }
-      }
-      if (replay) replay.hidden = false;
-      if (m === "without" && !autoWith) {
-        /* the story is half told: offer the other week, then play it */
-        autoWith = true;
-        var withBtn = modeBtns.filter(function (b) { return b.dataset.weekMode === "with"; })[0];
-        if (withBtn) withBtn.classList.add("is-beckoning");
-        await wait(2600);
-        if (my !== token || !inView) return;
-        play("with");
-      }
-    }
-    modeBtns.forEach(function (b) {
-      b.addEventListener("click", function () { autoWith = true; play(b.dataset.weekMode); });
-    });
-    if (replay) replay.addEventListener("click", function () { autoWith = true; play(mode); });
-    watchVisible(fig, function (v) { inView = v; }, "0px");
-    onceVisible(fig, function () { play("without"); }, 0.45);
   }
 
   /* ======================================================================
-     5. THE ORBIT
+     4. THE DUEL -- Monday's session, then one Tuesday prompt down two lanes
+     Each [data-beat] arrives in turn, the same beat on both lanes at once.
+     Every line holds its place from the start, so nothing shifts as it plays.
      ====================================================================== */
-  function Orbit(sec) {
-    var steps = $$(".ostep", sec);
-    var nodes = $$(".o-node", sec);
-    var labels = $$(".o-label", sec);
-    var comet = $(".o-comet", sec);
-    var trail = $(".o-trail", sec);
-    var ticks = $(".o-ticks", sec);
-    var n = steps.length;
+  function Duel(fig) {
+    if (reduced) return;
+    var beats = $$("[data-beat]", fig);
+    var replay = $(".duel-replay", fig);
+    var brief = $(".dl-brief", fig);
+    /* the mark around the figure: its star lands when the file is saved
+       (beat 2) and answers when the briefing reads it (beat 4) */
+    var mark = $(".mk", fig);
+    var last = 0;
+    beats.forEach(function (el) { last = Math.max(last, +el.dataset.beat); });
+    /* how long each beat holds before the next one arrives */
+    var HOLD = [700, 950, 1050, 700, 1000, 800, 850, 800, 0];
+    fig.classList.add("is-armed");
+    var token = 0;
+    async function run() {
+      var my = ++token;
+      if (replay) replay.hidden = true;
+      beats.forEach(function (el) { el.classList.remove("is-on", "is-landed"); });
+      if (mark) mark.classList.remove("is-lit", "is-read");
+      await wait(300); if (my !== token) return;
+      for (var b = 0; b <= last; b++) {
+        for (var k = 0; k < beats.length; k++) if (+beats[k].dataset.beat === b) beats[k].classList.add("is-on");
+        if (b === 2 && mark) mark.classList.add("is-lit");
+        if (b === 4 && brief) brief.classList.add("is-landed");
+        if (b === 4 && mark) mark.classList.add("is-read");
+        await wait(HOLD[b] === undefined ? 750 : HOLD[b]); if (my !== token) return;
+      }
+      if (replay) replay.hidden = false;
+    }
+    if (replay) replay.addEventListener("click", run);
+    /* the headline rises first */
+    onceVisible(fig, function () { setTimeout(run, 450); }, 0.3);
+  }
+
+  /* ======================================================================
+     5. THE LOOP -- write, brief, recall, curate on one stage
+     A tablist beside the orbit. Once on screen it plays one lap by itself,
+     waits while the pointer or the keyboard is on it, and stops for good the
+     moment the visitor picks a step. The comet only ever travels forward.
+     ====================================================================== */
+  function Loop(box) {
+    var tabs = $$('[role="tab"]', box);
+    var panels = tabs.map(function (t) { return document.getElementById(t.getAttribute("aria-controls")); });
+    var nodes = $$(".o-node", box);
+    var labels = $$(".o-label", box);
+    var arm = $(".o-arm", box);
+    var trail = $(".o-trail", box);
+    var ticks = $(".o-ticks", box);
+    var n = tabs.length, cur = 0, turns = 0;
+    var DWELL = 6500;
+    if (!n) return;
     if (ticks) {
       var NS = "http://www.w3.org/2000/svg";
       for (var i = 0; i < 72; i++) {
@@ -979,55 +882,74 @@
         ticks.appendChild(ln);
       }
     }
-    var mq = window.matchMedia("(min-width: 1000px) and (min-height: 620px)");
-    var pinned = false, lastLit = -1;
-    function setPinned() {
-      pinned = mq.matches && !reduced;
-      sec.classList.toggle("is-pinned", pinned);
-      lastLit = -1;
-      update();
-    }
-    function easeIO(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
-    function update() {
-      if (!pinned) {
-        steps.forEach(function (s) { s.classList.remove("is-on", "is-past"); });
-        return;
-      }
-      var r = sec.getBoundingClientRect();
-      var total = Math.max(1, sec.offsetHeight - window.innerHeight);
-      var p = clamp(-r.top / total, 0, 0.9999);
-      var k = Math.floor(p * n);
-      var f = p * n - k;
-      /* each step opens with the comet travelling in from the last station;
-         the last one ends by closing the loop back to the first */
-      var pos = k === 0 ? 0 : (k - 1) + easeIO(clamp(f / 0.32, 0, 1));
-      if (k === n - 1 && f > 0.7) pos = k + easeIO((f - 0.7) / 0.3);
-      var ang = -Math.PI / 2 + pos * (Math.PI * 2 / n);
-      if (comet) comet.setAttribute("transform", "translate(" + (220 + Math.cos(ang) * 150).toFixed(2) + " " + (220 + Math.sin(ang) * 150).toFixed(2) + ")");
-      if (trail) trail.style.setProperty("--trail", (pos / n * 100).toFixed(2));
-      /* the copy, the station, and its label change together, when the comet
-         arrives; closing the loop keeps the last station lit */
-      var lit = Math.min(Math.floor(pos + 0.02), n - 1);
-      if (lit !== lastLit) {
-        lastLit = lit;
-        steps.forEach(function (s, j) { s.classList.toggle("is-on", j === lit); s.classList.toggle("is-past", j < lit); });
-        nodes.forEach(function (nd, j) { nd.classList.toggle("is-on", j === lit); nd.classList.toggle("is-past", j < lit); });
-        labels.forEach(function (lb, j) { lb.classList.toggle("is-on", j === lit); });
-      }
-    }
-    /* clicking a station scrolls to it */
-    nodes.forEach(function (nd, j) {
-      nd.style.cursor = "pointer";
-      nd.addEventListener("click", function () {
-        if (!pinned) return;
-        var top = sec.getBoundingClientRect().top + window.scrollY;
-        var total = sec.offsetHeight - window.innerHeight;
-        window.scrollTo({ top: top + total * ((j + 0.45) / n), behavior: "smooth" });
+    var trailT = 0;
+    function show(i, focus, lap) {
+      /* closing the loop: the comet goes on round to the first station */
+      if (lap && i === 0) turns++;
+      cur = i;
+      tabs.forEach(function (t, k) {
+        var on = k === i;
+        t.setAttribute("aria-selected", on ? "true" : "false");
+        t.classList.toggle("active", on);
+        t.tabIndex = on ? 0 : -1;
+        if (panels[k]) panels[k].classList.toggle("is-on", on);
       });
-    });
-    if (mq.addEventListener) mq.addEventListener("change", setPinned);
-    setPinned();
-    scrollHooks.push(update);
+      nodes.forEach(function (nd, k) { nd.classList.toggle("is-on", k === i); nd.classList.toggle("is-past", k < i); });
+      labels.forEach(function (lb, k) { lb.classList.toggle("is-on", k === i); });
+      if (arm) arm.style.setProperty("--turn", ((turns * n + i) * (360 / n)) + "deg");
+      if (trail) {
+        clearTimeout(trailT);
+        if (lap && i === 0) {
+          trail.style.strokeDasharray = "100 100";
+          trailT = setTimeout(function () {
+            trail.style.transition = "none";
+            trail.style.strokeDasharray = "0 100";
+            void trail.getBoundingClientRect();
+            trail.style.transition = "";
+          }, 1200);
+        } else {
+          trail.style.strokeDasharray = (i / n * 100).toFixed(2) + " 100";
+        }
+      }
+      if (focus) tabs[i].focus();
+    }
+
+    /* narrow screens show one step at its own height (home.css, 960px), so a
+       step changing by itself would move the page under the reader */
+    var narrow = window.matchMedia && window.matchMedia("(max-width: 960px)").matches;
+    var auto = false, done = reduced || narrow, onScreen = false, held = false, timer = 0;
+    function sync() {
+      var run = !done && onScreen && !held;
+      if (run === auto) return;
+      auto = run;
+      box.classList.toggle("is-auto", auto);
+      clearTimeout(timer);
+      if (auto) next();
+    }
+    function next() {
+      timer = setTimeout(function () {
+        if (!auto) return;
+        var to = (cur + 1) % n;
+        show(to, false, true);
+        if (to === 0) { done = true; sync(); return; }
+        next();
+      }, DWELL);
+    }
+    function picked(i, focus) { done = true; sync(); show(i, focus, false); }
+
+    box.style.setProperty("--dwell", DWELL + "ms");
+    tabs.forEach(function (t, i) { t.addEventListener("click", function () { picked(i, false); }); });
+    rove(tabs, picked);
+    nodes.forEach(function (nd, i) { nd.addEventListener("click", function () { picked(i, false); }); });
+    box.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse") { held = true; sync(); } });
+    box.addEventListener("pointerleave", function () { held = false; sync(); });
+    box.addEventListener("focusin", function () { held = true; sync(); });
+    box.addEventListener("focusout", function () { held = false; sync(); });
+    show(0, false, false);
+    if (!("IntersectionObserver" in window)) return;
+    new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) { onScreen = e.isIntersecting; sync(); });
+    }, { threshold: 0.45 }).observe(box);
   }
 
   /* ======================================================================
@@ -1091,7 +1013,7 @@
   }
 
   /* ======================================================================
-     THE KEYS: a planted write held, a locked project opened by a touch.
+     7. THE KEYS: a planted write held, a locked project opened by a touch.
      Both terminals play line by line, side by side; the approval card waits
      for its scan before the agent goes on. Without JS (or with reduced
      motion) every line simply shows.
@@ -1142,7 +1064,31 @@
   }
 
   /* ======================================================================
-     7. THE FOLDER + THE GARDENER
+     THE LAYERS: six stops on one line, one sentence on show. A tablist; a
+     pointer resting on a stop picks it too.
+     ====================================================================== */
+  function Layers(box) {
+    var tabs = $$('[role="tab"]', box);
+    function pick(i, focus) {
+      tabs.forEach(function (t, k) {
+        var on = k === i;
+        t.setAttribute("aria-selected", on ? "true" : "false");
+        t.classList.toggle("active", on);
+        t.tabIndex = on ? 0 : -1;
+        var p = document.getElementById(t.getAttribute("aria-controls"));
+        if (p) p.classList.toggle("is-on", on);
+      });
+      if (focus) tabs[i].focus();
+    }
+    tabs.forEach(function (t, i) {
+      t.addEventListener("click", function () { pick(i, false); });
+      t.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse") pick(i, false); });
+    });
+    rove(tabs, pick);
+  }
+
+  /* ======================================================================
+     8. THE FOLDER + THE GARDENER
      ====================================================================== */
   function Folder(cell) {
     var file = $(".file", cell) || cell;
@@ -1199,7 +1145,7 @@
   }
 
   /* ======================================================================
-     8. THE CONSOLE -- hotspots on one screen, a lightbox for the others
+     9. THE CONSOLE -- hotspots on one screen, a lightbox for the others
      ====================================================================== */
   function Hotshot(fig) {
     var marks = $$(".hs", fig), notes = $$(".hs-notes li", fig);
@@ -1245,39 +1191,6 @@
       });
     });
     dlg.addEventListener("click", function () { dlg.close(); });
-  }
-
-  /* ======================================================================
-     9. THE ASKS -- a WAI-ARIA tablist; the markup shows every request until
-        this hides all but the first
-     ====================================================================== */
-  function Asks(box) {
-    var tabs = $$('[role="tab"]', box);
-    function pick(tab, focus) {
-      tabs.forEach(function (t) {
-        var on = t === tab;
-        t.setAttribute("aria-selected", on ? "true" : "false");
-        t.classList.toggle("active", on);
-        t.tabIndex = on ? 0 : -1;
-        var panel = document.getElementById(t.getAttribute("aria-controls"));
-        panel.hidden = !on;
-        panel.classList.toggle("is-shown", on);
-      });
-      if (focus) tab.focus();
-    }
-    tabs.forEach(function (t, i) {
-      t.addEventListener("click", function () { pick(t, false); });
-      t.addEventListener("keydown", function (ev) {
-        var k = ev.key;
-        var j = k === "ArrowDown" || k === "ArrowRight" ? i + 1
-          : k === "ArrowUp" || k === "ArrowLeft" ? i - 1
-          : k === "Home" ? 0 : k === "End" ? tabs.length - 1 : null;
-        if (j === null) return;
-        ev.preventDefault();
-        pick(tabs[(j + tabs.length) % tabs.length], true);
-      });
-    });
-    if (tabs.length) pick(tabs[0], false);
   }
 
   /* ======================================================================
@@ -1345,8 +1258,9 @@
       return y === 1 ? "about a year ago" : y + " years ago";
     }
     function title(id) {
-      var a = $('.rail a[data-rail="' + id + '"] .rail-label');
-      return a ? a.textContent.replace(/\s+/g, " ").trim() : id;
+      var sec = document.getElementById(id);
+      /* an id an older visit stored may no longer name a section */
+      return sec && sec.dataset.title || "";
     }
     function briefing() {
       if (!prev || !prev.last || now - prev.last < 20 * 60 * 1000) return;
@@ -1397,6 +1311,39 @@
      12. SMALL THINGS
      ====================================================================== */
   var sky = null;
+  /* THE DOCK -- the install command, within reach once the hero's own has
+     scrolled away. It steps aside whenever another install command, the
+     welcome-back card, or the footer is on screen, and the close button
+     keeps it away for the rest of the visit (sessionStorage).
+     */
+  function Dock(el) {
+    var KEY = "seamless.dock";
+    try { if (sessionStorage.getItem(KEY) === "off") return; } catch (e) { /* private mode */ }
+    if (!("IntersectionObserver" in window)) return;
+    var others = $$(".install-pill, .qs-step:first-child .code, .site-foot").filter(function (n) { return !el.contains(n); });
+    var inView = [], past = false, closed = false;
+    el.hidden = false;
+    function sync() {
+      el.classList.toggle("is-on", past && !closed && !inView.length && !$(".visit"));
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        var k = inView.indexOf(e.target);
+        if (e.isIntersecting && k < 0) inView.push(e.target);
+        else if (!e.isIntersecting && k >= 0) inView.splice(k, 1);
+      });
+      sync();
+    });
+    others.forEach(function (n) { io.observe(n); });
+    scrollHooks.push(function (y) { past = y > 260; sync(); });
+    var x = $("[data-dock-x]", el);
+    if (x) x.addEventListener("click", function () {
+      closed = true;
+      try { sessionStorage.setItem(KEY, "off"); } catch (e) { /* private mode */ }
+      sync();
+    });
+  }
+
   function copies() {
     document.addEventListener("click", function (e) {
       var btn = e.target.closest(".copy-btn");
@@ -1413,8 +1360,8 @@
       setTimeout(function () { mo.disconnect(); }, 2500);
       if (reduced) return;
       var r = btn.getBoundingClientRect();
-      /* the hero's own copy button sends a session streaking into the sky */
-      if (isInstall && sky && btn.closest(".hero")) sky.visit(r.left + r.width / 2, r.top + r.height / 2);
+      /* an install command copied anywhere sends a session into the sky */
+      if (isInstall && sky) sky.visit(r.left + r.width / 2, r.top + r.height / 2);
       /* everywhere: a small burst of stars */
       var b = document.createElement("span");
       b.className = "burst";
@@ -1446,27 +1393,30 @@
     reveals();
     copies();
     phoneMenu();
-    var hero = $(".hero");
-    if (hero) sky = Sky(hero);
-    var week = $("[data-week]");
-    if (week) Week(week);
-    var orbit = $("[data-orbit]");
-    if (orbit) Orbit(orbit);
+    if (starfield) starfield.classList.add("is-on");
+    var duel = $("[data-duel]");
+    if (duel) Duel(duel);
+    var loop = $("[data-loop]");
+    if (loop) Loop(loop);
     var board = $("[data-board]");
     if (board) Board(board);
+    var skyHost = $("[data-sky-host]");
+    if (skyHost) sky = Sky(skyHost);
     var file = $("[data-file]");
     if (file) Folder(file);
     var keysBox = $("[data-keys]");
     if (keysBox) Keys(keysBox);
+    var layers = $("[data-layers]");
+    if (layers) Layers(layers);
     var garden = $("[data-garden]");
     if (garden) Garden(garden);
     var shot = $("[data-hotshot]");
     if (shot) Hotshot(shot);
     Lightbox();
-    var asks = $("[data-asks]");
-    if (asks) Asks(asks);
     var fin = $(".finale");
     if (fin) Finale(fin);
+    var dock = $("[data-dock]");
+    if (dock) Dock(dock);
     window.addEventListener("scroll", requestScroll, { passive: true });
     window.addEventListener("resize", requestScroll);
     onScroll();

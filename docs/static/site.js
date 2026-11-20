@@ -1,6 +1,7 @@
 /* thereisnospoon.org -- theme toggle, OS switch, reading switch, copy
-   buttons, scroll reveals. No dependencies, no network, no state beyond
-   localStorage("theme"), localStorage("os") and sessionStorage's reading. */
+   buttons, the comparison matrix, scroll reveals. No dependencies, no
+   network, no state beyond localStorage("theme"), localStorage("os") and
+   sessionStorage's reading. */
 (function () {
   "use strict";
 
@@ -93,6 +94,46 @@
       }
     });
   }
+
+  /* the comparison matrix (the landing page and /compare/): picking a tool,
+     from its column head or from the pills narrow screens show, lights that
+     column and prints when to choose it over Seamless. The sentence, the
+     tool's one-line description and its link ride on the column head as
+     data attributes, so the markup stays the single copy of the words.
+     Without JS the whole table shows and scrolls sideways. */
+  document.querySelectorAll("[data-mtx]").forEach(function (box) {
+    var out = box.querySelector("[data-mtx-out]");
+    function pick(id) {
+      var th = box.querySelector('thead th[data-col="' + id + '"]');
+      if (!th) return;
+      box.dataset.focus = id;
+      box.querySelectorAll("[data-col]").forEach(function (c) {
+        c.classList.toggle("is-focus", c.dataset.col === id);
+      });
+      box.querySelectorAll("[data-mtx-pick]").forEach(function (b) {
+        b.setAttribute("aria-pressed", b.dataset.mtxPick === id ? "true" : "false");
+      });
+      if (!out) return;
+      var name = th.querySelector(".mtx-name").firstChild.textContent;
+      var why = th.dataset.pick || "";
+      out.textContent = "";
+      var lead = document.createElement("b");
+      lead.textContent = "Choose " + name + " instead if";
+      out.appendChild(lead);
+      out.appendChild(document.createTextNode(" " + why.charAt(0).toLowerCase() + why.slice(1) + " "));
+      if (th.dataset.href) {
+        var a = document.createElement("a");
+        a.href = th.dataset.href;
+        a.textContent = "More on " + name;
+        out.appendChild(a);
+      }
+    }
+    box.addEventListener("click", function (ev) {
+      var b = ev.target.closest("[data-mtx-pick]");
+      if (b) pick(b.dataset.mtxPick);
+    });
+    pick(box.dataset.focus);
+  });
 
   /* copy buttons: copy the nearest [data-copy] text */
   document.addEventListener("click", function (ev) {

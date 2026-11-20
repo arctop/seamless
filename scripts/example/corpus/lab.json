@@ -1,0 +1,322 @@
+{
+ "lab": "detached-updater-os-spikes",
+ "trials": [
+  {
+   "id": "01M4H8SDAPKHGWMWWCWGK1VA7P",
+   "title": "macOS 27: first bootstrap of a LaunchAgent -- process identity and BTM registration",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4H8VCD031XX19W2XJGADNC8",
+   "title": "macOS 27: external launchctl bootout -- children with no detach / Setpgid / Setsid",
+   "outcome": "partial"
+  },
+  {
+   "id": "01M4H8Y2GEE79EV86J6J0ER0AQ",
+   "title": "macOS 27: launchctl kickstart -k -- children with no detach / Setpgid / Setsid",
+   "outcome": "pass",
+   "changes": "Same harness; job re-bootstrapped and left running 11s (past the 10s throttle window), three idle children spawned (nil / Setpgid / Setsid SysProcAttr, SIGTERM ignored+logged), then `launchctl kickstart -k gui/501/<label>` from a terminal.",
+   "expected": "Setpgid and Setsid children get no signal and survive (90%); no-detach child gets the group SIGTERM at main-process exit (85%); immediate respawn (80%); 55% that -k sends SIGTERM rather than SIGKILL.",
+   "actual": "kickstart -k sent SIGTERM (daemon logged \"signal terminated\" 9ms after the call); new instance started 30ms later and answered /healthz 104ms after the kickstart call. No-detach child got SIGTERM 8ms after the daemon (group kill) and survived only by ignoring it; Setpgid and Setsid children received nothing, reparented to pid 1, ran to their natural end 11s later.",
+   "metrics": {
+    "kick_signal": "SIGTERM",
+    "none_got_sigterm": true,
+    "os": "macos-27.0.1",
+    "restart_healthy_ms": 104,
+    "setpgid_signaled": false,
+    "setsid_signaled": false,
+    "trial": "kickstart-k"
+   }
+  },
+  {
+   "id": "01M4H8Y2H9A23JJAGHYREZBJXD",
+   "title": "macOS 27: kill -9 of the service's main process -- children with no detach / Setpgid / Setsid",
+   "outcome": "pass",
+   "changes": "Same harness; job had run >10s; three idle children spawned (nil / Setpgid / Setsid, SIGTERM ignored+logged); `kill -9 <job pid>` from a terminal; KeepAlive=true in the plist.",
+   "expected": "KeepAlive respawns at once (ran > ThrottleInterval) (80%); no-detach child gets the group SIGTERM when launchd reaps the main process (85%); Setpgid/Setsid untouched (90%).",
+   "actual": "Respawned 31ms after the SIGKILL, healthy at 87ms. No-detach child got SIGTERM 6ms after the kill (launchd's group kill on job exit), survived only by ignoring it. Setpgid and Setsid children got nothing, reparented to pid 1, finished normally 13s later.",
+   "metrics": {
+    "none_got_sigterm": true,
+    "os": "macos-27.0.1",
+    "restart_healthy_ms": 87,
+    "setpgid_signaled": false,
+    "setsid_signaled": false,
+    "trial": "kill-9"
+   }
+  },
+  {
+   "id": "01M4H8ZMANVZY4SYKTK5BZHS8X",
+   "title": "macOS 27: orphaned Setsid updater runs the installer's bootout+bootstrap on its own service (same binary)",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4H90NYH6H49KQ69M87490HP",
+   "title": "macOS 27: orphaned Setsid updater swaps the binary (rename) then bootout+bootstrap -- no AMFI kill",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4H9RYSZ7DZRG69W2YXB7MP5",
+   "title": "macOS 27: real seamlessd under a throwaway LaunchAgent -- swap+kickstart -k is NOT killed; swap+bootout/bootstrap 0.54s",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4H9SAT0SHAXC29JSDXTF399",
+   "title": "macOS 27: BTM lazily flags a swapped adhoc executable as \"updated item ... not notified\" -> a fresh Background Items notice per update",
+   "outcome": "fail"
+  },
+  {
+   "id": "01M4H9VPFRNYXDDG6VF4JK3H45",
+   "title": "macOS 27: bootout is async -- with a 40ms drain the first bootstrap always fails (error 5); installer's sleep-1 retry costs ~0.9s vs a 0.1s loop",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4H9Y18S1T4VP6JBX9YSQ6BJ",
+   "title": "macOS 27: service hangs past the 5s exit timeout during the orphan's reload -- launchd SIGKILLs it, Setsid updater survives, bootstrap succeeds at try 5",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4H9ZZG2NFW2BNPD2EXDNPDN",
+   "title": "macOS 27: BTM re-walk -> \"updated item\" for every adhoc build, even with a stable codesign identifier",
+   "outcome": "fail"
+  },
+  {
+   "id": "01M4HA1P9J4BEEA1S6E9J02J2S",
+   "title": "macOS 27: a stable self-signed certificate does not keep BTM's LWCR -- only Team-ID (Developer ID) signing avoids the per-update notice",
+   "outcome": "fail",
+   "changes": "Temporary keychain (deleted afterwards; login search list restored at once) with a self-signed codeSigning certificate \"Seamless Spike Test Signing\" (CSSMERR_TP_NOT_TRUSTED). v7 and v8 (different bytes) signed `codesign -s <sha1> --keychain <tmp> -f -i org.thereisnospoon.spiked`; both designated requirements identical: `identifier \"org.thereisnospoon.spiked\" and certificate leaf = H\"26967222...\"`, TeamIdentifier not set. Each: swap, bootout/bootstrap, touch-triggered BTM re-walk.",
+   "expected": "launchd runs an untrusted-cert binary (75%). v7->v8 logged \"updated item with same LWCR\" (40%) vs \"updated item\" (60%, if BTM keys on TeamIdentifier).",
+   "actual": "Both ran under launchd (spawned, healthy; no Launch Constraint lines). B3 (adhoc -> cert): `updated item: uuid=45AD3646...`. B4 (same cert, new bytes, identical designated requirement): `updated item: uuid=0AB9CEE3...` -- a NEW LWCR again, not \"with same LWCR\". […] Conclusion: for legacy LaunchAgents BTM's LWCR follows the Team ID; anything without one (adhoc, adhoc+identifier, self-signed) is a new background item per build -> a \"Background Items Added\" notice per update. Avoiding it needs Developer ID signing of the darwin binaries (e.g. rcodesign in the release workflow).",
+   "metrics": {
+    "only_team_id_keeps_lwcr": true,
+    "os": "macos-27.0.1",
+    "self_signed_runs_under_launchd": true,
+    "self_signed_same_lwcr": false,
+    "trial": "btm-self-signed-stable-cert"
+   }
+  },
+  {
+   "id": "01M4HA44F60KWPX5M2FTR0E67G",
+   "title": "macOS 27: plist rewrites with an unchanged binary are \"updated item with same LWCR\" (no new notice); notices are posted ~10s after a re-walk and rate-limited",
+   "outcome": "partial"
+  },
+  {
+   "id": "01M4HA5V825ZZZFRS15K2KPBSG",
+   "title": "macOS 27: transient launchd job from a plist outside ~/Library/LaunchAgents runs as its own job with zero BTM activity",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HA8Q3JCG7TPFBPF16EXBDW",
+   "title": "macOS 27: live org.thereisnospoon.seamless restart with a 0.1s bootstrap loop -- healthy 0.84s (same binary)",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HC29F7XAQ0B13WPR7SAJAT",
+   "title": "Windows 11 (26200): a Task Scheduler-launched daemon is in a shared job with only SILENT_BREAKAWAY_OK",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HC68QA3TQ3SDF7TNZSZP8E",
+   "title": "Windows 11: Stop-ScheduledTask ends only the task's process -- children of every creation-flag kind survive (S4U task)",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HC68R8W3NHWHJAAJD2M35Q",
+   "title": "Windows 11: schtasks /End and taskkill /F of the daemon also leave every child alive (S4U task)",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HCFEQ2TNH450MZDRHDF0HY",
+   "title": "Windows 11: per-user on-demand update task registers and runs fine, but an immediate Stop+Start of the service task left it DOWN",
+   "outcome": "fail"
+  },
+  {
+   "id": "01M4HCFER6NMVHXS5AYMBNQXAF",
+   "title": "Windows 11: schtasks /End returns ~1.1s before the task's process exits -- an immediate /Run races the old listener (seamlessd's restart verb)",
+   "outcome": "fail",
+   "changes": "Harness w3 (logs any console control event: os.Interrupt / SIGTERM). Four restarts of \\SeamlessSpike (S4U) exactly as cmd/seamlessd/service.go's actionRestart does on Windows: `schtasks /End` then `schtasks /Run` immediately (runs 1, 3), vs `/End`, poll the old process until HasExited, then `/Run` (runs 2, 4). Health polled with Invoke-WebRequest.",
+   "expected": "/End returns ~0.1s; the old process lingers ~1s; immediate /Run -> bind failure and a dead task (85%); no console control event, a plain terminate (60%); the wait arm healthy ~1.6s after /End (80%).",
+   "actual": "/End returned in 0.035-0.16s every time; the old process actually exited 1.064s / 1.182s after /End (wait arm). No \"signal\" line in the daemon log in any run: Task Scheduler sent no CTRL_C/CTRL_CLOSE -- a hard terminate ~1.1s after the stop request, so a daemon gets no graceful shutdown. Immediate arm: run 1 got lucky (new instance listened, healthy +5.4s), run 3 lost the race (`bind: Only one usage of each socket address`, task Ready, lastResult 0x1, still down 25s later). Wait arm: healthy +2.18s and +3.86s after /End (~1.1s exit wait + ~0.6s start + PS 5.1 polling overhead). => `seamlessd restart` (and the updater's rollback/restart via serviceControl) on Windows can leave the daemon down until next logon; it must wait for the old serve process to exit before /Run, as install.ps1's Stop-Daemon (Stop-Process + Wait-Process) already does.",
+   "metrics": {
+    "console_signal_on_stop": false,
+    "end_returns_s": 0.04,
+    "immediate_run_failures": 1,
+    "immediate_run_tries": 2,
+    "logon": "S4U",
+    "old_process_exit_after_end_s": 1.12,
+    "os": "windows-11-26200",
+    "trial": "schtasks-restart-race",
+    "wait_arm_healthy_s": 2.18
+   }
+  },
+  {
+   "id": "01M4HCJNBWASKGFXM5R5MABHEE",
+   "title": "Windows 11: with install.ps1's stop-and-wait, the updater restarts the service from an on-demand task, a breakaway child, or even a plain child",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HCKVHA2T90CM3N81AQ0ARC",
+   "title": "Windows 11: a standard user can register its own InteractiveToken on-demand task via schtasks /Create /XML (even over SSH); S4U is Access denied",
+   "outcome": "partial"
+  },
+  {
+   "id": "01M4HFP7ZB1NJQTSC200MB92E1",
+   "title": "Linux Ubuntu 24.04: identity of the daemon inside the installer's seamless.service unit (cgroup v2, systemd 255)",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HFP80X4FJX21T0QBG906XT",
+   "title": "Linux Ubuntu 24.04: plain and Setsid children of the daemon are SIGTERMed with it on restart AND stop, then SIGKILLed at the 90s stop timeout",
+   "outcome": "pass",
+   "changes": "Mock daemon in the installer-shaped seamless.service spawned two idle updaters via exec.Command + go Wait (stdio = a file): SysProcAttr nil (plain) and {Setsid:true}. Both log and IGNORE SIGTERM/SIGHUP/SIGCONT and write a heartbeat file every 250ms. Then (run 1) `systemctl --user restart seamless.service`, (run 2) a fresh pair and `systemctl --user stop seamless.service`, both timed from the shell; user-manager journal read with sudo.",
+   "expected": "Both children get SIGTERM in the same instant as the daemon (95%: KillMode=control-group signals the whole cgroup); because they ignore SIGTERM, the restart blocks until TimeoutStopSec (90s default) then SIGKILL (85%); Setsid makes no difference (95%); stop identical (95%).",
+   "actual": "As predicted, both runs. systemd-cgls before: both updaters inside /user.slice/user-501.slice/user@501.service/app.slice/seamless.service (the Setsid one with pgid=sid=its pid, the plain one in the daemon's pgid 1321). Restart at 23:20:15.683: daemon, plain and Setsid child all got SIGTERM+SIGCONT within 0.6ms (15.6873-15.6879); the daemon exited at +62ms; both children got a SECOND SIGTERM+SIGCONT (state final-sigterm) and were reparented to the user manager (988). `systemctl --user restart` returned after 90.16s: journal \"seamless.service: State 'final-sigterm' timed out. Killing.\" / \"Killing process 1377 (seamlessd) with signal SIGKILL.\" / \"Killing process 1390 ...\" / \"Failed with result 'timeout'.\" / \"Found left-over process 1390 (seamlessd) in control group while starting unit. Ignoring.\", then \"Started seamless.service\" and a new instance at 23:21:45.846. Heartbeats stopped at the SIGKILL. Stop: identical (deactivating (final-sigterm) for 90.12s, SIGKILL to both). A real updater with Go's default SIGTERM handling would die at the installer's first `systemctl --user restart`, mid-install.",
+   "metrics": {
+    "cgroup_version": 2,
+    "children_sigterm_same_instant": true,
+    "kill_mode": "control-group",
+    "os": "ubuntu-24.04",
+    "plain_child_killed": true,
+    "restart_blocked_s": 90.16,
+    "second_sigterm_final": true,
+    "setsid_child_killed": true,
+    "stop_blocked_s": 90.12,
+    "systemd_version": 255,
+    "trial": "plain-setsid-children-vs-restart-stop"
+   }
+  },
+  {
+   "id": "01M4HFTHDMPJF7TW3DZR7QCPTW",
+   "title": "Linux Ubuntu 24.04: systemd-run --user --unit=seamless-update-<ULID> from INSIDE seamless.service works in ~8ms; the updater survives restart and stop and restarts the service itself (new instance +0.16s)",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HFTHEJWB032VQ44VA5NQE7",
+   "title": "Linux Ubuntu 24.04: transient updater unit semantics -- name collision rc=1 text, --collect drops failed units, RuntimeMaxSec stops with SIGTERM then SIGKILL",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HFWMAJCD2CHNHZFGDJQH63",
+   "title": "Linux Ubuntu 24.04: systemd-run --user --scope fallback from inside the unit works; the updater keeps the daemon's env (SEAMLESS_CONFIG) but gets the scope's INVOCATION_ID, survives restart/stop, restarts the service",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HFY3EV8HDP87CBXN83HFCZ",
+   "title": "Linux Ubuntu 24.04: systemd-run --user needs no D-Bus -- it reaches the manager's private socket via XDG_RUNTIME_DIR; only --wait/--pipe and a missing XDG_RUNTIME_DIR fail",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HG3THG6GDBBP8WMNXFMP9K",
+   "title": "Linux Ubuntu 24.04: real seamlessd (d8519bb source build) restarts to healthy in ~35ms; a 6th start inside 10s hits the user manager's start limit and leaves the service failed",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HG3TJB50GZXC4RJSF4VFD4",
+   "title": "Linux Ubuntu 24.04: the REAL probe code classifies the unit's process as installer (gate 9 met), and transient-unit, scope and shell processes as not supervised but outsideServiceCheck-ok",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HGDPZ2W7V58R4CBPV97SEA",
+   "title": "Linux Ubuntu 24.04: logout without linger stops user@UID 10s later -- the daemon AND both transient-service and scope updaters are SIGTERMed, SIGKILLed 5s later (Ubuntu's user@ stop timeout)",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HGDPZY8KAWAKKNBEHVM309",
+   "title": "Linux Ubuntu 24.04: with linger, logout leaves user@UID, the daemon and both updaters untouched; a plain ssh user may enable its own linger (polkitd allow_any=yes)",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HGP0N2GHN39WR3JE0V10NA",
+   "title": "Linux Debian 12: systemd-run --user transient updater (and --scope) from inside seamless.service work on systemd 252 with NO user D-Bus installed; Setsid children die on restart",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HGP0NY27HSN50RPNJ2FQPF",
+   "title": "Linux Fedora 44: systemd 259 (newest measured) -- transient updater and --scope from inside seamless.service work; error texts reworded (\"Failed to connect to user scope bus via local transport: ...\")",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HGP0PJRSQ3E7BMMT5XW2ZN",
+   "title": "Linux Ubuntu 22.04: systemd 249 (oldest measured, cgroup v2) -- transient updater and --scope from inside seamless.service work; app.slice present",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HGPMP11BNMDTPYKYRY9HNP",
+   "title": "Linux Debian 12 / Fedora 44 / Ubuntu 22.04: bus-missing behavior -- systemd-run --user works with no user bus at all (Debian) or with it stopped; failure texts differ by systemd version",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HGPMPZ74M4RQV0PDBB7NZ9",
+   "title": "Linux: the installer's explicit `loginctl enable-linger $(id -un)` works for a non-admin user wherever polkit is installed (Ubuntu 22/24, Debian 12) and is \"Access denied\" on Fedora 44 Cloud (no polkit)",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HGRKAQ3BJTJMXXARFSP1ND",
+   "title": "Linux Ubuntu 26.04 LTS + Debian 13: transient updater and --scope from inside seamless.service work on systemd 259 / 257; Debian 13 again has no user D-Bus",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HGZ7AYH02ZBGWF8BAMVDY2",
+   "title": "Linux cgroup v1 (hybrid): Debian 12 and Ubuntu 22.04 booted with systemd.unified_cgroup_hierarchy=0 -- spawn methods, kills and probe verdicts unchanged",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HGZ7C0ES644EQ547GQGN2J",
+   "title": "Linux cgroup v1 (full legacy): Debian 12 with systemd.legacy_systemd_cgroup_controller=1 has NO \"0::\" line; inSystemdUnit's name=systemd branch carries the verdict and everything still works",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HHJQEK5PE1VMKN6ZXCV8RZ",
+   "title": "Linux Arch (ARM rootfs 2026-08, systemd 261.2, nspawn container): transient updater and --scope from inside seamless.service work on the newest systemd",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HHJQFHM7SMS020S5XM3S71",
+   "title": "Linux Arch (systemd 261): a transient updater's restart hit seamless.service's start limit in a realistic sequence -- the installer-style `systemctl --user restart` fails and the daemon stays DOWN",
+   "outcome": "fail",
+   "changes": "Unplanned, observed during the Arch distro-test.sh run: seamless.service was enabled by an earlier aborted run, so the login started it (start 1), then setup.sh's restart (2), item b's restart (3), item c's restart (4), item c's stop+start (5) -- all within ~6s -- and then a transient updater (systemd-run --user --unit=seamless-update-<ULID>, running the installer stand-in: show-environment, daemon-reload, restart) restarted it (6).",
+   "expected": "(Not predicted: the start-limit trial on Ubuntu 24.04 had shown the mechanism, but this sequence was expected to stay under it.)",
+   "actual": "23:55:33.511 user manager: \"seamless.service: Start request repeated too quickly.\" / \"Failed with result 'start-limit-hit'.\"; the stand-in's `systemctl --user restart` rc=1 with systemd 261's text: \"Job for seamless.service failed because start of the service was attempted too often. See \\\"systemctl --user status seamless.service\\\" and \\\"journalctl --user -xeu seamless.service\\\" for details. To force a start use \\\"systemctl --user reset-failed seamless.service\\\" followed by \\\"systemctl --user start seamless.service\\\" again.\" The daemon stayed down (the next spawn request got \"connection refused\") until an unrelated `systemctl --user restart` 5.1s later, after the 10s window -- Restart=always never restarts a start-limit-hit unit. Five starts in 10s is the default burst (StartLimitIntervalUSec=10s, StartLimitBurst=5 on every distro measured; the installer's unit sets neither). A normal single update is 1 start, but an installer restart plus an updater verification/rollback restart plus an owner's restarts can reach it; an updater that sees this must `systemctl --user reset-failed seamless.service` and start again (or wait out the window), and should never treat a failed restart as \"the old daemon is still serving\".",
+   "metrics": {
+    "daemon_down_s": 5.1,
+    "os": "arch-arm-2026.08",
+    "restart_always_recovers": false,
+    "restart_rc": 1,
+    "start_limit_burst": 5,
+    "start_limit_interval_s": 10,
+    "starts_in_window": 6,
+    "systemd_version": 261,
+    "trial": "start-limit-hit-in-sequence"
+   }
+  },
+  {
+   "id": "01M4HHNJX0MASWHBEFRD8JT5GR",
+   "title": "Linux systemd 249/252/259: --setenv=NAME (inherit form) breaks the spawn on 249; -p Type=exec turns a non-executable updater into a synchronous rc=1 on 252+",
+   "outcome": "partial"
+  },
+  {
+   "id": "01M4HHTWA9CRRZ9YNED2NW00WR",
+   "title": "Linux Ubuntu 24.04: StartLimitIntervalSec=0 in the unit removes the start-limit-hit; reset-failed + restart recovers a hit at once",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HJ1654Y3GSM1NJBQNYWEE3",
+   "title": "Linux Fedora 44: logout without linger -- user@UID stops 10.2s after the last session; daemon and both updater kinds are SIGTERMed, the SIGTERM-ignoring updaters SIGKILLed at the user manager's 45s unit timeout",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M4HJ1XADF20N8MP70SGHG5ZG",
+   "title": "Linux Ubuntu 24.04: with linger and ZERO login sessions, the daemon's systemd-run spawn works and the updater restarts the service (the unattended case)",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M7XCE4Y3CCQQW19FFE6ZQ8W2",
+   "title": "macOS 26.6.2 LaunchAgent: kickstart -k of the daemon while its Setsid updater runs",
+   "outcome": "pass"
+  },
+  {
+   "id": "01M7XCE52XAH45A613JP1BABWR",
+   "title": "macOS 26.6.2 LaunchAgent: kill -9 of the daemon while its Setsid updater runs",
+   "outcome": "pass"
+  }
+ ]
+}

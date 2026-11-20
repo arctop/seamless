@@ -141,6 +141,10 @@ scripts/fixture/   the shared throwaway fixture: make-myapp.sh (demo repo) +
                    harness.sh --mode record|bench (branding | benchmark arms)
 scripts/branding/  GH-Pages surface: record.sh, distill.py (verbatim-audited
                    scene data), console-shots.js -- see its README.md
+scripts/example/   the site's /example/ page: corpus/ (a reviewed, read-only copy
+                   of part of this project's own Seamless), page.html, and
+                   build.py, which makes docs/example/index.html of them and
+                   is what site-check holds the page to -- see its README.md
 scripts/release/   cutting a release on the owner's Mac: macos.sh (darwin build,
                    Developer ID signing, notarization, draft, signed tag),
                    sign.sh (the owner's hardware-key signature over

@@ -10,9 +10,11 @@ import (
 // rootURLs are the site-root pages docsgen does not render but the sitemap must
 // still name -- the hand-written landing page, the hand-written comparison hub,
 // the hand-written Claude app page (Seamless for chat work that is not code),
-// and the hand-written security page. Deliberately a constant rather than a
-// directory scan, which would sweep in install, install.ps1, and static assets.
-var rootURLs = []string{"/", "/compare/", "/claude-app/", "/security/"}
+// the hand-written security page, and the example page (a read-only copy of
+// part of the Seamless project's own Seamless, built by scripts/example).
+// Deliberately a constant rather than a directory scan, which would sweep in
+// install, install.ps1, and static assets.
+var rootURLs = []string{"/", "/compare/", "/claude-app/", "/security/", "/example/"}
 
 // robotsTxt is written verbatim to the site root. The marker line is
 // load-bearing: the live host sits behind Cloudflare, which can serve its own

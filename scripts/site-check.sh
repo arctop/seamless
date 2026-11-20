@@ -10,15 +10,15 @@
 # run `go install github.com/arctop/seamless/cmd/...@latest`. The front door
 # advertised the old front door for a day.
 #
-# Fourteen assertions, each one a thing a machine can actually verify:
+# Sixteen assertions, each one a thing a machine can actually verify:
 #
 #   1. the hero pills run $INSTALL_CMD and $WIN_INSTALL_CMD, not other routes
 #   2. every surface that teaches installing teaches the SAME two commands
 #   3. every `seamlessd <sub>` the page names in a command context is real
 #   4. each copy button copies the command it visibly shows
 #   5. each static asset on the hand-written pages (the landing page, the
-#      /compare/ hub, the /claude-app/ page, and the /security/ page) carries
-#      a content-hash ?v= cache-buster that matches
+#      /compare/ hub, the /claude-app/ page, the /security/ page, and the
+#      /example/ page) carries a content-hash ?v= cache-buster that matches
 #   6. the head is complete and the canonicals match docs/CNAME
 #   7. exactly one JSON-LD block, braces balanced, with the required types
 #   8. the JSON-LD FAQPage mirrors the visible #faq section
@@ -30,6 +30,10 @@
 #  13. the landing OS switch stores the UA-refined canonical value (macos or
 #      linux, never the coarse unix) so the docs honor the pick
 #  14. the installers carry the repository's release_signers, line for line
+#  15. the comparison matrix on the landing page is the /compare/ hub's, cell
+#      for cell, and its "choose it instead if" lines are the hub's entries'
+#  16. the /example/ page is what scripts/example/build.py makes of its
+#      corpus, and names nothing the build's guard refuses
 #
 # Deliberately not a prose linter: claims like "one binary, no ceremony" are the
 # author's problem. Commands are checkable, so these are checked.
@@ -37,6 +41,8 @@
 set -eu
 
 PAGE=docs/index.html
+# The comparison hub ends on the install command, so assertions 2 and 4 cover
+# it as well as the stamps and canonical.
 COMPARE=docs/compare/index.html
 # The Claude app page: Seamless for chat work that isn't code. It teaches the
 # install and names seamlessd subcommands, so assertions 2-6 cover it too.
@@ -45,6 +51,11 @@ CLAUDEAPP=docs/claude-app/index.html
 # technical terms. It names commands in <code> spans, so assertions 3-6 cover
 # it like the Claude app page.
 SECURITYPAGE=docs/security/index.html
+# The example page: a read-only copy of part of the Seamless project's own
+# Seamless. It is generated (scripts/example/build.py) from the corpus beside
+# that script, and it ends on the install command, so assertions 2 and 4-6
+# cover it, and 16 holds it to its corpus.
+EXAMPLEPAGE=docs/example/index.html
 MAIN=cmd/seamlessd/main.go
 
 # The canonical install commands, and the single place they are written down.
@@ -56,7 +67,7 @@ WIN_INSTALL_CMD='irm https://thereisnospoon.org/install.ps1 | iex'
 
 # Every doc whose job includes telling a new user how to install. webmcp.js is
 # here because its list_agent_resources tool teaches both commands to agents.
-SURFACES="$PAGE $CLAUDEAPP README.md docs-src/quickstart.md docs-src/install.md docs/static/webmcp.js"
+SURFACES="$PAGE $CLAUDEAPP $COMPARE $EXAMPLEPAGE README.md docs-src/quickstart.md docs-src/install.md docs/static/webmcp.js"
 
 fail=0
 err() {
@@ -111,7 +122,7 @@ done
 # 4. A copy button reads its data-copy attribute, never the text beside it, so
 #    the two drift silently and independently: the page shows one command and
 #    the clipboard gets another. Nobody proof-reads an attribute.
-for f in "$PAGE" "$CLAUDEAPP" "$SECURITYPAGE"; do
+for f in "$PAGE" "$CLAUDEAPP" "$SECURITYPAGE" "$COMPARE" "$EXAMPLEPAGE"; do
 	drift=$(grep -oE 'data-copy="[^"]*">[^<]*<' "$f" |
 		sed 's/^data-copy="//; s/<$//' |
 		awk -F'">' '$1 != $2 { print "  shows [" $2 "] but copies [" $1 "]" }')
@@ -153,6 +164,7 @@ stamped "$PAGE" home.css home.js site.js scenes.js scenes-player.js webmcp.js
 stamped "$COMPARE" home.css site.js page.js webmcp.js
 stamped "$CLAUDEAPP" home.css site.js page.js webmcp.js
 stamped "$SECURITYPAGE" home.css site.js page.js webmcp.js
+stamped "$EXAMPLEPAGE" home.css site.js page.js example.js webmcp.js
 
 # 6. Head completeness. The docs pages get their head from docsgen and
 #    cmd/docsgen/seo_test.go gates them; the landing page head is hand-written,
@@ -167,6 +179,8 @@ grep -qF "<link rel=\"canonical\" href=\"${canon_host}claude-app/\">" "$CLAUDEAP
 	err "$CLAUDEAPP canonical does not match docs/CNAME [${canon_host}claude-app/]"
 grep -qF "<link rel=\"canonical\" href=\"${canon_host}security/\">" "$SECURITYPAGE" ||
 	err "$SECURITYPAGE canonical does not match docs/CNAME [${canon_host}security/]"
+grep -qF "<link rel=\"canonical\" href=\"${canon_host}example/\">" "$EXAMPLEPAGE" ||
+	err "$EXAMPLEPAGE canonical does not match docs/CNAME [${canon_host}example/]"
 for tag in \
 	'<meta name="description" content="' \
 	'<meta name="robots" content="max-image-preview:large, max-snippet:-1">' \
@@ -183,6 +197,7 @@ for tag in \
 	grep -qF "$tag" "$PAGE" || err "$PAGE head is missing $tag"
 	grep -qF "$tag" "$CLAUDEAPP" || err "$CLAUDEAPP head is missing $tag"
 	grep -qF "$tag" "$SECURITYPAGE" || err "$SECURITYPAGE head is missing $tag"
+	grep -qF "$tag" "$EXAMPLEPAGE" || err "$EXAMPLEPAGE head is missing $tag"
 done
 
 # 7. The JSON-LD block. Shell cannot validate JSON without a tool dependency
@@ -328,6 +343,52 @@ signers_ps=$(sed -n '/^# BEGIN release_signers$/,/^# END release_signers$/p' doc
 	sed '1d;$d' | sed "/^\$OwnerSigners = @'$/d; /^'@$/d")
 [ "$signers_ps" = "$signers_want" ] ||
 	err "docs/install.ps1's \$OwnerSigners (between # BEGIN/END release_signers) is not release_signers' key lines"
+
+# 15. The comparison matrix is printed twice: six tools on the landing page,
+#     all ten on the /compare/ hub. A fact about another project that changes
+#     on one page and not the other is a public claim that contradicts
+#     itself, so every cell the landing shows must be the hub's cell, byte for
+#     byte (a cell names its row and its tool in data-row and data-col), and
+#     every "choose it instead if" sentence riding on a column head
+#     (data-pick) must be the sentence the hub's entry for that tool prints.
+#     Whether a mark agrees with the hub's three prose tables is the author's
+#     to keep true; this only stops the two copies drifting apart.
+cells=$(grep -oE '<td[^>]*data-row="[^"]*"[^>]*>.*</td>' "$PAGE" || true)
+if [ -z "$cells" ]; then
+	err "no comparison matrix cells found in $PAGE (did the matrix markup change?)"
+else
+	while IFS= read -r c; do
+		grep -qF -- "$c" "$COMPARE" ||
+			err "$PAGE matrix cell is not in $COMPARE's matrix: [$c]"
+	done <<EOF
+$cells
+EOF
+fi
+for f in "$PAGE" "$COMPARE"; do
+	picks=$(grep -oE 'data-pick="[^"]*"' "$f" | sed 's/^data-pick="//; s/"$//' | sort -u)
+	if [ -z "$picks" ]; then
+		err "$f matrix carries no data-pick sentences"
+		continue
+	fi
+	while IFS= read -r p; do
+		grep -qF -- "<p>$p</p>" "$COMPARE" ||
+			err "$f matrix says choose it instead if [$p], which no $COMPARE entry prints"
+	done <<EOF
+$picks
+EOF
+done
+
+# 16. The example page shows records copied from a real project, so two things
+#     must hold: it is exactly what the build makes of the corpus (nobody
+#     edited the page by hand, nobody changed the corpus without rebuilding),
+#     and neither names a deployment. The build owns both checks. It needs
+#     python3; a machine without one skips this and says so.
+if command -v python3 >/dev/null 2>&1; then
+	python3 scripts/example/build.py --check ||
+		err "$EXAMPLEPAGE is not what scripts/example/build.py makes of its corpus"
+else
+	echo "site-check: python3 not found; skipping the $EXAMPLEPAGE freshness check" >&2
+fi
 
 [ "$fail" -eq 0 ] || exit 1
 echo "site-check: $PAGE agrees with the installer, the CLI, and its own structured data"

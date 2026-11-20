@@ -179,7 +179,7 @@
 <link rel="preload" as="font" type="font/woff2" href="static/fonts/fraunces-italic.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="static/fonts/instrument-sans.woff2" crossorigin>
 <script>(function(){var d=document.documentElement,t=localStorage.getItem("theme");if(t)d.dataset.theme=t;var o=localStorage.getItem("os");if(o==="macos"||o==="linux")o="unix";if(o!=="unix"&&o!=="windows")o=/Windows/i.test(navigator.userAgent)?"windows":"unix";d.dataset.os=o;var r=null;try{r=sessionStorage.getItem("seamless.reading")}catch(e){}d.dataset.reading=r==="tech"?"tech":"plain";d.className+=" js";})();</script>
-<link rel="stylesheet" href="static/home.css?v=9ca08b5d">
+<link rel="stylesheet" href="static/home.css?v=ec5dfd94">
 </head>
 <body>
 
@@ -206,6 +206,7 @@
   <symbol id="i-replay" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.8-6.3M3.5 4v4.2h4.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-fp" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4.2 10.4C5.3 6.6 8.4 4 12 4s6.7 2.6 7.8 6.4"/><path d="M6.4 17.4A9.6 9.6 0 0 1 5.6 13.4a6.4 6.4 0 0 1 12.8 0c0 1.1-.1 2-.3 2.9"/><path d="M9.1 19.6A14 14 0 0 1 8.2 13.6a3.8 3.8 0 0 1 7.6 0c0 2.2-.3 4.1-.9 5.8"/><path d="M12 13.4c0 2.8-.4 5.1-1.2 7.1"/><path d="M14.2 16.6c-.2 1.5-.6 2.8-1.1 4"/></g></symbol>
   <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2c.6 6 4 9.400 10 10-6 .6-9.400 4-10 10-.6-6-4-9.400-10-10 6-.6 9.400-4 10-10z"/></symbol>
 </svg>
 
 <header class="site-head" data-head>
@@ -221,11 +222,11 @@
       <nav class="nav-panel" aria-label="Menu">
         <a href="#how">How it works</a>
         <a href="#scenes">Demo</a>
-        <a href="#keys">Your keys</a>
+        <a href="example/">A real project</a>
+        <a href="#compare">Compare</a>
+        <a href="#keys">Security</a>
         <a href="#quickstart">Install</a>
         <a href="#faq">FAQ</a>
-        <a href="security/">Security</a>
-        <a href="compare/">Compare</a>
         <a href="claude-app/">Claude app</a>
         <a href="docs/">Docs</a>
         <a href="https://github.com/arctop/seamless">GitHub</a>
@@ -234,8 +235,9 @@
     <nav class="head-nav" aria-label="Site">
       <a href="#how">How it works</a>
       <a href="#scenes">Demo</a>
-      <a href="security/">Security</a>
-      <a href="compare/">Compare</a>
+      <a href="example/">Example</a>
+      <a href="#compare">Compare</a>
+      <a href="#keys">Security</a>
       <a href="claude-app/">Claude app</a>
       <a href="docs/">Docs</a>
     </nav>
@@ -253,34 +255,28 @@
   <div class="head-progress" aria-hidden="true"><i></i></div>
 </header>
 
-<!-- The chapter rail: one star per chapter, the line between them fills as
-     you read. Wide screens only; home.js marks the current chapter. -->
-<nav class="rail" aria-label="Chapters">
-  <ol>
-    <li><a href="#why" data-rail="why"><span class="rail-dot"></span><span class="rail-label"><em>i.</em> The forgetting</span></a></li>
-    <li><a href="#how" data-rail="how"><span class="rail-dot"></span><span class="rail-label"><em>ii.</em> The fix</span></a></li>
-    <li><a href="#scenes" data-rail="scenes"><span class="rail-dot"></span><span class="rail-label"><em>iii.</em> The proof</span></a></li>
-    <li><a href="#fleet" data-rail="fleet"><span class="rail-dot"></span><span class="rail-label"><em>iv.</em> The fleet</span></a></li>
-    <li><a href="#legible" data-rail="legible"><span class="rail-dot"></span><span class="rail-label"><em>v.</em> The folder</span></a></li>
-    <li><a href="#keys" data-rail="keys"><span class="rail-dot"></span><span class="rail-label"><em>vi.</em> The keys</span></a></li>
-    <li><a href="#console" data-rail="console"><span class="rail-dot"></span><span class="rail-label"><em>vii.</em> The console</span></a></li>
-    <li><a href="#quickstart" data-rail="quickstart"><span class="rail-dot"></span><span class="rail-label"><em>viii.</em> Try it</span></a></li>
-    <li><a href="#asks" data-rail="asks"><span class="rail-dot"></span><span class="rail-label"><em>ix.</em> Day one</span></a></li>
-  </ol>
-  <span class="rail-line" aria-hidden="true"><i></i></span>
-</nav>
-
 <main id="main">
 
 <!-- ================================================================ HERO -->
+<!-- What it is, what it changes, and the command, on one screen. The figure
+     is the page's whole argument as one picture: Monday's session, then the
+     same Tuesday prompt down two lanes. It is an illustration and says so;
+     the verbatim sessions follow under "the proof". home.js plays it once
+     (Duel); without JS, or with reduced motion, every line simply shows.
+
+     Around the figure sits the Seamless mark at full size (.mk): the orbit,
+     the meteor's cut, and the star at its end. The star is the file Monday's
+     session saved, and it arrives on the beat the "with" lane saves it; the
+     stars already on the orbit are the demo project's other memories. -->
 <section class="hero" id="top">
-  <canvas class="sky" aria-hidden="true"></canvas>
-  <div class="sky-tip" aria-hidden="true" hidden></div>
+  <div class="hero-sky" aria-hidden="true">
+    <i class="meteor m1"></i><i class="meteor m2"></i><i class="meteor m3"></i>
+  </div>
   <div class="wrap hero-grid">
     <div class="hero-copy">
-      <p class="hero-pre"><svg aria-hidden="true"><use href="#i-mark"/></svg> Shared memory for coding agents and the Claude app</p>
-      <h1 class="h1" data-split>Sessions end. <span class="br"></span>What they learned <span class="br br-wide"></span><em>doesn't.</em></h1>
-      <p class="hero-sub">On Monday your agent fixes the rate limiter. On Tuesday a fresh session &ldquo;tidies up&rdquo; the fix, because nothing told it why. Seamless saves what each session learns as markdown files on your computer and briefs every new session with them, in Claude Code, Codex, and any MCP agent.</p>
+      <p class="hero-pre"><svg aria-hidden="true"><use href="#i-mark"/></svg> Shared memory for Claude Code, Codex and the Claude app</p>
+      <h1 class="h1" data-split>Sessions end. <span class="br"></span>What they learned <em>doesn't.</em></h1>
+      <p class="hero-sub">Seamless saves what each session learns as a markdown file on your computer, and briefs the next session with it.</p>
       <div class="hero-act">
         <div class="os-switch" role="group" aria-label="Show the install command for">
           <button type="button" data-os-pick="unix" aria-pressed="false">macOS / Linux</button>
@@ -290,149 +286,125 @@
         <span class="install-pill" data-os-block="unix"><span class="p" aria-hidden="true">$</span><span class="cmd" data-copy="curl -fsSL https://thereisnospoon.org/install | sh">curl -fsSL https://thereisnospoon.org/install | sh</span><button class="copy-btn" type="button" aria-label="Copy install command">copy</button></span>
         <p class="os-cap" data-os-block="windows">Windows</p>
         <span class="install-pill" data-os-block="windows"><span class="p" aria-hidden="true">PS&gt;</span><span class="cmd" data-copy="irm https://thereisnospoon.org/install.ps1 | iex">irm https://thereisnospoon.org/install.ps1 | iex</span><button class="copy-btn" type="button" aria-label="Copy install command">copy</button></span>
-        <p class="hero-links">
-          <a class="lnk" href="#scenes">Watch the same prompt with and without it <svg aria-hidden="true"><use href="#i-down"/></svg></a>
-        </p>
-        <p class="hero-fork">Not a developer? <a class="lnk" href="claude-app/">See what it does in the Claude app <svg aria-hidden="true"><use href="#i-arrow"/></svg></a></p>
       </div>
       <ul class="hero-facts">
-        <li>MIT licensed</li>
-        <li>Runs on your computer, no account</li>
-        <li>macOS, Linux, Windows</li>
-        <li><a href="#keys">Projects locked behind your approval</a></li>
+        <li>Free, MIT licensed</li>
+        <li>No account</li>
+        <li>Runs on your computer</li>
         <li>One command to uninstall</li>
       </ul>
+      <p class="hero-fork">Want to see a real one? <a class="lnk" href="example/">Read the memory Seamless is built with <svg aria-hidden="true"><use href="#i-arrow"/></svg></a></p>
+      <p class="hero-fork">Not a developer? <a class="lnk" href="claude-app/">See it in the Claude app <svg aria-hidden="true"><use href="#i-arrow"/></svg></a></p>
+    </div>
+
+    <figure class="duel" id="why" data-duel>
+      <div class="mk" aria-hidden="true">
+        <span class="mk-ring"></span>
+        <span class="mk-cut"><i></i></span>
+        <span class="mk-star mk-new"><i></i><b>rate-limit-not-in-memory.md</b></span>
+        <span class="mk-star" style="--a:-31deg;--tw:5.2s"><i></i><b>auth-cookies-samesite-lax.md</b></span>
+        <span class="mk-star" style="--a:-9deg;--tw:7.4s"><i></i><b>refresh-token-single-use.md</b></span>
+        <span class="mk-star" style="--a:14deg;--tw:6.1s"><i></i><b>deploy-runbook.md</b></span>
+        <span class="mk-star" style="--a:37deg;--tw:8.3s"><i></i><b>postgres-timeouts.md</b></span>
+      </div>
+      <div class="duel-in">
+        <p class="duel-bar"><span>~/code/myapp</span><span class="term-tag">an illustration</span><button class="duel-replay" type="button" hidden><svg aria-hidden="true"><use href="#i-replay"/></svg>replay</button></p>
+        <div class="duel-mon">
+          <p class="duel-when" data-beat="0"><b>Mon</b><span>your agent fixes the rate limiter</span></p>
+          <p class="dl dl-prompt" data-beat="0">&gt; bursts get through behind the load balancer</p>
+          <p class="dl dl-ok" data-beat="1"><svg aria-hidden="true"><use href="#i-check"/></svg>Moved the counter to shared storage.</p>
+        </div>
+        <div class="duel-lanes">
+          <div class="lane lane-without">
+            <p class="lane-head" data-beat="2">without Seamless</p>
+            <p class="lane-carry" data-beat="2">session ended · context gone</p>
+            <p class="duel-when" data-beat="3"><b>Tue</b><span>a fresh session</span></p>
+            <p class="dl dl-none" data-beat="4">starts from zero</p>
+            <p class="dl dl-prompt" data-beat="5">&gt; tidy up the rate limiter</p>
+            <p class="dl" data-beat="6">This Redis dependency looks unnecessary.</p>
+            <p class="dl dl-ok" data-beat="7"><svg aria-hidden="true"><use href="#i-check"/></svg>Swapped it for an in-process map.</p>
+            <p class="verdict verdict-bad" data-beat="8"><svg aria-hidden="true"><use href="#i-x"/></svg>Monday's fix, undone</p>
+          </div>
+          <div class="lane lane-with">
+            <p class="lane-head" data-beat="2">with Seamless</p>
+            <p class="lane-carry lane-star" data-beat="2"><svg aria-hidden="true"><use href="#i-star"/></svg>rate-limit-not-in-memory.md</p>
+            <p class="duel-when" data-beat="3"><b>Tue</b><span>a fresh session</span></p>
+            <p class="dl dl-brief" data-beat="4"><span class="rc">&lt;seam-briefing&gt;</span> &hellip; rate-limit-not-in-memory: &hellip; use shared storage.</p>
+            <p class="dl dl-prompt" data-beat="5">&gt; tidy up the rate limiter</p>
+            <p class="dl" data-beat="6">The briefing says why Redis is there.</p>
+            <p class="dl dl-ok" data-beat="7"><svg aria-hidden="true"><use href="#i-check"/></svg>Kept the shared store. Tidied the rest.</p>
+            <p class="verdict verdict-ok" data-beat="8"><svg aria-hidden="true"><use href="#i-check"/></svg>Monday's fix, kept</p>
+          </div>
+        </div>
+      </div>
+      <figcaption class="sr-only">An illustration. On Monday an agent fixes a rate limiter by moving its counter to shared storage. On Tuesday a fresh session is asked to tidy up the rate limiter. Without Seamless it starts from zero and swaps the shared store for an in-process map, undoing Monday's fix. With Seamless the lesson was saved as a file, the new session is briefed with it, and the fix is kept.</figcaption>
+    </figure>
+  </div>
+  <div class="wrap">
+    <div class="works">
+      <p class="works-l">works with</p>
+      <ul class="works-list">
+        <li>Claude Code</li>
+        <li>Codex CLI</li>
+        <li>Claude desktop app</li>
+        <li>any MCP client</li>
+      </ul>
+      <p class="works-os">macOS · Linux · Windows</p>
     </div>
   </div>
-  <p class="sky-legend" aria-hidden="true"><span class="lg-item"><span class="lg-star"></span>a star is a memory file</span><span class="lg-item"><span class="lg-streak"></span>a streak is a session</span><span class="lg-hint">point at one to read it</span></p>
-  <a class="scroll-cue" href="#why" aria-label="Scroll to the problem"><span></span></a>
 </section>
 
-<!-- ================================================================ I. THE FORGETTING -->
-<section class="chapter forgetting" id="why" data-chapter="why">
+<!-- ================================================================ HOW IT WORKS -->
+<!-- Four steps on one stage. The tabs are a WAI-ARIA tablist; home.js (Loop)
+     advances them while the section is on screen and stops for good once the
+     visitor picks one. The panels share one grid cell, so the stage keeps the
+     tallest panel's height and the page never jumps. Without JS every step
+     shows, stacked. -->
+<section class="chapter how" id="how" data-chapter="how" data-title="how it works">
   <div class="wrap">
     <header class="ch-head">
-      <p class="ch-mark"><em>i.</em> the forgetting</p>
-      <h2 class="h2 rv">Every session is your agent's first day.</h2>
-      <p class="lede rv">Coding agents are sharp for an hour and blank by the next session. Why the rate limiter can't live in process memory, which cookie setting broke the login redirect, what the other agent is halfway through: all of it lived in a conversation that has ended.</p>
-    </header>
-
-    <!-- The week plays twice: without Seamless (each session's work dissolves
-         when it ends) and with it (Monday's lesson becomes a file that reaches
-         Tuesday's briefing). Lines without data-for-mode show in both; without
-         JS only the "without" week shows. home.js runs it. -->
-    <figure class="week" data-week data-mode="without">
-      <div class="week-bar">
-        <span class="tag">an illustration</span>
-        <div class="week-modes" role="group" aria-label="Play the week">
-          <button type="button" data-week-mode="without" aria-pressed="true">without Seamless</button>
-          <button type="button" data-week-mode="with" aria-pressed="false">with Seamless</button>
-        </div>
-        <button class="week-replay" type="button" hidden><svg aria-hidden="true"><use href="#i-replay"/></svg>replay</button>
-      </div>
-      <ol class="days">
-        <li class="day" data-day="0">
-          <p class="day-head"><b>Mon</b> <span>09:14</span></p>
-          <div class="day-body">
-            <p class="dl dl-prompt">&gt; bursts get through behind the load balancer</p>
-            <p class="dl">Found it: each instance only counts its own traffic.</p>
-            <p class="dl dl-ok"><svg aria-hidden="true"><use href="#i-check"/></svg>Moved the counter to shared storage.</p>
-            <p class="dl dl-save" data-for-mode="with" data-save>wrote memory/myapp/rate-limit-not-in-memory.md</p>
-          </div>
-          <p class="day-end" data-for-mode="without">session ended · context gone</p>
-          <p class="day-end" data-for-mode="with">session ended · the lesson is a file</p>
-        </li>
-        <li class="day" data-day="1">
-          <p class="day-head"><b>Tue</b> <span>10:02</span></p>
-          <div class="day-body">
-            <p class="dl dl-brief" data-for-mode="with" data-brief><span class="rc">&lt;seam-briefing&gt;</span> &hellip; rate-limit-not-in-memory: &hellip; use shared storage.</p>
-            <p class="dl dl-prompt">&gt; tidy up the rate limiter</p>
-            <p class="dl" data-for-mode="without">This Redis dependency looks unnecessary.</p>
-            <p class="dl dl-ok" data-for-mode="without" data-undo><svg aria-hidden="true"><use href="#i-check"/></svg>Swapped it for an in-process map.</p>
-            <p class="dl dl-ok" data-for-mode="with"><svg aria-hidden="true"><use href="#i-check"/></svg>Kept the shared store. Tidied the rest.</p>
-          </div>
-          <p class="day-end" data-for-mode="without">session ended · context gone</p>
-          <p class="day-end" data-for-mode="with">session ended · nothing undone</p>
-        </li>
-        <li class="day" data-day="2">
-          <p class="day-head"><b>Wed</b> <span>16:40</span></p>
-          <div class="day-body">
-            <p class="dl dl-prompt" data-for-mode="without">&gt; why are bursts getting through again?</p>
-            <p class="dl" data-for-mode="without">Let me read the limiter from scratch.</p>
-            <p class="dl dl-wait" data-for-mode="without"><span class="caret" aria-hidden="true"></span></p>
-            <p class="dl dl-prompt" data-for-mode="with">&gt; add a burst test for the limiter</p>
-            <p class="dl" data-for-mode="with">The briefing says the counter is shared, so the test spans instances.</p>
-            <p class="dl dl-ok" data-for-mode="with"><svg aria-hidden="true"><use href="#i-check"/></svg>Burst test passes on every instance.</p>
-          </div>
-          <p class="day-end" data-for-mode="without">still going</p>
-          <p class="day-end" data-for-mode="with">shipped before lunch</p>
-        </li>
-      </ol>
-      <figcaption>
-        <span data-for-mode="without">Monday's fix, Tuesday's cleanup, Wednesday's bug. Each session was competent. None of them could remember.</span>
-        <span data-for-mode="with">The same three sessions with Seamless. Monday's lesson became a file, Tuesday read it in its briefing before touching the limiter, and Wednesday moved on.</span>
-      </figcaption>
-    </figure>
-
-    <figure class="history">
-      <figcaption class="history-cap"><span class="tag">sound familiar?</span> What people end up typing to their agents, week after week.</figcaption>
-      <ol class="hist">
-        <li class="hrow rv"><span class="ht">mon 09:12</span><span class="hq">we went over this yesterday. the deploy runs migrations first.</span><span class="hn">Every new session starts from zero, so you re-explain the conventions, the decisions, the deploy steps.</span></li>
-        <li class="hrow rv"><span class="ht">mon 16:40</span><span class="hq">no. we decided against SameSite=Strict on purpose.</span><span class="hn">A constraint learned the hard way gets undone, because the reason lived in a chat that has ended.</span></li>
-        <li class="hrow rv"><span class="ht">tue 10:05</span><span class="hq">hold on, the other agent is already doing that.</span><span class="hn">Two agents on one repo grab the same task, then trample each other's edits.</span></li>
-        <li class="hrow hrow-again rv"><span class="ht">wed 09:31</span><span class="hq">we went over this yesterday. the deploy runs migrations first.</span><span class="hn"><span class="again">again</span></span></li>
-        <li class="hrow rv"><span class="ht">wed 14:22</span><span class="hq">where is it getting that from?</span><span class="hn">Memory kept in a cloud or an embedding index gives you nothing to read or correct.</span></li>
-        <li class="hrow hrow-again rv"><span class="ht">thu 11:03</span><span class="hq">no. we decided against SameSite=Strict on purpose.</span><span class="hn"><span class="again">again</span></span></li>
-      </ol>
-    </figure>
-  </div>
-</section>
-
-<!-- ================================================================ II. THE FIX -->
-<section class="chapter how" id="how" data-chapter="how">
-  <div class="wrap">
-    <header class="ch-head">
-      <p class="ch-mark"><em>ii.</em> the fix</p>
+      <p class="ch-mark">how it works</p>
       <h2 class="h2 rv">What one session learns, the next one starts with.</h2>
-      <p class="lede rv">Seamless runs as a small daemon on your machine and plugs into your agents through hooks and MCP. Agents write down what they learn while they work. New sessions open already briefed, and every agent you run reads from the same store. So can you.</p>
+      <p class="lede rv">A small daemon on your computer, wired into your agents through hooks and MCP.</p>
     </header>
-  </div>
-  <!-- Scroll-driven on wide screens (home.js pins .orbit-pin and steps the
-       comet round the ring); a plain list everywhere else. -->
-  <div class="orbit" data-orbit>
-    <div class="orbit-pin">
-      <div class="wrap orbit-grid">
-        <div class="orbit-fig" aria-hidden="true">
-          <svg viewBox="0 0 440 440" class="orbit-svg">
-            <circle class="o-ring o-ring-outer" cx="220" cy="220" r="196"/>
-            <circle class="o-ring" cx="220" cy="220" r="150"/>
-            <circle class="o-ring o-ring-faint" cx="220" cy="220" r="104"/>
-            <g class="o-ticks"></g>
-            <circle class="o-path" cx="220" cy="220" r="150" pathLength="100"/>
-            <circle class="o-trail" cx="220" cy="220" r="150" pathLength="100"/>
-            <g class="o-core">
-              <circle class="o-core-halo" cx="220" cy="220" r="46"/>
-              <circle class="o-core-disc" cx="220" cy="220" r="34"/>
-              <text x="220" y="216" text-anchor="middle">~/.seamless</text>
-              <text x="220" y="232" text-anchor="middle" class="o-core-sub">one store</text>
-            </g>
-            <g class="o-node" data-node="0" transform="translate(220 70)"><circle r="17"/><text y="5" text-anchor="middle">1</text></g>
-            <g class="o-node" data-node="1" transform="translate(370 220)"><circle r="17"/><text y="5" text-anchor="middle">2</text></g>
-            <g class="o-node" data-node="2" transform="translate(220 370)"><circle r="17"/><text y="5" text-anchor="middle">3</text></g>
-            <g class="o-node" data-node="3" transform="translate(70 220)"><circle r="17"/><text y="5" text-anchor="middle">4</text></g>
-            <text class="o-label" x="220" y="36" text-anchor="middle">write</text>
-            <text class="o-label" x="404" y="224" text-anchor="start">brief</text>
-            <text class="o-label" x="220" y="414" text-anchor="middle">recall</text>
-            <text class="o-label" x="36" y="224" text-anchor="end">curate</text>
-            <g class="o-comet"><circle class="o-comet-glow" r="12"/><circle class="o-comet-head" r="4.5"/></g>
-          </svg>
+    <div class="loop" data-loop>
+      <div class="loop-fig" aria-hidden="true">
+        <svg viewBox="0 0 440 440" class="orbit-svg" focusable="false">
+          <circle class="o-ring o-ring-outer" cx="220" cy="220" r="196"/>
+          <circle class="o-ring" cx="220" cy="220" r="150"/>
+          <circle class="o-ring o-ring-faint" cx="220" cy="220" r="104"/>
+          <g class="o-ticks"></g>
+          <circle class="o-path" cx="220" cy="220" r="150" pathLength="100"/>
+          <circle class="o-trail" cx="220" cy="220" r="150" pathLength="100"/>
+          <g class="o-core">
+            <circle class="o-core-halo" cx="220" cy="220" r="46"/>
+            <circle class="o-core-disc" cx="220" cy="220" r="34"/>
+            <text x="220" y="216" text-anchor="middle">~/.seamless</text>
+            <text x="220" y="232" text-anchor="middle" class="o-core-sub">one store</text>
+          </g>
+          <g class="o-arm"><g class="o-comet" transform="translate(220 70)"><circle class="o-comet-glow" r="12"/><circle class="o-comet-head" r="4.5"/></g></g>
+          <g class="o-node" data-node="0" transform="translate(220 70)"><circle r="17"/><text y="5" text-anchor="middle">1</text></g>
+          <g class="o-node" data-node="1" transform="translate(370 220)"><circle r="17"/><text y="5" text-anchor="middle">2</text></g>
+          <g class="o-node" data-node="2" transform="translate(220 370)"><circle r="17"/><text y="5" text-anchor="middle">3</text></g>
+          <g class="o-node" data-node="3" transform="translate(70 220)"><circle r="17"/><text y="5" text-anchor="middle">4</text></g>
+          <text class="o-label" x="220" y="36" text-anchor="middle">write</text>
+          <text class="o-label" x="404" y="224" text-anchor="start">brief</text>
+          <text class="o-label" x="220" y="414" text-anchor="middle">recall</text>
+          <text class="o-label" x="36" y="224" text-anchor="end">curate</text>
+        </svg>
+      </div>
+      <div class="loop-main">
+        <div class="loop-tabs" role="tablist" aria-label="The four steps">
+          <button class="loop-tab active" type="button" role="tab" id="loop-t-0" aria-controls="loop-p-0" aria-selected="true"><span class="sr-num">1</span>Write<i aria-hidden="true"></i></button>
+          <button class="loop-tab" type="button" role="tab" id="loop-t-1" aria-controls="loop-p-1" aria-selected="false" tabindex="-1"><span class="sr-num">2</span>Brief<i aria-hidden="true"></i></button>
+          <button class="loop-tab" type="button" role="tab" id="loop-t-2" aria-controls="loop-p-2" aria-selected="false" tabindex="-1"><span class="sr-num">3</span>Recall<i aria-hidden="true"></i></button>
+          <button class="loop-tab" type="button" role="tab" id="loop-t-3" aria-controls="loop-p-3" aria-selected="false" tabindex="-1"><span class="sr-num">4</span>Curate<i aria-hidden="true"></i></button>
         </div>
-        <ol class="orbit-steps">
-          <li class="ostep" data-step="0">
-            <div class="ostep-copy">
-              <p class="ostep-n">01 · write</p>
+        <div class="loop-panels">
+          <div class="loop-p is-on" id="loop-p-0" role="tabpanel" aria-labelledby="loop-t-0">
+            <div class="loop-copy">
               <h3>They write it down.</h3>
-              <p>When an agent hits a gotcha, makes a decision, or learns a constraint, it saves a memory: one markdown file with frontmatter, under <code>~/.seamless</code>.</p>
+              <p>When an agent learns something worth keeping, it saves one markdown file under <code>~/.seamless</code>.</p>
             </div>
             <div class="term term-sm">
               <p class="term-bar"><span>claude · ~/code/myapp</span></p>
@@ -443,12 +415,11 @@
 <p class="t-res">wrote memory/myapp/rate-limit-not-in-memory.md</p>
               </div>
             </div>
-          </li>
-          <li class="ostep" data-step="1">
-            <div class="ostep-copy">
-              <p class="ostep-n">02 · brief</p>
+          </div>
+          <div class="loop-p" id="loop-p-1" role="tabpanel" aria-labelledby="loop-t-1">
+            <div class="loop-copy">
               <h3>The next one starts briefed.</h3>
-              <p>Before the first prompt of a new session, a hook injects a short briefing: the repo's constraints, recent findings, open plans, and the work that's ready to claim.</p>
+              <p>Before the first prompt, a hook injects the repo's constraints and what earlier sessions left open.</p>
             </div>
             <div class="term term-sm">
               <p class="term-bar"><span>claude · ~/code/myapp · next morning</span></p>
@@ -465,12 +436,11 @@ Memories (myapp):
 <span class="t-tag">&lt;/seam-briefing&gt;</span></p>
               </div>
             </div>
-          </li>
-          <li class="ostep" data-step="2">
-            <div class="ostep-copy">
-              <p class="ostep-n">03 · recall</p>
+          </div>
+          <div class="loop-p" id="loop-p-2" role="tabpanel" aria-labelledby="loop-t-2">
+            <div class="loop-copy">
               <h3>Each prompt pulls what fits.</h3>
-              <p>Every prompt is matched against the store, and the memories that fit are injected on the spot. Full-text and vector search, fused, in one SQLite file.</p>
+              <p>Every prompt is matched against the store, and the memories that fit arrive with it.</p>
             </div>
             <div class="term term-sm">
               <p class="term-bar"><span>claude · ~/code/myapp</span></p>
@@ -481,36 +451,36 @@ Memories (myapp):
 Read with memory_read before re-deriving.<span class="t-tag">&lt;/seam-recall&gt;</span></p>
               </div>
             </div>
-          </li>
-          <li class="ostep" data-step="3">
-            <div class="ostep-copy">
-              <p class="ostep-n">04 · curate</p>
+          </div>
+          <div class="loop-p" id="loop-p-3" role="tabpanel" aria-labelledby="loop-t-3">
+            <div class="loop-copy">
               <h3>You keep it tidy.</h3>
-              <p>A gardener looks for duplicates, stale entries, and the knowledge agents keep searching for in vain, then asks you. Nothing is merged, retired, or forgotten behind your back.</p>
+              <p>A gardener proposes merges and retirements. Nothing changes until you approve. Try it.</p>
             </div>
-            <div class="term term-sm">
-              <p class="term-bar"><span>console · gardener</span></p>
-              <div class="term-body">
-<p class="t-head">2 proposals waiting</p>
-<p class="t-prop"><span class="t-k">merge</span> deploy-steps <span class="t-dim">into</span> deploy-runbook <span class="t-dim">near-duplicate</span></p>
-<p class="t-prop"><span class="t-k">retire</span> chroma-boot-race <span class="t-dim">unused for 60 days</span></p>
-<p class="t-btns"><span class="t-btn">approve</span><span class="t-btn t-btn-q">dismiss</span></p>
+            <div class="garden" data-garden>
+              <p class="garden-kicker">gardener · proposal</p>
+              <p class="garden-q"><code>deploy-steps</code> repeats <code>deploy-runbook</code>. Merge them?</p>
+              <div class="garden-stars" aria-hidden="true"><span class="gs gs-a"></span><span class="gs gs-b"></span></div>
+              <div class="garden-btns">
+                <button type="button" class="g-btn g-yes" data-garden-act="merge">Merge</button>
+                <button type="button" class="g-btn g-no" data-garden-act="dismiss">Dismiss</button>
               </div>
+              <p class="garden-out" data-garden-out aria-live="polite">Nothing is merged, retired, or forgotten until you say so.</p>
             </div>
-          </li>
-        </ol>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ================================================================ III. THE PROOF -->
-<section class="chapter proof" id="scenes" data-chapter="scenes">
+<!-- ================================================================ THE PROOF -->
+<section class="chapter proof" id="scenes" data-chapter="scenes" data-title="the proof">
   <div class="wrap">
     <header class="ch-head ch-head-wide">
-      <p class="ch-mark"><em>iii.</em> the proof</p>
+      <p class="ch-mark">the proof</p>
       <h2 class="h2 rv">We ran the same prompts twice, once with Seamless.</h2>
-      <p class="lede rv">Real Claude Code sessions in a seeded demo repo, with the same model on both sides. The agent's words and tool calls are verbatim. The grey 4&times; lines summarize stretches we skipped, and the file listing that closes the first scene is illustrative.</p>
+      <p class="lede rv">Real Claude Code sessions in a seeded demo repo, with the same model on both sides. The agent's words and tool calls are verbatim.</p>
     </header>
     <div class="scenes-reel">
       <div class="scenes-nav" role="tablist" aria-label="Terminal scenes"></div>
@@ -603,22 +573,141 @@ Read with memory_read before re-deriving.<span class="t-tag">&lt;/seam-recall&gt
       </div>
       <noscript><p class="fine"># with JavaScript off the transcripts don't animate; the summaries above are each scene's real outcome, and the full verbatim transcripts ship with the page as a plain script asset anyone can read.</p></noscript>
     </div>
-    <p class="fine proof-note">Prefer reading? Every scene has a full transcript page: <a href="scenarios/cold-start/">cold start</a>, <a href="scenarios/constraint-violation/">the hardening trap</a>, <a href="scenarios/token-safety/">token safety</a>, <a href="scenarios/task-collision/">two agents</a>.</p>
+    <p class="fine proof-note">The grey 4&times; lines summarize stretches we skipped, and the file listing that closes the first scene is illustrative. Full transcripts: <a href="scenarios/cold-start/">cold start</a>, <a href="scenarios/constraint-violation/">the hardening trap</a>, <a href="scenarios/token-safety/">token safety</a>, <a href="scenarios/task-collision/">two agents</a>.</p>
   </div>
 </section>
 
-<!-- ================================================================ IV. THE FLEET -->
-<section class="chapter fleet" id="fleet" data-chapter="fleet">
+<!-- ================================================================ COMPARE -->
+<!-- The matrix is generated from one table shared with /compare/, so the two
+     pages cannot disagree; every mark restates a fact printed in /compare/'s
+     tables. site.js runs it: picking a column sets Seamless beside that tool
+     and prints when to choose it instead. Without JS the whole table shows
+     and scrolls sideways. -->
+<section class="chapter compare" id="compare" data-chapter="compare" data-title="the alternatives">
+  <div class="wrap">
+    <header class="ch-head ch-head-wide">
+      <p class="ch-mark">the alternatives</p>
+      <h2 class="h2 rv">How it compares.</h2>
+      <p class="lede rv">Each mark restates a fact from that project's own docs, checked November 2026. Pick a tool to see when to choose it instead.</p>
+    </header>
+    <div class="mtx rv" data-mtx data-focus="claude-mem">
+      <div class="mtx-picks" role="group" aria-label="Set Seamless beside">
+        <button type="button" data-mtx-pick="built-in" aria-pressed="false">Built-in memory</button>
+        <button type="button" data-mtx-pick="agent-teams" aria-pressed="false">Agent Teams</button>
+        <button type="button" data-mtx-pick="claude-mem" aria-pressed="false">claude-mem</button>
+        <button type="button" data-mtx-pick="beads" aria-pressed="false">Beads</button>
+        <button type="button" data-mtx-pick="mem0-zep" aria-pressed="false">Mem0 / Zep</button>
+      </div>
+      <div class="mtx-scroll">
+        <table class="mtx-t">
+          <thead>
+            <tr>
+              <th scope="col" class="mtx-corner"><span class="sr-only">What you get</span></th>
+              <th scope="col" class="mtx-self" data-col="seamless"><span class="mtx-name"><svg aria-hidden="true"><use href="#i-mark"/></svg>Seamless</span></th>
+              <th scope="col" data-col="built-in" data-what="the memory you already have" data-href="compare/#built-in" data-pick="You use one client, in one repository at a time, on one computer, and notes the model keeps for itself are enough."><button type="button" class="mtx-name" data-mtx-pick="built-in" aria-pressed="false">Built-in memory<small>Claude Code, Codex</small></button></th>
+              <th scope="col" data-col="agent-teams" data-what="first-party coordination inside a session" data-href="compare/#agent-teams" data-pick="Everything you need coordinated happens inside one Claude Code session and nothing has to outlive it."><button type="button" class="mtx-name" data-mtx-pick="agent-teams" aria-pressed="false">Agent Teams<small>Claude Code</small></button></th>
+              <th scope="col" data-col="claude-mem" data-what="transcript memory for Claude Code and friends" data-href="compare/#claude-mem" data-pick="You want effortless recall of what past sessions did, today, with the largest community behind it, and you don&rsquo;t need shared tasks or a store you author yourself."><button type="button" class="mtx-name" data-mtx-pick="claude-mem" aria-pressed="false">claude-mem</button></th>
+              <th scope="col" data-col="beads" data-what="a git-native issue graph for coding agents" data-href="compare/#beads" data-pick="A dependency-aware queue in the repository is all you need, and the knowledge can live in your docs."><button type="button" class="mtx-name" data-mtx-pick="beads" aria-pressed="false">Beads</button></th>
+              <th scope="col" data-col="mem0-zep" data-what="memory engines for products you build" data-href="compare/#mem0-zep" data-pick="You are building a product whose users need memory. That is what they are for."><button type="button" class="mtx-name" data-mtx-pick="mem0-zep" aria-pressed="false">Mem0 / Zep</button></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Memory you can open as files</th>
+              <td class="mtx-self" data-row="files" data-col="seamless"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">one markdown file each</span></td>
+              <td data-row="files" data-col="built-in"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">MEMORY.md and topic files</span></td>
+              <td data-row="files" data-col="agent-teams"><span class="m m-x"><span class="sr-only">Not its job:</span></span><span class="mtx-note">a task list, no memory</span></td>
+              <td data-row="files" data-col="claude-mem"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">SQLite and Chroma</span></td>
+              <td data-row="files" data-col="beads"><span class="m m-x"><span class="sr-only">Not its job:</span></span><span class="mtx-note">issues, in a Dolt database</span></td>
+              <td data-row="files" data-col="mem0-zep"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">a vector store or a graph</span></td>
+            </tr>
+            <tr>
+              <th scope="row">One store for every agent you run</th>
+              <td class="mtx-self" data-row="clients" data-col="seamless"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">Claude Code, Codex, Claude app</span></td>
+              <td data-row="clients" data-col="built-in"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">one client, one repository</span></td>
+              <td data-row="clients" data-col="agent-teams"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">Claude Code only</span></td>
+              <td data-row="clients" data-col="claude-mem"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">Codex, Cursor and others too</span></td>
+              <td data-row="clients" data-col="beads"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">a CLI any agent can run</span></td>
+              <td data-row="clients" data-col="mem0-zep"><span class="m m-x"><span class="sr-only">Not its job:</span></span><span class="mtx-note">an API for your own app</span></td>
+            </tr>
+            <tr>
+              <th scope="row">A task queue agents claim from</th>
+              <td class="mtx-self" data-row="queue" data-col="seamless"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">leases, plans, repo locks</span></td>
+              <td data-row="queue" data-col="built-in"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">none</span></td>
+              <td data-row="queue" data-col="agent-teams"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">inside one team&rsquo;s session</span></td>
+              <td data-row="queue" data-col="claude-mem"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">none locally</span></td>
+              <td data-row="queue" data-col="beads"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">bd ready, atomic claims</span></td>
+              <td data-row="queue" data-col="mem0-zep"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">none</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Forgetting waits for your approval</th>
+              <td class="mtx-self" data-row="forget" data-col="seamless"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">replaced, never overwritten</span></td>
+              <td data-row="forget" data-col="built-in"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">the model prunes</span></td>
+              <td data-row="forget" data-col="agent-teams"><span class="m m-x"><span class="sr-only">Not its job:</span></span><span class="mtx-note">no memory to forget</span></td>
+              <td data-row="forget" data-col="claude-mem"><span class="m m-x"><span class="sr-only">Not its job:</span></span><span class="mtx-note">no forgetting documented</span></td>
+              <td data-row="forget" data-col="beads"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">old issues are summarized</span></td>
+              <td data-row="forget" data-col="mem0-zep"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">automatic consolidation</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Runs on your computer, no new account</th>
+              <td class="mtx-self" data-row="local" data-col="seamless"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">or a server of your own</span></td>
+              <td data-row="local" data-col="built-in"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">inside the client</span></td>
+              <td data-row="local" data-col="agent-teams"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">inside Claude Code</span></td>
+              <td data-row="local" data-col="claude-mem"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">cloud sync is opt-in</span></td>
+              <td data-row="local" data-col="beads"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">syncs through your git remote</span></td>
+              <td data-row="local" data-col="mem0-zep"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">cloud-first; self-host paths</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Nothing leaves it by default</th>
+              <td class="mtx-self" data-row="leaves" data-col="seamless"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">one anonymous update check</span></td>
+              <td data-row="leaves" data-col="built-in"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">files stay local</span></td>
+              <td data-row="leaves" data-col="agent-teams"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">team state stays local</span></td>
+              <td data-row="leaves" data-col="claude-mem"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">usage analytics on by default</span></td>
+              <td data-row="leaves" data-col="beads"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">nothing</span></td>
+              <td data-row="leaves" data-col="mem0-zep"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">the cloud holds your data</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Walls between projects</th>
+              <td class="mtx-self" data-row="walls" data-col="seamless"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">fences, and locks you approve</span></td>
+              <td data-row="walls" data-col="built-in"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">a directory per repository</span></td>
+              <td data-row="walls" data-col="agent-teams"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">the lead&rsquo;s permissions</span></td>
+              <td data-row="walls" data-col="claude-mem"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">private tags</span></td>
+              <td data-row="walls" data-col="beads"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">none documented</span></td>
+              <td data-row="walls" data-col="mem0-zep"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">compliance on paid tiers</span></td>
+            </tr>
+            <tr>
+              <th scope="row">A guard against planted memories</th>
+              <td class="mtx-self" data-row="planted" data-col="seamless"><span class="m m-y"><span class="sr-only">Yes:</span></span><span class="mtx-note">optional write screening</span></td>
+              <td data-row="planted" data-col="built-in"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">the client&rsquo;s own defenses</span></td>
+              <td data-row="planted" data-col="agent-teams"><span class="m m-p"><span class="sr-only">Partly:</span></span><span class="mtx-note">messages can&rsquo;t approve actions</span></td>
+              <td data-row="planted" data-col="claude-mem"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">none documented</span></td>
+              <td data-row="planted" data-col="beads"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">none documented</span></td>
+              <td data-row="planted" data-col="mem0-zep"><span class="m m-n"><span class="sr-only">No:</span></span><span class="mtx-note">none documented</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="mtx-foot">
+        <p class="mtx-out" data-mtx-out aria-live="polite"></p>
+        <ul class="mtx-key" aria-label="Key">
+          <li><span class="m m-y"></span>yes</li>
+          <li><span class="m m-p"></span>partly</li>
+          <li><span class="m m-n"></span>no</li>
+          <li><span class="m m-x"></span>not its job</li>
+        </ul>
+      </div>
+    </div>
+    <p class="cmp-more rv"><a class="lnk" href="compare/">All nine alternatives, in full <svg aria-hidden="true"><use href="#i-arrow"/></svg></a></p>
+  </div>
+</section>
+
+<!-- ================================================================ PARALLEL AGENTS -->
+<section class="chapter fleet" id="fleet" data-chapter="fleet" data-title="parallel agents">
   <div class="wrap fleet-grid">
     <header class="ch-head">
-      <p class="ch-mark"><em>iv.</em> the fleet</p>
+      <p class="ch-mark">parallel agents</p>
       <h2 class="h2 rv">Agent B claimed step 5. Agent A was told, and took step 6.</h2>
-      <p class="lede rv">Plans break into steps with dependencies, and claiming a step is atomic and comes with a lease. When two agents reach for the same step, one gets it and the other is told who holds it. If a session dies, its lease runs out and the step goes back on the queue.</p>
-      <ul class="points">
-        <li class="rv"><b>One queue, any client.</b> Claude Code and Codex agents claim from the same ready list.</li>
-        <li class="rv"><b>Plans outlive the week.</b> A plan's narrative note and its steps stay together across sessions, days, and clients.</li>
-        <li class="rv"><b>Plan mode, captured.</b> Approve a plan in Claude Code and it becomes a tracked plan, checked against git for staleness.</li>
-      </ul>
+      <p class="lede rv">Claiming a step is atomic and comes with a lease, for Claude Code and Codex agents on one queue. If a session dies, its lease runs out and the step goes back.</p>
     </header>
     <figure class="board" data-board>
       <div class="board-head">
@@ -648,20 +737,27 @@ Read with memory_read before re-deriving.<span class="t-tag">&lt;/seam-recall&gt
   </div>
 </section>
 
-<!-- ================================================================ V. THE FOLDER -->
-<section class="chapter legible" id="legible" data-chapter="legible">
-  <div class="wrap">
-    <header class="ch-head">
-      <p class="ch-mark"><em>v.</em> the folder</p>
-      <h2 class="h2 rv">Every memory is a file you can open.</h2>
-      <p class="lede rv">Grep it, fix it in your editor, or put the folder under git. SQLite indexes the files and keeps the fast-moving state (sessions, tasks, events), and the index can be rebuilt from the folder at any time.</p>
-    </header>
-    <div class="folder-grid">
+<!-- ================================================================ THE FOLDER -->
+<!-- The knowledge sky lives here: every star is a memory file, and pointing
+     at one reads it, which is this section's whole claim. home.js draws the
+     chart in the left half (Sky reads data-sky-side) and keeps it clear of
+     the column marked data-sky-keep. Below 1180px the chart gets a band of
+     its own under the copy. -->
+<section class="chapter legible" id="legible" data-chapter="legible" data-title="the folder" data-sky-host data-sky-side="left">
+  <div class="sky-wrap" aria-hidden="true"><canvas class="sky"></canvas></div>
+  <div class="sky-tip" aria-hidden="true" hidden></div>
+  <div class="wrap legible-grid">
+    <div class="legible-copy" data-sky-keep>
+      <header class="ch-head">
+        <p class="ch-mark">the folder</p>
+        <h2 class="h2 rv">Every memory is a file you can open.</h2>
+        <p class="lede rv">Point at a star. Each one is a markdown file under <code>~/.seamless</code> that you can grep, edit, or keep in git.</p>
+      </header>
       <div class="file-cell" data-file>
-      <span class="file-star" aria-hidden="true"></span>
-      <figure class="file">
-        <p class="file-path"><span>~/.seamless/</span>memory/myapp/rate-limit-not-in-memory.md</p>
-        <div class="file-body">
+        <span class="file-star" aria-hidden="true"></span>
+        <figure class="file">
+          <p class="file-path"><span>~/.seamless/</span>memory/myapp/rate-limit-not-in-memory.md</p>
+          <div class="file-body">
 <p class="fl fl-rule">---</p>
 <p class="fl" data-note="kind"><span class="k">kind:</span> gotcha</p>
 <p class="fl"><span class="k">name:</span> rate-limit-not-in-memory</p>
@@ -671,57 +767,34 @@ Read with memory_read before re-deriving.<span class="t-tag">&lt;/seam-recall&gt
 <p class="fl" data-note="source"><span class="k">source_session:</span> 01JZFJ3QK7Y2M8D4R6T1VNB5XC</p>
 <p class="fl fl-rule">---</p>
 <p class="fl fl-text" data-note="body">A rate limiter kept in a process map only sees one instance's traffic. myapp runs several instances behind the load balancer, so an attacker's requests fan out across them and each instance sees a fraction of the limit -- the endpoint is effectively unthrottled. Keep the counter in shared storage (Redis) keyed by IP and token family, with a short sliding window.</p>
-        </div>
-        <ol class="file-notes">
-          <li data-for="kind"><b>kind</b> Constraints are pinned into every briefing; gotchas, decisions, and runbooks surface when they're relevant.</li>
-          <li data-for="super"><b>superseded_by</b> Knowledge is replaced, never overwritten. The old version stays readable, with a pointer to the new one.</li>
-          <li data-for="source"><b>source_session</b> Provenance. You can always see which session learned it.</li>
-          <li data-for="body"><b>the body</b> Plain markdown. Edit it in your editor and the watcher reindexes.</li>
-        </ol>
-      </figure>
-      </div>
-
-      <div class="folder-side">
-        <div class="term term-sm rv">
-          <p class="term-bar"><span>zsh · ~</span></p>
-          <div class="term-body">
-<p><span class="t-p">$</span> ls ~/.seamless/memory/myapp/</p>
-<p class="t-cols"><span>auth-cookies-httponly-secure.md</span><span>auth-cookies-samesite-lax.md</span><span>chroma-boot-race.md</span><span>deploy-runbook.md</span><span>edge-cache-gotcha.md</span><span>persist-refresh-tokens.md</span><span>postgres-timeouts.md</span><span>rate-limit-not-in-memory.md</span><span>refresh-token-single-use.md</span></p>
-<p><span class="t-p">$</span> grep -l SameSite ~/.seamless/memory/myapp/*</p>
-<p>…/auth-cookies-httponly-secure.md<br>…/auth-cookies-samesite-lax.md</p>
-<p class="t-c"># the files are the memory. the index rebuilds from them.</p>
           </div>
-        </div>
-
-        <div class="garden rv" data-garden>
-          <p class="garden-kicker">gardener · proposal</p>
-          <p class="garden-q"><code>deploy-steps</code> repeats <code>deploy-runbook</code>. Merge them?</p>
-          <div class="garden-stars" aria-hidden="true"><span class="gs gs-a"></span><span class="gs gs-b"></span></div>
-          <div class="garden-btns">
-            <button type="button" class="g-btn g-yes" data-garden-act="merge">Merge</button>
-            <button type="button" class="g-btn g-no" data-garden-act="dismiss">Dismiss</button>
-          </div>
-          <p class="garden-out" data-garden-out aria-live="polite">Nothing is merged, retired, or forgotten until you say so. Try it.</p>
-        </div>
+          <ol class="file-notes">
+            <li data-for="kind"><b>kind</b> Constraints are pinned into every briefing.</li>
+            <li data-for="super"><b>superseded_by</b> Replaced, never overwritten.</li>
+            <li data-for="source"><b>source_session</b> Which session learned it.</li>
+            <li data-for="body"><b>the body</b> Plain markdown. Edit it and the watcher reindexes.</li>
+          </ol>
+        </figure>
       </div>
     </div>
   </div>
+  <p class="sky-legend" aria-hidden="true"><span class="lg-item"><span class="lg-star"></span>a star is a memory file</span><span class="lg-item"><span class="lg-streak"></span>a streak is a session</span><span class="lg-hint">point at one to read it</span></p>
 </section>
 
-<!-- ================================================================ VI. THE KEYS -->
+<!-- ================================================================ THE KEYS -->
 <!-- The security chapter. Two illustrations built from the server's own
      wording (a held write's reason codes and message, a locked project's
      recall line and the Touch ID prompt Seamless Approve composes), then the
-     five layers in the console Privacy screen's order, each in two readings:
-     plain words by default, technical terms on request (site.js; without JS
-     both readings show under their labels). home.js plays the two terminals;
-     without JS every line simply shows. -->
-<section class="chapter keys" id="keys" data-chapter="keys">
+     five layers in the console Privacy screen's order as stops on one line.
+     home.js plays the two terminals (Keys) and runs the line as a tablist
+     (Layers); without JS every line and every layer simply shows. The
+     technical reading of each layer is on /security/. -->
+<section class="chapter keys" id="keys" data-chapter="keys" data-title="the keys">
   <div class="wrap">
     <header class="ch-head">
-      <p class="ch-mark"><em>vi.</em> the keys</p>
+      <p class="ch-mark">the keys</p>
       <h2 class="h2 rv">Built for the day an agent gets tricked.</h2>
-      <p class="lede rv">Agents read web pages, issues and email, and any of them can carry instructions an agent will follow. Seamless keeps what your agents know on your own computers and lets you add walls as the work gets more sensitive. The strongest opens a project only when you approve, with Touch ID, a passkey, or your password.</p>
+      <p class="lede rv">Agents read web pages, issues and email, and any of them can carry instructions an agent will follow. With write screening on, a write that looks planted waits for your review, and a locked project opens only when you approve.</p>
     </header>
 
     <div class="keys-duo" data-keys>
@@ -738,7 +811,7 @@ Read with memory_read before re-deriving.<span class="t-tag">&lt;/seam-recall&gt
 <p class="t-say">The issue carried a hidden instruction to save a new CI rule. Seamless held it, so no session will be briefed with it unless you release it from the Held screen.</p>
           </div>
         </div>
-        <figcaption><b>A planted rule waits for you.</b> With write screening on, a write that looks planted is held out of every briefing until you release or discard it.</figcaption>
+        <figcaption><b>A planted rule waits for you.</b></figcaption>
       </figure>
 
       <figure class="vig">
@@ -760,96 +833,41 @@ Read with memory_read before re-deriving.<span class="t-tag">&lt;/seam-recall&gt
 <p class="t-kv"><span class="k">decision</span> indemnity-cap-1x-fees <span class="t-dim">2d</span></p>
           </div>
         </div>
-        <figcaption><b>A locked project waits for your touch.</b> Closed to every agent, its own included, until you approve one, for as long as you choose.</figcaption>
+        <figcaption><b>A locked project waits for your touch.</b></figcaption>
       </figure>
     </div>
     <p class="keys-replay"><button class="board-replay" type="button" data-keys-replay hidden><svg aria-hidden="true"><use href="#i-replay"/></svg>replay</button></p>
 
-    <div class="ledger">
-      <div class="ledger-head">
-        <h3 class="ledger-title">Five layers, from a fresh install inward.</h3>
-        <div class="reading" role="group" aria-label="Read the layers">
-          <button type="button" data-reading-pick="plain" aria-pressed="true">In plain words</button>
-          <button type="button" data-reading-pick="tech" aria-pressed="false">In technical terms</button>
-        </div>
+    <div class="layers" data-layers>
+      <h3 class="layers-title">Five layers, from a fresh install inward.</h3>
+      <div class="layers-line" role="tablist" aria-label="The layers">
+        <button class="ly active" type="button" role="tab" id="ly-t-0" aria-controls="ly-p-0" aria-selected="true"><span class="ly-dot is-on" aria-hidden="true"></span><span class="ly-name"><em>0</em> Out of the box</span><span class="ly-state">on from the first install</span></button>
+        <button class="ly" type="button" role="tab" id="ly-t-1" aria-controls="ly-p-1" aria-selected="false" tabindex="-1"><span class="ly-dot is-pick" aria-hidden="true"></span><span class="ly-name"><em>1</em> Project fences</span><span class="ly-state">per project, every OS</span></button>
+        <button class="ly" type="button" role="tab" id="ly-t-2" aria-controls="ly-p-2" aria-selected="false" tabindex="-1"><span class="ly-dot" aria-hidden="true"></span><span class="ly-name"><em>2</em> Write screening</span><span class="ly-state">optional, offered at first run</span></button>
+        <button class="ly" type="button" role="tab" id="ly-t-3" aria-controls="ly-p-3" aria-selected="false" tabindex="-1"><span class="ly-dot" aria-hidden="true"></span><span class="ly-name"><em>3</em> Its own account</span><span class="ly-state">optional, macOS &amp; Linux</span></button>
+        <button class="ly" type="button" role="tab" id="ly-t-4" aria-controls="ly-p-4" aria-selected="false" tabindex="-1"><span class="ly-dot" aria-hidden="true"></span><span class="ly-name"><em>4</em> Locked projects</span><span class="ly-state">optional, macOS &amp; Linux</span></button>
+        <button class="ly" type="button" role="tab" id="ly-t-5" aria-controls="ly-p-5" aria-selected="false" tabindex="-1"><span class="ly-dot" aria-hidden="true"></span><span class="ly-name"><em>5</em> Restricted agents</span><span class="ly-state">optional, macOS &amp; Linux</span></button>
       </div>
-      <ol class="lg-rows">
-        <li class="lg-row rv">
-          <div class="lg-head">
-            <p class="lg-name"><span class="lg-n">0</span>Out of the box</p>
-            <p class="lg-state is-on">on from the first install</p>
-          </div>
-          <div class="lg-text">
-            <p class="rd rd-plain"><span class="rd-label">In plain words</span>Your agents' memory is a folder on your computer, and nothing outside your computer can reach it. No account, no Seamless cloud, no usage tracking, and a backup every day.</p>
-            <p class="rd rd-tech"><span class="rd-label">In technical terms</span>Listens on <code>127.0.0.1:8081</code> and answers <code>421</code> to any other Host. A random 32-byte key in a <code>0600</code> file guards MCP and the console; agent registrations read it at connect time and never copy it. No telemetry. Daily backups, seven kept.</p>
-          </div>
-        </li>
-        <li class="lg-row rv">
-          <div class="lg-head">
-            <p class="lg-name"><span class="lg-n">1</span>Project fences</p>
-            <p class="lg-state is-pick">per project, every OS</p>
-          </div>
-          <div class="lg-text">
-            <p class="rd rd-plain"><span class="rd-label">In plain words</span>Mark a client's project confidential and nothing in it shows up in your other work. Seal it, and nothing from outside gets in either.</p>
-            <p class="rd rd-tech"><span class="rd-label">In technical terms</span><code>open</code>, <code>confidential</code> or <code>sealed</code>, enforced at every surface Seamless serves: briefings, recall, tool reads and writes, family views, the gardener. A refusal never echoes the content. With access requests on, you grant read-only or read-and-write access, and later writes carry provenance stamps.</p>
-          </div>
-        </li>
-        <li class="lg-row rv">
-          <div class="lg-head">
-            <p class="lg-name"><span class="lg-n">2</span>Write screening</p>
-            <p class="lg-state">optional, offered at first run</p>
-          </div>
-          <div class="lg-text">
-            <p class="rd rd-plain"><span class="rd-label">In plain words</span>When an agent tries to save something that looks planted, like hidden instructions or a password, it waits for you instead of reaching the next session.</p>
-            <p class="rd rd-tech"><span class="rd-label">In technical terms</span>Every agent write to a memory or note is screened on your computer for secrets, injection markers, hidden comments and Unicode, encoded blobs and unlisted links. Holds wait in a database queue, never in the corpus. A constraint's supersede or delete is always held, as is a rule change from a session that fetched outside text. Files changed outside Seamless are quarantined.</p>
-          </div>
-        </li>
-        <li class="lg-row rv">
-          <div class="lg-head">
-            <p class="lg-name"><span class="lg-n">3</span>Seamless in its own account</p>
-            <p class="lg-state">optional, macOS &amp; Linux</p>
-          </div>
-          <div class="lg-text">
-            <p class="rd rd-plain"><span class="rd-label">In plain words</span>Give Seamless its own user account on your computer, and your agents can no longer open its files. They have to ask it, and it knows exactly who is asking.</p>
-            <p class="rd rd-tech"><span class="rd-label">In technical terms</span><code>peer_auth</code>: the daemon runs as a dedicated OS account with a <code>0700</code> data directory and serves a Unix socket, where the kernel names each caller's uid (<code>LOCAL_PEERCRED</code> on macOS, <code>SO_PEERCRED</code> on Linux). It refuses to start if another account could rewrite its data, socket directory, config or binary.</p>
-          </div>
-        </li>
-        <li class="lg-row rv">
-          <div class="lg-head">
-            <p class="lg-name"><span class="lg-n">4</span>Locked projects</p>
-            <p class="lg-state">optional, macOS &amp; Linux</p>
-          </div>
-          <div class="lg-text">
-            <p class="rd rd-plain"><span class="rd-label">In plain words</span>A locked project stays closed, even to its own agents, until you say yes with Touch ID, a passkey, or your password. The yes lasts as long as you choose.</p>
-            <p class="rd rd-tech"><span class="rd-label">In technical terms</span>An approval is a lease on the asking agent's process tree, read from the kernel: the session, 1 h or 4 h, capped at 8 h by default. The proof is <code>seam approve</code> (<code>sudo -k</code>), a WebAuthn passkey that signs its duration, or a Secure Enclave key in Seamless Approve, whose Touch ID prompt is built from the daemon's facts, never the agent's words.</p>
-          </div>
-        </li>
-        <li class="lg-row rv">
-          <div class="lg-head">
-            <p class="lg-name"><span class="lg-n">5</span>Restricted agent accounts</p>
-            <p class="lg-state">optional, macOS &amp; Linux</p>
-          </div>
-          <div class="lg-text">
-            <p class="rd rd-plain"><span class="rd-label">In plain words</span>Run unattended agents as a separate user on your computer. They see only the projects you open to them, and any rule they change waits for you.</p>
-            <p class="rd rd-tech"><span class="rd-label">In technical terms</span><code>peer_auth.restricted</code>: the account reaches open, unlocked projects, or only those you list. It reads the global scope without writing it, cannot create projects or ask for access, and its changes to binding rules wait as proposals on the Held screen, labeled with the account.</p>
-          </div>
-        </li>
-      </ol>
-      <div class="ledger-more">
-        <p>Every update is checked against the release's signatures before it installs, and rolls back if the new version does not come up. The limits are written down too.</p>
-        <a class="lnk" href="security/">The whole security model <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      <div class="layers-out">
+        <p class="ly-p is-on" id="ly-p-0" role="tabpanel" aria-labelledby="ly-t-0"><b>Out of the box.</b> Your agents' memory is a folder on your computer, and nothing outside your computer can reach it. No account, no Seamless cloud, no usage tracking, and a backup every day.</p>
+        <p class="ly-p" id="ly-p-1" role="tabpanel" aria-labelledby="ly-t-1"><b>Project fences.</b> Mark a client's project confidential and nothing in it shows up in your other work. Seal it, and nothing from outside gets in either.</p>
+        <p class="ly-p" id="ly-p-2" role="tabpanel" aria-labelledby="ly-t-2"><b>Write screening.</b> When an agent tries to save something that looks planted, like hidden instructions or a password, it waits for you instead of reaching the next session.</p>
+        <p class="ly-p" id="ly-p-3" role="tabpanel" aria-labelledby="ly-t-3"><b>Seamless in its own account.</b> Give Seamless its own user account on your computer, and your agents can no longer open its files. They have to ask it, and it knows exactly who is asking.</p>
+        <p class="ly-p" id="ly-p-4" role="tabpanel" aria-labelledby="ly-t-4"><b>Locked projects.</b> A locked project stays closed, even to its own agents, until you say yes with Touch ID, a passkey, or your password. The yes lasts as long as you choose.</p>
+        <p class="ly-p" id="ly-p-5" role="tabpanel" aria-labelledby="ly-t-5"><b>Restricted agent accounts.</b> Run unattended agents as a separate user on your computer. They see only the projects you open to them, and any rule they change waits for you.</p>
       </div>
+      <p class="layers-more"><a class="lnk" href="security/">The whole security model, limits included <svg aria-hidden="true"><use href="#i-arrow"/></svg></a></p>
     </div>
   </div>
 </section>
 
-<!-- ================================================================ VII. THE CONSOLE -->
-<section class="chapter console" id="console" data-chapter="console">
+<!-- ================================================================ THE CONSOLE -->
+<section class="chapter console" id="console" data-chapter="console" data-title="the console">
   <div class="wrap">
     <header class="ch-head ch-head-wide">
-      <p class="ch-mark"><em>vii.</em> the console</p>
+      <p class="ch-mark">the console</p>
       <h2 class="h2 rv">See what your agents were told, and when.</h2>
-      <p class="lede rv">The console ships inside the daemon. <code>seamlessd console-open</code> shows briefings landing, recalls firing, and claims changing hands as they happen, along with how much of the store actually reaches your agents.</p>
+      <p class="lede rv">The console ships inside the daemon. <code>seamlessd console-open</code> shows briefings landing, recalls firing, and claims changing hands as they happen.</p>
     </header>
     <figure class="hotshot rv" data-hotshot>
       <div class="shot-frame">
@@ -864,27 +882,73 @@ Read with memory_read before re-deriving.<span class="t-tag">&lt;/seam-recall&gt
         </div>
       </div>
       <ol class="hs-notes">
-        <li data-hs="1"><b>Gardener proposals.</b> Merges, retirements, and digests wait here until you approve or dismiss them.</li>
-        <li data-hs="2"><b>Memory reach.</b> How much of the store reached an agent this month, rather than how big it is.</li>
-        <li data-hs="3"><b>Live now.</b> Every session running at this moment, across your projects.</li>
-        <li data-hs="4"><b>The knowledge sky.</b> Every memory as a star, placed by when it last reached an agent. Yes, it's the sky at the top of this page.</li>
+        <li data-hs="1"><b>Gardener proposals</b> wait here until you approve or dismiss them.</li>
+        <li data-hs="2"><b>Memory reach.</b> How much of the store reached an agent this month.</li>
+        <li data-hs="3"><b>Live now.</b> Every session running at this moment.</li>
+        <li data-hs="4"><b>The knowledge sky.</b> Every memory as a star, as in the folder above.</li>
       </ol>
     </figure>
     <ul class="thumbs">
-      <li class="thumb rv"><a class="themed-light" href="static/shots/now-light.webp"><img src="static/shots/now-light.webp" width="1440" height="900" loading="lazy" alt="Now screen: three agents live across two projects, each card showing its claimed task and lease, plans in motion, and the queue that is claimable this instant"></a><a class="themed-dark" href="static/shots/now-dark.webp"><img src="static/shots/now-dark.webp" width="1440" height="900" loading="lazy" alt="Now screen: three agents live across two projects, each card showing its claimed task and lease, plans in motion, and the queue that is claimable this instant"></a><p><b>Now</b> Every agent on duty, what each one holds, and what is claimable this instant.</p></li>
-      <li class="thumb rv"><a class="themed-light" href="static/shots/interactions-light.webp"><img src="static/shots/interactions-light.webp" width="1440" height="900" loading="lazy" alt="Interactions feed: every tool call, injection, and prompt from three live sessions, split into per-session lanes"></a><a class="themed-dark" href="static/shots/interactions-dark.webp"><img src="static/shots/interactions-dark.webp" width="1440" height="900" loading="lazy" alt="Interactions feed: every tool call, injection, and prompt from three live sessions, split into per-session lanes"></a><p><b>Interactions</b> Every injection, recall, and tool call, live, in per-session lanes.</p></li>
-      <li class="thumb rv"><a class="themed-light" href="static/shots/plans-light.webp"><img src="static/shots/plans-light.webp" width="1440" height="900" loading="lazy" alt="Plans board: six plans grouped by in progress, ready, and done, with step counts and claim status"></a><a class="themed-dark" href="static/shots/plans-dark.webp"><img src="static/shots/plans-dark.webp" width="1440" height="900" loading="lazy" alt="Plans board: six plans grouped by in progress, ready, and done, with step counts and claim status"></a><p><b>Plans</b> Captured plans with their notes, steps, and who holds what.</p></li>
-      <li class="thumb rv"><a class="themed-light" href="static/shots/retrieval-light.webp"><img src="static/shots/retrieval-light.webp" width="1440" height="900" loading="lazy" alt="Retrieval health: the delivery path from injections to distinct memories to sessions reached, with knowledge-base coverage"></a><a class="themed-dark" href="static/shots/retrieval-dark.webp"><img src="static/shots/retrieval-dark.webp" width="1440" height="900" loading="lazy" alt="Retrieval health: the delivery path from injections to distinct memories to sessions reached, with knowledge-base coverage"></a><p><b>Retrieval</b> How much of the store actually reaches your agents.</p></li>
+      <li class="thumb rv"><a class="themed-light" href="static/shots/now-light.webp"><img src="static/shots/now-light.webp" width="1440" height="900" loading="lazy" alt="Now screen: three agents live across two projects, each card showing its claimed task and lease, plans in motion, and the queue that is claimable this instant"></a><a class="themed-dark" href="static/shots/now-dark.webp"><img src="static/shots/now-dark.webp" width="1440" height="900" loading="lazy" alt="Now screen: three agents live across two projects, each card showing its claimed task and lease, plans in motion, and the queue that is claimable this instant"></a><p><b>Now</b> Every agent on duty and what it holds.</p></li>
+      <li class="thumb rv"><a class="themed-light" href="static/shots/interactions-light.webp"><img src="static/shots/interactions-light.webp" width="1440" height="900" loading="lazy" alt="Interactions feed: every tool call, injection, and prompt from three live sessions, split into per-session lanes"></a><a class="themed-dark" href="static/shots/interactions-dark.webp"><img src="static/shots/interactions-dark.webp" width="1440" height="900" loading="lazy" alt="Interactions feed: every tool call, injection, and prompt from three live sessions, split into per-session lanes"></a><p><b>Interactions</b> Every injection, recall, and tool call, live.</p></li>
+      <li class="thumb rv"><a class="themed-light" href="static/shots/plans-light.webp"><img src="static/shots/plans-light.webp" width="1440" height="900" loading="lazy" alt="Plans board: six plans grouped by in progress, ready, and done, with step counts and claim status"></a><a class="themed-dark" href="static/shots/plans-dark.webp"><img src="static/shots/plans-dark.webp" width="1440" height="900" loading="lazy" alt="Plans board: six plans grouped by in progress, ready, and done, with step counts and claim status"></a><p><b>Plans</b> Steps, notes, and who holds what.</p></li>
+      <li class="thumb rv"><a class="themed-light" href="static/shots/retrieval-light.webp"><img src="static/shots/retrieval-light.webp" width="1440" height="900" loading="lazy" alt="Retrieval health: the delivery path from injections to distinct memories to sessions reached, with knowledge-base coverage"></a><a class="themed-dark" href="static/shots/retrieval-dark.webp"><img src="static/shots/retrieval-dark.webp" width="1440" height="900" loading="lazy" alt="Retrieval health: the delivery path from injections to distinct memories to sessions reached, with knowledge-base coverage"></a><p><b>Retrieval</b> How much of the store reaches your agents.</p></li>
     </ul>
     <p class="fine">Screens from a demo instance seeded with fictional data, with the optional research and gamification features switched on. The console is served by your own daemon, and nothing on it leaves your computers.</p>
   </div>
 </section>
 
-<!-- ================================================================ VIII. TRY IT -->
-<section class="chapter install" id="quickstart" data-chapter="quickstart">
+<!-- ================================================================ IN USE -->
+<!-- The use case: the project that builds Seamless. The figure is twelve hours
+     of it drawn to scale, 9 to 10 October 2026: the plan's capture, the start of
+     each wave of parallel agents (a star for each agent), the release tag.
+     Every time and count is from the project's own records, and /example/
+     carries those records; change a number here only together with the copy
+     there (scripts/example/). Without JS the figure simply shows. -->
+<section class="chapter built" id="built" data-chapter="built" data-title="in use">
   <div class="wrap">
     <header class="ch-head ch-head-wide">
-      <p class="ch-mark"><em>viii.</em> try it</p>
+      <p class="ch-mark">in use</p>
+      <h2 class="h2 rv">Seamless is built with Seamless.</h2>
+      <p class="lede rv">The agents that write it have started every session from its own memory since July. Here are twelve hours of that project, drawn to scale. The records behind them are open to read.</p>
+    </header>
+    <figure class="day rv">
+      <div class="day-in">
+        <div class="day-line" aria-hidden="true"><i></i></div>
+        <ol class="day-ev">
+          <li class="ev ev-mark" style="--at:0%;--t:0"><em>15:22</em><span>The plan is approved, on its 38th draft.</span></li>
+          <li class="ev ev-wave" style="--at:11.2%;--t:0.112"><em>16:45</em><b>7 agents</b><span class="wave-s" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></li>
+          <li class="ev ev-wave" style="--at:23.8%;--t:0.238"><em>18:18</em><b>3 agents</b><span class="wave-s" aria-hidden="true"><i></i><i></i><i></i></span></li>
+          <li class="ev ev-mark" style="--at:35.6%;--t:0.356"><em>19:45</em><span>Trials start on macOS and Windows. Linux follows.</span></li>
+          <li class="ev ev-wave" style="--at:60.9%;--t:0.609"><em>22:52</em><b>7 agents</b><span class="wave-s" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></li>
+          <li class="ev ev-wave" style="--at:87.1%;--t:0.871"><em>02:05</em><b>3 agents</b><span class="wave-s" aria-hidden="true"><i></i><i></i><i></i></span></li>
+          <li class="ev ev-wave ev-up" style="--at:94.5%;--t:0.945"><em>03:00</em><b>3 agents</b><span class="wave-s" aria-hidden="true"><i></i><i></i><i></i></span></li>
+          <li class="ev ev-mark ev-end" style="--at:100%;--t:1"><em>03:40</em><span>v0.7.0 is tagged: the first release that updates itself.</span></li>
+        </ol>
+      </div>
+      <figcaption class="fine">9 and 10 October 2026, in UTC. Each group of stars is a wave of agents working in parallel on the plan's steps, placed where its session began. The live checks on Linux and macOS finished the next day, and one check on a Windows desktop was dropped.</figcaption>
+    </figure>
+    <ul class="built-facts rv">
+      <li><b>38</b> steps on one queue</li>
+      <li><b>23</b> agent runs, no file conflicts</li>
+      <li><b>48</b> trials: 38 passed, 6 failed, 4 partial</li>
+      <li><b>36</b> commits on main</li>
+    </ul>
+    <div class="built-act rv">
+      <a class="btn-solid" href="example/">Read the project's memory <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      <a class="lnk" href="example/#briefing">See what a session is told first <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ TRY IT -->
+<!-- Three steps down the left, the way out on the right. The third step and
+     the requests under it are what to say on day one; each prompt is meant to
+     be copied, and docs/first-prompts/ has what the agent does with it. -->
+<section class="chapter install" id="quickstart" data-chapter="quickstart" data-title="try it">
+  <div class="wrap">
+    <header class="ch-head ch-head-wide">
+      <p class="ch-mark">try it</p>
       <h2 class="h2 rv">Try it on one repo this afternoon.</h2>
       <p class="lede rv">One command installs it and wires the agents it finds. If it isn't for you, one command takes it all back out and leaves your notes where they are.</p>
     </header>
@@ -934,15 +998,21 @@ Read with memory_read before re-deriving.<span class="t-tag">&lt;/seam-recall&gt
           <div class="qs-main">
             <h3><span class="qs-n">2</span>Open your agent in any repo</h3>
             <div class="code"><span class="p" aria-hidden="true">$</span><span class="cmd" data-copy="cd ~/code/myrepo &amp;&amp; claude">cd ~/code/myrepo &amp;&amp; claude</span><button class="copy-btn" type="button" aria-label="Copy">copy</button></div>
-            <p class="qs-note">Restart the client once after installing. There is nothing to configure: the first session in a git repo registers the project itself, and the agent's context opens with a <code>&lt;seam-briefing&gt;</code> block. Using Codex? Review the hooks once with <code>/hooks</code>, then see <a href="docs/codex-cli/">the Codex guide</a>. Chatting in the Claude desktop app instead? A chat has no hooks, so Claude loads a project when you ask; <a href="claude-app/">here is how that works</a>.</p>
-            <p class="qs-try"><b>A first test.</b> Ask your agent to &ldquo;remember, as a constraint: never force-push main.&rdquo; Then start a fresh session in the same repo and look for the rule in its briefing. <a href="#asks">More to try</a>.</p>
+            <p class="qs-note">Restart the client once. There is nothing to configure: the session opens with a <code>&lt;seam-briefing&gt;</code> block. Guides for <a href="docs/codex-cli/">Codex</a> and <a href="claude-app/">the Claude app</a>.</p>
           </div>
         </li>
-        <li class="qs-step rv">
+        <li class="qs-step rv" id="asks">
           <div class="qs-main">
-            <h3><span class="qs-n">3</span>Watch it work <span class="opt">optional</span></h3>
-            <div class="code"><span class="p" aria-hidden="true">$</span><span class="cmd" data-copy="seamlessd console-open">seamlessd console-open</span><button class="copy-btn" type="button" aria-label="Copy">copy</button></div>
-            <p class="qs-note">Opens the console, signed in, so you can watch briefings inject, recalls fire, and tasks get claimed. What changed lately is in the <a href="docs/changelog/">changelog</a>.</p>
+            <h3><span class="qs-n">3</span>Teach it one rule</h3>
+            <div class="code say"><span class="say-label">prompt</span><span class="cmd" data-copy="Save this to Seamless as a constraint: never force-push main.">Save this to Seamless as a constraint: never force-push main.</span><button class="copy-btn" type="button" aria-label="Copy the request">copy</button></div>
+            <p class="qs-note">Start a fresh session in the same repo. The rule is in its briefing, in Claude Code and Codex alike.</p>
+            <details class="what more-asks">
+              <summary class="what-s">Three more to try</summary>
+            <div class="code say"><span class="say-label">prompt</span><span class="cmd" data-copy="Make a Seamless plan with tasks: move sessions to Redis, then migrate the existing sessions, then update the deploy runbook.">Make a Seamless plan with tasks: move sessions to Redis, then migrate the existing sessions, then update the deploy runbook.</span><button class="copy-btn" type="button" aria-label="Copy the request">copy</button></div>
+            <div class="code say"><span class="say-label">prompt</span><span class="cmd" data-copy="Go through my past Claude Code sessions for this repo in ~/.claude/projects and list the decisions and gotchas worth keeping. Save the ones I pick to Seamless.">Go through my past Claude Code sessions for this repo in ~/.claude/projects and list the decisions and gotchas worth keeping. Save the ones I pick to Seamless.</span><button class="copy-btn" type="button" aria-label="Copy the request">copy</button></div>
+            <div class="code say"><span class="say-label">prompt</span><span class="cmd" data-copy="Wrap up for today: record what is done and what is left for the next session.">Wrap up for today: record what is done and what is left for the next session.</span><button class="copy-btn" type="button" aria-label="Copy the request">copy</button></div>
+            <p class="qs-note"><a href="docs/first-prompts/">All the first prompts</a>, each with what the agent does and where the result ends up.</p>
+            </details>
           </div>
         </li>
       </ol>
@@ -953,187 +1023,23 @@ Read with memory_read before re-deriving.<span class="t-tag">&lt;/seam-recall&gt
         <div class="code"><span class="p" aria-hidden="true">$</span><span class="cmd" data-copy="seamlessd uninstall --dry-run">seamlessd uninstall --dry-run</span><button class="copy-btn" type="button" aria-label="Copy">copy</button></div>
         <p class="leave-note">Prints exactly what would be removed, and removes nothing.</p>
         <div class="code"><span class="p" aria-hidden="true">$</span><span class="cmd" data-copy="seamlessd uninstall">seamlessd uninstall</span><button class="copy-btn" type="button" aria-label="Copy">copy</button></div>
-        <ul class="leave-list">
-          <li><svg aria-hidden="true"><use href="#i-check"/></svg>Stops and removes the background service</li>
-          <li><svg aria-hidden="true"><use href="#i-check"/></svg>Strips the hooks from Claude Code and Codex, and leaves your other hooks alone</li>
-          <li><svg aria-hidden="true"><use href="#i-check"/></svg>Deregisters the MCP server and removes the skills</li>
-          <li><svg aria-hidden="true"><use href="#i-check"/></svg>Deletes both binaries. Running it twice is harmless.</li>
-        </ul>
-        <p class="leave-keep">Your memories and their backups stay in <code>~/.seamless</code> and your key in <code>~/.config/seamless</code>, because uninstalling a program shouldn't delete your knowledge. Add <code>--purge</code> to remove them too. Same command on Windows. Updates install themselves; to update right now, run <code>seamlessd update</code>.</p>
+        <p class="leave-note">Removes the service, the hooks, the MCP registration, the skills, and both binaries.</p>
+        <p class="leave-keep">Your memories and their backups stay in <code>~/.seamless</code>, and your key in <code>~/.config/seamless</code>, unless you add <code>--purge</code>. Same command on Windows.</p>
         <p class="leave-more"><a class="lnk" href="docs/updating/#uninstall">Update &amp; uninstall, in full <svg aria-hidden="true"><use href="#i-arrow"/></svg></a></p>
       </aside>
     </div>
   </div>
 </section>
 
-<!-- ================================================================ IX. DAY ONE -->
-<!-- Requests to paste on the first day, each beside an illustration of what
-     the agent does with it. The prompts are meant to be copied; the replies
-     are invented, but every tool named in them is a real Seamless MCP tool
-     (or the client's own Bash/Read) and does what the reply says. home.js
-     runs the index as a tablist; without JS every request shows, stacked. -->
-<section class="chapter asks-sec" id="asks" data-chapter="asks">
-  <div class="wrap">
-    <header class="ch-head ch-head-wide">
-      <p class="ch-mark"><em>ix.</em> day one</p>
-      <h2 class="h2 rv">What to ask in your first session.</h2>
-      <p class="lede rv">You talk to your agent the way you already do. Paste any of these into Claude Code or Codex inside a repo, and change the details to your own. The replies are illustrations, the tools in them are real, and everything the agent saves is a file under <code>~/.seamless</code>.</p>
-    </header>
-    <div class="asks" data-asks>
-      <div class="ask-tabs" role="tablist" aria-label="Requests to try" aria-orientation="vertical">
-        <button class="ask-tab active" type="button" role="tab" id="ask-t-rule" aria-controls="ask-rule" aria-selected="true"><span class="sr-num">01</span>Remember a rule</button>
-        <button class="ask-tab" type="button" role="tab" id="ask-t-note" aria-controls="ask-note" aria-selected="false" tabindex="-1"><span class="sr-num">02</span>Save a note</button>
-        <button class="ask-tab" type="button" role="tab" id="ask-t-plan" aria-controls="ask-plan" aria-selected="false" tabindex="-1"><span class="sr-num">03</span>Plan with tasks</button>
-        <button class="ask-tab" type="button" role="tab" id="ask-t-import" aria-controls="ask-import" aria-selected="false" tabindex="-1"><span class="sr-num">04</span>Import past sessions</button>
-        <button class="ask-tab" type="button" role="tab" id="ask-t-recall" aria-controls="ask-recall" aria-selected="false" tabindex="-1"><span class="sr-num">05</span>Ask what&rsquo;s known</button>
-        <button class="ask-tab" type="button" role="tab" id="ask-t-change" aria-controls="ask-change" aria-selected="false" tabindex="-1"><span class="sr-num">06</span>Change a decision</button>
-        <button class="ask-tab" type="button" role="tab" id="ask-t-handoff" aria-controls="ask-handoff" aria-selected="false" tabindex="-1"><span class="sr-num">07</span>Hand off</button>
-      </div>
-      <div class="ask-panels">
-
-        <div class="ask" id="ask-rule" role="tabpanel" aria-labelledby="ask-t-rule">
-          <p class="ask-name">Remember a rule</p>
-          <div class="code say"><span class="say-label">prompt</span><span class="cmd" data-copy="Save this to Seamless as a constraint: migrations run before the deploy, never after.">Save this to Seamless as a constraint: migrations run before the deploy, never after.</span><button class="copy-btn" type="button" aria-label="Copy the request">copy</button></div>
-          <div class="term term-sm">
-            <p class="term-bar"><span>claude · ~/code/myapp</span><span class="term-tag">an illustration</span></p>
-            <div class="term-body">
-<p class="t-tool"><b>●</b> memory_write <span class="t-arg">deploy-runs-migrations-first</span></p>
-<p class="t-kv"><span class="k">kind</span> constraint</p>
-<p class="t-kv"><span class="k">description</span> Run migrations before the deploy, never after: the new code assumes the new schema.</p>
-<p class="t-res">wrote memory/myapp/deploy-runs-migrations-first.md</p>
-<p class="t-say">Saved as a constraint. Every new session in this repo gets it in its briefing.</p>
-            </div>
-          </div>
-          <p class="ask-note">Constraints are pinned into every briefing for the repo. Start a fresh session and the rule is there before your first prompt, in Claude Code and Codex alike.</p>
-        </div>
-
-        <div class="ask" id="ask-note" role="tabpanel" aria-labelledby="ask-t-note">
-          <p class="ask-name">Save a note</p>
-          <div class="code say"><span class="say-label">prompt</span><span class="cmd" data-copy="Save what we just worked out about webhook retries as a Seamless note.">Save what we just worked out about webhook retries as a Seamless note.</span><button class="copy-btn" type="button" aria-label="Copy the request">copy</button></div>
-          <div class="term term-sm">
-            <p class="term-bar"><span>claude · ~/code/myapp</span><span class="term-tag">an illustration</span></p>
-            <div class="term-body">
-<p class="t-tool"><b>●</b> notes_create <span class="t-arg">Webhook retries: backoff and idempotency</span></p>
-<p class="t-kv"><span class="k">tags</span> webhooks, payments</p>
-<p class="t-res">wrote notes/myapp/webhook-retries-backoff-and-idempotency.md</p>
-<p class="t-say">Saved the long version as a note: the backoff schedule, why the handler has to be idempotent, and the two approaches we ruled out.</p>
-            </div>
-          </div>
-          <p class="ask-note">Notes hold the long version of something: a design, research, the reasoning behind a call. Memories hold the one-line rule. When a later session searches for retries, both come back.</p>
-        </div>
-
-        <div class="ask" id="ask-plan" role="tabpanel" aria-labelledby="ask-t-plan">
-          <p class="ask-name">Plan with tasks</p>
-          <div class="code say"><span class="say-label">prompt</span><span class="cmd" data-copy="Make a Seamless plan with tasks: move sessions to Redis, then migrate the existing sessions, then update the deploy runbook.">Make a Seamless plan with tasks: move sessions to Redis, then migrate the existing sessions, then update the deploy runbook.</span><button class="copy-btn" type="button" aria-label="Copy the request">copy</button></div>
-          <div class="term term-sm">
-            <p class="term-bar"><span>claude · ~/code/myapp</span><span class="term-tag">an illustration</span></p>
-            <div class="term-body">
-<p class="t-tool"><b>●</b> notes_create <span class="t-arg">Move sessions to Redis</span></p>
-<p class="t-kv"><span class="k">tags</span> plan:sessions-to-redis</p>
-<p class="t-tool"><b>●</b> tasks_add <span class="t-arg">Move session storage to Redis</span></p>
-<p class="t-tool"><b>●</b> tasks_add <span class="t-arg">Migrate existing sessions</span> <span class="t-dim">waits on step 1</span></p>
-<p class="t-tool"><b>●</b> tasks_add <span class="t-arg">Update the deploy runbook</span> <span class="t-dim">waits on step 2</span></p>
-<p class="t-say">The plan is sessions-to-redis: 3 steps, and the first one is ready to claim.</p>
-            </div>
-          </div>
-          <p class="ask-then">Then, in any later session, or in a second agent running beside this one:</p>
-          <div class="code say"><span class="say-label">prompt</span><span class="cmd" data-copy="Pick up the next step of the sessions-to-redis plan.">Pick up the next step of the sessions-to-redis plan.</span><button class="copy-btn" type="button" aria-label="Copy the request">copy</button></div>
-          <p class="ask-note">The agent claims the step before it starts, so another agent asking the same thing is told who holds it. Until the plan is done, every briefing in the repo shows how far along it is.</p>
-        </div>
-
-        <div class="ask" id="ask-import" role="tabpanel" aria-labelledby="ask-t-import">
-          <p class="ask-name">Import past sessions</p>
-          <div class="code say"><span class="say-label">prompt</span><span class="cmd" data-copy="Go through my past Claude Code sessions for this repo in ~/.claude/projects and list the decisions and gotchas worth keeping. Save the ones I pick to Seamless.">Go through my past Claude Code sessions for this repo in ~/.claude/projects and list the decisions and gotchas worth keeping. Save the ones I pick to Seamless.</span><button class="copy-btn" type="button" aria-label="Copy the request">copy</button></div>
-          <div class="term term-sm">
-            <p class="term-bar"><span>claude · ~/code/myapp</span><span class="term-tag">an illustration</span></p>
-            <div class="term-body">
-<p class="t-tool"><b>●</b> Bash <span class="t-arg">ls ~/.claude/projects/-Users-you-code-myapp/</span></p>
-<p class="t-res">41 transcripts, Jun 3 to Oct 8</p>
-<p class="t-tool"><b>●</b> Read <span class="t-arg">…/7c1e9a04-….jsonl</span> <span class="t-dim">and 11 more, newest first</span></p>
-<p class="t-say">Four worth keeping:</p>
-<p class="t-kv"><span class="k">1</span> decision · sessions-stay-in-cookies <span class="t-dim">Sep 30</span></p>
-<p class="t-kv"><span class="k">2</span> gotcha · postgres-timeout-on-cold-start <span class="t-dim">Aug 21</span></p>
-<p class="t-kv"><span class="k">3</span> decision · no-orm-for-reporting-queries <span class="t-dim">Aug 2</span></p>
-<p class="t-kv"><span class="k">4</span> gotcha · ci-cache-keyed-on-lockfile <span class="t-dim">Jul 9</span></p>
-<p class="t-say">Which should I save?</p>
-<p class="t-user">&gt; 1, 2 and 4</p>
-<p class="t-tool"><b>●</b> memory_write <span class="t-arg">sessions-stay-in-cookies</span></p>
-<p class="t-tool"><b>●</b> memory_write <span class="t-arg">postgres-timeout-on-cold-start</span></p>
-<p class="t-tool"><b>●</b> memory_write <span class="t-arg">ci-cache-keyed-on-lockfile</span></p>
-<p class="t-say">Saved 3. Each one says when it was decided and why.</p>
-            </div>
-          </div>
-          <p class="ask-then">Or start from the repo&rsquo;s own history:</p>
-          <div class="code say"><span class="say-label">prompt</span><span class="cmd" data-copy="Read the last three months of git log and list the decisions a new teammate could not get from the code. Save the ones I pick to Seamless.">Read the last three months of git log and list the decisions a new teammate could not get from the code. Save the ones I pick to Seamless.</span><button class="copy-btn" type="button" aria-label="Copy the request">copy</button></div>
-          <p class="ask-note">Seamless doesn&rsquo;t import transcripts by itself. Your agent reads them with its own file tools and saves only what you pick. Codex keeps its sessions in <code>~/.codex/sessions</code>, so on Codex point it there instead.</p>
-        </div>
-
-        <div class="ask" id="ask-recall" role="tabpanel" aria-labelledby="ask-t-recall">
-          <p class="ask-name">Ask what&rsquo;s known</p>
-          <div class="code say"><span class="say-label">prompt</span><span class="cmd" data-copy="What do we know about the rate limiter?">What do we know about the rate limiter?</span><button class="copy-btn" type="button" aria-label="Copy the request">copy</button></div>
-          <div class="term term-sm">
-            <p class="term-bar"><span>claude · ~/code/myapp</span><span class="term-tag">an illustration</span></p>
-            <div class="term-body">
-<p class="t-tool"><b>●</b> recall <span class="t-arg">rate limiter</span></p>
-<p class="t-kv"><span class="k">memory</span> rate-limit-not-in-memory <span class="t-dim">gotcha · 6d</span></p>
-<p class="t-kv"><span class="k">note</span> load-test-results-september <span class="t-dim">2w</span></p>
-<p class="t-kv"><span class="k">task</span> Rate-limit POST /auth/refresh <span class="t-dim">done</span></p>
-<p class="t-say">The limiter counts in shared storage, because each instance behind the load balancer only sees its own slice of traffic. The September load test is what caught it, and the limit on /auth/refresh shipped last week.</p>
-            </div>
-          </div>
-          <p class="ask-note">One search covers memories, notes, tasks, and what past sessions reported. Often you won&rsquo;t need to ask at all: when a prompt touches something the store knows, the matching memories arrive with the prompt.</p>
-        </div>
-
-        <div class="ask" id="ask-change" role="tabpanel" aria-labelledby="ask-t-change">
-          <p class="ask-name">Change a decision</p>
-          <div class="code say"><span class="say-label">prompt</span><span class="cmd" data-copy="We moved background jobs from Redis to SQS. Save that to Seamless as replacing the old decision.">We moved background jobs from Redis to SQS. Save that to Seamless as replacing the old decision.</span><button class="copy-btn" type="button" aria-label="Copy the request">copy</button></div>
-          <div class="term term-sm">
-            <p class="term-bar"><span>claude · ~/code/myapp</span><span class="term-tag">an illustration</span></p>
-            <div class="term-body">
-<p class="t-tool"><b>●</b> memory_write <span class="t-arg">jobs-on-sqs</span></p>
-<p class="t-kv"><span class="k">kind</span> decision</p>
-<p class="t-kv"><span class="k">supersedes</span> jobs-on-redis</p>
-<p class="t-res">wrote memory/myapp/jobs-on-sqs.md</p>
-<p class="t-say">Saved. jobs-on-redis is out of briefings and search, and its file is still there, marked superseded_by jobs-on-sqs.</p>
-            </div>
-          </div>
-          <p class="ask-note">Nothing is overwritten. Ask &ldquo;what did we use before SQS?&rdquo; next month and the agent can still read the old decision and see when it changed.</p>
-        </div>
-
-        <div class="ask" id="ask-handoff" role="tabpanel" aria-labelledby="ask-t-handoff">
-          <p class="ask-name">Hand off</p>
-          <div class="code say"><span class="say-label">prompt</span><span class="cmd" data-copy="Wrap up for today: record what is done and what is left for the next session.">Wrap up for today: record what is done and what is left for the next session.</span><button class="copy-btn" type="button" aria-label="Copy the request">copy</button></div>
-          <div class="term term-sm">
-            <p class="term-bar"><span>claude · ~/code/myapp</span><span class="term-tag">an illustration</span></p>
-            <div class="term-body">
-<p class="t-tool"><b>●</b> session_end</p>
-<p class="t-kv"><span class="k">findings</span> Burst test passes on every instance. Left: the alert on refresh-token reuse; its task is ready and unclaimed.</p>
-<p class="t-sep">next morning, a fresh session</p>
-<p class="t-inject"><span class="t-tag">&lt;seam-briefing&gt;</span>
-Recent findings:
-- cc/52a41f8a (14h): <mark>Burst test passes on every instance. Left: the alert on refresh-token reuse</mark>; its task is ready and unclaimed.
-<span class="t-dim">…</span>
-<span class="t-tag">&lt;/seam-briefing&gt;</span></p>
-            </div>
-          </div>
-          <p class="ask-note">The next session in the repo opens with the handoff, whichever agent you start. If you forget to ask, the last thing the session said is kept as its finding instead.</p>
-        </div>
-
-      </div>
-    </div>
-    <p class="fine asks-more">Each of these, with what the agent calls and where the result ends up, is in <a href="docs/first-prompts/">First prompts to try</a>.</p>
-  </div>
-</section>
-
 <!-- ================================================================ FAQ -->
 <section class="chapter faq-sec" id="faq">
-  <div class="wrap faq-grid">
+  <div class="wrap faq-grid faq-grid-top">
     <header class="ch-head">
       <p class="ch-mark">fair questions</p>
       <h2 class="h2 rv">Before you ask.</h2>
-      <p class="lede rv">Short answers here. The <a href="compare/">full comparison</a> sets nine alternatives against Seamless on ten axes, privacy and security among them, and says when to choose each instead. The <a href="security/">security page</a> covers the rest.</p>
+      <p class="lede rv">Short answers here. The <a href="compare/">full comparison</a> and the <a href="security/">security page</a> have the long ones.</p>
     </header>
-    <div class="faq">
+    <div class="faq faq-duo">
       <details class="rv">
         <summary>Who decides what gets written?</summary>
         <div class="a"><p>Your agents do, on purpose: they call the <code>memory_write</code> tool when they learn something worth keeping, prompted by the instructions Seamless gives them. The hooks inject briefings and recall and log each session, but they never write memories on their own. You can edit or delete any file, and the gardener&rsquo;s merges and retirements wait for your approval.</p></div>
@@ -1200,7 +1106,7 @@ Recent findings:
       <circle class="fm-star" cx="98" cy="22" r="5"/>
     </svg>
     <h2 class="h2 finale-h" data-split>There is no spoon.</h2>
-    <p class="finale-p rv">Most memory products ask you to trust a store you can't read. Seamless keeps its memory as markdown files on your own computer and briefs your agents from them. It asks you before anything is forgotten, and before a locked project opens.</p>
+    <p class="finale-p rv">Seamless keeps its memory as markdown files on your own computer and briefs your agents from them. It asks you before anything is forgotten, and before a locked project opens.</p>
     <div class="finale-act rv">
       <p class="os-cap" data-os-block="unix">macOS / Linux</p>
       <span class="install-pill" data-os-block="unix"><span class="p" aria-hidden="true">$</span><span class="cmd" data-copy="curl -fsSL https://thereisnospoon.org/install | sh">curl -fsSL https://thereisnospoon.org/install | sh</span><button class="copy-btn" type="button" aria-label="Copy install command">copy</button></span>
@@ -1230,6 +1136,7 @@ Recent findings:
       <div>
         <b>Project</b>
         <a href="docs/">Docs</a>
+        <a href="example/">An example project</a>
         <a href="security/">Security</a>
         <a href="compare/">Compare</a>
         <a href="docs/changelog/">Changelog</a>
@@ -1249,10 +1156,20 @@ Recent findings:
   </div>
 </footer>
 
+<!-- The install command, docked: it rises once the hero's own command has
+     scrolled away and steps aside whenever another install command is on
+     screen. home.js runs it (Dock); without JS it never shows. -->
+<aside class="dock" data-dock aria-label="Install Seamless" hidden>
+  <p class="dock-label"><svg aria-hidden="true"><use href="#i-mark"/></svg><b>Install Seamless</b></p>
+  <div class="code dock-code" data-os-block="unix"><span class="p" aria-hidden="true">$</span><span class="cmd" data-copy="curl -fsSL https://thereisnospoon.org/install | sh">curl -fsSL https://thereisnospoon.org/install | sh</span><button class="copy-btn" type="button" aria-label="Copy install command">copy</button></div>
+  <div class="code dock-code" data-os-block="windows"><span class="p" aria-hidden="true">PS&gt;</span><span class="cmd" data-copy="irm https://thereisnospoon.org/install.ps1 | iex">irm https://thereisnospoon.org/install.ps1 | iex</span><button class="copy-btn" type="button" aria-label="Copy install command">copy</button></div>
+  <button class="dock-x" type="button" aria-label="Hide the install bar" data-dock-x><svg aria-hidden="true"><use href="#i-x"/></svg></button>
+</aside>
+
 <script src="static/scenes.js?v=913912f7"></script>
 <script src="static/scenes-player.js?v=7074d146"></script>
-<script src="static/site.js?v=4b8fbf31"></script>
-<script src="static/home.js?v=da8b87c9"></script>
+<script src="static/site.js?v=943ef286"></script>
+<script src="static/home.js?v=010790f3"></script>
 <script src="static/webmcp.js?v=c9b44136"></script>
 </body>
 </html>
