@@ -1,5 +1,6 @@
-/* thereisnospoon.org -- theme toggle, copy buttons, scroll reveals.
-   No dependencies, no network, no state beyond localStorage("theme"). */
+/* thereisnospoon.org -- theme toggle, OS switch, reading switch, copy
+   buttons, scroll reveals. No dependencies, no network, no state beyond
+   localStorage("theme"), localStorage("os") and sessionStorage's reading. */
 (function () {
   "use strict";
 
@@ -60,6 +61,36 @@
     });
     document.addEventListener("keydown", function (ev) {
       if (ev.key === "Escape" && navMenu.open) navMenu.open = false;
+    });
+  }
+
+  /* the reading switch: a ledger read in plain words or in technical terms.
+     The head script restores the pick before paint (sessionStorage, so it
+     holds across the site's pages for this visit only); without JS no
+     data-reading is set and both readings show under their labels. */
+  var READ_KEY = "seamless.reading";
+  if (document.querySelector("[data-reading-pick]")) {
+    var syncReading = function () {
+      var mode = root.dataset.reading === "tech" ? "tech" : "plain";
+      root.dataset.reading = mode;
+      document.querySelectorAll("[data-reading-pick]").forEach(function (b) {
+        b.setAttribute("aria-pressed", b.dataset.readingPick === mode ? "true" : "false");
+      });
+    };
+    syncReading();
+    document.addEventListener("click", function (ev) {
+      var b = ev.target.closest("[data-reading-pick]");
+      if (!b) return;
+      root.dataset.reading = b.dataset.readingPick;
+      try { sessionStorage.setItem(READ_KEY, b.dataset.readingPick); } catch (e) { /* private mode */ }
+      syncReading();
+      var live = document.getElementById("announce");
+      if (live) {
+        live.textContent = "";
+        setTimeout(function () {
+          live.textContent = b.dataset.readingPick === "tech" ? "Showing the technical reading" : "Showing the plain reading";
+        }, 60);
+      }
     });
   }
 

@@ -17,8 +17,8 @@
 #   3. every `seamlessd <sub>` the page names in a command context is real
 #   4. each copy button copies the command it visibly shows
 #   5. each static asset on the hand-written pages (the landing page, the
-#      /compare/ hub, and the /claude-app/ page) carries a content-hash ?v=
-#      cache-buster that matches
+#      /compare/ hub, the /claude-app/ page, and the /security/ page) carries
+#      a content-hash ?v= cache-buster that matches
 #   6. the head is complete and the canonicals match docs/CNAME
 #   7. exactly one JSON-LD block, braces balanced, with the required types
 #   8. the JSON-LD FAQPage mirrors the visible #faq section
@@ -41,6 +41,10 @@ COMPARE=docs/compare/index.html
 # The Claude app page: Seamless for chat work that isn't code. It teaches the
 # install and names seamlessd subcommands, so assertions 2-6 cover it too.
 CLAUDEAPP=docs/claude-app/index.html
+# The security page: the whole privacy and security model in plain words and
+# technical terms. It names commands in <code> spans, so assertions 3-6 cover
+# it like the Claude app page.
+SECURITYPAGE=docs/security/index.html
 MAIN=cmd/seamlessd/main.go
 
 # The canonical install commands, and the single place they are written down.
@@ -92,7 +96,7 @@ done
 #    is folded back to the bare name before the lookup.
 known=$(sed -n '/switch cmd {/,/^	default:/p' "$MAIN" |
 	grep -oE '"[a-z][a-z-]*"' | tr -d '"' | sort -u)
-for f in "$PAGE" "$CLAUDEAPP"; do
+for f in "$PAGE" "$CLAUDEAPP" "$SECURITYPAGE"; do
 	named=$({
 		grep -oE 'data-copy="[^"]*"' "$f" | sed 's/^data-copy="//; s/"$//'
 		grep -oE '<code[^>]*>[^<]*</code>' "$f" | sed 's/<code[^>]*>//; s|</code>||'
@@ -107,7 +111,7 @@ done
 # 4. A copy button reads its data-copy attribute, never the text beside it, so
 #    the two drift silently and independently: the page shows one command and
 #    the clipboard gets another. Nobody proof-reads an attribute.
-for f in "$PAGE" "$CLAUDEAPP"; do
+for f in "$PAGE" "$CLAUDEAPP" "$SECURITYPAGE"; do
 	drift=$(grep -oE 'data-copy="[^"]*">[^<]*<' "$f" |
 		sed 's/^data-copy="//; s/<$//' |
 		awk -F'">' '$1 != $2 { print "  shows [" $2 "] but copies [" $1 "]" }')
@@ -146,8 +150,9 @@ stamped() {
 	done
 }
 stamped "$PAGE" home.css home.js site.js scenes.js scenes-player.js webmcp.js
-stamped "$COMPARE" site.css site.js webmcp.js
-stamped "$CLAUDEAPP" home.css site.js webmcp.js
+stamped "$COMPARE" home.css site.js page.js webmcp.js
+stamped "$CLAUDEAPP" home.css site.js page.js webmcp.js
+stamped "$SECURITYPAGE" home.css site.js page.js webmcp.js
 
 # 6. Head completeness. The docs pages get their head from docsgen and
 #    cmd/docsgen/seo_test.go gates them; the landing page head is hand-written,
@@ -160,6 +165,8 @@ grep -qF "<link rel=\"canonical\" href=\"${canon_host}compare/\">" "$COMPARE" ||
 	err "$COMPARE canonical does not match docs/CNAME [${canon_host}compare/]"
 grep -qF "<link rel=\"canonical\" href=\"${canon_host}claude-app/\">" "$CLAUDEAPP" ||
 	err "$CLAUDEAPP canonical does not match docs/CNAME [${canon_host}claude-app/]"
+grep -qF "<link rel=\"canonical\" href=\"${canon_host}security/\">" "$SECURITYPAGE" ||
+	err "$SECURITYPAGE canonical does not match docs/CNAME [${canon_host}security/]"
 for tag in \
 	'<meta name="description" content="' \
 	'<meta name="robots" content="max-image-preview:large, max-snippet:-1">' \
@@ -175,6 +182,7 @@ for tag in \
 	'<meta name="twitter:card" content="'; do
 	grep -qF "$tag" "$PAGE" || err "$PAGE head is missing $tag"
 	grep -qF "$tag" "$CLAUDEAPP" || err "$CLAUDEAPP head is missing $tag"
+	grep -qF "$tag" "$SECURITYPAGE" || err "$SECURITYPAGE head is missing $tag"
 done
 
 # 7. The JSON-LD block. Shell cannot validate JSON without a tool dependency

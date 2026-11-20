@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security and privacy - Seamless keeps what your agents know on your own computers</title>
+<meta name="description" content="How Seamless protects the shared memory of your AI agents: no account and no telemetry, what can leave your computer and when, project fences, write screening, locked projects that open only with your Touch ID or passkey, verified updates, and the limits, stated plainly.">
+<link rel="canonical" href="https://thereisnospoon.org/security/">
+<meta name="robots" content="max-image-preview:large, max-snippet:-1">
+<meta property="og:site_name" content="Seamless">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://thereisnospoon.org/security/">
+<meta property="og:title" content="Seamless security and privacy - what your agents know stays yours">
+<meta property="og:description" content="No account, no telemetry, files on your own computer. Then, as the work gets sensitive: walls between projects, writes that wait for your review, and projects that open only with your Touch ID, a passkey, or your password.">
+<meta property="og:image" content="https://thereisnospoon.org/static/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Seamless - sessions end. What they learned doesn't.">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "@id": "https://thereisnospoon.org/security/",
+  "url": "https://thereisnospoon.org/security/",
+  "name": "Security and privacy - Seamless keeps what your agents know on your own computers",
+  "description": "The Seamless security and privacy model: what a fresh install does, what can leave your computer, the five protection layers from project fences to locked projects and restricted agent accounts, how releases are verified, networked setups, the limits, and how to report a vulnerability.",
+  "isPartOf": {"@id": "https://thereisnospoon.org/#website"},
+  "about": {"@id": "https://thereisnospoon.org/#app"}
+}
+</script>
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f5">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#070a13">
+<link rel="icon" type="image/svg+xml" href="../static/favicon.svg">
+<link rel="preload" as="font" type="font/woff2" href="../static/fonts/fraunces.woff2" crossorigin>
+<link rel="preload" as="font" type="font/woff2" href="../static/fonts/fraunces-italic.woff2" crossorigin>
+<link rel="preload" as="font" type="font/woff2" href="../static/fonts/instrument-sans.woff2" crossorigin>
+<script>(function(){var d=document.documentElement,t=localStorage.getItem("theme");if(t)d.dataset.theme=t;var o=localStorage.getItem("os");if(o==="macos"||o==="linux")o="unix";if(o!=="unix"&&o!=="windows")o=/Windows/i.test(navigator.userAgent)?"windows":"unix";d.dataset.os=o;var r=null;try{r=sessionStorage.getItem("seamless.reading")}catch(e){}d.dataset.reading=r==="tech"?"tech":"plain";d.className+=" js";})();</script>
+<link rel="stylesheet" href="../static/home.css?v=9ca08b5d">
+<style>
+/* /security/ -- built on the landing's home.css (header, rail, chapters,
+   ledger, reading switch, data tables, finale, footer); only this page's own
+   pieces are styled here. */
+.sec-points { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 clamp(28px, 4vw, 64px); border-top: 1px solid var(--hair); }
+.sec-points li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 4px 12px; padding: 20px 2px 19px; border-bottom: 1px solid var(--hair); }
+.sec-points svg { width: 18px; height: 18px; margin-top: 5px; color: var(--ok); }
+.sec-points h3 { margin: 0 0 4px; font-family: var(--serif); font-size: 21px; line-height: 1.25; font-weight: 400; color: var(--ink); font-variation-settings: "opsz" 48; }
+.sec-points p { margin: 0; font-size: 15.5px; line-height: 1.6; color: var(--text); }
+.sec-points code { font-size: 0.84em; white-space: normal; }
+.sec-note { margin: 22px 0 0; max-width: 760px; font-size: 15.5px; color: var(--muted); }
+.sec-note b { color: var(--ink); font-weight: 600; }
+.sec-sub { margin: clamp(56px, 8vh, 84px) 0 18px; font-family: var(--serif); font-size: clamp(26px, 2.6vw, 36px); line-height: 1.1; font-weight: 400; letter-spacing: -0.014em; font-variation-settings: "opsz" 96, "SOFT" 30; }
+.sec-sub + .sec-lede { margin: -6px 0 22px; max-width: 680px; font-size: 16.5px; color: var(--muted); }
+.mx-table td, .mx-table th { width: 25%; }
+.plans { margin: clamp(40px, 6vh, 64px) 0 0; display: grid; gap: 14px; }
+.plan-tabs { display: inline-flex; flex-wrap: wrap; justify-self: start; padding: 3px; gap: 2px; border: 1px solid var(--hair); border-radius: 999px; background: var(--panel-a); }
+.plan-tab { border: 0; background: transparent; cursor: pointer; padding: 7px 15px; border-radius: 999px; font-size: 14px; font-weight: 500; color: var(--muted); transition: color 0.25s, background-color 0.25s; }
+.plan-tab span { margin-left: 4px; font-family: var(--serif); font-style: italic; font-weight: 400; opacity: 0.75; }
+.plan-tab:hover { color: var(--ink); }
+.plan-tab.active { background: var(--ink); color: var(--bg); }
+:root:not(.js) .plan-tabs { display: none; }
+.plan { min-width: 0; border: 1px solid var(--hair-2); border-radius: 18px; overflow: hidden; background: var(--term-bg); box-shadow: var(--shadow-lg); }
+.js .plan[hidden] { display: none; }
+:root[data-theme="light"] .plan { background: var(--panel); }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .plan { background: var(--panel); } }
+.plan-cap { margin: 0; padding: 11px 16px; border-bottom: 1px solid var(--hair); font-size: 14px; color: var(--muted); }
+.plan-cap b { margin-right: 6px; color: var(--ink); font-weight: 600; }
+.js .plan-cap { display: none; }
+.plan img { width: 100%; height: auto; aspect-ratio: 1152 / 473; }
+.plans figcaption { margin: 2px 2px 0; }
+.plans figcaption b { color: var(--ink); font-weight: 600; }
+.dtable-wrap + .ledger { margin-top: clamp(64px, 9vh, 96px); }
+.pair .h2 { font-size: clamp(36px, 4.1vw, 60px); }
+.pair .ch-head { margin-bottom: 0; }
+.pair-fig { align-self: center; }
+.mx-table tbody th { font-weight: 500; }
+.lg-limit { margin: 10px 0 0 !important; padding-left: 12px; border-left: 2px solid var(--hair-2); font-size: 14.5px !important; color: var(--muted) !important; }
+.lg-limit b { color: var(--ink); font-weight: 600; }
+.chain { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0 clamp(16px, 2vw, 28px); counter-reset: chain; position: relative; }
+.chain::before { content: ""; position: absolute; left: 0; right: 0; top: 4px; height: 1px; background: linear-gradient(90deg, var(--accent), var(--hair-2) 60%, transparent); }
+.chain li { position: relative; padding: 30px 0 0; counter-increment: chain; }
+.chain li::before { content: ""; position: absolute; left: 0; top: 0; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 5px var(--accent-soft), 0 0 14px var(--glow); }
+.chain .ch-k { display: block; margin: 0 0 8px; font-family: var(--serif); font-style: italic; font-size: 15px; color: var(--accent); }
+.chain .ch-k::before { content: counter(chain) ". "; }
+.chain h3 { margin: 0 0 8px; font-family: var(--serif); font-size: 21px; line-height: 1.2; font-weight: 400; color: var(--ink); font-variation-settings: "opsz" 48; }
+.chain p { margin: 0; font-size: 14.5px; line-height: 1.6; color: var(--text); }
+.chain code { font-size: 0.82em; white-space: normal; }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: clamp(28px, 4vw, 64px); align-items: start; }
+.pair-fig { margin: 0; padding: 22px; border: 1px solid var(--hair-2); border-radius: 20px; background: var(--panel-a); box-shadow: var(--shadow-md); }
+.pair-row { display: grid; grid-template-columns: minmax(0, 1fr) 96px minmax(0, 1fr); align-items: center; gap: 8px; }
+.pair-box { padding: 16px 14px; border: 1px solid var(--hair-2); border-radius: 14px; background: var(--panel); text-align: center; }
+.pair-box b { display: block; font-family: var(--serif); font-weight: 400; font-size: 21px; color: var(--ink); }
+.pair-box span { display: block; margin-top: 2px; font-size: 13.5px; color: var(--muted); }
+.pair-link { position: relative; height: 2px; background: linear-gradient(90deg, var(--hair-2), var(--accent), var(--hair-2)); }
+.pair-link span { position: absolute; left: 50%; top: -15px; transform: translateX(-50%); display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--panel); border: 1px solid var(--accent); color: var(--accent); }
+.pair-link svg { width: 15px; height: 15px; }
+.pair-steps { list-style: none; margin: 18px 0 0; padding: 0; counter-reset: ps; display: grid; gap: 8px; }
+.pair-steps li { counter-increment: ps; display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; font-size: 14.5px; line-height: 1.5; color: var(--text); }
+.pair-steps li::before { content: counter(ps); width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--accent); color: var(--accent); font-family: var(--serif); font-style: italic; font-size: 13px; }
+.limits { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 clamp(28px, 4vw, 64px); border-top: 1px solid var(--hair); }
+.limits li { padding: 18px 2px 17px; border-bottom: 1px solid var(--hair); font-size: 15.5px; line-height: 1.6; color: var(--text); }
+.limits b { display: block; margin: 0 0 3px; font-family: var(--serif); font-weight: 400; font-size: 20px; color: var(--ink); }
+.limits code { font-size: 0.84em; white-space: normal; }
+.report { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: clamp(24px, 4vw, 56px); align-items: center; padding: clamp(26px, 3.4vw, 40px); border: 1px solid var(--hair-2); border-radius: 24px; background: radial-gradient(120% 90% at 100% 0%, var(--accent-soft), transparent 60%), var(--panel-a); }
+.report h2 { margin: 0 0 10px; font-family: var(--serif); font-weight: 400; font-size: clamp(30px, 3vw, 42px); line-height: 1.08; letter-spacing: -0.016em; font-variation-settings: "opsz" 96, "SOFT" 30; }
+.report p { margin: 0; color: var(--text); }
+.report-act { display: grid; gap: 14px; justify-items: start; }
+.btn-solid { display: inline-flex; align-items: center; gap: 10px; padding: 12px 20px; border-radius: 999px; background: var(--ink); color: var(--bg); font-weight: 600; text-decoration: none; transition: transform 0.4s var(--ease-out), box-shadow 0.4s; }
+.btn-solid:hover { color: var(--bg); transform: translateY(-1px); box-shadow: 0 8px 24px -10px var(--glow), 0 0 0 4px var(--accent-soft); }
+.btn-solid svg { width: 17px; height: 17px; }
+@media (max-width: 1100px) {
+  .chain { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px 28px; }
+  .chain::before { display: none; }
+  .chain li { padding: 0 0 0 26px; }
+  .chain li::before { top: 6px; }
+}
+@media (max-width: 960px) {
+  .pair, .report { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+  .sec-points, .limits, .chain { grid-template-columns: minmax(0, 1fr); }
+  .mx-table td, .mx-table th { width: auto; }
+}
+@media (max-width: 460px) {
+  .pair-row { grid-template-columns: minmax(0, 1fr); }
+  .pair-link { height: 36px; width: 2px; margin: 0 auto; background: linear-gradient(var(--hair-2), var(--accent), var(--hair-2)); }
+  .pair-link span { top: 3px; }
+}
+</style>
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="starfield" aria-hidden="true"></div>
+<p class="sr-only" id="announce" aria-live="polite"></p>
+
+<!-- Shared glyphs, as on the landing page. -->
+<svg class="defs" width="0" height="0" aria-hidden="true" focusable="false">
+  <symbol id="i-mark" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="8.6" fill="none" stroke="currentColor" stroke-width="1.9"/>
+    <path d="M6.2 25.8 24.6 7.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+    <circle cx="25.6" cy="6.4" r="2.6" style="fill:var(--mark-star,currentColor)"/>
+  </symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h13m-5-5 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-gh" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 13.4A8.5 8.5 0 1 1 10.6 3.5a6.6 6.6 0 0 0 9.9 9.9z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.5v2.2m0 14.6v2.2M4.6 4.6l1.6 1.6m11.6 11.6 1.6 1.6M2.5 12h2.2m14.6 0h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+</svg>
+
+<header class="site-head" data-head>
+  <div class="head-in">
+    <a class="brand" href="../" aria-label="Seamless home">
+      <svg class="brand-mark" aria-hidden="true"><use href="#i-mark"/></svg>
+      <span class="brand-word">seamless</span>
+    </a>
+    <details class="nav-menu">
+      <summary aria-label="Menu"><span></span><span></span></summary>
+      <nav class="nav-panel" aria-label="Menu">
+        <a href="#short">The short version</a>
+        <a href="#outbound">What leaves your computer</a>
+        <a href="#layers">The five layers</a>
+        <a href="#releases">Verified updates</a>
+        <a href="#limits">The limits</a>
+        <a href="#report">Report a problem</a>
+        <a href="../">Home</a>
+        <a href="../compare/">Compare</a>
+        <a href="../claude-app/">Claude app</a>
+        <a href="../docs/concepts/security/">Docs</a>
+      </nav>
+    </details>
+    <nav class="head-nav" aria-label="Site">
+      <a href="../#how">How it works</a>
+      <a href="../#scenes">Demo</a>
+      <a href="./" class="is-current" aria-current="page">Security</a>
+      <a href="../compare/">Compare</a>
+      <a href="../claude-app/">Claude app</a>
+      <a href="../docs/">Docs</a>
+    </nav>
+    <div class="head-tools">
+      <button class="theme-toggle" type="button" aria-label="Toggle color theme">
+        <svg class="icon-moon" aria-hidden="true"><use href="#i-moon"/></svg>
+        <svg class="icon-sun" aria-hidden="true"><use href="#i-sun"/></svg>
+      </button>
+      <a class="gh-link" href="https://github.com/arctop/seamless" aria-label="Seamless on GitHub">
+        <svg aria-hidden="true"><use href="#i-gh"/></svg>
+      </a>
+      <a class="head-cta" href="../#quickstart">Install</a>
+    </div>
+  </div>
+  <div class="head-progress" aria-hidden="true"><i></i></div>
+</header>
+
+<nav class="rail" aria-label="Chapters">
+  <ol>
+    <li><a href="#short" data-rail="short"><span class="rail-dot"></span><span class="rail-label"><em>i.</em> The short version</span></a></li>
+    <li><a href="#outbound" data-rail="outbound"><span class="rail-dot"></span><span class="rail-label"><em>ii.</em> What leaves</span></a></li>
+    <li><a href="#layers" data-rail="layers"><span class="rail-dot"></span><span class="rail-label"><em>iii.</em> The five layers</span></a></li>
+    <li><a href="#releases" data-rail="releases"><span class="rail-dot"></span><span class="rail-label"><em>iv.</em> Verified updates</span></a></li>
+    <li><a href="#networked" data-rail="networked"><span class="rail-dot"></span><span class="rail-label"><em>v.</em> Your computers</span></a></li>
+    <li><a href="#limits" data-rail="limits"><span class="rail-dot"></span><span class="rail-label"><em>vi.</em> The limits</span></a></li>
+    <li><a href="#setups" data-rail="setups"><span class="rail-dot"></span><span class="rail-label"><em>vii.</em> Pick a setup</span></a></li>
+  </ol>
+  <span class="rail-line" aria-hidden="true"><i></i></span>
+</nav>
+
+<main id="main">
+
+<!-- ================================================================ HERO -->
+<section class="pg-hero" id="top" data-hero>
+  <svg class="pg-arc" viewBox="0 0 600 600" aria-hidden="true" focusable="false">
+    <circle class="a-ring a-faint" cx="300" cy="300" r="268"/>
+    <circle class="a-ring" cx="300" cy="300" r="196"/>
+    <circle class="a-ring a-faint" cx="300" cy="300" r="122"/>
+    <path class="a-cut" d="M70 530 512 88"/>
+    <circle class="a-star" cx="520" cy="80" r="7"/>
+  </svg>
+  <div class="wrap">
+    <p class="hero-pre"><svg aria-hidden="true"><use href="#i-lock"/></svg> Security and privacy</p>
+    <h1 class="h1" data-split>What your agents know stays <em>yours.</em></h1>
+    <p class="hero-sub">Seamless keeps your agents&rsquo; shared memory as plain files on your own computer. There is no account, no Seamless cloud, and no usage tracking. When the work gets sensitive you add walls, up to projects that open only when you approve with Touch ID, a passkey, or your password. This page says what each wall stops, and what none of them do.</p>
+    <div class="pg-tools">
+      <p class="pg-tools-label">Read this page</p>
+      <div class="reading" role="group" aria-label="Read this page">
+        <button type="button" data-reading-pick="plain" aria-pressed="true">In plain words</button>
+        <button type="button" data-reading-pick="tech" aria-pressed="false">In technical terms</button>
+      </div>
+    </div>
+    <ul class="hero-facts">
+      <li>No account</li>
+      <li>No telemetry</li>
+      <li>Files you can read</li>
+      <li>Signed, verified releases</li>
+      <li><a href="#report">Report a vulnerability</a></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================================================================ I. THE SHORT VERSION -->
+<section class="chapter" id="short" data-chapter="short">
+  <div class="wrap">
+    <header class="ch-head">
+      <p class="ch-mark"><em>i.</em> the short version</p>
+      <h2 class="h2 rv">What is true the moment you install it.</h2>
+      <p class="lede rv">A fresh install is a <b>Standalone</b> one: everything on one computer. Before you turn on anything below, this much already holds.</p>
+    </header>
+    <ul class="sec-points">
+      <li class="rv"><svg aria-hidden="true"><use href="#i-check"/></svg><div>
+        <h3>It answers your computer only</h3>
+        <p class="rd rd-plain"><span class="rd-label">In plain words</span>Nothing outside your computer can reach Seamless, until you set it up as a Server for your own other computers.</p>
+        <p class="rd rd-tech"><span class="rd-label">In technical terms</span>Listens on <code>127.0.0.1:8081</code>. A request naming a Host it does not serve gets <code>421</code>, which closes DNS rebinding. A Server binds its own name, with TLS 1.2 or later.</p>
+      </div></li>
+      <li class="rv"><svg aria-hidden="true"><use href="#i-check"/></svg><div>
+        <h3>No account, no cloud</h3>
+        <p class="rd rd-plain"><span class="rd-label">In plain words</span>There is nothing to sign up for, and Seamless has no hosted service. It is two small programs on your computer.</p>
+        <p class="rd rd-tech"><span class="rd-label">In technical terms</span>A Go daemon (<code>seamlessd</code>) and a CLI (<code>seam</code>), no CGO. One SQLite file and a folder of markdown under <code>~/.seamless</code>. No external database or vector service.</p>
+      </div></li>
+      <li class="rv"><svg aria-hidden="true"><use href="#i-check"/></svg><div>
+        <h3>No usage tracking</h3>
+        <p class="rd rd-plain"><span class="rd-label">In plain words</span>Seamless sends no telemetry. On its own it only checks for new versions, anonymously, and one setting turns that off.</p>
+        <p class="rd rd-tech"><span class="rd-label">In technical terms</span>No analytics code. The update check is an anonymous request to GitHub&rsquo;s release list every six hours, carrying no token, version, host or install id. <code>update.check: false</code> stops all update traffic.</p>
+      </div></li>
+      <li class="rv"><svg aria-hidden="true"><use href="#i-check"/></svg><div>
+        <h3>Files you can read</h3>
+        <p class="rd rd-plain"><span class="rd-label">In plain words</span>Every memory is a text file you can open, search, back up, or delete. Nothing is hidden in a format only Seamless understands.</p>
+        <p class="rd rd-tech"><span class="rd-label">In technical terms</span>Memories and notes are markdown with YAML frontmatter, and they are the source of truth. SQLite indexes them and keeps sessions, tasks and events; the index rebuilds from the files.</p>
+      </div></li>
+      <li class="rv"><svg aria-hidden="true"><use href="#i-check"/></svg><div>
+        <h3>A key your agents never copy</h3>
+        <p class="rd rd-plain"><span class="rd-label">In plain words</span>Programs need Seamless&rsquo;s key to talk to it, and the key never ends up in your agents&rsquo; settings.</p>
+        <p class="rd rd-tech"><span class="rd-label">In technical terms</span>A random 32-byte key in a <code>0600</code> config file. Claude Code reads it through <code>seam mcp-headers</code> and Codex through <code>seam mcp-proxy</code>, at connect time; neither puts it in client config or argv.</p>
+      </div></li>
+      <li class="rv"><svg aria-hidden="true"><use href="#i-check"/></svg><div>
+        <h3>A backup every day</h3>
+        <p class="rd rd-plain"><span class="rd-label">In plain words</span>Seamless backs itself up daily and keeps a week. If you restore one and change your mind, you can undo it.</p>
+        <p class="rd rd-tech"><span class="rd-label">In technical terms</span>Release installs archive the database and corpus daily and keep 7, in <code>~/.seamless/backups</code>. A restore is staged, applied at the next start, and undoable; it keeps every project&rsquo;s lock.</p>
+      </div></li>
+    </ul>
+    <p class="sec-note"><b>Every project starts open</b>, and the five layers below start off. A program running as you can read <code>~/.seamless</code> directly until <a href="#layers">layer 3</a> moves Seamless into an account of its own.</p>
+  </div>
+</section>
+
+<!-- ================================================================ II. WHAT LEAVES -->
+<section class="chapter" id="outbound" data-chapter="outbound">
+  <div class="wrap">
+    <header class="ch-head">
+      <p class="ch-mark"><em>ii.</em> what leaves</p>
+      <h2 class="h2 rv">What leaves your computer, and when.</h2>
+      <p class="lede rv">Seamless itself sends very little. Most of what can leave is something you set up, and each row says how to stop it.</p>
+    </header>
+    <div class="dtable-wrap rv">
+      <table class="dtable">
+        <thead>
+          <tr><th scope="col">What</th><th scope="col">Where it goes</th><th scope="col">When</th><th scope="col">To stop it</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">A check for new versions<span class="sub">anonymous: no token, version, host or install id</span></th><td data-label="goes to">GitHub&rsquo;s release list</td><td data-label="when">every six hours, on release installs</td><td data-label="to stop it"><code>update.check: false</code></td></tr>
+          <tr><th scope="row">Update downloads</th><td data-label="goes to">GitHub releases</td><td data-label="when">when an install the installer made updates itself</td><td data-label="to stop it"><code>update.auto: false</code>, or <code>update.check: false</code> for all update traffic</td></tr>
+          <tr><th scope="row">The text of your memories and notes, and your recall queries</th><td data-label="goes to">the model provider you configure, to be embedded</td><td data-label="when">only after you add an OpenAI or Anthropic key, and from every project, fenced and locked ones included</td><td data-label="to stop it">use Ollama, which keeps it on your computer, or no provider at all</td></tr>
+          <tr><th scope="row">A project&rsquo;s session findings</th><td data-label="goes to">that provider&rsquo;s chat model, for the gardener&rsquo;s monthly digest</td><td data-label="when">only with a provider key set</td><td data-label="to stop it">Ollama, or no provider</td></tr>
+          <tr><th scope="row">A page an agent asks to capture</th><td data-label="goes to">the address the agent names</td><td data-label="when">only when an agent calls <code>capture_url</code></td><td data-label="to stop it">limited to ports 80 and 443; private and loopback addresses are refused</td></tr>
+          <tr><th scope="row">Requests from your other computers</th><td data-label="goes to">your own Server, over TLS</td><td data-label="when">only in a Networked setup</td><td data-label="to stop it">stay Standalone</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="sec-note">Two things are outside Seamless&rsquo;s reach. What an agent reads from Seamless travels to that agent&rsquo;s own model provider with the rest of the conversation, and the agent&rsquo;s app keeps its own transcripts.</p>
+  </div>
+</section>
+
+<!-- ================================================================ III. THE FIVE LAYERS -->
+<section class="chapter" id="layers" data-chapter="layers">
+  <div class="wrap">
+    <header class="ch-head">
+      <p class="ch-mark"><em>iii.</em> the five layers</p>
+      <h2 class="h2 rv">Built for the day an agent gets tricked.</h2>
+      <p class="lede rv">Agents read web pages, issues and email, and any of them can carry instructions an agent will follow. Each layer narrows what a tricked agent can read, what it can plant for the next session, and what it can open without you. They are the same five, in the same order, as the console&rsquo;s Privacy screen.</p>
+    </header>
+
+    <h3 class="sec-sub">How far a tricked agent gets</h3>
+    <p class="sec-lede">The same agent, following a planted instruction, in each arrangement. Seamless can only protect what it holds: in your own account a compromised agent also reaches everything else you own, which is why the last column matters.</p>
+    <div class="dtable-wrap rv">
+      <table class="dtable mx-table">
+        <thead>
+          <tr><th scope="col">The agent tries to</th><th scope="col">Seamless runs as you <span class="sub">the default</span></th><th scope="col">Seamless in its own account <span class="sub">layers 3 and 4</span></th><th scope="col">Agent in a restricted account <span class="sub">layer 5</span></th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Read the memory files on disk</th><td data-label="runs as you"><span class="mx mx-yes">can</span></td><td data-label="own account"><span class="mx mx-no">cannot</span><span class="sub">the folder belongs to Seamless</span></td><td data-label="restricted"><span class="mx mx-no">cannot</span></td></tr>
+          <tr><th scope="row">Use Seamless as you: open, confidential and sealed projects</th><td data-label="runs as you"><span class="mx mx-yes">can</span></td><td data-label="own account"><span class="mx mx-yes">can</span><span class="sub">and every call lands in the event log</span></td><td data-label="restricted"><span class="mx mx-ask">only what you list</span><span class="sub">open, unlocked projects</span></td></tr>
+          <tr><th scope="row">Open a locked project</th><td data-label="runs as you"><span class="mx mx-na">no locks yet</span><span class="sub">locks need layer 3</span></td><td data-label="own account"><span class="mx mx-ask">only if you approve</span></td><td data-label="restricted"><span class="mx mx-no">cannot</span><span class="sub">it cannot ask</span></td></tr>
+          <tr><th scope="row">Plant a rule the next session is briefed with</th><td data-label="runs as you"><span class="mx mx-ask">held for you</span><span class="sub">with write screening on</span></td><td data-label="own account"><span class="mx mx-ask">held for you</span><span class="sub">with write screening on</span></td><td data-label="restricted"><span class="mx mx-ask">waits for you</span><span class="sub">always</span></td></tr>
+          <tr><th scope="row">Reach the rest of your home folder: SSH keys, code, browser data</th><td data-label="runs as you"><span class="mx mx-yes">can</span></td><td data-label="own account"><span class="mx mx-yes">can</span><span class="sub">that is your account&rsquo;s reach</span></td><td data-label="restricted"><span class="mx mx-no">cannot</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <figure class="plans rv" data-tabs>
+      <div class="plan-tabs" role="tablist" aria-label="Setup">
+        <button class="plan-tab active" type="button" role="tab" id="pt-shared" aria-controls="pp-shared" aria-selected="true">Seamless runs as you <span>the default</span></button>
+        <button class="plan-tab" type="button" role="tab" id="pt-ded" aria-controls="pp-ded" aria-selected="false" tabindex="-1">Seamless in its own account <span>layers 3 and 4</span></button>
+      </div>
+      <div class="plan" id="pp-shared" role="tabpanel" aria-labelledby="pt-shared">
+        <p class="plan-cap"><b>Seamless runs as you</b> the default</p>
+        <img class="themed-light" src="../static/shots/privacy-shared-light.webp" width="1152" height="473" loading="lazy" alt="The console's Privacy screen with a compromised agent switched on, Seamless running as your own account: the agent reads every project's files directly, takes the bearer key, and reaches your SSH keys, code and browser data">
+        <img class="themed-dark" src="../static/shots/privacy-shared-dark.webp" width="1152" height="473" loading="lazy" alt="The console's Privacy screen with a compromised agent switched on, Seamless running as your own account: the agent reads every project's files directly, takes the bearer key, and reaches your SSH keys, code and browser data">
+      </div>
+      <div class="plan" id="pp-ded" role="tabpanel" aria-labelledby="pt-ded">
+        <p class="plan-cap"><b>Seamless in its own account</b> layers 3 and 4</p>
+        <img class="themed-light" src="../static/shots/privacy-dedicated-light.webp" width="1152" height="473" loading="lazy" alt="The same screen with Seamless in an account of its own: the agent is refused at the data folder, still acts as you through Seamless for open, confidential and sealed projects, and a locked project waits for your Touch ID, passkey or password">
+        <img class="themed-dark" src="../static/shots/privacy-dedicated-dark.webp" width="1152" height="473" loading="lazy" alt="The same screen with Seamless in an account of its own: the agent is refused at the data folder, still acts as you through Seamless for open, confidential and sealed projects, and a locked project waits for your Touch ID, passkey or password">
+      </div>
+      <figcaption class="fine">The console&rsquo;s own Privacy screen with its <b>Compromised agent</b> switch on, from a demo instance. It draws the same picture for your setup, and lists the steps that would tighten it.</figcaption>
+    </figure>
+
+    <div class="ledger">
+      <div class="ledger-head">
+        <h3 class="ledger-title">The layers, one by one.</h3>
+        <div class="reading" role="group" aria-label="Read the layers">
+          <button type="button" data-reading-pick="plain" aria-pressed="true">In plain words</button>
+          <button type="button" data-reading-pick="tech" aria-pressed="false">In technical terms</button>
+        </div>
+      </div>
+      <ol class="lg-rows">
+        <li class="lg-row rv">
+          <div class="lg-head">
+            <p class="lg-name"><span class="lg-n">1</span>Project fences</p>
+            <p class="lg-state is-pick">per project, every OS</p>
+          </div>
+          <div class="lg-text">
+            <p class="rd rd-plain"><span class="rd-label">In plain words</span>Mark a client&rsquo;s project confidential and nothing in it shows up while you work on anything else. Seal it, and nothing from outside gets in either. Good for keeping one client&rsquo;s matter out of another&rsquo;s.</p>
+            <p class="rd rd-tech"><span class="rd-label">In technical terms</span><code>open</code>, <code>confidential</code> (nothing leaves) or <code>sealed</code> (nothing in or out), enforced at every surface Seamless serves: briefings, recall, tool reads and writes, family views, the gardener. A refusal never echoes content. With access requests on, an agent asks; you approve a read-only or read-and-write grant, or a move into the project, and later writes carry <code>may_contain</code> provenance stamps.</p>
+            <p class="lg-limit"><b>Its limit:</b> a fence stops accidents between well-behaved agents. Until layer 3 it trusts the session an agent says it belongs to, and does not stop an agent reading the files directly.</p>
+          </div>
+        </li>
+        <li class="lg-row rv">
+          <div class="lg-head">
+            <p class="lg-name"><span class="lg-n">2</span>Write screening</p>
+            <p class="lg-state">optional, every OS</p>
+          </div>
+          <div class="lg-text">
+            <p class="rd rd-plain"><span class="rd-label">In plain words</span>When an agent tries to save something that looks planted, like hidden instructions or a password, it waits for you on the console&rsquo;s Held screen instead of reaching the next session. Good for agents that read the web, issues or email.</p>
+            <p class="rd rd-tech"><span class="rd-label">In technical terms</span>Every agent write to a memory or note is screened on your computer for secrets, injection markers, role tags, hidden comments, zero-width and bidi characters, encoded blobs and unlisted links. Holds wait in a database queue, never in the corpus. A constraint&rsquo;s supersede or delete is always held, as is a rule change from a session that fetched outside text. Injected lines carry their provenance, files changed outside Seamless are quarantined, and a lockdown switch narrows briefings to what you confirmed.</p>
+            <p class="lg-limit"><b>Its limit:</b> the screens are heuristics. They catch the known shapes of an attack and hold the rest of the suspicious writes for you to judge.</p>
+          </div>
+        </li>
+        <li class="lg-row rv">
+          <div class="lg-head">
+            <p class="lg-name"><span class="lg-n">3</span>Seamless in its own account</p>
+            <p class="lg-state">optional, macOS &amp; Linux</p>
+          </div>
+          <div class="lg-text">
+            <p class="rd rd-plain"><span class="rd-label">In plain words</span>Give Seamless its own user account on your computer, and your agents can no longer open its files. They have to ask it, and it knows exactly who is asking. That is what makes locks possible.</p>
+            <p class="rd rd-tech"><span class="rd-label">In technical terms</span><code>peer_auth</code>: the daemon runs as a dedicated OS account with a <code>0700</code> data directory and serves a Unix socket, where the kernel names each caller&rsquo;s uid (<code>LOCAL_PEERCRED</code> on macOS, <code>SO_PEERCRED</code> on Linux). Nothing the caller sends can change that. It refuses to start if another account could rewrite its data, its socket&rsquo;s directory, its config or its binary.</p>
+            <p class="lg-limit"><b>Its limit:</b> an agent running as you still acts as you through Seamless, and reaches the rest of your home folder. Root, and anyone who can become Seamless&rsquo;s account, reads everything.</p>
+          </div>
+        </li>
+        <li class="lg-row rv">
+          <div class="lg-head">
+            <p class="lg-name"><span class="lg-n">4</span>Locked projects</p>
+            <p class="lg-state">optional, macOS &amp; Linux</p>
+          </div>
+          <div class="lg-text">
+            <p class="rd rd-plain"><span class="rd-label">In plain words</span>A locked project stays closed, even to its own agents, until you say yes with Touch ID, a passkey, or your password. The yes covers that one agent, for as long as you choose.</p>
+            <p class="rd rd-tech"><span class="rd-label">In technical terms</span>An approval is a lease on the asking agent&rsquo;s process tree, read from the kernel: the session, 1 h or 4 h, capped at 8 h by default. The proof is <code>seam approve</code> (<code>sudo -k</code>), a WebAuthn passkey that signs its duration, or a Secure Enclave key in the Seamless Approve app. Its Touch ID prompt is built from the daemon&rsquo;s facts, never the agent&rsquo;s words, so a request cannot dress itself up. A locked project is always confidential or sealed too.</p>
+            <p class="lg-limit"><b>Its limit:</b> what an approved session read stays in its transcript after the approval ends.</p>
+          </div>
+        </li>
+        <li class="lg-row rv">
+          <div class="lg-head">
+            <p class="lg-name"><span class="lg-n">5</span>Restricted agent accounts</p>
+            <p class="lg-state">optional, macOS &amp; Linux</p>
+          </div>
+          <div class="lg-text">
+            <p class="rd rd-plain"><span class="rd-label">In plain words</span>Run unattended agents as a separate user on your computer. They see only the projects you open to them, and any rule they change waits for you. Good for agents that run overnight without you watching.</p>
+            <p class="rd rd-tech"><span class="rd-label">In technical terms</span><code>peer_auth.restricted</code>: the account reaches open, unlocked projects, shaped by <code>exclude</code> or <code>only</code>. It reads the global scope without writing it, cannot create projects or ask for access, and its changes to constraints, conventions, protocols and stages wait as proposals on the Held screen. Everything it writes is labeled with the account.</p>
+            <p class="lg-limit"><b>Its limit:</b> it reaches whatever you open to it, and nothing more.</p>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ IV. VERIFIED UPDATES -->
+<section class="chapter" id="releases" data-chapter="releases">
+  <div class="wrap">
+    <header class="ch-head">
+      <p class="ch-mark"><em>iv.</em> verified updates</p>
+      <h2 class="h2 rv">Every update proves where it came from.</h2>
+      <p class="lede rv">A release carries two signatures from two different holders, and nothing installs until both check out. An update that fails to come up rolls itself back.</p>
+    </header>
+    <ol class="chain">
+      <li class="rv"><span class="ch-k">built</span><h3>By the release workflow</h3>
+        <p class="rd rd-plain"><span class="rd-label">In plain words</span>GitHub signs each release on behalf of the exact build that made it.</p>
+        <p class="rd rd-tech"><span class="rd-label">In technical terms</span>A Sigstore keyless signature over <code>checksums.txt</code>, tied to this repository&rsquo;s release workflow at the release&rsquo;s exact tag.</p></li>
+      <li class="rv"><span class="ch-k">signed</span><h3>By the maintainer&rsquo;s hardware key</h3>
+        <p class="rd rd-plain"><span class="rd-label">In plain words</span>A person signs it too, with a physical key that has to be touched and unlocked with a PIN.</p>
+        <p class="rd rd-tech"><span class="rd-label">In technical terms</span><code>checksums.txt.sshsig</code>, an OpenSSH signature from a FIDO security key with touch and PIN required, on every release after v0.8.3. It covers every archive and both installers.</p></li>
+      <li class="rv"><span class="ch-k">notarized</span><h3>By Apple, on macOS</h3>
+        <p class="rd rd-plain"><span class="rd-label">In plain words</span>The Mac programs are signed by their developer and checked by Apple.</p>
+        <p class="rd rd-tech"><span class="rd-label">In technical terms</span>The darwin binaries carry a Developer ID signature and are notarized.</p></li>
+      <li class="rv"><span class="ch-k">checked</span><h3>Before anything runs</h3>
+        <p class="rd rd-plain"><span class="rd-label">In plain words</span>The installer and the updater refuse a release whose signatures do not match.</p>
+        <p class="rd rd-tech"><span class="rd-label">In technical terms</span>The installers check archives against <code>checksums.txt</code> and its owner signature (and Sigstore, with <code>cosign</code>). The updater verifies the Sigstore bundles in-process against a trusted root built into the binary; <code>update.release_signers</code> makes it require the maintainer&rsquo;s signature as well.</p></li>
+      <li class="rv"><span class="ch-k">installed</span><h3>Carefully</h3>
+        <p class="rd rd-plain"><span class="rd-label">In plain words</span>An update waits a day after release, backs up first, and undoes itself if the new version does not start.</p>
+        <p class="rd rd-tech"><span class="rd-label">In technical terms</span>A 24 h soak after publishing, a pre-update backup, a health check of a freshly started process, and an automatic rollback, which never unlocks a project.</p></li>
+    </ol>
+    <p class="sec-note">A fresh install trusts this site, which publishes only from release tags and the maintainers&rsquo; site tags, and the keys the installer carries. Piping a script into a shell deserves a read first: the installer is <a href="../install">one file</a>.</p>
+  </div>
+</section>
+
+<!-- ================================================================ V. YOUR COMPUTERS -->
+<section class="chapter" id="networked" data-chapter="networked">
+  <div class="wrap pair">
+    <header class="ch-head">
+      <p class="ch-mark"><em>v.</em> your computers</p>
+      <h2 class="h2 rv">Your other computers, with no cloud in between.</h2>
+      <p class="rd rd-plain lede"><span class="rd-label">In plain words</span>Share one memory across your laptop and your desktop. One of them keeps the data; the others pair with it using a one-time code and talk to it over an encrypted connection. You can cut any of them off from the console.</p>
+      <p class="rd rd-tech lede"><span class="rd-label">In technical terms</span>The Server serves https (TLS 1.2+) under the name setup gave it. A Client checks the certificate&rsquo;s SHA-256 fingerprint before it sends a pairing code (80 bits, 10 minutes, single use, stored hashed); plain-http pairing is refused. A macOS or Linux Client runs a relay that pins the exact certificate, holds a client certificate of its own and reports each caller&rsquo;s uid and process chain. Each device is revocable on the Devices page.</p>
+    </header>
+    <figure class="pair-fig rv">
+      <div class="pair-row">
+        <div class="pair-box"><b>Server</b><span>keeps the data</span></div>
+        <div class="pair-link"><span><svg aria-hidden="true"><use href="#i-lock"/></svg></span></div>
+        <div class="pair-box"><b>Client</b><span>keeps nothing</span></div>
+      </div>
+      <ol class="pair-steps">
+        <li>The Server&rsquo;s console shows a pairing code.</li>
+        <li>The Client checks the Server&rsquo;s certificate fingerprint.</li>
+        <li>It pairs with the code, once, within ten minutes.</li>
+        <li>From then on it uses a credential of its own, which you can revoke.</li>
+      </ol>
+      <figcaption class="fine" style="margin-top:14px">Your own network or tailnet is the boundary. The public internet is not a supported one. Windows computers join as Clients.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ================================================================ VI. THE LIMITS -->
+<section class="chapter" id="limits" data-chapter="limits">
+  <div class="wrap">
+    <header class="ch-head">
+      <p class="ch-mark"><em>vi.</em> the limits</p>
+      <h2 class="h2 rv">What Seamless does not claim.</h2>
+      <p class="lede rv">A security story is only as good as its edges, so here they are.</p>
+    </header>
+    <ul class="limits">
+      <li class="rv"><b>No encryption at rest.</b>Memories, notes and backups are plain files. Disk encryption is your operating system&rsquo;s job, and worth turning on.</li>
+      <li class="rv"><b>Programs that run as you.</b>Until Seamless runs in its own account, any program of yours can read <code>~/.seamless</code> and its key, whatever the fences say.</li>
+      <li class="rv"><b>Your home folder.</b>Seamless protects what it holds. An agent running as you still reaches your SSH keys, code and browser data; give unattended agents an account of their own.</li>
+      <li class="rv"><b>Root.</b>Root, and anyone who can become Seamless&rsquo;s account, reads everything. A passwordless <code>sudo</code> voids the arrangement.</li>
+      <li class="rv"><b>What a session already read.</b>An approval that ends does not unread what is in the agent&rsquo;s transcript.</li>
+      <li class="rv"><b>Copies made elsewhere.</b>Seamless guards its own surfaces. An agent can still put what it read into a file, a commit or a pull request.</li>
+      <li class="rv"><b>Your model provider.</b>With a cloud provider configured, embedded text goes to it from every project. Ollama keeps it local.</li>
+      <li class="rv"><b>A daemon that is down.</b>Hooks fail open, so an agent keeps working, without its briefing, rather than stopping.</li>
+      <li class="rv"><b>Windows.</b>No Seamless in its own account, no relay and no Server role, so no locked projects on Windows.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================================================================ VII. PICK A SETUP -->
+<section class="chapter" id="setups" data-chapter="setups">
+  <div class="wrap">
+    <header class="ch-head">
+      <p class="ch-mark"><em>vii.</em> pick a setup</p>
+      <h2 class="h2 rv">Turn on what your work needs.</h2>
+      <p class="lede rv">Most people need nothing beyond a fresh install. Each row is a step you can take later, without moving anything.</p>
+    </header>
+    <div class="dtable-wrap rv">
+      <table class="dtable">
+        <thead>
+          <tr><th scope="col">If you</th><th scope="col">Turn on</th><th scope="col">How</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Work alone on ordinary projects</th><td data-label="turn on">nothing: a Standalone install</td><td data-label="how"><a href="../docs/quickstart/">Quickstart</a></td></tr>
+          <tr><th scope="row">Keep a client&rsquo;s work out of your other projects</th><td data-label="turn on"><code>confidential</code> or <code>sealed</code> on that project</td><td data-label="how"><a href="../docs/concepts/project-isolation/">Project isolation</a></td></tr>
+          <tr><th scope="row">Let agents read the web, issues or email</th><td data-label="turn on">write screening</td><td data-label="how"><a href="../docs/guides/write-screening/">Write screening</a></td></tr>
+          <tr><th scope="row">Want a project even your own agents open only with your yes</th><td data-label="turn on">Seamless in its own account, then lock the project</td><td data-label="how"><a href="../docs/guides/peer-auth/">Locked projects</a></td></tr>
+          <tr><th scope="row">Run agents unattended</th><td data-label="turn on">a restricted agent account</td><td data-label="how"><a href="../docs/guides/peer-auth/#restricted-local-accounts">Restricted accounts</a></td></tr>
+          <tr><th scope="row">Use more than one computer</th><td data-label="turn on">a Networked setup</td><td data-label="how"><a href="../docs/guides/network-install/">Network install</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="sec-note">The whole model, with every mechanism and its guide, is in the docs: <a href="../docs/concepts/security/">Security and privacy</a>. The console&rsquo;s Privacy screen draws it for your own setup.</p>
+  </div>
+</section>
+
+<!-- ================================================================ REPORT -->
+<section class="chapter" id="report">
+  <div class="wrap">
+    <div class="report rv">
+      <div>
+        <h2>Found a security problem?</h2>
+        <p>Please report it privately through GitHub, not in a public issue. The report stays between you and the maintainers until a fix ships, and the <a href="https://github.com/arctop/seamless/blob/main/SECURITY.md">security policy</a> says what is in scope.</p>
+      </div>
+      <div class="report-act">
+        <a class="btn-solid" href="https://github.com/arctop/seamless/security/advisories/new">Report a vulnerability <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+        <a class="lnk" href="../#quickstart">Or install Seamless <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-foot">
+  <div class="wrap foot-grid">
+    <div class="foot-brand">
+      <a class="brand" href="../" aria-label="Seamless home">
+        <svg class="brand-mark" aria-hidden="true"><use href="#i-mark"/></svg>
+        <span class="brand-word">seamless</span>
+      </a>
+      <p class="foot-tag">No seams. No spoons.</p>
+      <p class="colophon">Seamless is published by <a href="https://arctop.com">Arctop</a>. Set in Fraunces, Instrument Sans &amp; IBM Plex Mono, self-hosted (<a href="../static/fonts/OFL-NOTICE.txt">OFL</a>). This page loads nothing from other sites and has no trackers or cookies. Your theme and reading choice stay in your browser. Naturally, the source is <a href="https://github.com/arctop/seamless/tree/main/docs">in the repo</a>.</p>
+    </div>
+    <nav class="foot-nav" aria-label="Footer">
+      <div>
+        <b>Project</b>
+        <a href="../docs/">Docs</a>
+        <a href="./">Security</a>
+        <a href="../compare/">Compare</a>
+        <a href="../docs/changelog/">Changelog</a>
+        <a href="https://github.com/arctop/seamless">GitHub</a>
+        <a href="https://github.com/arctop/seamless/security/advisories/new">Report a vulnerability</a>
+      </div>
+      <div>
+        <b>Start</b>
+        <a href="../#quickstart">Install</a>
+        <a href="../docs/quickstart/">Quickstart</a>
+        <a href="../claude-app/">In the Claude app</a>
+        <a href="../docs/concepts/security/">The security model, in full</a>
+        <a href="../docs/updating/#uninstall">Uninstall</a>
+      </div>
+    </nav>
+  </div>
+</footer>
+
+<script src="../static/site.js?v=4b8fbf31"></script>
+<script src="../static/page.js?v=218340c4"></script>
+<script src="../static/webmcp.js?v=c9b44136"></script>
+</body>
+</html>

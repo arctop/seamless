@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Seamless vs. the alternatives - an honest local-first comparison</title>
-<meta name="description" content="An honest comparison of Seamless with Claude Code's Agent Teams, claude-mem, Anthropic's built-in memory, Mem0, Zep, Dosu, agentmemory, and Supermemory - seven axes, and when to choose each of them instead.">
+<meta name="description" content="An honest comparison of Seamless with Claude Code and Codex built-in memory, Claude Code's Agent Teams, claude-mem, Anthropic's platform memory, Beads, Basic Memory, agentmemory, Mem0 and Zep, and Supermemory: how each runs, what it keeps, privacy and security, and when to choose it instead.">
 <link rel="canonical" href="https://thereisnospoon.org/compare/">
 <meta name="robots" content="max-image-preview:large, max-snippet:-1">
 <meta property="og:site_name" content="Seamless">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://thereisnospoon.org/compare/">
 <meta property="og:title" content="Seamless vs. the alternatives - an honest local-first comparison">
-<meta property="og:description" content="Agent Teams, claude-mem, Anthropic's built-in memory, Mem0/Zep, Dosu, agentmemory, Supermemory: seven axes, no adjectives, and an honest choose-them-instead paragraph for every one.">
+<meta property="og:description" content="Built-in Claude Code and Codex memory, Agent Teams, claude-mem, Anthropic's platform memory, Beads, Basic Memory, agentmemory, Mem0/Zep, Supermemory: how each runs, what it keeps, what leaves your computer, and when to choose it instead.">
 <meta property="og:image" content="https://thereisnospoon.org/static/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -24,7 +24,7 @@
   "@id": "https://thereisnospoon.org/compare/",
   "url": "https://thereisnospoon.org/compare/",
   "name": "Seamless vs. the alternatives - an honest local-first comparison",
-  "description": "How Seamless compares with Claude Code Agent Teams, claude-mem, Anthropic built-in memory, Mem0, Zep, Dosu, agentmemory, and Supermemory - and when to choose each of them instead.",
+  "description": "How Seamless compares with Claude Code and Codex built-in memory, Claude Code Agent Teams, claude-mem, Anthropic platform memory, Beads, Basic Memory, agentmemory, Mem0, Zep, and Supermemory - and when to choose each of them instead.",
   "isPartOf": {"@id": "https://thereisnospoon.org/#website"},
   "about": {"@id": "https://thereisnospoon.org/#app"}
 }
@@ -33,401 +33,352 @@
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#070a13">
 <link rel="icon" type="image/svg+xml" href="../static/favicon.svg">
 <link rel="preload" as="font" type="font/woff2" href="../static/fonts/fraunces.woff2" crossorigin>
+<link rel="preload" as="font" type="font/woff2" href="../static/fonts/fraunces-italic.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="../static/fonts/instrument-sans.woff2" crossorigin>
-<script>(function(){var d=document.documentElement,t=localStorage.getItem("theme");if(t)d.dataset.theme=t;})();</script>
-<link rel="stylesheet" href="../static/site.css?v=658d0062">
+<script>(function(){var d=document.documentElement,t=localStorage.getItem("theme");if(t)d.dataset.theme=t;var o=localStorage.getItem("os");if(o==="macos"||o==="linux")o="unix";if(o!=="unix"&&o!=="windows")o=/Windows/i.test(navigator.userAgent)?"windows":"unix";d.dataset.os=o;d.className+=" js";})();</script>
+<link rel="stylesheet" href="../static/home.css?v=9ca08b5d">
 <style>
-.cmp-head { max-width: 740px; }
-.cmp-head h1 {
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: clamp(36px, 5vw, 64px);
-  font-variation-settings: "opsz" 144, "SOFT" 30;
-  letter-spacing: -0.026em;
-  line-height: 1.02;
-  margin: 18px 0 24px;
-  text-wrap: balance;
+/* /compare/ -- built on the landing's home.css (header, chapters, data
+   tables, footer); only the comparison's own pieces are styled here. */
+.cmp-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 18px; }
+.cmp-tabs a { padding: 8px 15px 9px; border: 1px solid var(--hair); border-radius: 999px; font-size: 14.5px; font-weight: 500; color: var(--muted); text-decoration: none; transition: color 0.25s, border-color 0.25s, background-color 0.25s; }
+.cmp-tabs a:hover { color: var(--ink); border-color: var(--hair-2); background: var(--panel-a); }
+.cmp-block { scroll-margin-top: calc(var(--head-h) + 16px); }
+.cmp-block + .cmp-block { margin-top: clamp(48px, 7vh, 72px); }
+.cmp-block h3 { margin: 0 0 6px; font-family: var(--serif); font-size: clamp(24px, 2.4vw, 32px); line-height: 1.12; font-weight: 400; letter-spacing: -0.012em; font-variation-settings: "opsz" 72, "SOFT" 30; }
+.cmp-block .cmp-lede { margin: 0 0 18px; max-width: 700px; font-size: 16px; color: var(--muted); }
+.dtable.cmp tbody th { white-space: nowrap; }
+.dtable.cmp tbody th a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--hair-2); text-underline-offset: 3px; }
+.dtable.cmp tbody th a:hover { text-decoration-color: var(--accent); }
+.dtable.cmp tr.self > * { background: color-mix(in oklab, var(--accent) 7%, transparent); }
+.dtable.cmp tr.self th { box-shadow: inset 3px 0 0 var(--accent); }
+.dtable.cmp td { font-size: 14.5px; }
+.cmp-foot { margin: 16px 0 0; font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+.cmp-foot a { color: var(--muted); }
+.field { max-width: 820px; }
+.entry { padding: 44px 0 40px; border-top: 1px solid var(--hair); scroll-margin-top: calc(var(--head-h) + 16px); }
+.entry:first-child { border-top: 0; padding-top: 0; }
+.entry h3 { margin: 0 0 4px; font-family: var(--serif); font-size: clamp(28px, 2.8vw, 38px); line-height: 1.1; font-weight: 400; letter-spacing: -0.016em; color: var(--ink); font-variation-settings: "opsz" 96, "SOFT" 30; }
+.entry .what { margin: 0 0 16px; font-family: var(--serif); font-style: italic; font-size: 18px; color: var(--muted); font-variation-settings: "opsz" 24; }
+.entry p { margin: 12px 0 0; font-size: 16.5px; line-height: 1.7; color: var(--text); }
+.entry code { font-size: 0.84em; white-space: normal; }
+.choose { margin: 22px 0 0; padding: 15px 18px 16px; border: 1px solid var(--hair); border-left: 3px solid var(--ok); border-radius: 12px; background: var(--panel-a); }
+.choose b { display: block; margin: 0 0 3px; font-family: var(--serif); font-style: italic; font-weight: 400; font-size: 17px; color: var(--ok); }
+.choose p { margin: 0; font-size: 15.5px; }
+.cmp-aside { max-width: 820px; margin: 48px 0 0; padding: 18px 22px; border: 1px dashed var(--hair-2); border-radius: 16px; font-size: 15px; line-height: 1.65; color: var(--muted); }
+.cmp-aside b { color: var(--ink); font-weight: 600; }
+.cta-row { display: flex; flex-wrap: wrap; gap: 14px 30px; margin: 26px 0 0; }
+@media (max-width: 760px) {
+  .dtable.cmp tbody th { white-space: normal; }
+  .dtable.cmp tr.self { background: color-mix(in oklab, var(--accent) 7%, transparent); box-shadow: inset 3px 0 0 var(--accent); }
+  .dtable.cmp tr.self > * { background: none; box-shadow: none; }
 }
-.cmp-head p { color: var(--ink-2); font-size: 18px; line-height: 1.65; }
-.cmp-head p + p { margin-top: 14px; }
-.cmp-head p a, .cmp-entry p a, .cmp-foot a {
-  text-decoration: underline;
-  text-decoration-color: color-mix(in oklab, currentColor 38%, transparent);
-}
-.cmp-head p a:hover, .cmp-entry p a:hover, .cmp-foot a:hover { color: var(--ink); text-decoration-color: var(--accent); }
-.table-scroll {
-  overflow-x: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: var(--shadow-md);
-}
-table.cmp { border-collapse: collapse; width: 100%; min-width: 1080px; font-size: 14px; }
-.cmp th, .cmp td {
-  padding: 13px 14px;
-  text-align: left;
-  vertical-align: top;
-  border-bottom: 1px solid var(--border);
-}
-.cmp thead th {
-  font-family: var(--font-sans);
-  font-size: 12px; font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-  background: color-mix(in oklab, var(--surface-2) 55%, var(--surface));
-}
-.cmp tbody th {
-  font-family: var(--font-display);
-  font-weight: 500; font-size: 16px;
-  font-variation-settings: "opsz" 24;
-  white-space: nowrap;
-  position: sticky; left: 0;
-  background: var(--surface);
-}
-.cmp tbody th a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
-.cmp tbody th a:hover { text-decoration-color: var(--accent); }
-.cmp td { color: var(--ink-2); }
-/* the Seamless row: a warm wash of the accent, opaque so the sticky first
-   cell still covers what scrolls beneath it */
-.cmp tbody tr.self th, .cmp tbody tr.self td { background: color-mix(in oklab, var(--accent) 7%, var(--surface)); }
-.cmp tbody tr.self th { box-shadow: inset 3px 0 0 var(--accent); }
-.cmp tbody tr:last-child th, .cmp tbody tr:last-child td { border-bottom: none; }
-.cmp-foot { margin-top: 16px; font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); }
-.cmp-list { max-width: 780px; }
-.cmp-entry { padding: 40px 0; border-top: 1px solid var(--border); scroll-margin-top: 80px; }
-.cmp-entry:first-of-type { border-top: none; padding-top: 0; }
-.cmp-entry h2 {
-  font-family: var(--font-display);
-  font-weight: 400; font-size: 34px;
-  font-variation-settings: "opsz" 96, "SOFT" 30;
-  letter-spacing: -0.02em;
-  line-height: 1.12;
-  margin-bottom: 6px;
-}
-.cmp-entry .what {
-  font-family: var(--font-display);
-  font-style: italic;
-  font-size: 18px;
-  font-variation-settings: "opsz" 24;
-  color: var(--muted);
-  margin-bottom: 14px;
-}
-.cmp-entry p { color: var(--ink-2); font-size: 16.5px; line-height: 1.7; margin-top: 12px; }
-.cmp-entry p code {
-  font-size: 0.86em;
-  color: var(--ink);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
-  padding: 0.08em 0.38em;
-}
-.choose {
-  margin-top: 20px;
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--ok);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  padding: 15px 18px 16px;
-}
-.choose b {
-  display: block;
-  font-family: var(--font-display);
-  font-style: italic;
-  font-weight: 400;
-  font-size: 17px;
-  font-variation-settings: "opsz" 24;
-  color: var(--ok);
-  margin-bottom: 4px;
-}
-.choose p { margin: 0; font-size: 15.5px; color: var(--ink-2); }
-.cmp-aside {
-  max-width: 780px;
-  margin-top: 48px;
-  padding: 18px 20px;
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-lg);
-  font-size: 15px;
-  line-height: 1.65;
-  color: var(--muted);
-}
-/* the landing's .lnk: ink text on a hairline that warms to the accent */
-.cta-links { display: flex; gap: 28px; flex-wrap: wrap; margin-top: 22px; }
-.cta-links a {
-  color: var(--ink);
-  font-weight: 500;
-  border-bottom: 1px solid var(--border-strong);
-  padding-bottom: 2px;
-  transition: border-color 0.3s, color 0.3s;
-}
-.cta-links a:hover { border-color: var(--accent); text-decoration: none; }
 </style>
 </head>
 <body>
 
-<header class="site-head">
-  <div class="wrap">
-    <!-- The brand: the landing's empty-set mark (its <symbol id="i-mark">),
-         inlined because this page carries no symbol sheet, then the word in
-         Fraunces. Same markup as cmd/docsgen/templates/{layout,scenario}.html. -->
-    <a class="brand" href="../" aria-label="Seamless home"><svg class="brand-mark" viewBox="0 0 32 32" width="26" height="26" aria-hidden="true" focusable="false"><circle cx="16" cy="16" r="8.6" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M6.2 25.8 24.6 7.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="25.6" cy="6.4" r="2.6" style="fill:var(--mark-star,currentColor)"/></svg><span class="brand-word">seamless</span></a>
+<a class="skip-link" href="#main">Skip to content</a>
+<div class="starfield" aria-hidden="true"></div>
+<p class="sr-only" id="announce" aria-live="polite"></p>
+
+<!-- Shared glyphs, as on the landing page. -->
+<svg class="defs" width="0" height="0" aria-hidden="true" focusable="false">
+  <symbol id="i-mark" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="8.6" fill="none" stroke="currentColor" stroke-width="1.9"/>
+    <path d="M6.2 25.8 24.6 7.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+    <circle cx="25.6" cy="6.4" r="2.6" style="fill:var(--mark-star,currentColor)"/>
+  </symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h13m-5-5 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 13.4A8.5 8.5 0 1 1 10.6 3.5a6.6 6.6 0 0 0 9.9 9.9z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.5v2.2m0 14.6v2.2M4.6 4.6l1.6 1.6m11.6 11.6 1.6 1.6M2.5 12h2.2m14.6 0h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-gh" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></symbol>
+</svg>
+
+<header class="site-head" data-head>
+  <div class="head-in">
+    <a class="brand" href="../" aria-label="Seamless home">
+      <svg class="brand-mark" aria-hidden="true"><use href="#i-mark"/></svg>
+      <span class="brand-word">seamless</span>
+    </a>
+    <details class="nav-menu">
+      <summary aria-label="Menu"><span></span><span></span></summary>
+      <nav class="nav-panel" aria-label="Menu">
+        <a href="#glance">At a glance</a>
+        <a href="#field">Every alternative</a>
+        <a href="../">Home</a>
+        <a href="../security/">Security</a>
+        <a href="../claude-app/">Claude app</a>
+        <a href="../docs/">Docs</a>
+        <a href="https://github.com/arctop/seamless">GitHub</a>
+      </nav>
+    </details>
     <nav class="head-nav" aria-label="Site">
-      <a href="../">Home</a>
-      <a href="#table">At a glance</a>
-      <a class="docs-link" href="../docs/">Docs</a>
+      <a href="../#how">How it works</a>
+      <a href="../#scenes">Demo</a>
+      <a href="../security/">Security</a>
+      <a href="./" class="is-current" aria-current="page">Compare</a>
+      <a href="../claude-app/">Claude app</a>
+      <a href="../docs/">Docs</a>
+    </nav>
+    <div class="head-tools">
       <button class="theme-toggle" type="button" aria-label="Toggle color theme">
-        <svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20.5 13.4A8.5 8.5 0 1 1 10.6 3.5a6.6 6.6 0 0 0 9.9 9.9z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
-        <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.5v2.2m0 14.6v2.2M4.6 4.6l1.6 1.6m11.6 11.6 1.6 1.6M2.5 12h2.2m14.6 0h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <svg class="icon-moon" aria-hidden="true"><use href="#i-moon"/></svg>
+        <svg class="icon-sun" aria-hidden="true"><use href="#i-sun"/></svg>
       </button>
       <a class="gh-link" href="https://github.com/arctop/seamless" aria-label="Seamless on GitHub">
-        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+        <svg aria-hidden="true"><use href="#i-gh"/></svg>
       </a>
-    </nav>
+      <a class="head-cta" href="../#quickstart">Install</a>
+    </div>
   </div>
+  <div class="head-progress" aria-hidden="true"><i></i></div>
 </header>
 
-<main>
+<main id="main">
 
-<!-- ======================================================= INTRO -->
-<section class="section">
+<!-- ================================================================ HERO -->
+<section class="pg-hero" id="top" data-hero>
+  <svg class="pg-arc" viewBox="0 0 600 600" aria-hidden="true" focusable="false">
+    <circle class="a-ring a-faint" cx="300" cy="300" r="268"/>
+    <circle class="a-ring" cx="300" cy="300" r="196"/>
+    <circle class="a-ring a-faint" cx="300" cy="300" r="122"/>
+    <path class="a-cut" d="M70 530 512 88"/>
+    <circle class="a-star" cx="520" cy="80" r="7"/>
+  </svg>
   <div class="wrap">
-    <div class="cmp-head">
-      <p class="kicker">fair questions, longer answers</p>
-      <h1>Seamless vs. the alternatives</h1>
-      <p>Seamless is a local-first coordination substrate for the coding agents you run: persistent memory, dependency-aware tasks, and shared plans, stored as markdown files you own and indexed by one local Go daemon. This page compares it with the tools people actually weigh it against - <a href="#agent-teams">Claude Code's Agent Teams</a>, <a href="#claude-mem">claude-mem</a>, <a href="#anthropic-memory">Anthropic's built-in memory</a>, <a href="#mem0-zep">Mem0 and Zep</a>, <a href="#dosu">Dosu</a>, <a href="#agentmemory">agentmemory</a>, and <a href="#supermemory">Supermemory</a>.</p>
-      <p>Several of these are excellent, and for plenty of people the right answer is one of them; every section below ends with exactly when that is. What you will not find here is an accuracy benchmark. Memory benchmarks in this category are self-refereed, every vendor publishes one where they win, and we don't play. Legibility is the benchmark: open the folder, read what your agents wrote.</p>
-    </div>
+    <p class="hero-pre"><svg aria-hidden="true"><use href="#i-mark"/></svg> Fair questions, longer answers</p>
+    <h1 class="h1" data-split>Seamless and the <em>alternatives.</em></h1>
+    <p class="hero-sub">Seamless is shared memory and coordination for the agents you run: rules, decisions and plans kept as markdown files on your own computer, a briefing at every session start, and a task queue parallel agents claim from, behind walls you choose. This page sets it beside the tools people actually weigh it against. Several are excellent, and each section ends with when to pick it instead.</p>
+    <ul class="hero-facts">
+      <li>Checked November 2026</li>
+      <li>Nine alternatives</li>
+      <li>Privacy and security included</li>
+      <li>No benchmark claims</li>
+    </ul>
   </div>
 </section>
 
-<!-- ======================================================= TABLE -->
-<section class="section tint" id="table">
+<!-- ================================================================ AT A GLANCE -->
+<section class="chapter" id="glance" data-chapter="glance">
   <div class="wrap">
-    <div class="section-head">
-      <p class="kicker">at a glance</p>
-      <h2>Seven axes, no adjectives.</h2>
-    </div>
-    <div class="table-scroll" tabindex="0" role="region" aria-label="Comparison table: Seamless and seven alternatives across seven axes">
-      <table class="cmp">
-        <thead>
-          <tr>
-            <th scope="col">tool</th>
-            <th scope="col">storage format</th>
-            <th scope="col">where it runs</th>
-            <th scope="col">account required</th>
-            <th scope="col">multi-agent coordination</th>
-            <th scope="col">forgetting policy</th>
-            <th scope="col">runtime</th>
-            <th scope="col">cost</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr class="self">
-            <th scope="row">Seamless</th>
-            <td>markdown files in git; SQLite indexes them and stores operational state</td>
-            <td>your machine, localhost only</td>
-            <td>none</td>
-            <td>ready-queue, lease claiming, shared plans</td>
-            <td>proposals only - you approve</td>
-            <td>Go daemon + CLI, no CGO</td>
-            <td>free, MIT</td>
-          </tr>
-          <tr>
-            <th scope="row"><a href="#agent-teams">Agent Teams</a></th>
-            <td>team task list inside Claude Code</td>
-            <td>inside Claude Code</td>
-            <td>a Claude subscription</td>
-            <td>shared task list, claims, dependencies - one team</td>
-            <td>state ends with the team</td>
-            <td>built into Claude Code</td>
-            <td>included</td>
-          </tr>
-          <tr>
-            <th scope="row"><a href="#claude-mem">claude-mem</a></th>
-            <td>SQLite + Chroma vectors under ~/.claude-mem</td>
-            <td>your machine; optional cloud sync</td>
-            <td>none</td>
-            <td>none - memory only</td>
-            <td>none documented</td>
-            <td>Node 20 + Bun</td>
-            <td>free, Apache-2.0</td>
-          </tr>
-          <tr>
-            <th scope="row"><a href="#anthropic-memory">Anthropic memory</a></th>
-            <td>files in a managed sandbox</td>
-            <td>Anthropic's sandbox</td>
-            <td>a Claude account</td>
-            <td>none - one agent's silo</td>
-            <td>model-managed edits</td>
-            <td>built into Claude</td>
-            <td>included</td>
-          </tr>
-          <tr>
-            <th scope="row"><a href="#mem0-zep">Mem0 / Zep</a></th>
-            <td>vector store / temporal knowledge graph</td>
-            <td>cloud-first; self-host available</td>
-            <td>yes</td>
-            <td>none - a memory API</td>
-            <td>automatic extraction and consolidation</td>
-            <td>SaaS or self-hosted services</td>
-            <td>free tiers, paid plans</td>
-          </tr>
-          <tr>
-            <th scope="row"><a href="#dosu">Dosu</a></th>
-            <td>hosted knowledge base</td>
-            <td>cloud</td>
-            <td>yes - team</td>
-            <td>shared team knowledge, no task claiming</td>
-            <td>managed for you</td>
-            <td>SaaS</td>
-            <td>commercial</td>
-          </tr>
-          <tr>
-            <th scope="row"><a href="#agentmemory">agentmemory</a></th>
-            <td>SQLite + vector index; its DB is the truth</td>
-            <td>your machine; cloud optional</td>
-            <td>none</td>
-            <td>shared memory namespaces</td>
-            <td>automatic - decay, TTL, eviction</td>
-            <td>Node 20 + iii-engine</td>
-            <td>free, Apache-2.0</td>
-          </tr>
-          <tr>
-            <th scope="row"><a href="#supermemory">Supermemory</a></th>
-            <td>cloud store; a local drop-in exists</td>
-            <td>cloud-first</td>
-            <td>yes, for the full product</td>
-            <td>none - a memory API</td>
-            <td>automatic forgetting</td>
-            <td>SaaS; small Go drop-in</td>
-            <td>free tier; the Claude Code path needs Pro</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="cmp-foot"># facts checked against each project's public docs, July 2026. Got yours wrong? <a href="https://github.com/arctop/seamless/issues">Open an issue</a> - we'll fix it.</p>
-  </div>
-</section>
+    <header class="ch-head">
+      <p class="ch-mark"><em>i.</em> at a glance</p>
+      <h2 class="h2 rv">Ten tools, three questions.</h2>
+      <p class="lede rv">How each one runs, what it keeps, and what it does with your data. Facts, no adjectives. What you will not find is an accuracy benchmark: memory benchmarks in this category are self-refereed, every vendor publishes one where they win, and we would rather you open the folder and read what your agents wrote.</p>
+    </header>
+    <nav class="cmp-tabs" aria-label="Tables">
+      <a href="#runs">How it runs</a>
+      <a href="#keeps">What it keeps</a>
+      <a href="#privacy">Privacy and security</a>
+    </nav>
 
-<!-- ======================================================= THE FIELD -->
-<section class="section">
-  <div class="wrap">
-    <div class="section-head">
-      <p class="kicker">the field</p>
-      <h2>Every close alternative, taken seriously.</h2>
-      <p>What each one is, where the line between us actually sits, and when to pick it instead of us.</p>
-    </div>
-    <div class="cmp-list">
-
-      <article class="cmp-entry" id="agent-teams">
-        <h2>Claude Code's Agent Teams</h2>
-        <p class="what">first-party multi-agent coordination</p>
-        <p>Agent Teams are Claude Code's own answer to parallel agents, and it is a real one: a shared task list, task claiming backed by file locking so two agents cannot grab the same step, <code>addBlockedBy</code> and <code>addBlocks</code> dependency markers that gate what is claimable, and git worktrees isolating each agent's edits. If that list sounds familiar, it should - it is the shape of our ready-queue and lease claiming, shipped first-party and free. We would be lying if we called it anything but strong.</p>
-        <p>The line is lifetime and reach. An Agent Teams task list belongs to one team, inside one tool, for the life of that team: when the team winds down, the claims, the ordering, and the context go with it. Nothing crosses to your next session, to another checkout, or to an agent that is not Claude. Seamless is the layer underneath: a claim outlives the team, a plan outlives the week, and a Codex agent can read what a Claude agent wrote - because all of it is markdown and SQLite on your disk, in git, not state inside one product.</p>
-        <p>In practice they compose. Spin up an Agent Team for the burst of parallel work; let Seamless hold the plan, the constraints, and every claim that has to survive it.</p>
-        <div class="choose"><b>choose them instead if</b><p>Everything you need coordinated happens inside one Claude Code team and nothing has to outlive it. It is first-party, free, and needs no install.</p></div>
-      </article>
-
-      <article class="cmp-entry" id="claude-mem">
-        <h2>claude-mem</h2>
-        <p class="what">transcript memory for Claude Code</p>
-        <p>claude-mem is by far the most popular memory tool in the Claude Code ecosystem, and deservedly: install the plugin and it just works. Hooks watch your session, an AI pass compresses what happened into semantic summaries, and future sessions start with that context loaded. Everything stays local - SQLite plus a Chroma vector store under <code>~/.claude-mem</code> - it is Apache-2.0, free, and reaches beyond Claude Code to OpenCode, Copilot, Gemini, and friends.</p>
-        <p>The difference is what gets remembered, and who decides. claude-mem records what happened: its store is generated summaries of your sessions, kept at the compressor's judgment. Seamless stores what an agent - or you - deliberately wrote down: a constraint, a runbook, a decision, in an eight-kind taxonomy with explicit supersession and a gardener that proposes cleanup you approve. One is a memory of events; the other is a curated body of knowledge you can open in an editor and diff in git.</p>
-        <p>And memory is claude-mem's whole surface. There is no task queue, no claiming, no plans - it will not stop two agents from doing the same work twice.</p>
-        <div class="choose"><b>choose them instead if</b><p>You want effortless recall of what past sessions did, today, with the biggest community in the space - and you don't need shared tasks or a store you author yourself.</p></div>
-      </article>
-
-      <article class="cmp-entry" id="anthropic-memory">
-        <h2>Anthropic's built-in memory</h2>
-        <p class="what">first-party per-agent memory</p>
-        <p>Claude's managed memory gives an agent a directory it can read and write across sessions, mounted into a sandbox and managed for you. It is first-party, zero-setup, and improving steadily - for a single Claude surface it may honestly be all you need.</p>
-        <p>It is also, by design, a silo. The directory belongs to one agent in one product: no cross-agent sharing, no cross-client reach, no tasks, no claiming, no plans. And the files live in Anthropic's sandbox rather than on your disk - you cannot grep them, diff them, or commit them alongside the code they describe. Seamless is the shared ground every agent you run stands on, whatever client it speaks from, and its files answer to <code>ls</code>.</p>
-        <p>The Claude apps have a different memory again, for chat: entries Claude generates from your conversations, kept with your account, separate for each Claude Project, and available on the web and the phone as well as the desktop. If your work happens in those chats, <a href="../claude-app/#memory">Seamless in the Claude app</a> sets that memory next to Seamless row by row.</p>
-        <div class="choose"><b>choose them instead if</b><p>You use exactly one Claude surface, can't or won't install anything, and continuity for that single agent is the whole requirement.</p></div>
-      </article>
-
-      <article class="cmp-entry" id="mem0-zep">
-        <h2>Mem0 and Zep</h2>
-        <p class="what">memory APIs for products you build</p>
-        <p>Mem0 and Zep are serious infrastructure: SDKs and APIs that give the product you are building per-user memory. Mem0 extracts facts from conversations into a vector store; Zep builds a temporal knowledge graph that can answer questions like who owned this account in February. Both are production-oriented, well-funded, and cloud-first, with self-hosted open-source paths.</p>
-        <p>They solve a different problem than Seamless does. Their customer is a developer shipping an app whose users need memory at scale; the memory belongs to your product and lives behind an account. Seamless is for the agents you run - the fleet of coding sessions pointed at your own repos - on your machine, bound to localhost, with no account anywhere. Comparing them axis by axis mostly shows the axes mattering differently: multi-tenancy and SLAs on their side, git-diffability and task claiming on ours.</p>
-        <div class="choose"><b>choose them instead if</b><p>You are building a product whose users need memory. That is what they are for, and it is not what Seamless is.</p></div>
-      </article>
-
-      <article class="cmp-entry" id="dosu">
-        <h2>Dosu</h2>
-        <p class="what">team knowledge infrastructure</p>
-        <p><a href="https://dosu.dev">Dosu</a> is knowledge infrastructure for whole teams: a hosted, shared brain that captures knowledge as your agents and engineers work, answers questions with it, and keeps your documentation in sync with the code. For an organization, that docs-that-heal loop is genuinely hard to replicate, and Dosu does it well.</p>
-        <p>Seamless is the local-first counterpart, scoped to one person and their fleet. Durable knowledge lives in a folder in git on your own disk rather than in a vendor's cloud, and there is no Seamless account. Model calls leave the machine only when you configure a remote provider; Ollama keeps them local. Seamless also adds what a team-knowledge product does not try to: coordination primitives - a dependency-aware ready-queue, lease-based claiming, shared plans - for the agents actually doing the work.</p>
-        <div class="choose"><b>choose them instead if</b><p>A whole team needs shared, managed knowledge with documentation kept in sync, and having a vendor run it is a feature rather than a concern.</p></div>
-      </article>
-
-      <article class="cmp-entry" id="agentmemory">
-        <h2>agentmemory</h2>
-        <p class="what">the feature-maximal local memory runtime</p>
-        <p>agentmemory is the most feature-dense local memory system in the field, and on raw memory features it out-ships us: triple-hybrid retrieval (BM25 plus vectors plus a graph), a dozen ambient hooks, 53 MCP tools, contradiction detection, tiered consolidation, session replay, and benchmark results it publishes proudly. It runs locally on SQLite, embeds offline for free, and is Apache-2.0.</p>
-        <p>The disagreement is philosophical, and worth stating plainly. agentmemory automates the lifecycle: Ebbinghaus-style decay, TTLs, and importance eviction decide what fades, and its database is the source of truth, with Obsidian export as a secondary view. Seamless holds the opposite bet: markdown files are the truth for durable knowledge, forgetting is a proposal you approve, and the whole system stays small enough to read - two small Go binaries against a Node 20 runtime plus its separate engine. Whether 53 tools is a feature or a smell is exactly the question to ask yourself.</p>
-        <div class="choose"><b>choose them instead if</b><p>You want the most automated, most feature-complete local memory available, and you are comfortable letting a decay curve do the forgetting.</p></div>
-      </article>
-
-      <article class="cmp-entry" id="supermemory">
-        <h2>Supermemory</h2>
-        <p class="what">a memory API for your whole digital life</p>
-        <p>Supermemory positions itself as the memory API for the AI era, and its scope is the widest here: a personal-and-company brain with connectors for Google Drive, Gmail, and Notion, multimodal ingestion, and fast retrieval, run as a cloud service. An open-source local drop-in exists - a small static Go server that runs offline with Ollama - but the cloud is the product.</p>
-        <p>That breadth is the trade. Seamless is narrow on purpose: the agents and Claude chats you run, the knowledge they write down on purpose, and their division of labor, local-first with no account. Supermemory's Claude Code integration also sits behind its Pro subscription, while Seamless is free everywhere it runs. If your question is what should ingest my email and my documents on its own, that was never our question.</p>
-        <div class="choose"><b>choose them instead if</b><p>You want one memory across your tools and your life - email, docs, notes, agents - and a cloud service holding it is acceptable.</p></div>
-      </article>
-
-    </div>
-    <aside class="cmp-aside">Not listed: Letta/MemGPT, Cognee, and Graphiti. Not because they are bad - because they answer a different question. Letta is a framework for building stateful agents; Cognee and Graphiti are knowledge-graph engines for applications. If you are choosing between them and Seamless, you are probably still deciding what you are building. This page is for deciding what your coding agents should share.</aside>
-  </div>
-</section>
-
-<!-- ======================================================= CTA -->
-<section class="section tint">
-  <div class="wrap">
-    <div class="section-head" style="margin-bottom:0">
-      <p class="kicker">see for yourself</p>
-      <h2>The folder is the argument.</h2>
-      <p>Install it, run two sessions, then open <code>~/.seamless/memory</code> and read what got written.</p>
-      <div class="cta-links">
-        <a href="../#quickstart">Quickstart &rarr;</a>
-        <a href="../docs/">Docs &rarr;</a>
-        <a href="https://github.com/arctop/seamless">GitHub &rarr;</a>
+    <div class="cmp-block rv" id="runs">
+      <h3>How it runs</h3>
+      <p class="cmp-lede">Where the memory lives, what you need to use it, and what it costs.</p>
+      <div class="dtable-wrap">
+        <table class="dtable cmp">
+          <thead><tr><th scope="col">Tool</th><th scope="col">Where it runs</th><th scope="col">Account</th><th scope="col">Runtime</th><th scope="col">Cost and license</th></tr></thead>
+          <tbody>
+            <tr class="self"><th scope="row">Seamless</th><td data-label="runs">your computer; or a Server of yours your other computers pair with</td><td data-label="account">none</td><td data-label="runtime">Go daemon + CLI, no CGO</td><td data-label="cost">free, MIT</td></tr>
+            <tr><th scope="row"><a href="#built-in">Built-in memory</a></th><td data-label="runs">inside Claude Code or Codex, on your computer</td><td data-label="account">your Claude or ChatGPT sign-in</td><td data-label="runtime">built into the client</td><td data-label="cost">included</td></tr>
+            <tr><th scope="row"><a href="#agent-teams">Agent Teams</a></th><td data-label="runs">inside one Claude Code session</td><td data-label="account">your Claude sign-in</td><td data-label="runtime">built in, experimental</td><td data-label="cost">included</td></tr>
+            <tr><th scope="row"><a href="#claude-mem">claude-mem</a></th><td data-label="runs">your computer; cloud sync and a hosted observer are opt-in</td><td data-label="account">none locally</td><td data-label="runtime">Node, Bun and uv</td><td data-label="cost">Apache-2.0; hosted parts paid</td></tr>
+            <tr><th scope="row"><a href="#anthropic-memory">Anthropic platform memory</a></th><td data-label="runs">your storage (memory tool) or Anthropic&rsquo;s (Managed Agents)</td><td data-label="account">a Claude API account</td><td data-label="runtime">the Claude API</td><td data-label="cost">API usage</td></tr>
+            <tr><th scope="row"><a href="#beads">Beads</a></th><td data-label="runs">your computer; syncs through your git remote</td><td data-label="account">none</td><td data-label="runtime">Go CLI</td><td data-label="cost">free, MIT</td></tr>
+            <tr><th scope="row"><a href="#basic-memory">Basic Memory</a></th><td data-label="runs">your computer; a hosted version is opt-in</td><td data-label="account">none locally</td><td data-label="runtime">Python 3.12+</td><td data-label="cost">AGPL-3.0; hosted plan paid</td></tr>
+            <tr><th scope="row"><a href="#agentmemory">agentmemory</a></th><td data-label="runs">your computer</td><td data-label="account">none</td><td data-label="runtime">Node + its own engine</td><td data-label="cost">free, Apache-2.0</td></tr>
+            <tr><th scope="row"><a href="#mem0-zep">Mem0 / Zep</a></th><td data-label="runs">cloud-first, with self-hosted paths</td><td data-label="account">yes, for the cloud services</td><td data-label="runtime">SaaS, or services you host</td><td data-label="cost">free tiers and paid plans; open-source cores</td></tr>
+            <tr><th scope="row"><a href="#supermemory">Supermemory</a></th><td data-label="runs">cloud-first; a closed-source local binary</td><td data-label="account">yes, for the cloud</td><td data-label="runtime">SaaS</td><td data-label="cost">free tier, then $19 to $399 a month</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
+
+    <div class="cmp-block rv" id="keeps">
+      <h3>What it keeps, and how agents share it</h3>
+      <p class="cmp-lede">Who decides what is remembered, how it is forgotten, and whether several agents can divide work through it.</p>
+      <div class="dtable-wrap">
+        <table class="dtable cmp">
+          <thead><tr><th scope="col">Tool</th><th scope="col">What it stores</th><th scope="col">Forgetting</th><th scope="col">Agents working together</th></tr></thead>
+          <tbody>
+            <tr class="self"><th scope="row">Seamless</th><td data-label="stores">what an agent or you chose to write down, as markdown files; SQLite indexes them and holds sessions, tasks and events</td><td data-label="forgetting">replaced, never overwritten; the gardener proposes, you approve</td><td data-label="together">a ready-queue with lease claiming, shared plans and repo locks, across clients</td></tr>
+            <tr><th scope="row">Built-in memory</th><td data-label="stores">notes the model writes: a <code>MEMORY.md</code> index and topic files per repository (Claude Code); generated memory files (Codex)</td><td data-label="forgetting">the model prunes; you can edit or reset</td><td data-label="together">none; Claude Code&rsquo;s is not loaded into subagents</td></tr>
+            <tr><th scope="row">Agent Teams</th><td data-label="stores">a team&rsquo;s config, mailboxes and task list under <code>~/.claude</code></td><td data-label="forgetting">team config removed when the session ends; the task list stays on disk</td><td data-label="together">shared task list, file-locked claims, dependencies, messages, within one team</td></tr>
+            <tr><th scope="row">claude-mem</th><td data-label="stores">observations and summaries a second agent writes from session activity, in SQLite and Chroma</td><td data-label="forgetting">none documented</td><td data-label="together">none locally; a shared team workspace is a hosted, opt-in option</td></tr>
+            <tr><th scope="row">Anthropic platform memory</th><td data-label="stores">files the model writes, in storage you control or in versioned memory stores</td><td data-label="forgetting">the model edits; every store change is versioned</td><td data-label="together">one store can be attached to many sessions</td></tr>
+            <tr><th scope="row">Beads</th><td data-label="stores">issues with dependencies, in a Dolt database under <code>.beads/</code></td><td data-label="forgetting">summarizes old closed issues</td><td data-label="together">dependency graph, <code>bd ready</code>, atomic <code>--claim</code></td></tr>
+            <tr><th scope="row">Basic Memory</th><td data-label="stores">markdown notes with a local SQLite index</td><td data-label="forgetting">you edit or delete</td><td data-label="together">none; hosted Teams shares notes</td></tr>
+            <tr><th scope="row">agentmemory</th><td data-label="stores">automatically captured memories in its own store, with an Obsidian export</td><td data-label="forgetting">automatic decay, TTLs and eviction</td><td data-label="together">shared or isolated agent scopes</td></tr>
+            <tr><th scope="row">Mem0 / Zep</th><td data-label="stores">facts extracted from conversations, in a vector store or a temporal knowledge graph</td><td data-label="forgetting">automatic consolidation; outdated facts invalidated over time</td><td data-label="together">none: memory APIs for your own app</td></tr>
+            <tr><th scope="row">Supermemory</th><td data-label="stores">a cloud memory graph fed by connectors and plugins</td><td data-label="forgetting">automatic expiry and contradiction handling</td><td data-label="together">none documented</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="cmp-block rv" id="privacy">
+      <h3>Privacy and security</h3>
+      <p class="cmp-lede">What leaves your computer without you asking, what keeps one project&rsquo;s memory from another, and what stands between a poisoned memory and your next session. Memory poisoning is real enough that Anthropic&rsquo;s own memory docs warn a successful prompt injection can write content later sessions read as trusted memory.</p>
+      <div class="dtable-wrap">
+        <table class="dtable cmp">
+          <thead><tr><th scope="col">Tool</th><th scope="col">Leaves your computer by default</th><th scope="col">Isolation and access</th><th scope="col">Against planted memories</th></tr></thead>
+          <tbody>
+            <tr class="self"><th scope="row">Seamless</th><td data-label="leaves">an anonymous update check; text goes to a model provider only if you add one</td><td data-label="isolation">confidential and sealed projects; locked projects open only with your Touch ID, passkey or password; callers named by their OS account</td><td data-label="planted">optional write screening holds suspicious writes for you; provenance marks; files changed outside it are quarantined</td></tr>
+            <tr><th scope="row">Built-in memory</th><td data-label="leaves">the files stay local; their text goes to the model as context</td><td data-label="isolation">one directory per repository</td><td data-label="planted">the client&rsquo;s general prompt-injection defenses</td></tr>
+            <tr><th scope="row">Agent Teams</th><td data-label="leaves">team state stays local</td><td data-label="isolation">teammates run in the lead&rsquo;s permission mode</td><td data-label="planted">a teammate&rsquo;s message cannot approve an action for you</td></tr>
+            <tr><th scope="row">claude-mem</th><td data-label="leaves">session activity goes to the provider you pick for compression; anonymous usage analytics are on until you turn them off</td><td data-label="isolation"><code>&lt;private&gt;</code> tags keep text out of storage</td><td data-label="planted">none documented</td></tr>
+            <tr><th scope="row">Anthropic platform memory</th><td data-label="leaves">Managed Agents stores are held by Anthropic; the memory tool keeps files where you put them</td><td data-label="isolation">workspace-scoped stores; read-only attachment</td><td data-label="planted">read-only stores and versions; the docs warn of the risk</td></tr>
+            <tr><th scope="row">Beads</th><td data-label="leaves">nothing; it syncs to a git remote you name</td><td data-label="isolation">none documented</td><td data-label="planted">none documented</td></tr>
+            <tr><th scope="row">Basic Memory</th><td data-label="leaves">anonymous usage events, on by default (no file contents)</td><td data-label="isolation">separate projects</td><td data-label="planted">none documented</td></tr>
+            <tr><th scope="row">agentmemory</th><td data-label="leaves">nothing unless you add a model provider</td><td data-label="isolation">a shared secret; per-agent scopes</td><td data-label="planted">strips secrets and private tags</td></tr>
+            <tr><th scope="row">Mem0 / Zep</th><td data-label="leaves">yes: the cloud services hold your data</td><td data-label="isolation">enterprise compliance (SOC 2, HIPAA) on paid tiers</td><td data-label="planted">none documented</td></tr>
+            <tr><th scope="row">Supermemory</th><td data-label="leaves">yes: the cloud service holds your data</td><td data-label="isolation">access by tag; compliance on higher tiers</td><td data-label="planted">none documented</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="cmp-foot"># checked against each project&rsquo;s own docs, README or pricing page, November 2026. Got yours wrong? <a href="https://github.com/arctop/seamless/issues">Open an issue</a> and we&rsquo;ll fix it. Seamless&rsquo;s own model, limits included, is on the <a href="../security/">security page</a>.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ THE FIELD -->
+<section class="chapter" id="field" data-chapter="field">
+  <div class="wrap">
+    <header class="ch-head">
+      <p class="ch-mark"><em>ii.</em> the field</p>
+      <h2 class="h2 rv">Every close alternative, taken seriously.</h2>
+      <p class="lede rv">What each one is, where the line between us actually sits, and when to pick it instead of us.</p>
+    </header>
+    <div class="field">
+
+      <article class="entry" id="built-in">
+        <h3>Claude Code and Codex built-in memory</h3>
+        <p class="what">the memory you already have</p>
+        <p>Claude Code keeps an auto memory, on by default in local sessions: notes Claude writes about your corrections and preferences, as a <code>MEMORY.md</code> index plus topic files, one directory per repository under <code>~/.claude/projects</code>. The first 200 lines of the index load into every session. It is plain markdown on your own disk, which is exactly right, and it costs nothing. Codex has memories too, off by default. If you have never set anything up, this is the baseline Seamless has to beat.</p>
+        <p>The line is reach. Built-in memory is one client&rsquo;s notes about one repository on one computer, and Claude Code does not load it into subagents. Seamless is the same idea widened: one store that Claude Code, Codex and the Claude app all read and write, with kinds and replacement, a task queue and claiming for agents running side by side, fences between projects, and locks that need your approval. Nothing stops you from running both.</p>
+        <div class="choose"><b>choose it instead if</b><p>You use one client, in one repository at a time, on one computer, and notes the model keeps for itself are enough.</p></div>
+      </article>
+
+      <article class="entry" id="agent-teams">
+        <h3>Claude Code&rsquo;s Agent Teams</h3>
+        <p class="what">first-party coordination inside a session</p>
+        <p>Agent Teams are Claude Code&rsquo;s own answer to parallel agents, still marked experimental and off until you enable them. A lead session spawns teammates, each in its own context window; they share a task list with pending, in-progress and completed states, claim tasks under a file lock so two cannot grab the same one, honor dependencies, and message each other directly. It is real coordination, first-party, and included.</p>
+        <p>The line is lifetime and reach. A team belongs to one session: one team per session, no nested teams, and the team&rsquo;s config is removed when the session ends. Nothing reaches an agent that is not Claude. Seamless is the layer underneath: a claim outlives the team, a plan outlives the week, and a Codex agent can read what a Claude agent wrote.</p>
+        <div class="choose"><b>choose it instead if</b><p>Everything you need coordinated happens inside one Claude Code session and nothing has to outlive it.</p></div>
+      </article>
+
+      <article class="entry" id="claude-mem">
+        <h3>claude-mem</h3>
+        <p class="what">transcript memory for Claude Code and friends</p>
+        <p>claude-mem has the biggest community in the space, by a distance, and earns it: install it and it works. Hooks watch your sessions, a second agent turns their activity into short observations and a summary, and future sessions start with that context. It stores everything in SQLite and Chroma under <code>~/.claude-mem</code>, is Apache-2.0, and now captures from Codex, Cursor and other clients too. Cloud sync, a hosted observer and a shared team workspace are opt-in extras.</p>
+        <p>The difference is what gets remembered, and who decides. claude-mem keeps a compressed record of what happened, at the summarizer&rsquo;s judgment. Seamless keeps what an agent or you deliberately wrote down, as a constraint, a decision or a runbook you can open in an editor, with replacement instead of compression. claude-mem&rsquo;s compression sends session activity to the model provider you pick, and its anonymous usage analytics are on until you turn them off; Seamless sends nothing to a provider unless you add one. And memory is claude-mem&rsquo;s whole surface locally: no task queue, no claiming, no plans.</p>
+        <div class="choose"><b>choose it instead if</b><p>You want effortless recall of what past sessions did, today, with the largest community behind it, and you don&rsquo;t need shared tasks or a store you author yourself.</p></div>
+      </article>
+
+      <article class="entry" id="anthropic-memory">
+        <h3>Anthropic&rsquo;s platform memory</h3>
+        <p class="what">memory for agents you build on the Claude API</p>
+        <p>If you build agents on the Claude Developer Platform, Anthropic offers two kinds of memory. The memory tool lets your agent read and write files in storage you control. Managed Agents add memory stores: workspace-scoped collections that Anthropic holds, mounted into each session&rsquo;s sandbox, attachable to many sessions, read-only when you choose, and versioned on every change. The docs are candid that a prompt injection can write into a read-write store, and recommend read-only attachment for anything the agent need not change.</p>
+        <p>It solves a different problem. Its customer is a developer building an agent product; Seamless is for the agents you run on your own repositories and in your own Claude app. The Claude apps&rsquo; chat memory is something else again, and <a href="../claude-app/#memory">Seamless in the Claude app</a> sets that one beside Seamless, row by row.</p>
+        <div class="choose"><b>choose it instead if</b><p>You are building an agent on the Claude API and want memory managed with it.</p></div>
+      </article>
+
+      <article class="entry" id="beads">
+        <h3>Beads</h3>
+        <p class="what">a git-native issue graph for coding agents</p>
+        <p>Beads is the closest thing to Seamless&rsquo;s task queue, and a good one: a Go CLI that keeps issues in a versioned Dolt database inside your repository, with blocking dependencies, <code>bd ready</code> for what can start, and an atomic <code>--claim</code> so two agents never take the same task. It syncs through your git remote, is MIT-licensed, and has a large following.</p>
+        <p>It tracks the work. Seamless tracks the work and the knowledge around it: the plan&rsquo;s steps and claims, plus the constraints, decisions and runbooks every session is briefed with, recall across all of it, and fences and locks around the projects that need them.</p>
+        <div class="choose"><b>choose it instead if</b><p>A dependency-aware queue in the repository is all you need, and the knowledge can live in your docs.</p></div>
+      </article>
+
+      <article class="entry" id="basic-memory">
+        <h3>Basic Memory</h3>
+        <p class="what">markdown notes as an AI&rsquo;s memory</p>
+        <p>Basic Memory shares Seamless&rsquo;s central bet: the memory is markdown files on your disk, and SQLite is only an index you can rebuild. It is a Python MCP server, AGPL-licensed, with an optional hosted version and a shared Teams workspace. Its anonymous usage events are on by default, carry no file contents, and one variable turns them off.</p>
+        <p>The difference is everything around the notes. Basic Memory is a knowledge base an assistant reads and writes. Seamless adds what a fleet of agents needs from one: a briefing at every session start, kinds and replacement, a task queue with claiming, and walls between projects.</p>
+        <div class="choose"><b>choose it instead if</b><p>You want a markdown knowledge base for one assistant, and coordination is not your problem.</p></div>
+      </article>
+
+      <article class="entry" id="agentmemory">
+        <h3>agentmemory</h3>
+        <p class="what">the feature-maximal local memory runtime</p>
+        <p>agentmemory is the most feature-dense local memory system in the field, and on raw memory features it out-ships us: hybrid retrieval, a dozen hooks, more than fifty MCP tools, consolidation and session replay. It runs locally, embeds offline, and is Apache-2.0.</p>
+        <p>The disagreement is philosophical. agentmemory automates the lifecycle: decay curves, TTLs and eviction decide what fades, and its own store is the source of truth, with Obsidian export as a view. Seamless holds the opposite bet: markdown files are the truth, forgetting is a proposal you approve, and the system stays small enough to read.</p>
+        <div class="choose"><b>choose it instead if</b><p>You want the most automated local memory available, and you are comfortable letting a decay curve do the forgetting.</p></div>
+      </article>
+
+      <article class="entry" id="mem0-zep">
+        <h3>Mem0 and Zep</h3>
+        <p class="what">memory engines for products you build</p>
+        <p>Mem0 and Zep are serious infrastructure: SDKs and APIs that give the product you are building per-user memory. Mem0 extracts facts from conversations into a vector store; Zep builds a temporal knowledge graph, on its open-source Graphiti engine, that knows when a fact stopped being true. Both are cloud-first with self-hosted paths, and both sell compliance to companies.</p>
+        <p>They solve a different problem than Seamless does. Their customer is a developer shipping an app whose users need memory at scale. Seamless is for the agents you run, on your computer, with no account anywhere.</p>
+        <div class="choose"><b>choose them instead if</b><p>You are building a product whose users need memory. That is what they are for.</p></div>
+      </article>
+
+      <article class="entry" id="supermemory">
+        <h3>Supermemory</h3>
+        <p class="what">a memory API for your whole digital life</p>
+        <p>Supermemory&rsquo;s scope is the widest here: a memory for you and your company, fed by connectors for email, drives and notes, with plugins for Claude Code, Cursor and others included on every plan. It runs as a cloud service; a free local binary exists for smaller stores, and its engine is not open source.</p>
+        <p>That breadth is the trade. Seamless is narrow on purpose: the agents and Claude chats you run, the knowledge they write down on purpose, and their division of labor, kept on your own computer. If your question is what should ingest my email and documents on its own, that was never ours.</p>
+        <div class="choose"><b>choose it instead if</b><p>You want one memory across your tools and your life, and a cloud service holding it is acceptable.</p></div>
+      </article>
+
+    </div>
+    <aside class="cmp-aside"><b>Not listed, and why.</b> Letta now builds a coding agent of its own around git-backed memory, so it is a different kind of tool. Cognee and Graphiti are knowledge-graph engines for applications. Serena&rsquo;s memories serve its code-intelligence toolkit. ByteRover&rsquo;s open-source CLI is archived, Pieces captures your whole operating system, and Dosu has moved from team knowledge to agent productivity. If you are choosing between one of them and Seamless, you are probably still deciding what you are building; this page is for deciding what your agents should share.</aside>
+  </div>
+</section>
+
+<!-- ================================================================ CTA -->
+<section class="chapter" id="try">
+  <div class="wrap">
+    <header class="ch-head" style="margin-bottom:0">
+      <p class="ch-mark">see for yourself</p>
+      <h2 class="h2 rv">The folder is the argument.</h2>
+      <p class="lede rv">Install it, run two sessions, then open <code>~/.seamless/memory</code> and read what got written.</p>
+      <div class="cta-row rv">
+        <a class="lnk" href="../#quickstart">Install <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+        <a class="lnk" href="../security/">The security model <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+        <a class="lnk" href="../docs/">Docs <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      </div>
+    </header>
   </div>
 </section>
 
 </main>
 
 <footer class="site-foot">
-  <div class="wrap">
-    <div class="fm">
-      <a class="brand" href="../" aria-label="Seamless home"><svg class="brand-mark" viewBox="0 0 32 32" width="26" height="26" aria-hidden="true" focusable="false"><circle cx="16" cy="16" r="8.6" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M6.2 25.8 24.6 7.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><circle cx="25.6" cy="6.4" r="2.6" style="fill:var(--mark-star,currentColor)"/></svg><span class="brand-word">seamless</span></a>
-      <p class="tagline">No seams. No spoons.</p>
-      <p class="colophon">Seamless is published by <a href="https://arctop.com">Arctop</a>. Set in Fraunces, Instrument Sans &amp; IBM Plex Mono, self-hosted (<a href="../static/fonts/OFL-NOTICE.txt">OFL</a>). No trackers, no cookies, no CDNs - this page is a static file. Naturally, it's <a href="https://github.com/arctop/seamless/tree/main/docs">in the repo</a>.</p>
+  <div class="wrap foot-grid">
+    <div class="foot-brand">
+      <a class="brand" href="../" aria-label="Seamless home">
+        <svg class="brand-mark" aria-hidden="true"><use href="#i-mark"/></svg>
+        <span class="brand-word">seamless</span>
+      </a>
+      <p class="foot-tag">No seams. No spoons.</p>
+      <p class="colophon">Seamless is published by <a href="https://arctop.com">Arctop</a>. Set in Fraunces, Instrument Sans &amp; IBM Plex Mono, self-hosted (<a href="../static/fonts/OFL-NOTICE.txt">OFL</a>). No trackers, no cookies, no CDNs: this page is a static file. Naturally, it&rsquo;s <a href="https://github.com/arctop/seamless/tree/main/docs">in the repo</a>.</p>
     </div>
-    <nav aria-label="Footer">
+    <nav class="foot-nav" aria-label="Footer">
       <div>
         <b>Project</b>
         <a href="../">Home</a>
         <a href="../docs/">Docs</a>
+        <a href="../security/">Security</a>
         <a href="https://github.com/arctop/seamless">GitHub</a>
         <a href="https://github.com/arctop/seamless/issues">Issues</a>
       </div>
       <div>
         <b>On this page</b>
-        <a href="#table">At a glance</a>
+        <a href="#glance">At a glance</a>
+        <a href="#built-in">Built-in memory</a>
         <a href="#agent-teams">Agent Teams</a>
         <a href="#claude-mem">claude-mem</a>
-        <a href="#mem0-zep">Mem0 / Zep</a>
+        <a href="#beads">Beads</a>
       </div>
     </nav>
   </div>
 </footer>
 
-<script src="../static/site.js?v=c88feb8d"></script>
+<script src="../static/site.js?v=4b8fbf31"></script>
+<script src="../static/page.js?v=218340c4"></script>
 <script src="../static/webmcp.js?v=c9b44136"></script>
 </body>
 </html>

@@ -15,9 +15,16 @@ claude-app/index.html   hand-written page for people who use Claude in the
                         research, writing, consulting). Built on the landing's
                         home.css (same header, rail, chapters, steps, FAQ,
                         finale, footer) plus an inline <style> for its own
-                        pieces and an inline script for the shared motion;
-                        it does not load home.js, which drives the landing's
-                        own sections
+                        pieces; its motion is static/page.js. It does not load
+                        home.js, which drives the landing's own sections
+security/index.html     hand-written security and privacy page: the short
+                        version, what leaves the computer, how far a tricked
+                        agent gets (with the console's Privacy plans), the five
+                        layers, verified updates, networked setups, the
+                        limits, and how to report a vulnerability. home.css +
+                        page.js + an inline <style>, like claude-app/
+compare/index.html      hand-written comparison hub, on home.css + page.js
+                        like the pages above (it no longer loads site.css)
 CNAME                   custom domain: thereisnospoon.org
 .nojekyll               disable Jekyll (it would skip our _-prefixed paths); the
                         Actions deploy runs no Jekyll either
@@ -56,16 +63,22 @@ static/home.js          the landing page's motion and interactive pieces: the
                         the local-only "welcome back"
                         briefing (localStorage key seamless.visit)
 static/scenes-player.js animates the verbatim scenes.js transcripts (landing only)
-static/site.css         shared stylesheet for the docs, /compare/ and the
-                        scenario pages (the landing page no longer loads it)
-static/site.js          theme toggle, OS switch, copy buttons, phone menu,
-                        scroll reveals (no deps; shared by landing + compare +
-                        scenario pages)
+static/site.css         shared stylesheet for the docs and the scenario pages
+                        (the landing, /compare/, /claude-app/ and /security/
+                        load home.css instead)
+static/site.js          theme toggle, OS switch, the plain/technical reading
+                        switch, copy buttons, phone menu, scroll reveals (no
+                        deps; shared by every hand-written page)
+static/page.js          the shared motion of the hand-written pages other than
+                        the landing: header and progress line, chapter rail,
+                        headline rise, tablists, the matter chart, the copy
+                        burst
 static/webmcp.js        WebMCP tools for browser agents: search the docs, read
                         any page as markdown, list the agent endpoints; loaded
                         by every page, a no-op without a model context
 static/favicon.svg      the Seamless mark (an empty set)
-static/shots/           console screenshots, dark + light (see below)
+static/shots/           console screenshots, dark + light, including the
+                        Privacy screen's machine plan for /security/ (see below)
 static/og.png           1200x630 social preview card
 static/og-source.html   source for og.png (see below)
 static/fonts/           self-hosted woff2 (OFL, see OFL-NOTICE.txt): Fraunces,
@@ -296,8 +309,13 @@ subcommands (a command spelled with its install path, like
 `~/.local/bin/seamlessd console-open`, is folded to the bare name first),
 copy buttons that copy what they show, asset stamps, canonical, and head tags.
 Its claims about Claude's own memory and the app's surfaces are prose, dated
-"checked October 2026" on the page; recheck them when Anthropic changes the
-app.
+"checked November 2026" on the page; recheck them when Anthropic changes the
+app. The security page (`security/index.html`) is covered the same way:
+assertions 3-6 (commands, copy buttons, asset stamps, canonical, head tags).
+Its claims are prose too, checked against the code and the guides when written;
+recheck them when a layer changes. The reading switch (`data-reading-pick`,
+`.rd-plain` / `.rd-tech`) is shared with the landing's keys chapter: without
+JS both readings show under their labels.
 
 ### Editing the landing page without fooling the gate
 
@@ -384,24 +402,37 @@ together; the script refuses to run when they disagree.
 
 ## Regenerate the console shots
 
-`static/shots/` holds the console screenshots (6 pages x dark/light, WebP).
-They come from a THROWAWAY instance seeded with fictional data by
-`cmd/demoseed` -- never from a live data dir. To re-capture after a console
-change:
+`static/shots/` holds the console screenshots (6 pages x dark/light, WebP,
+plus the Privacy screen's machine plan in two setups). They come from a
+THROWAWAY instance seeded with fictional data by `cmd/demoseed` -- never from a
+live data dir. The Privacy screen prints the daemon's account name and data
+path, so the demo runs a `-tags osusergo` build with `USER=you` and a scratch
+`HOME`; `scripts/branding/README.md` has that recipe, which is the one to
+follow. The short version, to re-capture after a console change:
 
 ```bash
 # 1. seed a throwaway data dir (numbers are tuned; see internal/demokit/data.go)
-go run ./cmd/demoseed -data /tmp/seamless-demo
+mkdir -p /tmp/demo-home
+go run ./cmd/demoseed -data /tmp/demo-home/.seamless
+CGO_ENABLED=0 go build -tags osusergo -o /tmp/seamlessd-demo ./cmd/seamlessd
 
-# 2. serve it on a port that is NOT your live daemon. The optional features ship
-#    off, and a fresh data dir is a new installation -- without all three the
-#    seeded trials, momentum cues, and the Now screen's arcade never render.
-#    A new installation's console also starts at level basic, which hides Now,
-#    Interactions, and Retrieval; the level flag puts every screen back.
-SEAMLESS_DATA_DIR=/tmp/seamless-demo SEAMLESS_ADDR=127.0.0.1:8090 \
+# 2. serve it on a port that is NOT your live daemon, with a throwaway config
+#    (without SEAMLESS_CONFIG, serve loads your LIVE config). The optional
+#    features ship off, and a fresh data dir is a new installation -- without
+#    them the seeded trials, momentum cues, the Now screen's arcade and the
+#    write-screening layer never render. A new installation's console also
+#    starts at level basic, which hides Now, Interactions, and Retrieval; the
+#    level flag puts every screen back. USER and HOME keep your account name
+#    and home path off the Privacy screen.
+touch /tmp/seamless-demo.yaml
+HOME=/tmp/demo-home USER=you SEAMLESS_CONFIG=/tmp/seamless-demo.yaml \
+  SEAMLESS_DATA_DIR=/tmp/demo-home/.seamless SEAMLESS_ADDR=127.0.0.1:8090 \
   SEAMLESS_FEATURES_RESEARCH=1 SEAMLESS_FEATURES_MOMENTUM=1 \
-  SEAMLESS_FEATURES_GAMIFICATION=1 SEAMLESS_CONSOLE_LEVEL=advanced \
-  SEAMLESS_MCP_API_KEY=<any key> ./bin/seamlessd serve
+  SEAMLESS_FEATURES_GAMIFICATION=1 SEAMLESS_FEATURES_SCREENING=1 \
+  SEAMLESS_CONSOLE_LEVEL=advanced SEAMLESS_MCP_API_KEY=<any key> \
+  /tmp/seamlessd-demo serve
+SEAMLESS_CONFIG=/tmp/seamless-demo.yaml SEAMLESS_SERVER_URL=http://127.0.0.1:8090 \
+  SEAMLESS_MCP_API_KEY=<same key> ./bin/seam project isolation homelab confidential --yes
 
 # 3. capture both themes at 1440x900 @2x (Playwright driving installed Chrome)
 SEAMLESS_SHOT_BASE=http://127.0.0.1:8090 SEAMLESS_MCP_API_KEY=<same key> \

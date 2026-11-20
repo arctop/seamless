@@ -35,8 +35,8 @@
 <link rel="preload" as="font" type="font/woff2" href="../static/fonts/fraunces.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="../static/fonts/fraunces-italic.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="../static/fonts/instrument-sans.woff2" crossorigin>
-<script>(function(){var d=document.documentElement,t=localStorage.getItem("theme");if(t)d.dataset.theme=t;var o=localStorage.getItem("os");if(o==="macos"||o==="linux")o="unix";if(o!=="unix"&&o!=="windows")o=/Windows/i.test(navigator.userAgent)?"windows":"unix";d.dataset.os=o;d.className+=" js";})();</script>
-<link rel="stylesheet" href="../static/home.css?v=57defe73">
+<script>(function(){var d=document.documentElement,t=localStorage.getItem("theme");if(t)d.dataset.theme=t;var o=localStorage.getItem("os");if(o==="macos"||o==="linux")o="unix";if(o!=="unix"&&o!=="windows")o=/Windows/i.test(navigator.userAgent)?"windows":"unix";d.dataset.os=o;var r=null;try{r=sessionStorage.getItem("seamless.reading")}catch(e){}d.dataset.reading=r==="tech"?"tech":"plain";d.className+=" js";})();</script>
+<link rel="stylesheet" href="../static/home.css?v=9ca08b5d">
 <style>
 /* /claude-app/ -- Seamless for people who use Claude in the desktop app for
    work that isn't code. The landing's stylesheet (home.css) carries the
@@ -293,6 +293,7 @@ table.vs { width: 100%; border-collapse: collapse; }
         <a href="#setup">Set it up</a>
         <a href="#first-chats">What to say first</a>
         <a href="#questions">Questions</a>
+        <a href="../security/">Security</a>
         <a href="../">For developers</a>
         <a href="../docs/claude-app/">Docs</a>
         <a href="https://github.com/arctop/seamless">GitHub</a>
@@ -304,6 +305,7 @@ table.vs { width: 100%; border-collapse: collapse; }
       <a href="#memory">Claude&rsquo;s memory</a>
       <a href="#files">Your files</a>
       <a href="#questions">Questions</a>
+      <a href="../security/">Security</a>
       <a href="../docs/claude-app/">Docs</a>
     </nav>
     <div class="head-tools">
@@ -336,7 +338,7 @@ table.vs { width: 100%; border-collapse: collapse; }
 <main id="main">
 
 <!-- ================================================================ HERO -->
-<section class="ca-hero" id="top">
+<section class="ca-hero" id="top" data-hero>
   <div class="wrap ca-hero-grid">
     <div class="hero-copy">
       <p class="hero-pre"><svg aria-hidden="true"><use href="#i-mark"/></svg> Seamless for the Claude app</p>
@@ -358,7 +360,7 @@ table.vs { width: 100%; border-collapse: collapse; }
          stars are entries (placed by kind and by age), streaks are chats, and
          a ring marks an entry that was replaced but stays readable. An
          illustration; the names match the Law desk below. -->
-    <figure class="chart" data-chart>
+    <figure class="chart" data-chart="harbor-acquisition">
       <figcaption class="chart-head"><b>harbor-acquisition</b><span class="fence"><svg aria-hidden="true"><use href="#i-lock"/></svg>sealed</span><span class="tag">an illustration</span></figcaption>
 <svg class="chart-svg" viewBox="0 0 560 560" role="img" aria-labelledby="chart-t">
 <title id="chart-t">An illustration of one matter's record as a star chart: each star is an entry placed by kind and by age, a decision replaced today is linked to its replacement, and two chats streak in.</title>
@@ -643,13 +645,13 @@ table.vs { width: 100%; border-collapse: collapse; }
           <tr><th scope="row">keeping work apart</th><td data-col="Claude&rsquo;s memory">Each Claude Project has its own memory</td><td class="us" data-col="Seamless">Projects you can make confidential or sealed, enforced for every tool that connects</td></tr>
           <tr><th scope="row">open items</th><td data-col="Claude&rsquo;s memory">Not part of memory</td><td class="us" data-col="Seamless">Tasks, in order when one waits on another, that outlast the chat</td></tr>
           <tr><th scope="row">taking it with you</th><td data-col="Claude&rsquo;s memory">Ask Claude to write it out</td><td class="us" data-col="Seamless">It&rsquo;s already plain files</td></tr>
-          <tr><th scope="row">setup</th><td data-col="Claude&rsquo;s memory">On by default on Free, Pro, and Max; an owner turns it on for Team and Enterprise</td><td class="us" data-col="Seamless">One command in a terminal, then restart the app</td></tr>
+          <tr><th scope="row">setup</th><td data-col="Claude&rsquo;s memory">On by default on Free, Pro, Max, and Ultra; on Team and Enterprise an owner makes it available, and organizations created since October 31, 2026 start with it on</td><td class="us" data-col="Seamless">One command in a terminal, then restart the app</td></tr>
         </tbody>
       </table>
     </div>
     <div class="vs-after">
       <p class="qs-try rv"><b>Use Claude&rsquo;s memory alone if</b> you work on the web or your phone as much as on the desktop, you&rsquo;d rather install nothing, and automatic memory covers what you need to carry between chats.</p>
-      <p class="fine rv">Claude&rsquo;s memory as Anthropic&rsquo;s help center describes it, checked October 2026. Anthropic doesn&rsquo;t offer it to organizations under HIPAA, public-sector, or custom data-retention agreements. Something out of date? <a href="https://github.com/arctop/seamless/issues">Open an issue</a>.</p>
+      <p class="fine rv">Claude&rsquo;s memory as Anthropic&rsquo;s help center describes it, checked November 2026. Anthropic doesn&rsquo;t offer it to organizations with HIPAA or public-sector agreements. Something out of date? <a href="https://github.com/arctop/seamless/issues">Open an issue</a>.</p>
     </div>
   </div>
 </section>
@@ -660,7 +662,7 @@ table.vs { width: 100%; border-collapse: collapse; }
     <header class="ch-head">
       <p class="ch-mark"><em>iv.</em> your files</p>
       <h2 class="h2 rv">Every entry is a file on your own computer.</h2>
-      <p class="lede rv">Seamless is a small program that runs in the background. It has no account and no cloud, sends no usage data, and only answers your own machine. This is the entry Harbor&rsquo;s chat replaced today, still on disk and marked with what replaced it.</p>
+      <p class="lede rv">Seamless is a small program that runs in the background. It has no account and no cloud, sends no usage data, and only answers your own computer, or the other computers you pair with it. This is the entry Harbor&rsquo;s chat replaced today, still on disk and marked with what replaced it.</p>
     </header>
     <div class="folder-grid">
       <div class="file-cell" data-file>
@@ -692,7 +694,7 @@ table.vs { width: 100%; border-collapse: collapse; }
         <ul class="points">
           <li class="rv"><b>Your chats still go to Anthropic.</b> When Claude reads an entry into a conversation, that text becomes part of the chat and is handled like everything else you type, under your Claude plan&rsquo;s terms. Seamless doesn&rsquo;t change what Anthropic receives or keeps.</li>
           <li class="rv"><b>Search stays on your machine unless you change it.</b> Out of the box, search is keyword-only and offline. Search by meaning is optional: with an OpenAI key, the text of your entries is sent to OpenAI to be indexed; with Ollama, it stays on your computer.</li>
-          <li class="rv"><b>The walls are between conversations.</b> A sealed project keeps one client&rsquo;s record out of another client&rsquo;s chats. It isn&rsquo;t a lock: anyone who can sign in to your computer account can open the folder.</li>
+          <li class="rv"><b>The walls are between conversations.</b> A sealed project keeps one client&rsquo;s record out of another client&rsquo;s chats. On its own it isn&rsquo;t a lock: anyone who can sign in to your computer account can open the folder. For a matter that needs one, Seamless can run in an account of its own and lock the project, so it opens only when you approve with Touch ID, a passkey, or your password. <a href="../security/">How that works</a>.</li>
           <li class="rv"><b>No compliance claims.</b> Whether this setup fits your professional obligations is a judgment for you, or for your firm.</li>
         </ul>
       </div>
@@ -732,7 +734,8 @@ table.vs { width: 100%; border-collapse: collapse; }
             <div class="qs-out" data-os-block="unix">
 <p class="qs-out-h">what it prints, abridged (Mac)</p>
 <p>checksum     ok</p>
-<p>warning: cosign not found -- archive verified by checksum only.</p>
+<p>warning: cosign not found -- skipping the Sigstore check of checksums.txt; the owner's signature is still checked.</p>
+<p>owner        ok (owner-yk1)</p>
 <p>installed    /Users/you/.local/bin/seamlessd, /Users/you/.local/bin/seam</p>
 <p class="qs-out-gap">&hellip;</p>
 <p>service      com.arctop.seamless (launchd)</p>
@@ -743,7 +746,8 @@ table.vs { width: 100%; border-collapse: collapse; }
             <div class="qs-out" data-os-block="windows">
 <p class="qs-out-h">what it prints, abridged (Windows)</p>
 <p>checksum     ok</p>
-<p>WARNING: cosign not found -- archive verified by checksum only.</p>
+<p>WARNING: cosign not found -- skipping the Sigstore check of checksums.txt; the owner's signature is still checked.</p>
+<p>owner        ok (owner-yk1)</p>
 <p>installed    C:\Users\you\.local\bin\seamlessd.exe, C:\Users\you\.local\bin\seam.exe</p>
 <p class="qs-out-gap">&hellip;</p>
 <p>service      Seamless (Scheduled Task, at logon)</p>
@@ -751,10 +755,10 @@ table.vs { width: 100%; border-collapse: collapse; }
 <p class="qs-out-gap">&hellip;</p>
 <p>chat in the Claude app -- the seamless MCP tools load after an app restart</p>
             </div>
-            <p class="qs-note">It checks the download against its published checksum, installs Seamless for your user only, starts it in the background, and connects the Claude app. If it also finds Claude Code or Codex, it asks which to connect; pressing Return keeps what it found.</p>
+            <p class="qs-note">First it asks two questions, and pressing Return answers both: <b>Standalone</b>, for everything on this computer, and <b>Fresh</b>, for a new, empty record. Then it checks the download against checksums the maintainer signed with a hardware key, installs Seamless for your user only, starts it in the background, and connects the Claude app. If it also finds Claude Code or Codex, it asks which to connect; pressing Return keeps what it found.</p>
             <details class="what">
               <summary class="what-s">Two lines that look like problems, and aren&rsquo;t</summary>
-              <p>The cosign warning means an optional signing tool isn&rsquo;t installed; the download still matched its published checksum. On a Mac it may also suggest adding a folder to your PATH, which the Claude app doesn&rsquo;t need. The installer is <a href="../install">one readable script</a> (<a href="../install.ps1">PowerShell</a>), if you&rsquo;d like to look first.</p>
+              <p>The cosign warning means an optional signing tool isn&rsquo;t installed; the download still matched checksums the maintainer signed, which the <code>owner ok</code> line confirms. On a Mac it may also suggest adding a folder to your PATH, which the Claude app doesn&rsquo;t need. The installer is <a href="../install">one readable script</a> (<a href="../install.ps1">PowerShell</a>), if you&rsquo;d like to look first.</p>
             </details>
           </div>
         </li>
@@ -965,7 +969,7 @@ table.vs { width: 100%; border-collapse: collapse; }
       </details>
       <details class="rv">
         <summary>Can my team share it?</summary>
-        <div class="a"><p>It&rsquo;s set up for one person on one computer. A trusted team can <a href="../docs/guides/network-install/">share one copy over a network</a>, but there are no per-person permissions: everyone with access sees everything.</p></div>
+        <div class="a"><p>It&rsquo;s set up for one person, on one computer or a few of their own. A trusted team can <a href="../docs/guides/network-install/">share one copy over a network</a>, and then everyone with access sees every open project. A locked project still opens only with your approval, and a separate account on the computer can be limited to the projects you list (<a href="../security/">the security page</a> has the details).</p></div>
       </details>
       <details class="rv">
         <summary>Does it work on Windows?</summary>
@@ -1023,6 +1027,7 @@ table.vs { width: 100%; border-collapse: collapse; }
         <b>Project</b>
         <a href="../">Home</a>
         <a href="../docs/">Docs</a>
+        <a href="../security/">Security</a>
         <a href="../compare/">Compare</a>
         <a href="../docs/changelog/">Changelog</a>
         <a href="https://github.com/arctop/seamless">GitHub</a>
@@ -1039,252 +1044,8 @@ table.vs { width: 100%; border-collapse: collapse; }
   </div>
 </footer>
 
-<script src="../static/site.js?v=c88feb8d"></script>
+<script src="../static/site.js?v=4b8fbf31"></script>
 <script src="../static/webmcp.js?v=c9b44136"></script>
-<script>
-/* The page's motion and its few interactive pieces. home.js drives the
-   landing's own sections (its sky, the week, the orbit, the welcome-back
-   briefing) and is not loaded here; the shared behaviors below follow it:
-   the header and progress line, the chapter rail, the headline rise, the
-   copy burst. site.js still owns the theme, the OS switch, the copy buttons,
-   and the .rv reveal. Without JS the page reads complete. */
-(function () {
-  "use strict";
-  var root = document.documentElement;
-  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  function $(s, c) { return (c || document).querySelector(s); }
-  function $$(s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)); }
-  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
-  function onceVisible(el, cb, threshold) {
-    if (!("IntersectionObserver" in window)) { cb(); return; }
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) { if (e.isIntersecting) { io.disconnect(); cb(); } });
-    }, { threshold: threshold || 0.25 });
-    io.observe(el);
-  }
-  var announcer = $("#announce");
-  function say(text) {
-    if (!announcer) return;
-    announcer.textContent = "";
-    setTimeout(function () { announcer.textContent = text; }, 60);
-  }
-
-  /* the headline rise and staggered reveals, as on the landing */
-  function splitWords(el) {
-    var i = 0;
-    (function walk(node) {
-      Array.prototype.slice.call(node.childNodes).forEach(function (n) {
-        if (n.nodeType === 3) {
-          var frag = document.createDocumentFragment();
-          n.textContent.split(/(\s+)/).forEach(function (part) {
-            if (!part) return;
-            if (/^\s+$/.test(part)) { frag.appendChild(document.createTextNode(part)); return; }
-            var w = document.createElement("span");
-            w.className = "w";
-            var wi = document.createElement("span");
-            wi.className = "wi";
-            wi.textContent = part;
-            wi.style.setProperty("--i", i++);
-            w.appendChild(wi);
-            frag.appendChild(w);
-          });
-          n.parentNode.replaceChild(frag, n);
-        } else if (n.nodeType === 1) {
-          walk(n);
-        }
-      });
-    })(el);
-  }
-  var groups = new Map();
-  $$(".rv").forEach(function (el) {
-    var n = groups.get(el.parentNode) || 0;
-    el.style.setProperty("--d", Math.min(n, 6) * 90 + "ms");
-    groups.set(el.parentNode, n + 1);
-  });
-  if (!reduced) {
-    $$("[data-split]").forEach(function (el) {
-      splitWords(el);
-      if (el.classList.contains("h1")) {
-        var go = function () { setTimeout(function () { el.classList.add("is-in"); }, 120); };
-        if (document.fonts && document.fonts.ready) document.fonts.ready.then(go); else go();
-        setTimeout(function () { el.classList.add("is-in"); }, 1500);
-      } else {
-        onceVisible(el, function () { el.classList.add("is-in"); }, 0.4);
-      }
-    });
-  }
-
-  /* the header, the progress line, the rail, the horizons, the starfield */
-  var head = $("[data-head]");
-  var progress = head && $(".head-progress i", head);
-  var rail = $(".rail");
-  var railLinks = rail ? $$("a[data-rail]", rail) : [];
-  var railFill = rail && $(".rail-line i", rail);
-  var chapters = $$("[data-chapter]");
-  var horizons = $$(".chapter");
-  var navLinks = $$(".head-nav a[href^='#']");
-  var starfield = $(".starfield");
-  var heroEl = $(".ca-hero");
-  var finaleEl = $(".finale");
-  function onScroll() {
-    var y = window.scrollY || window.pageYOffset;
-    var vh = window.innerHeight;
-    if (head) head.classList.toggle("is-solid", y > 24);
-    if (progress) progress.style.setProperty("--p", clamp(y / Math.max(1, root.scrollHeight - vh), 0, 1).toFixed(4));
-    var line = vh * 0.42, cur = -1, frac = 0;
-    for (var i = 0; i < chapters.length; i++) {
-      var r = chapters[i].getBoundingClientRect();
-      if (r.top <= line) { cur = i; frac = clamp((line - r.top) / Math.max(1, r.height), 0, 1); }
-    }
-    for (var c = 0; c < horizons.length; c++) horizons[c].classList.toggle("is-reached", horizons[c].getBoundingClientRect().top <= line);
-    var curId = cur >= 0 ? chapters[cur].id : "";
-    railLinks.forEach(function (a, k) {
-      a.classList.toggle("is-current", k === cur);
-      a.classList.toggle("is-past", k < cur);
-      if (k === cur) a.setAttribute("aria-current", "true"); else a.removeAttribute("aria-current");
-    });
-    if (railFill) railFill.style.setProperty("--fill", clamp((cur + frac) / Math.max(1, chapters.length - 1), 0, 1).toFixed(4));
-    var pastHero = heroEl ? heroEl.getBoundingClientRect().bottom < vh * 0.5 : true;
-    var atEnd = finaleEl ? finaleEl.getBoundingClientRect().top < vh * 0.55 : false;
-    if (rail) rail.classList.toggle("is-on", pastHero && !atEnd && cur >= 0);
-    navLinks.forEach(function (a) { a.classList.toggle("is-current", a.getAttribute("href") === "#" + curId); });
-    if (starfield) {
-      starfield.classList.toggle("is-on", pastHero);
-      if (!reduced) starfield.style.transform = "translate3d(0," + (-y * 0.02).toFixed(1) + "px,0)";
-    }
-  }
-  var ticking = false;
-  function requestScroll() {
-    if (ticking) return;
-    ticking = true;
-    requestAnimationFrame(function () { ticking = false; onScroll(); });
-  }
-  window.addEventListener("scroll", requestScroll, { passive: true });
-  window.addEventListener("resize", requestScroll);
-  onScroll();
-
-  /* the desk switcher and the first-chats index: WAI-ARIA tablists, each
-     panel shown until this hides all but the first */
-  $$("[data-desks], [data-asks]").forEach(function (box) {
-    var tabs = $$('[role="tab"]', box);
-    var pick = function (tab, focus) {
-      tabs.forEach(function (t) {
-        var on = t === tab;
-        t.setAttribute("aria-selected", on ? "true" : "false");
-        t.classList.toggle("active", on);
-        t.tabIndex = on ? 0 : -1;
-        var panel = document.getElementById(t.getAttribute("aria-controls"));
-        panel.hidden = !on;
-        panel.classList.toggle("is-shown", on);
-      });
-      if (focus) tab.focus();
-    };
-    tabs.forEach(function (t, i) {
-      t.addEventListener("click", function () { pick(t, false); });
-      t.addEventListener("keydown", function (ev) {
-        var k = ev.key;
-        var j = k === "ArrowRight" || k === "ArrowDown" ? i + 1
-          : k === "ArrowLeft" || k === "ArrowUp" ? i - 1
-          : k === "Home" ? 0 : k === "End" ? tabs.length - 1 : null;
-        if (j === null) return;
-        ev.preventDefault();
-        pick(tabs[(j + tabs.length) % tabs.length], true);
-      });
-    });
-    tabs.forEach(function (t) { document.getElementById(t.getAttribute("aria-controls")).hidden = t !== tabs[0]; });
-  });
-
-  /* the matter chart: point at a star to read its entry */
-  var chart = $("[data-chart]");
-  if (chart) {
-    var tip = $(".sky-tip", chart);
-    var hot = null;
-    var show = function (st) {
-      if (hot) hot.classList.remove("is-hot");
-      hot = st;
-      st.classList.add("is-hot");
-      tip.textContent = "";
-      var path = document.createElement("p");
-      path.className = "tp-path";
-      path.textContent = "~/.seamless/" + st.getAttribute("data-f") + "/harbor-acquisition/" + st.getAttribute("data-n") + ".md";
-      var kind = document.createElement("span");
-      kind.className = "tp-kind";
-      kind.textContent = st.classList.contains("is-was") ? "decision \u00b7 replaced" : st.getAttribute("data-k");
-      kind.style.background = getComputedStyle(st).color;
-      var desc = document.createElement("p");
-      desc.className = "tp-desc";
-      desc.textContent = st.getAttribute("data-d");
-      tip.appendChild(path); tip.appendChild(kind); tip.appendChild(desc);
-      var cr = chart.getBoundingClientRect(), sr = st.getBoundingClientRect();
-      var x = sr.left + sr.width / 2 - cr.left, y = sr.top + sr.height / 2 - cr.top;
-      var w = tip.offsetWidth, h = tip.offsetHeight;
-      var left = clamp(x + 16, 0, cr.width - w);
-      var top = y - h - 14 < 0 ? y + 16 : y - h - 14;
-      tip.style.transform = "translate(" + left.toFixed(0) + "px," + top.toFixed(0) + "px)";
-      tip.classList.add("is-on");
-    };
-    var hide = function () {
-      if (hot) hot.classList.remove("is-hot");
-      hot = null;
-      tip.classList.remove("is-on");
-    };
-    $$(".c-st", chart).forEach(function (st) {
-      st.addEventListener("pointerenter", function () { show(st); });
-      st.addEventListener("pointerleave", hide);
-      st.addEventListener("click", function (ev) { ev.stopPropagation(); if (hot === st) hide(); else show(st); });
-    });
-    document.addEventListener("click", hide);
-  }
-
-  /* the file: point at a note to light its line */
-  $$(".file-notes li[data-for]").forEach(function (li) {
-    var line = $('.fl[data-note="' + li.getAttribute("data-for") + '"]');
-    if (!line) return;
-    var on = function () { li.classList.add("is-hot"); line.classList.add("is-hot"); };
-    var off = function () { li.classList.remove("is-hot"); line.classList.remove("is-hot"); };
-    li.addEventListener("pointerenter", on);
-    li.addEventListener("pointerleave", off);
-  });
-
-  /* copy confirmations for assistive tech, and the landing's small burst */
-  document.addEventListener("click", function (e) {
-    var btn = e.target.closest(".copy-btn");
-    if (!btn) return;
-    var mo = new MutationObserver(function () {
-      if (btn.classList.contains("ok")) { say("Copied to clipboard"); mo.disconnect(); }
-      else if (btn.classList.contains("sel")) { say("Text selected. Press Command C or Control C to copy it."); mo.disconnect(); }
-    });
-    mo.observe(btn, { attributes: true, attributeFilter: ["class"] });
-    setTimeout(function () { mo.disconnect(); }, 2500);
-    if (reduced) return;
-    var r = btn.getBoundingClientRect();
-    var b = document.createElement("span");
-    b.className = "burst";
-    b.style.left = (r.left + r.width / 2) + "px";
-    b.style.top = (r.top + r.height / 2) + "px";
-    for (var i = 0; i < 9; i++) {
-      var dot = document.createElement("i");
-      dot.style.setProperty("--a", (i * 40 + Math.random() * 18) + "deg");
-      dot.style.setProperty("--r", (22 + Math.random() * 18) + "px");
-      b.appendChild(dot);
-    }
-    document.body.appendChild(b);
-    setTimeout(function () { b.remove(); }, 900);
-  });
-
-  /* the phone menu closes on a tap outside it or on scroll */
-  var nav = $(".nav-menu");
-  if (nav) {
-    document.addEventListener("click", function (e) { if (nav.open && !nav.contains(e.target)) nav.open = false; });
-    window.addEventListener("scroll", function () { if (nav.open) nav.open = false; }, { passive: true });
-  }
-
-  /* the finale's mark draws itself */
-  if (finaleEl && !reduced) {
-    finaleEl.classList.add("is-armed");
-    onceVisible(finaleEl, function () { finaleEl.classList.add("is-in"); }, 0.35);
-  }
-})();
-</script>
+<script src="../static/page.js?v=218340c4"></script>
 </body>
 </html>

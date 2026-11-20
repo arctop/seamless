@@ -13,8 +13,8 @@
 # has never cached, so the fix goes live with the HTML.
 #
 # Run this after editing any of the assets below (the landing page's own
-# home.css/home.js, or the site.css/site.js shared by /compare/ and
-# /claude-app/), then commit the restamped pages. site-check enforces that the stamped hash
+# home.css/home.js, the site.js/page.js shared by /claude-app/, /security/
+# and /compare/, or site.css), then commit the restamped pages. site-check enforces that the stamped hash
 # matches the file.
 
 set -eu
@@ -22,9 +22,9 @@ set -eu
 # Every local script/stylesheet the hand-written pages load by name. Fonts and
 # images are omitted: they change by getting a new filename, not by mutating in
 # place.
-PAGES="docs/index.html docs/compare/index.html docs/claude-app/index.html"
+PAGES="docs/index.html docs/compare/index.html docs/claude-app/index.html docs/security/index.html"
 DIR=docs/static
-ASSETS="home.css home.js site.css site.js scenes.js scenes-player.js webmcp.js"
+ASSETS="home.css home.js site.css site.js page.js scenes.js scenes-player.js webmcp.js"
 
 # First 8 hex of the file's sha256. sha256sum on Linux/CI, shasum on macOS.
 sha8() {

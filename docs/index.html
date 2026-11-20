@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Seamless - your agents share a brain. You can read it.</title>
-<meta name="description" content="Seamless is shared, local-first memory for Claude Code, Codex, the Claude desktop app, and any MCP agent: what one session learns becomes a markdown file on your machine, the next session starts briefed, and parallel agents claim work without colliding.">
+<meta name="description" content="Seamless is shared, local-first memory for Claude Code, Codex, the Claude desktop app, and any MCP agent: what one session learns becomes a markdown file on your computer, the next session starts briefed, parallel agents claim work without colliding, and a sensitive project opens only with your approval.">
 <link rel="canonical" href="https://thereisnospoon.org/">
 <meta name="robots" content="max-image-preview:large, max-snippet:-1">
 <meta property="og:site_name" content="Seamless">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://thereisnospoon.org/">
 <meta property="og:title" content="Seamless - sessions end. What they learned doesn't.">
-<meta property="og:description" content="Shared, local-first memory for your coding agents and your Claude app chats: markdown files you own, a briefing at every session start, and a task queue so parallel agents stop colliding. One command to install, one to uninstall.">
+<meta property="og:description" content="Shared, local-first memory for your coding agents and your Claude app chats: markdown files you own, a briefing at every session start, a task queue so parallel agents stop colliding, and walls between projects that open only with your approval.">
 <meta property="og:image" content="https://thereisnospoon.org/static/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -43,7 +43,7 @@
       "@type": "SoftwareApplication",
       "@id": "https://thereisnospoon.org/#app",
       "name": "Seamless",
-      "description": "Local-first shared memory and task coordination for AI coding agents and Claude desktop app chats. One Go daemon plus CLI, MCP server, and markdown files you own. Hooks for Claude Code and Codex CLI; an MCP bridge for the Claude app.",
+      "description": "Local-first shared memory and task coordination for AI coding agents and Claude desktop app chats. A Go daemon plus CLI, MCP server, and markdown files you own. Hooks for Claude Code and Codex CLI; an MCP bridge for the Claude app. Project fences, write screening, and locked projects that open only with the owner's Touch ID, passkey, or password.",
       "applicationCategory": "DeveloperApplication",
       "operatingSystem": "macOS, Linux, Windows",
       "url": "https://thereisnospoon.org/",
@@ -68,7 +68,7 @@
           "name": "Who decides what gets written?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Your agents do, on purpose: they call the memory_write tool when they learn something worth keeping, prompted by the instructions Seamless gives them. The hooks inject briefings and recall and log each session, but they never write memories on their own. You can edit or delete any file, and the gardener's merges and retirements wait for your approval."
+            "text": "Your agents do, on purpose: they call the memory_write tool when they learn something worth keeping, prompted by the instructions Seamless gives them. The hooks inject briefings and recall and log each session, but they never write memories on their own. You can edit or delete any file, and the gardener’s merges and retirements wait for your approval."
           }
         },
         {
@@ -76,7 +76,7 @@
           "name": "Is it only for code?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "No. The same store works from chats in the Claude desktop app, for work that runs across many conversations: a legal matter, a deal, a study, a manuscript. Claude saves the rules and decisions as plain files on your computer, keeps a replaced decision readable next to its replacement, and can wall one client's project off from the rest. A chat has no hooks, so Claude loads a project when you ask, or when a Claude Project's instructions tell it to, and it works in the desktop app only, not on the web or your phone. Examples at five desks: https://thereisnospoon.org/claude-app/"
+            "text": "No. The same store works from chats in the Claude desktop app, for work that runs across many conversations: a legal matter, a deal, a study, a manuscript. Claude saves the rules and decisions as plain files on your computer, keeps a replaced decision readable next to its replacement, and can wall one client’s project off from the rest. A chat has no hooks, so Claude loads a project when you ask, or when a Claude Project’s instructions tell it to, and it works in the desktop app only, not on the web or your phone. See it at five desks (https://thereisnospoon.org/claude-app/)."
           }
         },
         {
@@ -84,7 +84,7 @@
           "name": "Do I need an OpenAI key?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "No. Without an embeddings provider, recall runs on full-text search alone. Add an OpenAI key to switch on vector search as well, or point Seamless at a local Ollama to keep embeddings on your machine."
+            "text": "No. Without an embeddings provider, recall runs on full-text search alone. Add an OpenAI key to switch on vector search as well, and the text of your memories and notes goes to OpenAI to be embedded. Point Seamless at a local Ollama instead and it all stays on your computer."
           }
         },
         {
@@ -92,7 +92,15 @@
           "name": "Does it phone home?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "No. Localhost bind, a static bearer key, and no product telemetry. The one request it makes on its own is an anonymous look at GitHub's release list, so it can tell you about a new release and update itself; update.check: false turns that off. Embeddings use OpenAI if you add a key, or run fully offline with Ollama. This page has no trackers either: it is a static file, and what it remembers (your theme, your OS pick, how far you read) stays in your own browser."
+            "text": "No. There is no account and no product telemetry. On its own, a release install asks GitHub’s release list for new versions every six hours, anonymously, and downloads the updates it installs; update.check: false turns that off. Text goes to a model provider only if you add one. This page has no trackers either: it is a static file, and what it remembers (your theme, your OS pick, how far you read) stays in your own browser."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What if one of my agents gets tricked?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "That is the case Seamless is built around. Out of the box it runs on your computer and nothing outside it can reach it. Turn on write screening and a write that looks planted, such as hidden instructions or a leaked key, waits for your review instead of reaching the next session. Fence a client’s project and it never shows up in your other work. For the most sensitive work, run Seamless in its own account and lock the project, and even its own agents wait for your Touch ID, passkey, or password. The security page (https://thereisnospoon.org/security/) has the whole model, limits included."
           }
         },
         {
@@ -100,7 +108,7 @@
           "name": "How do I uninstall it?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Run seamlessd uninstall, and preview it first with seamlessd uninstall --dry-run. It stops the service, removes the hooks, the MCP registrations, the skills, and both binaries, and running it twice is harmless. Your memories stay in ~/.seamless and your key in ~/.config/seamless unless you add --purge."
+            "text": "Run seamlessd uninstall, and preview it first with seamlessd uninstall --dry-run. It stops the service, removes the hooks, the MCP registrations, the skills, and both binaries, and running it twice is harmless. Your memories and their daily backups stay in ~/.seamless and your key in ~/.config/seamless unless you add --purge."
           }
         },
         {
@@ -108,15 +116,15 @@
           "name": "Where are the benchmarks?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Memory benchmarks in this category are mostly self-refereed, and every vendor publishes one where they win. The repo ships its scenario harness instead: cmd/seambench runs real Claude Code sessions over a seeded repo with and without Seamless, grades what the agent did, and reports the difference, so you can measure it with your own model. Or start smaller: watch the side-by-side sessions on this page, then read what your agents wrote."
+            "text": "Memory benchmarks in this category are mostly self-refereed, and every vendor publishes one where they win. The repo ships its scenario harness instead: cmd/seambench (https://github.com/arctop/seamless/tree/main/cmd/seambench) runs real Claude Code sessions over a seeded repo with and without Seamless, grades what the agent did, and reports the difference, so you can measure it with your own model. Or start smaller: watch the side-by-side sessions above, then read what your agents wrote."
           }
         },
         {
           "@type": "Question",
-          "name": "Why not just use Anthropic's built-in memory?",
+          "name": "Why not just use Claude Code's built-in memory?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Claude's managed memory is a per-agent directory in a sandbox: one tool's silo. Seamless is shared ground across every agent you run, plus tasks, plans, atomic claiming, and a console, kept as files on your own disk. In the Claude apps, memory is something else again: entries Claude generates from your chats and keeps with your account, one memory per Claude Project. The Claude app page sets that one next to Seamless, row by row: https://thereisnospoon.org/claude-app/#memory"
+            "text": "Claude Code now keeps an auto memory of its own, on by default: markdown notes per repository, on your computer, and a good start. They are one client’s notes about one repo on one machine. Seamless is shared ground for every agent you run, Claude Code, Codex, and the Claude app alike, with tasks, plans, atomic claiming, fences between projects, and a console. Codex has memories too, off by default. The comparison (https://thereisnospoon.org/compare/#built-in) sets them side by side."
           }
         },
         {
@@ -124,7 +132,15 @@
           "name": "Why not just use Claude Code's Agent Teams?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Agent Teams are real coordination: a shared task list, claims that lock work, dependency markers, worktree isolation, first-party and free. But that state lives inside one team, for the life of that team. Close it and the claims, the ordering, and the context are gone. Seamless is the layer underneath. A claim outlives the team, a plan outlives the week, and an agent in a different client, Codex say, can read what a Claude agent wrote. Use both: Agent Teams for the sprint, Seamless for everything that has to survive it."
+            "text": "Agent Teams are real coordination inside Claude Code: a shared task list, claims that lock work, dependencies, and messages between teammates, first-party and still marked experimental. That state belongs to one team in one session. Seamless is the layer underneath. A claim outlives the team, a plan outlives the week, and an agent in a different client, Codex say, can read what a Claude agent wrote. Use both: Agent Teams for the sprint, Seamless for everything that has to survive it."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Why not just use claude-mem?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "claude-mem records what your sessions did: a model compresses their tool activity into summaries, stored in SQLite and Chroma on your computer, and it has the biggest community in the space. Seamless keeps what an agent or you chose to write down, as markdown you can read and edit, with explicit replacement instead of compression, plus the task queue and claiming that let parallel agents divide the work."
           }
         },
         {
@@ -132,23 +148,15 @@
           "name": "Why not just use Mem0 or Zep?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "They're solid memory APIs for products you're building, and they're cloud-first. Seamless is for the agents you run. It lives on your machine, binds to localhost, and needs no account. Different job."
+            "text": "They’re memory engines for products you’re building, cloud-first, with self-hosted paths. Seamless is for the agents you run. It lives on your computer and needs no account. Different job."
           }
         },
         {
           "@type": "Question",
-          "name": "Why not just use Dosu?",
+          "name": "Why not just use Beads?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Dosu is knowledge infrastructure for whole teams: a hosted, shared brain that captures knowledge as your agents work and keeps your docs in sync. If you need a team-wide solution, it's an excellent one. Seamless is the local-first counterpart, aimed at one person and their fleet: files on your own disk, no account, no cloud."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "Why not just use agentmemory?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "agentmemory is a Node.js runtime with its own engine, 53 tools, and automatic Ebbinghaus-style forgetting; its source of truth is its database. Seamless is a self-contained Go daemon plus CLI, durable knowledge lives as markdown files you can put in git, and nothing is forgotten until you approve it."
+            "text": "Beads is the closest thing to Seamless’s task queue: a git-native issue graph with dependencies and atomic claims, as a Go command-line tool. It tracks the work. Seamless tracks the work and the knowledge around it: the plan’s steps and claims, plus the constraints, decisions, and runbooks every session is briefed with. If a queue is all you need, Beads is a fine choice."
           }
         },
         {
@@ -156,7 +164,7 @@
           "name": "Why not just use Supermemory?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Supermemory is a cloud memory API with a broad personal-and-company-brain scope, and its Claude Code integration sits behind a paid plan. Seamless is free, local, and narrowly aimed at one job: the agents and Claude chats you run, sharing one legible brain."
+            "text": "Supermemory is a memory API for your whole digital life, with connectors for email, drives, and notes, run as a cloud service, and plugins for Claude Code and Cursor on every plan. Seamless is narrow on purpose: the agents and Claude chats you run, the knowledge they write down, kept on your own computer."
           }
         }
       ]
@@ -170,8 +178,8 @@
 <link rel="preload" as="font" type="font/woff2" href="static/fonts/fraunces.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="static/fonts/fraunces-italic.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="static/fonts/instrument-sans.woff2" crossorigin>
-<script>(function(){var d=document.documentElement,t=localStorage.getItem("theme");if(t)d.dataset.theme=t;var o=localStorage.getItem("os");if(o==="macos"||o==="linux")o="unix";if(o!=="unix"&&o!=="windows")o=/Windows/i.test(navigator.userAgent)?"windows":"unix";d.dataset.os=o;d.className+=" js";})();</script>
-<link rel="stylesheet" href="static/home.css?v=57defe73">
+<script>(function(){var d=document.documentElement,t=localStorage.getItem("theme");if(t)d.dataset.theme=t;var o=localStorage.getItem("os");if(o==="macos"||o==="linux")o="unix";if(o!=="unix"&&o!=="windows")o=/Windows/i.test(navigator.userAgent)?"windows":"unix";d.dataset.os=o;var r=null;try{r=sessionStorage.getItem("seamless.reading")}catch(e){}d.dataset.reading=r==="tech"?"tech":"plain";d.className+=" js";})();</script>
+<link rel="stylesheet" href="static/home.css?v=9ca08b5d">
 </head>
 <body>
 
@@ -196,6 +204,7 @@
   <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 13.4A8.5 8.5 0 1 1 10.6 3.5a6.6 6.6 0 0 0 9.9 9.9z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
   <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.5v2.2m0 14.6v2.2M4.6 4.6l1.6 1.6m11.6 11.6 1.6 1.6M2.5 12h2.2m14.6 0h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
   <symbol id="i-replay" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.8-6.3M3.5 4v4.2h4.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-fp" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4.2 10.4C5.3 6.6 8.4 4 12 4s6.7 2.6 7.8 6.4"/><path d="M6.4 17.4A9.6 9.6 0 0 1 5.6 13.4a6.4 6.4 0 0 1 12.8 0c0 1.1-.1 2-.3 2.9"/><path d="M9.1 19.6A14 14 0 0 1 8.2 13.6a3.8 3.8 0 0 1 7.6 0c0 2.2-.3 4.1-.9 5.8"/><path d="M12 13.4c0 2.8-.4 5.1-1.2 7.1"/><path d="M14.2 16.6c-.2 1.5-.6 2.8-1.1 4"/></g></symbol>
   <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
 </svg>
 
@@ -210,24 +219,23 @@
     <details class="nav-menu">
       <summary aria-label="Menu"><span></span><span></span></summary>
       <nav class="nav-panel" aria-label="Menu">
-        <a href="#why">The problem</a>
         <a href="#how">How it works</a>
         <a href="#scenes">Demo</a>
-        <a href="#fleet">Fleet</a>
+        <a href="#keys">Your keys</a>
         <a href="#quickstart">Install</a>
-        <a href="#asks">What to ask first</a>
         <a href="#faq">FAQ</a>
+        <a href="security/">Security</a>
+        <a href="compare/">Compare</a>
         <a href="claude-app/">Claude app</a>
         <a href="docs/">Docs</a>
         <a href="https://github.com/arctop/seamless">GitHub</a>
       </nav>
     </details>
     <nav class="head-nav" aria-label="Site">
-      <a href="#why">The problem</a>
       <a href="#how">How it works</a>
       <a href="#scenes">Demo</a>
-      <a href="#fleet">Fleet</a>
-      <a href="#faq">FAQ</a>
+      <a href="security/">Security</a>
+      <a href="compare/">Compare</a>
       <a href="claude-app/">Claude app</a>
       <a href="docs/">Docs</a>
     </nav>
@@ -254,9 +262,10 @@
     <li><a href="#scenes" data-rail="scenes"><span class="rail-dot"></span><span class="rail-label"><em>iii.</em> The proof</span></a></li>
     <li><a href="#fleet" data-rail="fleet"><span class="rail-dot"></span><span class="rail-label"><em>iv.</em> The fleet</span></a></li>
     <li><a href="#legible" data-rail="legible"><span class="rail-dot"></span><span class="rail-label"><em>v.</em> The folder</span></a></li>
-    <li><a href="#console" data-rail="console"><span class="rail-dot"></span><span class="rail-label"><em>vi.</em> The console</span></a></li>
-    <li><a href="#quickstart" data-rail="quickstart"><span class="rail-dot"></span><span class="rail-label"><em>vii.</em> Try it</span></a></li>
-    <li><a href="#asks" data-rail="asks"><span class="rail-dot"></span><span class="rail-label"><em>viii.</em> Day one</span></a></li>
+    <li><a href="#keys" data-rail="keys"><span class="rail-dot"></span><span class="rail-label"><em>vi.</em> The keys</span></a></li>
+    <li><a href="#console" data-rail="console"><span class="rail-dot"></span><span class="rail-label"><em>vii.</em> The console</span></a></li>
+    <li><a href="#quickstart" data-rail="quickstart"><span class="rail-dot"></span><span class="rail-label"><em>viii.</em> Try it</span></a></li>
+    <li><a href="#asks" data-rail="asks"><span class="rail-dot"></span><span class="rail-label"><em>ix.</em> Day one</span></a></li>
   </ol>
   <span class="rail-line" aria-hidden="true"><i></i></span>
 </nav>
@@ -271,7 +280,7 @@
     <div class="hero-copy">
       <p class="hero-pre"><svg aria-hidden="true"><use href="#i-mark"/></svg> Shared memory for coding agents and the Claude app</p>
       <h1 class="h1" data-split>Sessions end. <span class="br"></span>What they learned <span class="br br-wide"></span><em>doesn't.</em></h1>
-      <p class="hero-sub">On Monday your agent fixes the rate limiter. On Tuesday a fresh session &ldquo;tidies up&rdquo; the fix, because nothing told it why. Seamless saves what each session learns as markdown files on your machine and briefs every new session with them, in Claude Code, Codex, and any MCP agent.</p>
+      <p class="hero-sub">On Monday your agent fixes the rate limiter. On Tuesday a fresh session &ldquo;tidies up&rdquo; the fix, because nothing told it why. Seamless saves what each session learns as markdown files on your computer and briefs every new session with them, in Claude Code, Codex, and any MCP agent.</p>
       <div class="hero-act">
         <div class="os-switch" role="group" aria-label="Show the install command for">
           <button type="button" data-os-pick="unix" aria-pressed="false">macOS / Linux</button>
@@ -288,8 +297,9 @@
       </div>
       <ul class="hero-facts">
         <li>MIT licensed</li>
-        <li>Runs on your machine, no account</li>
+        <li>Runs on your computer, no account</li>
         <li>macOS, Linux, Windows</li>
+        <li><a href="#keys">Projects locked behind your approval</a></li>
         <li>One command to uninstall</li>
       </ul>
     </div>
@@ -658,7 +668,7 @@ Read with memory_read before re-deriving.<span class="t-tag">&lt;/seam-recall&gt
 <p class="fl"><span class="k">description:</span> In-memory rate limit on the refresh endpoint resets per instance; use shared storage.</p>
 <p class="fl"><span class="k">project:</span> myapp</p>
 <p class="fl" data-note="super"><span class="k">superseded_by:</span> null</p>
-<p class="fl" data-note="source"><span class="k">source_session:</span> cc/52a41f8a</p>
+<p class="fl" data-note="source"><span class="k">source_session:</span> 01JZFJ3QK7Y2M8D4R6T1VNB5XC</p>
 <p class="fl fl-rule">---</p>
 <p class="fl fl-text" data-note="body">A rate limiter kept in a process map only sees one instance's traffic. myapp runs several instances behind the load balancer, so an attacker's requests fan out across them and each instance sees a fraction of the limit -- the endpoint is effectively unthrottled. Keep the counter in shared storage (Redis) keyed by IP and token family, with a short sliding window.</p>
         </div>
@@ -698,11 +708,146 @@ Read with memory_read before re-deriving.<span class="t-tag">&lt;/seam-recall&gt
   </div>
 </section>
 
-<!-- ================================================================ VI. THE CONSOLE -->
+<!-- ================================================================ VI. THE KEYS -->
+<!-- The security chapter. Two illustrations built from the server's own
+     wording (a held write's reason codes and message, a locked project's
+     recall line and the Touch ID prompt Seamless Approve composes), then the
+     five layers in the console Privacy screen's order, each in two readings:
+     plain words by default, technical terms on request (site.js; without JS
+     both readings show under their labels). home.js plays the two terminals;
+     without JS every line simply shows. -->
+<section class="chapter keys" id="keys" data-chapter="keys">
+  <div class="wrap">
+    <header class="ch-head">
+      <p class="ch-mark"><em>vi.</em> the keys</p>
+      <h2 class="h2 rv">Built for the day an agent gets tricked.</h2>
+      <p class="lede rv">Agents read web pages, issues and email, and any of them can carry instructions an agent will follow. Seamless keeps what your agents know on your own computers and lets you add walls as the work gets more sensitive. The strongest opens a project only when you approve, with Touch ID, a passkey, or your password.</p>
+    </header>
+
+    <div class="keys-duo" data-keys>
+      <figure class="vig">
+        <div class="term term-sm">
+          <p class="term-bar"><span>claude · ~/code/myapp</span><span class="term-tag">an illustration</span></p>
+          <div class="term-body">
+<p class="t-user">&gt; triage issue #482 and save anything we should remember</p>
+<p class="t-tool"><b>●</b> WebFetch <span class="t-arg">github.com/acme/myapp/issues/482</span></p>
+<p class="t-tool"><b>●</b> memory_write <span class="t-arg">ci-skip-signature-check</span></p>
+<p class="t-kv"><span class="k">kind</span> constraint</p>
+<p class="t-held"><span class="t-chip">held</span>session.tainted · instruction.override · hidden.comment</p>
+<p class="t-quote">Held for the owner's review: this write is stored but kept out of briefings, recall and the gardener until the owner releases it on the console's Held screen. Nothing in the corpus changed. …</p>
+<p class="t-say">The issue carried a hidden instruction to save a new CI rule. Seamless held it, so no session will be briefed with it unless you release it from the Held screen.</p>
+          </div>
+        </div>
+        <figcaption><b>A planted rule waits for you.</b> With write screening on, a write that looks planted is held out of every briefing until you release or discard it.</figcaption>
+      </figure>
+
+      <figure class="vig">
+        <div class="term term-sm">
+          <p class="term-bar"><span>claude · ~/code/harbor</span><span class="term-tag">an illustration</span></p>
+          <div class="term-body">
+<p class="t-user">&gt; what did we agree on the indemnity cap?</p>
+<p class="t-tool"><b>●</b> recall <span class="t-arg">indemnity cap</span></p>
+<p class="t-lock"><svg aria-hidden="true"><use href="#i-lock"/></svg>harbor-legal (locked) may hold results</p>
+<p class="t-tool"><b>●</b> access_request <span class="t-arg">harbor-legal</span></p>
+<div class="approve" data-approve>
+  <span class="approve-fp" aria-hidden="true"><svg><use href="#i-fp"/></svg></span>
+  <p class="approve-t">Seamless Approve</p>
+  <p class="approve-p">Seamless Approve is trying to approve <b>read-write access to harbor-legal (sealed)</b> for Claude Code 2.1.319 in session cc/52a41f8a <b>for 1 hour</b>.</p>
+  <p class="approve-btns"><span>Cancel</span><span>Touch ID</span></p>
+</div>
+<p class="t-ok"><svg aria-hidden="true"><use href="#i-check"/></svg>approved for 1 hour · this agent's processes only</p>
+<p class="t-tool"><b>●</b> recall <span class="t-arg">indemnity cap</span></p>
+<p class="t-kv"><span class="k">decision</span> indemnity-cap-1x-fees <span class="t-dim">2d</span></p>
+          </div>
+        </div>
+        <figcaption><b>A locked project waits for your touch.</b> Closed to every agent, its own included, until you approve one, for as long as you choose.</figcaption>
+      </figure>
+    </div>
+    <p class="keys-replay"><button class="board-replay" type="button" data-keys-replay hidden><svg aria-hidden="true"><use href="#i-replay"/></svg>replay</button></p>
+
+    <div class="ledger">
+      <div class="ledger-head">
+        <h3 class="ledger-title">Five layers, from a fresh install inward.</h3>
+        <div class="reading" role="group" aria-label="Read the layers">
+          <button type="button" data-reading-pick="plain" aria-pressed="true">In plain words</button>
+          <button type="button" data-reading-pick="tech" aria-pressed="false">In technical terms</button>
+        </div>
+      </div>
+      <ol class="lg-rows">
+        <li class="lg-row rv">
+          <div class="lg-head">
+            <p class="lg-name"><span class="lg-n">0</span>Out of the box</p>
+            <p class="lg-state is-on">on from the first install</p>
+          </div>
+          <div class="lg-text">
+            <p class="rd rd-plain"><span class="rd-label">In plain words</span>Your agents' memory is a folder on your computer, and nothing outside your computer can reach it. No account, no Seamless cloud, no usage tracking, and a backup every day.</p>
+            <p class="rd rd-tech"><span class="rd-label">In technical terms</span>Listens on <code>127.0.0.1:8081</code> and answers <code>421</code> to any other Host. A random 32-byte key in a <code>0600</code> file guards MCP and the console; agent registrations read it at connect time and never copy it. No telemetry. Daily backups, seven kept.</p>
+          </div>
+        </li>
+        <li class="lg-row rv">
+          <div class="lg-head">
+            <p class="lg-name"><span class="lg-n">1</span>Project fences</p>
+            <p class="lg-state is-pick">per project, every OS</p>
+          </div>
+          <div class="lg-text">
+            <p class="rd rd-plain"><span class="rd-label">In plain words</span>Mark a client's project confidential and nothing in it shows up in your other work. Seal it, and nothing from outside gets in either.</p>
+            <p class="rd rd-tech"><span class="rd-label">In technical terms</span><code>open</code>, <code>confidential</code> or <code>sealed</code>, enforced at every surface Seamless serves: briefings, recall, tool reads and writes, family views, the gardener. A refusal never echoes the content. With access requests on, you grant read-only or read-and-write access, and later writes carry provenance stamps.</p>
+          </div>
+        </li>
+        <li class="lg-row rv">
+          <div class="lg-head">
+            <p class="lg-name"><span class="lg-n">2</span>Write screening</p>
+            <p class="lg-state">optional, offered at first run</p>
+          </div>
+          <div class="lg-text">
+            <p class="rd rd-plain"><span class="rd-label">In plain words</span>When an agent tries to save something that looks planted, like hidden instructions or a password, it waits for you instead of reaching the next session.</p>
+            <p class="rd rd-tech"><span class="rd-label">In technical terms</span>Every agent write to a memory or note is screened on your computer for secrets, injection markers, hidden comments and Unicode, encoded blobs and unlisted links. Holds wait in a database queue, never in the corpus. A constraint's supersede or delete is always held, as is a rule change from a session that fetched outside text. Files changed outside Seamless are quarantined.</p>
+          </div>
+        </li>
+        <li class="lg-row rv">
+          <div class="lg-head">
+            <p class="lg-name"><span class="lg-n">3</span>Seamless in its own account</p>
+            <p class="lg-state">optional, macOS &amp; Linux</p>
+          </div>
+          <div class="lg-text">
+            <p class="rd rd-plain"><span class="rd-label">In plain words</span>Give Seamless its own user account on your computer, and your agents can no longer open its files. They have to ask it, and it knows exactly who is asking.</p>
+            <p class="rd rd-tech"><span class="rd-label">In technical terms</span><code>peer_auth</code>: the daemon runs as a dedicated OS account with a <code>0700</code> data directory and serves a Unix socket, where the kernel names each caller's uid (<code>LOCAL_PEERCRED</code> on macOS, <code>SO_PEERCRED</code> on Linux). It refuses to start if another account could rewrite its data, socket directory, config or binary.</p>
+          </div>
+        </li>
+        <li class="lg-row rv">
+          <div class="lg-head">
+            <p class="lg-name"><span class="lg-n">4</span>Locked projects</p>
+            <p class="lg-state">optional, macOS &amp; Linux</p>
+          </div>
+          <div class="lg-text">
+            <p class="rd rd-plain"><span class="rd-label">In plain words</span>A locked project stays closed, even to its own agents, until you say yes with Touch ID, a passkey, or your password. The yes lasts as long as you choose.</p>
+            <p class="rd rd-tech"><span class="rd-label">In technical terms</span>An approval is a lease on the asking agent's process tree, read from the kernel: the session, 1 h or 4 h, capped at 8 h by default. The proof is <code>seam approve</code> (<code>sudo -k</code>), a WebAuthn passkey that signs its duration, or a Secure Enclave key in Seamless Approve, whose Touch ID prompt is built from the daemon's facts, never the agent's words.</p>
+          </div>
+        </li>
+        <li class="lg-row rv">
+          <div class="lg-head">
+            <p class="lg-name"><span class="lg-n">5</span>Restricted agent accounts</p>
+            <p class="lg-state">optional, macOS &amp; Linux</p>
+          </div>
+          <div class="lg-text">
+            <p class="rd rd-plain"><span class="rd-label">In plain words</span>Run unattended agents as a separate user on your computer. They see only the projects you open to them, and any rule they change waits for you.</p>
+            <p class="rd rd-tech"><span class="rd-label">In technical terms</span><code>peer_auth.restricted</code>: the account reaches open, unlocked projects, or only those you list. It reads the global scope without writing it, cannot create projects or ask for access, and its changes to binding rules wait as proposals on the Held screen, labeled with the account.</p>
+          </div>
+        </li>
+      </ol>
+      <div class="ledger-more">
+        <p>Every update is checked against the release's signatures before it installs, and rolls back if the new version does not come up. The limits are written down too.</p>
+        <a class="lnk" href="security/">The whole security model <svg aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ VII. THE CONSOLE -->
 <section class="chapter console" id="console" data-chapter="console">
   <div class="wrap">
     <header class="ch-head ch-head-wide">
-      <p class="ch-mark"><em>vi.</em> the console</p>
+      <p class="ch-mark"><em>vii.</em> the console</p>
       <h2 class="h2 rv">See what your agents were told, and when.</h2>
       <p class="lede rv">The console ships inside the daemon. <code>seamlessd console-open</code> shows briefings landing, recalls firing, and claims changing hands as they happen, along with how much of the store actually reaches your agents.</p>
     </header>
@@ -731,15 +876,15 @@ Read with memory_read before re-deriving.<span class="t-tag">&lt;/seam-recall&gt
       <li class="thumb rv"><a class="themed-light" href="static/shots/plans-light.webp"><img src="static/shots/plans-light.webp" width="1440" height="900" loading="lazy" alt="Plans board: six plans grouped by in progress, ready, and done, with step counts and claim status"></a><a class="themed-dark" href="static/shots/plans-dark.webp"><img src="static/shots/plans-dark.webp" width="1440" height="900" loading="lazy" alt="Plans board: six plans grouped by in progress, ready, and done, with step counts and claim status"></a><p><b>Plans</b> Captured plans with their notes, steps, and who holds what.</p></li>
       <li class="thumb rv"><a class="themed-light" href="static/shots/retrieval-light.webp"><img src="static/shots/retrieval-light.webp" width="1440" height="900" loading="lazy" alt="Retrieval health: the delivery path from injections to distinct memories to sessions reached, with knowledge-base coverage"></a><a class="themed-dark" href="static/shots/retrieval-dark.webp"><img src="static/shots/retrieval-dark.webp" width="1440" height="900" loading="lazy" alt="Retrieval health: the delivery path from injections to distinct memories to sessions reached, with knowledge-base coverage"></a><p><b>Retrieval</b> How much of the store actually reaches your agents.</p></li>
     </ul>
-    <p class="fine">Screens from a demo instance seeded with fictional data. The console binds to localhost; nothing in it leaves your machine.</p>
+    <p class="fine">Screens from a demo instance seeded with fictional data, with the optional research and gamification features switched on. The console is served by your own daemon, and nothing on it leaves your computers.</p>
   </div>
 </section>
 
-<!-- ================================================================ VII. TRY IT -->
+<!-- ================================================================ VIII. TRY IT -->
 <section class="chapter install" id="quickstart" data-chapter="quickstart">
   <div class="wrap">
     <header class="ch-head ch-head-wide">
-      <p class="ch-mark"><em>vii.</em> try it</p>
+      <p class="ch-mark"><em>viii.</em> try it</p>
       <h2 class="h2 rv">Try it on one repo this afternoon.</h2>
       <p class="lede rv">One command installs it and wires the agents it finds. If it isn't for you, one command takes it all back out and leaves your notes where they are.</p>
     </header>
@@ -761,6 +906,7 @@ Read with memory_read before re-deriving.<span class="t-tag">&lt;/seam-recall&gt
 <p class="qs-out-h">what it prints, abridged (macOS)</p>
 <p>checksum     ok</p>
 <p>signature    ok (sigstore)</p>
+<p>owner        ok (owner-yk1)</p>
 <p>installed    /Users/you/.local/bin/seamlessd, /Users/you/.local/bin/seam</p>
 <p class="qs-out-gap">&hellip;</p>
 <p>service      com.arctop.seamless (launchd)</p>
@@ -770,6 +916,7 @@ Read with memory_read before re-deriving.<span class="t-tag">&lt;/seam-recall&gt
 <p class="qs-out-h">what it prints, abridged (Windows)</p>
 <p>checksum     ok</p>
 <p>signature    ok (sigstore)</p>
+<p>owner        ok (owner-yk1)</p>
 <p>installed    C:\Users\you\.local\bin\seamlessd.exe, C:\Users\you\.local\bin\seam.exe</p>
 <p class="qs-out-gap">&hellip;</p>
 <p>service      Seamless (Scheduled Task, at logon)</p>
@@ -777,8 +924,8 @@ Read with memory_read before re-deriving.<span class="t-tag">&lt;/seam-recall&gt
             </div>
             <details class="what">
               <summary class="what-s">What this does</summary>
-              <p data-os-block="unix">Fetches the checksum-verified release for your platform, installs <code>seamlessd</code> and <code>seam</code> into <code>~/.local/bin</code>, generates the API key, wires the clients it detects (Claude Code, the Claude app's chat surface, and Codex: hooks, MCP, and skills), and starts the daemon as a per-user service on <code>127.0.0.1:8081</code> with data in <code>~/.seamless</code>. Needs <code>curl</code> and <code>tar</code>. No Go, no CGO, no database, and no LLM key: recall is full-text only until you add OpenAI or Ollama for embeddings. At a terminal it first asks how this computer will be used: Standalone, everything here (the default), or Networked, as the Server your other computers connect to or a Client of one (<a href="docs/guides/network-install/">how</a>).</p>
-              <p data-os-block="windows">Fetches the checksum-verified release for your platform, installs <code>seamlessd.exe</code> and <code>seam.exe</code> into <code>~\.local\bin</code>, generates the API key, wires the clients it detects (Claude Code, the Claude app's chat surface, and Codex: hooks, MCP, and skills), and starts the daemon as a per-user Scheduled Task (at logon, as you, no admin) on <code>127.0.0.1:8081</code> with data in <code>~\.seamless</code>. Needs nothing beyond Windows itself; PowerShell 5.1 and 7 both work. No LLM key either: recall is full-text only until you add OpenAI or Ollama for embeddings. At a terminal it first asks whether this computer is Standalone or a Client of a Seamless Server on another computer: a Windows computer is never the Server, and as a Client its agents never open a locked project (<a href="docs/guides/network-install/">how</a>).</p>
+              <p data-os-block="unix">Fetches the release for your platform and checks it against checksums the maintainer signed with a hardware key, installs <code>seamlessd</code> and <code>seam</code> into <code>~/.local/bin</code>, generates the API key, wires the clients it detects (Claude Code, the Claude app's chat surface, and Codex: hooks, MCP, and skills), and starts the daemon as a per-user service on <code>127.0.0.1:8081</code> with data in <code>~/.seamless</code>, backed up every day. Needs <code>curl</code> and <code>tar</code>. No Go, no CGO, no database, and no LLM key: recall is full-text only until you add OpenAI or Ollama for embeddings. At a terminal it first asks how this computer will be used: Standalone, everything here (the default), or Networked, as the Server your other computers connect to or a Client of one (<a href="docs/guides/network-install/">how</a>).</p>
+              <p data-os-block="windows">Fetches the release for your platform and checks it against checksums the maintainer signed with a hardware key, installs <code>seamlessd.exe</code> and <code>seam.exe</code> into <code>~\.local\bin</code>, generates the API key, wires the clients it detects (Claude Code, the Claude app's chat surface, and Codex: hooks, MCP, and skills), and starts the daemon as a per-user Scheduled Task (at logon, as you, no admin) on <code>127.0.0.1:8081</code> with data in <code>~\.seamless</code>. Needs nothing beyond Windows itself; PowerShell 5.1 and 7 both work. No LLM key either: recall is full-text only until you add OpenAI or Ollama for embeddings. At a terminal it first asks whether this computer is Standalone or a Client of a Seamless Server on another computer: a Windows computer is never the Server, and as a Client its agents never open a locked project (<a href="docs/guides/network-install/">how</a>).</p>
               <p>It is <a href="install">one shell script</a> (<a href="install.ps1">one PowerShell script</a> on Windows), and piping a stranger's script into a shell deserves a read first. Prefer a toolchain, or the pieces one at a time? <code>go install</code>, a <a href="https://github.com/arctop/seamless/releases">prebuilt archive</a>, and <code>make install</code> all land in the same place; see <a href="docs/install/">Install &amp; deploy</a>.</p>
             </details>
           </div>
@@ -812,14 +959,14 @@ Read with memory_read before re-deriving.<span class="t-tag">&lt;/seam-recall&gt
           <li><svg aria-hidden="true"><use href="#i-check"/></svg>Deregisters the MCP server and removes the skills</li>
           <li><svg aria-hidden="true"><use href="#i-check"/></svg>Deletes both binaries. Running it twice is harmless.</li>
         </ul>
-        <p class="leave-keep">Your memories stay in <code>~/.seamless</code> and your key in <code>~/.config/seamless</code>, because uninstalling a program shouldn't delete your knowledge. Add <code>--purge</code> to remove them too. Same command on Windows. Updates install themselves; to update right now, run <code>seamlessd update</code>.</p>
+        <p class="leave-keep">Your memories and their backups stay in <code>~/.seamless</code> and your key in <code>~/.config/seamless</code>, because uninstalling a program shouldn't delete your knowledge. Add <code>--purge</code> to remove them too. Same command on Windows. Updates install themselves; to update right now, run <code>seamlessd update</code>.</p>
         <p class="leave-more"><a class="lnk" href="docs/updating/#uninstall">Update &amp; uninstall, in full <svg aria-hidden="true"><use href="#i-arrow"/></svg></a></p>
       </aside>
     </div>
   </div>
 </section>
 
-<!-- ================================================================ VIII. DAY ONE -->
+<!-- ================================================================ IX. DAY ONE -->
 <!-- Requests to paste on the first day, each beside an illustration of what
      the agent does with it. The prompts are meant to be copied; the replies
      are invented, but every tool named in them is a real Seamless MCP tool
@@ -828,7 +975,7 @@ Read with memory_read before re-deriving.<span class="t-tag">&lt;/seam-recall&gt
 <section class="chapter asks-sec" id="asks" data-chapter="asks">
   <div class="wrap">
     <header class="ch-head ch-head-wide">
-      <p class="ch-mark"><em>viii.</em> day one</p>
+      <p class="ch-mark"><em>ix.</em> day one</p>
       <h2 class="h2 rv">What to ask in your first session.</h2>
       <p class="lede rv">You talk to your agent the way you already do. Paste any of these into Claude Code or Codex inside a repo, and change the details to your own. The replies are illustrations, the tools in them are real, and everything the agent saves is a file under <code>~/.seamless</code>.</p>
     </header>
@@ -984,7 +1131,7 @@ Recent findings:
     <header class="ch-head">
       <p class="ch-mark">fair questions</p>
       <h2 class="h2 rv">Before you ask.</h2>
-      <p class="lede rv">Short answers here. The <a href="compare/">full comparison</a> covers seven axes, every close alternative, and when to choose them instead.</p>
+      <p class="lede rv">Short answers here. The <a href="compare/">full comparison</a> sets nine alternatives against Seamless on ten axes, privacy and security among them, and says when to choose each instead. The <a href="security/">security page</a> covers the rest.</p>
     </header>
     <div class="faq">
       <details class="rv">
@@ -997,15 +1144,19 @@ Recent findings:
       </details>
       <details class="rv">
         <summary>Do I need an OpenAI key?</summary>
-        <div class="a"><p>No. Without an embeddings provider, recall runs on full-text search alone. Add an OpenAI key to switch on vector search as well, or point Seamless at a local Ollama to keep embeddings on your machine.</p></div>
+        <div class="a"><p>No. Without an embeddings provider, recall runs on full-text search alone. Add an OpenAI key to switch on vector search as well, and the text of your memories and notes goes to OpenAI to be embedded. Point Seamless at a local Ollama instead and it all stays on your computer.</p></div>
       </details>
       <details class="rv">
         <summary>Does it phone home?</summary>
-        <div class="a"><p>No. Localhost bind, a static bearer key, and no product telemetry. The one request it makes on its own is an anonymous look at GitHub's release list, so it can tell you about a new release and update itself; <code>update.check: false</code> turns that off. Embeddings use OpenAI if you add a key, or run fully offline with Ollama. This page has no trackers either: it is a static file, and what it remembers (your theme, your OS pick, how far you read) stays in your own browser.</p></div>
+        <div class="a"><p>No. There is no account and no product telemetry. On its own, a release install asks GitHub&rsquo;s release list for new versions every six hours, anonymously, and downloads the updates it installs; <code>update.check: false</code> turns that off. Text goes to a model provider only if you add one. This page has no trackers either: it is a static file, and what it remembers (your theme, your OS pick, how far you read) stays in your own browser.</p></div>
+      </details>
+      <details class="rv">
+        <summary>What if one of my agents gets tricked?</summary>
+        <div class="a"><p>That is the case Seamless is built around. Out of the box it runs on your computer and nothing outside it can reach it. Turn on write screening and a write that looks planted, such as hidden instructions or a leaked key, waits for your review instead of reaching the next session. Fence a client&rsquo;s project and it never shows up in your other work. For the most sensitive work, run Seamless in its own account and lock the project, and even its own agents wait for your Touch ID, passkey, or password. <a href="security/">The security page</a> has the whole model, limits included.</p></div>
       </details>
       <details class="rv">
         <summary>How do I uninstall it?</summary>
-        <div class="a"><p>Run <code>seamlessd uninstall</code>, and preview it first with <code>seamlessd uninstall --dry-run</code>. It stops the service, removes the hooks, the MCP registrations, the skills, and both binaries, and running it twice is harmless. Your memories stay in <code>~/.seamless</code> and your key in <code>~/.config/seamless</code> unless you add <code>--purge</code>.</p></div>
+        <div class="a"><p>Run <code>seamlessd uninstall</code>, and preview it first with <code>seamlessd uninstall --dry-run</code>. It stops the service, removes the hooks, the MCP registrations, the skills, and both binaries, and running it twice is harmless. Your memories and their daily backups stay in <code>~/.seamless</code> and your key in <code>~/.config/seamless</code> unless you add <code>--purge</code>.</p></div>
       </details>
       <details class="rv">
         <summary>Where are the benchmarks?</summary>
@@ -1013,28 +1164,28 @@ Recent findings:
       </details>
       <p class="faq-stem">Why not just use&hellip;</p>
       <details class="rv">
-        <summary>&hellip;Anthropic's built-in memory?</summary>
-        <div class="a"><p>Claude's managed memory is a per-agent directory in a sandbox: one tool's silo. Seamless is shared ground across every agent you run, plus tasks, plans, atomic claiming, and a console, kept as files on your own disk. In the Claude apps, memory is something else again: entries Claude generates from your chats and keeps with your account, one memory per Claude Project. <a href="claude-app/#memory">The Claude app page</a> sets that one next to Seamless, row by row.</p></div>
+        <summary>&hellip;Claude Code's built-in memory?</summary>
+        <div class="a"><p>Claude Code now keeps an auto memory of its own, on by default: markdown notes per repository, on your computer, and a good start. They are one client&rsquo;s notes about one repo on one machine. Seamless is shared ground for every agent you run, Claude Code, Codex, and the Claude app alike, with tasks, plans, atomic claiming, fences between projects, and a console. Codex has memories too, off by default. <a href="compare/#built-in">The comparison</a> sets them side by side.</p></div>
       </details>
       <details class="rv">
         <summary>&hellip;Claude Code's Agent Teams?</summary>
-        <div class="a"><p>Agent Teams are real coordination: a shared task list, claims that lock work, dependency markers, worktree isolation, first-party and free. But that state lives inside <em>one team</em>, for the life of that team. Close it and the claims, the ordering, and the context are gone. Seamless is the layer underneath. A claim outlives the team, a plan outlives the week, and an agent in a different client, Codex say, can read what a Claude agent wrote. Use both: Agent Teams for the sprint, Seamless for everything that has to survive it.</p></div>
+        <div class="a"><p>Agent Teams are real coordination inside Claude Code: a shared task list, claims that lock work, dependencies, and messages between teammates, first-party and still marked experimental. That state belongs to <em>one team</em> in one session. Seamless is the layer underneath. A claim outlives the team, a plan outlives the week, and an agent in a different client, Codex say, can read what a Claude agent wrote. Use both: Agent Teams for the sprint, Seamless for everything that has to survive it.</p></div>
+      </details>
+      <details class="rv">
+        <summary>&hellip;claude-mem?</summary>
+        <div class="a"><p>claude-mem records what your sessions did: a model compresses their tool activity into summaries, stored in SQLite and Chroma on your computer, and it has the biggest community in the space. Seamless keeps what an agent or you chose to write down, as markdown you can read and edit, with explicit replacement instead of compression, plus the task queue and claiming that let parallel agents divide the work.</p></div>
       </details>
       <details class="rv">
         <summary>&hellip;Mem0 or Zep?</summary>
-        <div class="a"><p>They're solid memory APIs for products you're <em>building</em>, and they're cloud-first. Seamless is for the agents you <em>run</em>. It lives on your machine, binds to localhost, and needs no account. Different job.</p></div>
+        <div class="a"><p>They&rsquo;re memory engines for products you&rsquo;re <em>building</em>, cloud-first, with self-hosted paths. Seamless is for the agents you <em>run</em>. It lives on your computer and needs no account. Different job.</p></div>
       </details>
       <details class="rv">
-        <summary>&hellip;Dosu?</summary>
-        <div class="a"><p><a href="https://dosu.dev">Dosu</a> is knowledge infrastructure for whole teams: a hosted, shared brain that captures knowledge as your agents work and keeps your docs in sync. If you need a team-wide solution, it's an excellent one. Seamless is the local-first counterpart, aimed at one person and their fleet: files on your own disk, no account, no cloud.</p></div>
-      </details>
-      <details class="rv">
-        <summary>&hellip;agentmemory?</summary>
-        <div class="a"><p>agentmemory is a Node.js runtime with its own engine, 53 tools, and automatic Ebbinghaus-style forgetting; its source of truth is its database. Seamless is a self-contained Go daemon plus CLI, durable knowledge lives as markdown files you can put in git, and nothing is forgotten until you approve it.</p></div>
+        <summary>&hellip;Beads?</summary>
+        <div class="a"><p>Beads is the closest thing to Seamless&rsquo;s task queue: a git-native issue graph with dependencies and atomic claims, as a Go command-line tool. It tracks the work. Seamless tracks the work and the knowledge around it: the plan&rsquo;s steps and claims, plus the constraints, decisions, and runbooks every session is briefed with. If a queue is all you need, Beads is a fine choice.</p></div>
       </details>
       <details class="rv">
         <summary>&hellip;Supermemory?</summary>
-        <div class="a"><p>Supermemory is a cloud memory API with a broad personal-and-company-brain scope, and its Claude Code integration sits behind a paid plan. Seamless is free, local, and narrowly aimed at one job: the agents and Claude chats you run, sharing one legible brain.</p></div>
+        <div class="a"><p>Supermemory is a memory API for your whole digital life, with connectors for email, drives, and notes, run as a cloud service, and plugins for Claude Code and Cursor on every plan. Seamless is narrow on purpose: the agents and Claude chats you run, the knowledge they write down, kept on your own computer.</p></div>
       </details>
     </div>
   </div>
@@ -1049,7 +1200,7 @@ Recent findings:
       <circle class="fm-star" cx="98" cy="22" r="5"/>
     </svg>
     <h2 class="h2 finale-h" data-split>There is no spoon.</h2>
-    <p class="finale-p rv">Most memory products ask you to trust a store you can't read. Seamless keeps its memory as markdown files on your disk. The daemon indexes them and briefs your agents, and the gardener asks before anything is forgotten.</p>
+    <p class="finale-p rv">Most memory products ask you to trust a store you can't read. Seamless keeps its memory as markdown files on your own computer and briefs your agents from them. It asks you before anything is forgotten, and before a locked project opens.</p>
     <div class="finale-act rv">
       <p class="os-cap" data-os-block="unix">macOS / Linux</p>
       <span class="install-pill" data-os-block="unix"><span class="p" aria-hidden="true">$</span><span class="cmd" data-copy="curl -fsSL https://thereisnospoon.org/install | sh">curl -fsSL https://thereisnospoon.org/install | sh</span><button class="copy-btn" type="button" aria-label="Copy install command">copy</button></span>
@@ -1079,10 +1230,11 @@ Recent findings:
       <div>
         <b>Project</b>
         <a href="docs/">Docs</a>
+        <a href="security/">Security</a>
         <a href="compare/">Compare</a>
         <a href="docs/changelog/">Changelog</a>
         <a href="https://github.com/arctop/seamless">GitHub</a>
-        <a href="https://github.com/arctop/seamless/issues">Issues</a>
+        <a href="https://github.com/arctop/seamless/security/advisories/new">Report a vulnerability</a>
       </div>
       <div>
         <b>Start</b>
@@ -1099,8 +1251,8 @@ Recent findings:
 
 <script src="static/scenes.js?v=913912f7"></script>
 <script src="static/scenes-player.js?v=7074d146"></script>
-<script src="static/site.js?v=c88feb8d"></script>
-<script src="static/home.js?v=9e3f7429"></script>
+<script src="static/site.js?v=4b8fbf31"></script>
+<script src="static/home.js?v=da8b87c9"></script>
 <script src="static/webmcp.js?v=c9b44136"></script>
 </body>
 </html>

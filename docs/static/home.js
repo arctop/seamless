@@ -1091,6 +1091,57 @@
   }
 
   /* ======================================================================
+     THE KEYS: a planted write held, a locked project opened by a touch.
+     Both terminals play line by line, side by side; the approval card waits
+     for its scan before the agent goes on. Without JS (or with reduced
+     motion) every line simply shows.
+     ====================================================================== */
+  function Keys(box) {
+    if (reduced) return;
+    var terms = $$(".vig .term-body", box);
+    if (terms.length !== 2) return;
+    var replay = $("[data-keys-replay]");
+    var a = Array.prototype.slice.call(terms[0].children);
+    var b = Array.prototype.slice.call(terms[1].children);
+    var card = $("[data-approve]", box);
+    box.classList.add("is-armed");
+    function reset() {
+      a.concat(b).forEach(function (el) { el.classList.remove("is-on"); });
+      box.classList.remove("is-scanning", "is-approved");
+    }
+    var token = 0;
+    async function run() {
+      var my = ++token;
+      if (replay) replay.hidden = true;
+      reset();
+      await wait(500); if (my !== token) return;
+      var ia = 0, ib = 0;
+      // the two sessions interleave, the left a beat ahead
+      while (ia < a.length || ib < b.length) {
+        if (ia < a.length) {
+          a[ia].classList.add("is-on");
+          ia++;
+          await wait(a[ia - 1].classList.contains("t-held") ? 1000 : 450); if (my !== token) return;
+        }
+        if (ib < b.length) {
+          b[ib].classList.add("is-on");
+          if (b[ib] === card) {
+            box.classList.add("is-scanning");
+            await wait(1800); if (my !== token) return;
+            box.classList.remove("is-scanning");
+            box.classList.add("is-approved");
+          }
+          ib++;
+          await wait(450); if (my !== token) return;
+        }
+      }
+      if (replay) replay.hidden = false;
+    }
+    if (replay) replay.addEventListener("click", run);
+    onceVisible(box, run, 0.35);
+  }
+
+  /* ======================================================================
      7. THE FOLDER + THE GARDENER
      ====================================================================== */
   function Folder(cell) {
@@ -1405,6 +1456,8 @@
     if (board) Board(board);
     var file = $("[data-file]");
     if (file) Folder(file);
+    var keysBox = $("[data-keys]");
+    if (keysBox) Keys(keysBox);
     var garden = $("[data-garden]");
     if (garden) Garden(garden);
     var shot = $("[data-hotshot]");
