@@ -179,11 +179,10 @@ reach, or gives it one confidential project, and never takes a project from you.
 
 ## Deploy it: the daemon runs as its own account
 
-[`seamlessd setup`](/reference/cli-seamlessd/#seamlessd_setup) does not turn
-locked projects on yet: on a computer that runs the daemon it offers **Turn on
-locked projects (peer_auth)** and points to
-[the move below](#move-an-existing-install-over), which uses this section.
-These are the steps, by hand.
+[`seamlessd peer-auth setup`](/reference/cli-seamlessd/#seamlessd_peer_auth)
+moves an installed daemon here in one guided command
+([below](#in-one-command)). These are the steps it takes, by hand, and the
+reference for what it builds.
 
 The data directory holds every project's memory in plain files and a SQLite
 database. If the daemon runs as you, every process of yours reads them. So with
@@ -1661,11 +1660,34 @@ and console unlock the backup held.
 
 ## Move an existing install over
 
-This is where `seamlessd setup` sends you for locked projects: it does not turn
-them on itself yet. A first Standalone or Server install lists them as a step to
-do by hand, and a re-run offers **Turn on locked projects (peer_auth)** on a
-computer that runs the daemon, naming this section. Two of setup's steps come
-first:
+### In one command {#in-one-command}
+
+On the computer that runs the daemon, as yourself:
+
+```bash
+seamlessd peer-auth setup
+```
+
+It shows the whole move - the account, where the binaries come from, the config
+change, the services, your configs and the hooks - asks once, and runs steps 2 to 7
+below (and 10: its export goes straight into a file only root reads), asking for your password through `sudo` for those that need
+root. The binaries it installs are this seamlessd's release, downloaded and
+checked against the release's signature, and on macOS Apple's notarization, in
+a staging directory only root can write, before they go into place. A run that
+stops says why and continues from that step when you run it again;
+`seamlessd peer-auth status` says where it stands, `--dry-run` prints every
+command first, and `seamlessd peer-auth undo` rolls back what ran. Fence the
+projects you will lock first (step 1), and enroll an approver and lock them
+afterwards (steps 8 and 9): it locks nothing itself.
+[The reference](/reference/cli-seamlessd/#seamlessd_peer_auth) has every step
+and flag. The rest of this section is the same move by hand.
+
+### By hand
+
+`seamlessd setup` names `seamlessd peer-auth setup` and this section for
+locked projects: a first Standalone or Server install lists them as a step for
+after the install, and a re-run offers **Turn on locked projects (peer_auth)**
+on a computer that runs the daemon. Two of setup's steps come first:
 
 - **A Server's address.** Set it up first, with setup
   ([the Server's address](/reference/cli-seamlessd/#seamlessd_setup_address)):

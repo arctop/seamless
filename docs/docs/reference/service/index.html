@@ -490,7 +490,10 @@ undone. See <a href="../../guides/data/#restore">Restore</a>.</li>
 </ul>
 <h2 id="peer-auth-daemon">A system service for peer_auth</h2>
 <p><a href="../../guides/peer-auth/">Locked projects</a> need the daemon to run as an account of
-its own, so the per-user service above cannot host it. On macOS it
+its own, so the per-user service above cannot host it.
+<a href="../../reference/cli-seamlessd/#seamlessd_peer_auth"><code>seamlessd peer-auth setup</code></a>
+installs it, retires the per-user service and moves the data; this is what it
+writes, for doing it by hand. On macOS it
 is a LaunchDaemon that names the account; it runs whether or not anyone is
 logged in. Install it as <code>/Library/LaunchDaemons/com.arctop.seamless.daemon.plist</code>
 (<code>root:wheel</code>, <code>0644</code>):</p>

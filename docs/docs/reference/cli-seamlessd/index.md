@@ -435,9 +435,10 @@ installer.
 | `SEAMLESS_SERVER_NAME` | the name the other computers reach the Server at ([below](#seamlessd_setup_address)); with `SEAMLESS_SETUP=server` only |
 | `SEAMLESS_TLS_CERT`, `SEAMLESS_TLS_KEY` | that name's certificate and key, full paths; none for this computer's Tailscale name, whose certificate setup gets from the tailnet |
 
-A refusal stops the install before anything is installed. Locked projects are
-not built into setup yet: the install ends by naming the guide that sets them
-up by hand. A Server's install ends with what
+A refusal stops the install before anything is installed. Setup does not turn
+locked projects on itself: the install ends by naming
+[`seamlessd peer-auth setup`](#seamlessd_peer_auth), which moves the daemon in
+one guided command, and the guide that sets them up by hand. A Server's install ends with what
 each Client needs - its address, its certificate's fingerprint, how to get a
 pairing code, and the one-liners - as `seamlessd devices code` prints them.
 
@@ -1173,6 +1174,71 @@ too, the uid it recorded as yours (`relay.owner` warns for a pairing that
 recorded none) and the pinned certificate's expiry (`relay.certificate`, a
 warn from 14 days before it). [The relay's root step](https://thereisnospoon.org/docs/guides/network-install/#the-relays-root-step)
 has the account, the layout and every step.
+
+## seamlessd peer-auth {#seamlessd_peer_auth}
+
+```bash
+seamlessd peer-auth setup [--yes] [--dry-run] [--release X.Y.Z | --source-build] [--root-owned-binaries]
+seamlessd peer-auth status
+seamlessd peer-auth undo [--yes] [--dry-run]
+```
+
+Turns on [locked projects](https://thereisnospoon.org/docs/guides/peer-auth/) on the computer that runs the
+daemon, macOS and Linux only: the guide's
+[Move an existing install over](https://thereisnospoon.org/docs/guides/peer-auth/#move-an-existing-install-over)
+as one guided, resumable command. Run it as yourself, never as root. `setup`
+reads the install, refuses what it cannot move (a client's config, peer_auth
+already on, a data directory that is not yours, an `/opt/seamless` that is not
+root's, a daemon or a relay there already), and shows the whole move: the
+account and its id, where the binaries come from, the config change, the
+services, your own configs and the hooks. After one confirmation (`--yes` for
+none) it runs eleven steps, each asking for your password through `sudo` where
+it needs root:
+
+1. `backup`: an export of everything into `/opt/seamless/before-peer-auth.tar.gz`, root's alone (`0600`).
+2. `account`: `_seamless`, a system account (on macOS an id below 500 free as both a user id and a group id), the layout, and the pin.
+3. `binaries`: into `/opt/seamless/bin`, held by the daemon's account so it [updates itself](https://thereisnospoon.org/docs/guides/peer-auth/#updates).
+4. `config`: `/opt/seamless/etc/seamless.yaml` (`root:_seamless 0640`): your config with `data_dir`, the TLS pair (copied into `/opt/seamless/etc/tls`) and a `peer_auth` block changed, every other key kept, the bearer key and the LLM keys among them.
+5. `retire`: your per-user service stopped, its LaunchAgent plist kept as `<label>.plist.pre-peer-auth` or its systemd user unit disabled.
+6. `data`: your data directory moved to `/opt/seamless/data`, the daemon's account's alone.
+7. `service`: the LaunchDaemon `com.arctop.seamless.daemon` or the system unit `seamless-daemon.service` (on Linux the account lingers first).
+8. `health`: the daemon answers on the socket.
+9. `doctor`: `seamlessd doctor`, as the daemon's account, against its config.
+10. `client`: your config set aside as `seamless.yaml.pre-peer-auth`, never edited, and a client's config on the socket written in its place, with `console.yaml` (`0600`) beside it keeping the key for the console.
+11. `hooks`: `seamlessd install-hooks --seam /opt/seamless/bin/seam`.
+
+It ends with what comes next: enroll an approver, then lock a project from the
+console. It locks nothing itself.
+
+The binaries are the trust anchor: nothing an agent of yours could have
+replaced runs as root or as the daemon's account. By default they are this
+seamlessd's own release (`--release` names another): its `seamlessd` and `seam`
+are downloaded for the exact tag and checked against the release's
+Sigstore-signed `checksums.txt` before anything else, and root then copies them
+into `/opt/seamless/stage`, a directory only root can write, and checks each
+copy there against the hash taken of the verified release - on macOS also
+against Apple's notarization and the Developer ID team this seamlessd carries
+(or, for a source build installing a release, the team that signed it) - before
+it goes into place. A source build refuses without `--source-build`, which
+copies the binaries beside it with the hash check alone: no signature checks
+them, and the daemon never updates itself. `--root-owned-binaries` keeps
+`/opt/seamless/bin` root's, and the daemon then only tells you about a new
+release.
+
+Each finished step is recorded in `/opt/seamless/etc/peer-auth-setup.state`,
+root's and readable by every account. A run that stops - a refused password, a
+failed check - says which step and why, and `seamlessd peer-auth setup` run
+again continues from that step with the plan it began with. `status` prints
+where the move stands, step by step, and doctor has a `peer_auth setup` row
+on a computer that began one. `--dry-run` prints every command a step would run
+now, and changes nothing.
+
+`undo` follows the guide's [Roll back](https://thereisnospoon.org/docs/guides/peer-auth/#roll-back) for what
+ran: the system service stopped and removed, the data moved back and made yours
+again, the per-user service put back and started, your server config back in
+place, and the hooks reinstalled against it. It keeps the account, the layout,
+the binaries, the daemon's config and the backup, which the next `setup` reuses;
+delete them by hand once you no longer need them.
 
 ## seamlessd console-open {#seamlessd_console_open}
 

@@ -40,21 +40,36 @@ func (lc *lockedConsole) lockChange(t *testing.T, key *passkeytest.Authenticator
 	return lc.do(lc.browser(http.MethodPost, path+"/finish", "", url.Values{"id": {begun.ID}, "action": {string(action)}, "response": {string(assertion)}}))
 }
 
-// Off, nothing shows and nothing answers.
+// Off, no lock shows and nothing answers: where peer_auth runs, the card
+// names the command that turns it on instead, and on Windows nothing shows.
 func TestLock_AbsentWithoutPeerAuth(t *testing.T) {
 	db, mux := newConsole(t)
 	ctx := context.Background()
 	_, err := store.EnsureProject(ctx, db, lockableSlug, lockableSlug)
 	require.NoError(t, err)
 
-	req := httptest.NewRequest(http.MethodGet, "/console/projects/"+lockableSlug, nil)
-	req.AddCookie(consoleCookie())
-	rr := do(mux, req)
-	require.Equal(t, http.StatusOK, rr.Code)
-	require.NotContains(t, rr.Body.String(), `id="lock"`)
-	require.NotContains(t, rr.Body.String(), "/console/lock/")
+	page := func() string {
+		req := httptest.NewRequest(http.MethodGet, "/console/projects/"+lockableSlug, nil)
+		req.AddCookie(consoleCookie())
+		rr := do(mux, req)
+		require.Equal(t, http.StatusOK, rr.Code)
+		return rr.Body.String()
+	}
+	defer func(old string) { lockSetupGOOS = old }(lockSetupGOOS)
+	for _, goos := range []string{"darwin", "linux"} {
+		lockSetupGOOS = goos
+		body := page()
+		require.Contains(t, body, "data-lock-setup", goos)
+		require.Contains(t, body, "<code>seamlessd peer-auth setup</code>", goos)
+		require.NotContains(t, body, "/console/lock/", goos)
+	}
+	lockSetupGOOS = "windows"
+	body := page()
+	require.NotContains(t, body, `id="lock"`)
+	require.NotContains(t, body, "peer-auth setup")
+	require.NotContains(t, body, "/console/lock/")
 
-	req = httptest.NewRequest(http.MethodGet, "/console/lock/"+lockableSlug, nil)
+	req := httptest.NewRequest(http.MethodGet, "/console/lock/"+lockableSlug, nil)
 	req.AddCookie(consoleCookie())
 	require.Equal(t, http.StatusNotFound, do(mux, req).Code)
 	for _, suffix := range []string{"/begin", "/finish"} {

@@ -91,11 +91,15 @@ type doctorMachine struct {
 	sharedConfig sharedConfigEnv
 	relay        relayDoctorEnv
 	peerAuth     peerAuthEnv
+	// setupState reads seamlessd peer-auth setup's state file; nil reads
+	// none, and no row is shown.
+	setupState func(string) ([]byte, error)
 }
 
 // hostDoctorMachine is this machine.
 func hostDoctorMachine() doctorMachine {
-	return doctorMachine{goos: runtime.GOOS, sharedConfig: defaultSharedConfigEnv(), relay: defaultRelayDoctorEnv(), peerAuth: defaultPeerAuthEnv()}
+	return doctorMachine{goos: runtime.GOOS, sharedConfig: defaultSharedConfigEnv(), relay: defaultRelayDoctorEnv(), peerAuth: defaultPeerAuthEnv(),
+		setupState: os.ReadFile}
 }
 
 // doctorOn is doctor reading the machine through m.
@@ -120,6 +124,11 @@ func doctorOn(args []string, m doctorMachine) error {
 	)
 	// A relay on this computer (its data directory exists): no rows anywhere else.
 	checks = append(checks, relayDoctorChecks(context.Background(), m.relay)...)
+	// A move to peer_auth (seamlessd peer-auth setup): no row on a computer
+	// that never began one.
+	if m.setupState != nil {
+		checks = append(checks, pasStatusDoctor(m.setupState)...)
+	}
 
 	// The role branch, and it is placed here because everything below it reads
 	// LOCAL server state a client does not have: the report would describe a

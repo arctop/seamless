@@ -1827,6 +1827,9 @@
       <ul class="iso-promises">
         <li class="on">Open — shares normally. Global knowledge flows in; family surfaces may include it.</li><li class="">Confidential — nothing leaves. Agents in other projects never see this project&#39;s knowledge, and agents here cannot write outside it.</li><li class="">Sealed — nothing in or out. Agents here see only this project: no global memories, no family, no cross-project reads.</li>
       </ul>
+      <div class="iso-lock" id="lock" data-lock-setup>
+        <p class="muted"><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Locking a project needs peer_auth, which runs the daemon as an account of its own. To turn it on, run <code>seamlessd peer-auth setup</code> on this computer, as yourself: it shows the whole move, asks once, and asks for your password where it needs root.</p>
+      </div>
     </div>
   </div>
 
@@ -2785,6 +2788,9 @@
       <ul class="iso-promises">
         <li class="">Open — shares normally. Global knowledge flows in; family surfaces may include it.</li><li class="on">Confidential — nothing leaves. Agents in other projects never see this project&#39;s knowledge, and agents here cannot write outside it.</li><li class="">Sealed — nothing in or out. Agents here see only this project: no global memories, no family, no cross-project reads.</li>
       </ul>
+      <div class="iso-lock" id="lock" data-lock-setup>
+        <p class="muted"><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Locking a project needs peer_auth, which runs the daemon as an account of its own. To turn it on, run <code>seamlessd peer-auth setup</code> on this computer, as yourself: it shows the whole move, asks once, and asks for your password where it needs root.</p>
+      </div>
     </div>
   </div>
 
@@ -3077,6 +3083,9 @@
       <ul class="iso-promises">
         <li class="">Open — shares normally. Global knowledge flows in; family surfaces may include it.</li><li class="">Confidential — nothing leaves. Agents in other projects never see this project&#39;s knowledge, and agents here cannot write outside it.</li><li class="on">Sealed — nothing in or out. Agents here see only this project: no global memories, no family, no cross-project reads.</li>
       </ul>
+      <div class="iso-lock" id="lock" data-lock-setup>
+        <p class="muted"><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Locking a project needs peer_auth, which runs the daemon as an account of its own. To turn it on, run <code>seamlessd peer-auth setup</code> on this computer, as yourself: it shows the whole move, asks once, and asks for your password where it needs root.</p>
+      </div>
     </div>
   </div>
 

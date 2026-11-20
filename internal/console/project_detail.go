@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"runtime"
 	"slices"
 	"strings"
 	"time"
@@ -52,8 +53,10 @@ type projectWorkspaceData struct {
 	IsolationOptions []isolationOptionVM
 	IsolationConfirm *isolationConfirmVM
 	// Lock is the project's lock under peer_auth; nil with peer_auth off, so
-	// nothing renders.
-	Lock *lockView
+	// nothing renders. LockSetup is then set where peer_auth runs (macOS and
+	// Linux): the card names the command that turns it on.
+	Lock      *lockView
+	LockSetup bool
 
 	Metrics   projectMetrics
 	Trend     []store.TrendBucket // this project's injection trend (its own memories)
@@ -145,6 +148,11 @@ func (s *Service) projectDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	s.projectWorkspace(w, r, p)
 }
+
+// lockSetupGOOS is the platform the daemon runs on, which decides whether the
+// Isolation card offers seamlessd peer-auth setup: peer_auth runs on macOS and
+// Linux only.
+var lockSetupGOOS = runtime.GOOS
 
 // projectSummary renders the thin project peek: metadata + per-channel counts,
 // served as the peek fragment (?peek=1) or CLI JSON.
@@ -239,6 +247,7 @@ func (s *Service) projectWorkspace(w http.ResponseWriter, r *http.Request, p cor
 		return
 	}
 	data.Lock = lock
+	data.LockSetup = lock == nil && (lockSetupGOOS == "darwin" || lockSetupGOOS == "linux")
 	if lock.Locked() {
 		disableUnfenced(data.IsolationOptions)
 	}

@@ -255,8 +255,9 @@ var setupSteps = map[string]setupStep{
 		what: "start from a backup instead of empty",
 		run:  setupImportStep},
 	"locked-projects": {id: "locked-projects", label: "locked", peerAuth: true, after: true,
-		what:   "locked projects (peer_auth): a project only the agents you approve can open",
-		manual: setupDocs + "guides/peer-auth/#move-an-existing-install-over"},
+		what: "locked projects (peer_auth): a project only the agents you approve can open",
+		manual: "seamlessd peer-auth setup moves the daemon to an account of its own in one guided command, " +
+			"once this install is done (or by hand: " + setupDocs + "guides/peer-auth/#move-an-existing-install-over)"},
 	"clients": {id: "clients", label: "clients", after: true,
 		what:   "what each {client} needs: this computer's address, its certificate's fingerprint and a pairing code",
 		manual: "seamlessd devices code prints it, with a code (" + setupDocs + "guides/network-install/#step-3-pair-a-client)",

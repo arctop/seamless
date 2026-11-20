@@ -29,10 +29,14 @@ const (
 // it is printed for.
 type Tools struct {
 	Sudo, Env, ID, Install, Tee, Chmod, Chown, Mv string
+	// Rm, Tar and Sleep: /bin/rm and /bin/sleep everywhere, tar where each
+	// system keeps it (/bin/tar holds on a Debian whose /bin is not merged
+	// into /usr/bin, and wherever it is).
+	Rm, Tar, Sleep string
 	// Sum is the SHA-256 check, which reads its list from stdin with -c.
 	Sum string
-	// macOS's account and service tools.
-	Dscl, Launchctl string
+	// macOS's account and service tools, and its code-signature check.
+	Dscl, Launchctl, Plutil, Codesign string
 	// Linux's. /bin/systemctl and /bin/loginctl hold on a Debian or Ubuntu
 	// whose /bin is not merged into /usr/bin, and wherever it is.
 	Useradd, Groupadd, Usermod, Systemctl, Loginctl string
@@ -45,14 +49,15 @@ type Tools struct {
 // ToolsFor is goos's tools: macOS ("darwin"), else Linux.
 func ToolsFor(goos string) Tools {
 	t := Tools{Sudo: Sudo, Env: Env, ID: "/usr/bin/id", Install: "/usr/bin/install",
-		Tee: "/usr/bin/tee", Chmod: "/bin/chmod", Mv: "/bin/mv"}
+		Tee: "/usr/bin/tee", Chmod: "/bin/chmod", Mv: "/bin/mv", Rm: "/bin/rm", Sleep: "/bin/sleep"}
 	if goos == "darwin" {
-		t.Chown, t.Sum = "/usr/sbin/chown", "/usr/bin/shasum -a 256"
+		t.Chown, t.Sum, t.Tar = "/usr/sbin/chown", "/usr/bin/shasum -a 256", "/usr/bin/tar"
 		t.Dscl, t.Launchctl = "/usr/bin/dscl", "/bin/launchctl"
+		t.Plutil, t.Codesign = "/usr/bin/plutil", "/usr/bin/codesign"
 		t.Tailscale = "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
 		return t
 	}
-	t.Chown, t.Sum = "/bin/chown", "/usr/bin/sha256sum"
+	t.Chown, t.Sum, t.Tar = "/bin/chown", "/usr/bin/sha256sum", "/bin/tar"
 	t.Useradd, t.Groupadd, t.Usermod, t.Systemctl = "/usr/sbin/useradd", "/usr/sbin/groupadd", "/usr/sbin/usermod", "/bin/systemctl"
 	t.Loginctl = "/bin/loginctl"
 	t.Tailscale = "/usr/bin/tailscale"

@@ -80,7 +80,11 @@
         <a class="btn small" href="/console/lock/{{.Slug}}">{{icon "lock"}}Lock this project</a>
         {{end}}
       </div>
-      {{- end}}
+      {{- else}}{{if .LockSetup}}
+      <div class="iso-lock" id="lock" data-lock-setup>
+        <p class="muted">{{icon "lock"}}Locking a project needs peer_auth, which runs the daemon as an account of its own. To turn it on, run <code>seamlessd peer-auth setup</code> on this computer, as yourself: it shows the whole move, asks once, and asks for your password where it needs root.</p>
+      </div>
+      {{- end}}{{- end}}
     </div>
   </div>
 

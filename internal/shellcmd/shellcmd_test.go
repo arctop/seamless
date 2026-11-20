@@ -14,7 +14,8 @@ func TestToolsFor_AbsolutePathsPerOS(t *testing.T) {
 		require.Equal(t, Sudo, tools.Sudo, goos)
 		require.Equal(t, Env, tools.Env, goos)
 		for name, p := range map[string]string{"id": tools.ID, "install": tools.Install, "tee": tools.Tee, "chmod": tools.Chmod,
-			"chown": tools.Chown, "mv": tools.Mv, "sum": tools.Sum, "tailscale": tools.Tailscale} {
+			"chown": tools.Chown, "mv": tools.Mv, "rm": tools.Rm, "tar": tools.Tar, "sleep": tools.Sleep, "sum": tools.Sum,
+			"tailscale": tools.Tailscale} {
 			require.True(t, len(p) > 1 && p[0] == '/', "%s %s: %q", goos, name, p)
 		}
 	}
@@ -29,6 +30,11 @@ func TestToolsFor_AbsolutePathsPerOS(t *testing.T) {
 	require.Equal(t, "/bin/loginctl", linux.Loginctl)
 	require.Empty(t, mac.Loginctl)
 	require.Empty(t, linux.Dscl)
+	require.Equal(t, "/usr/bin/codesign", mac.Codesign)
+	require.Equal(t, "/usr/bin/plutil", mac.Plutil)
+	require.Empty(t, linux.Codesign)
+	require.Equal(t, "/usr/bin/tar", mac.Tar)
+	require.Equal(t, "/bin/tar", linux.Tar)
 	require.Equal(t, "/usr/bin/sudo /usr/bin/install -m 0755 a b", mac.AsRoot(mac.Install, "-m", "0755", "a", "b"))
 }
 

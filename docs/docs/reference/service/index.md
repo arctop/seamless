@@ -268,7 +268,10 @@ walks through the outcomes. What the service manager can tell you:
 ## A system service for peer_auth {#peer-auth-daemon}
 
 [Locked projects](https://thereisnospoon.org/docs/guides/peer-auth/) need the daemon to run as an account of
-its own, so the per-user service above cannot host it. On macOS it
+its own, so the per-user service above cannot host it.
+[`seamlessd peer-auth setup`](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_peer_auth)
+installs it, retires the per-user service and moves the data; this is what it
+writes, for doing it by hand. On macOS it
 is a LaunchDaemon that names the account; it runs whether or not anyone is
 logged in. Install it as `/Library/LaunchDaemons/com.arctop.seamless.daemon.plist`
 (`root:wheel`, `0644`):
