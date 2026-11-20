@@ -96,7 +96,7 @@ func (s *Server) handleNotesCreate(ctx context.Context, req mcp.CallToolRequest)
 
 func notesReadTool() mcp.Tool {
 	return mcp.NewTool("notes_read", hintRead(),
-		mcp.WithDescription("Read a note by id, or by slug within the current project (falling back to a global note of the same slug). A plan's slug is not a note's: a miss on one names the plan's narrative note."),
+		mcp.WithDescription("Read a note by id, or by slug within the current project (falling back to a global note of the same slug). A plan's slug is not a note's: it answers with the plan's narrative note when that is in the same scope, and otherwise the miss names it."),
 		mcp.WithString("id", mcp.Description("note id (ULID); pass exactly one of id or slug")),
 		mcp.WithString("slug", mcp.Description("note slug, as briefings, plan compositions, and notes_create responses name notes (alias: name)")),
 		mcp.WithString("project", mcp.Description("project slug for the slug lookup; defaults to the bound session's project")),
@@ -109,9 +109,10 @@ func (s *Server) handleNotesRead(ctx context.Context, req mcp.CallToolRequest) (
 		return errResult("notes_read", errors.New("pass exactly one of id or slug"))
 	}
 	var note core.Note
+	var plan string
 	var err error
 	if slug != "" {
-		note, err = s.loadNoteBySlug(ctx, req, slug)
+		note, plan, err = s.loadNoteBySlug(ctx, req, slug)
 	} else {
 		if id == "" {
 			return errResult("notes_read", errors.New("id or slug is required (notes_read reads one note by ULID or exact slug; to search text use recall)"))
@@ -144,6 +145,13 @@ func (s *Server) handleNotesRead(ctx context.Context, req mcp.CallToolRequest) (
 	}
 	if note.Model != "" {
 		out["model"] = note.Model
+	}
+	if plan != "" {
+		// The slug asked for was a plan's, so the answer is another slug's note:
+		// say so, and name the plan back (plan-slug-must-be-named-back-to-the-agent).
+		out["plan"] = plan
+		out["note"] = fmt.Sprintf("%s is a plan's slug, not a note's: this is the plan's narrative note (slug %s); "+
+			"its steps are tasks_list plan=%s", plan, note.Slug, plan)
 	}
 	// The restricted account that wrote the current content; the owner's own
 	// notes carry none, so their output is what it always was.
@@ -578,35 +586,80 @@ func (s *Server) loadNote(ctx context.Context, id string) (core.Note, error) {
 // loadNoteBySlug resolves a note slug to its full on-disk content, searching the
 // request's read scope first and falling back to the global scope -- the same
 // resolution memory_read applies to names, because briefings, plan compositions,
-// and notes_create responses all name notes by slug.
-func (s *Server) loadNoteBySlug(ctx context.Context, req mcp.CallToolRequest, slug string) (core.Note, error) {
+// and notes_create responses all name notes by slug. A slug that is no note's but
+// a plan's answers with the plan's narrative (planNarrativeInScope), and plan is
+// then that slug; otherwise plan is "".
+func (s *Server) loadNoteBySlug(ctx context.Context, req mcp.CallToolRequest, slug string) (note core.Note, plan string, err error) {
 	slug = core.Slugify(slug)
 	project, err := s.resolveReadScope(ctx, argString(req, "project"))
 	if err != nil {
-		return core.Note{}, err
+		return core.Note{}, "", err
 	}
 	idx, ok, err := store.NoteBySlug(ctx, s.cfg.DB, project, slug)
 	if err != nil {
-		return core.Note{}, err
+		return core.Note{}, "", err
 	}
+	// The global scope was searched too: the caller is bound to it, or its fence
+	// leaves it readable.
+	globalSearched := project == ""
 	if !ok && project != "" {
 		// The fallback resolves no scope of its own, so a sealed session would
 		// otherwise read a global note its fence had removed from its world.
-		global, gerr := s.canReadGlobal(ctx)
-		if gerr != nil {
-			return core.Note{}, gerr
+		if globalSearched, err = s.canReadGlobal(ctx); err != nil {
+			return core.Note{}, "", err
 		}
-		if global {
+		if globalSearched {
 			idx, ok, err = store.NoteBySlug(ctx, s.cfg.DB, "", slug)
 			if err != nil {
-				return core.Note{}, err
+				return core.Note{}, "", err
 			}
 		}
 	}
 	if !ok {
-		return core.Note{}, s.noteReadMiss(ctx, project, slug)
+		narrative, found, perr := s.planNarrativeInScope(ctx, project, slug, globalSearched)
+		if perr != nil {
+			// The miss is already decided; a failed plan lookup must not turn it
+			// into a different error (noteReadMiss logs its own hint failures).
+			s.logger.Warn("mcp: notes_read plan slug", "slug", slug, "error", perr)
+		}
+		if !found {
+			return core.Note{}, "", s.noteReadMiss(ctx, project, slug)
+		}
+		idx, plan = narrative, slug
 	}
-	return s.cfg.Files.Store().ReadNote(idx.FilePath)
+	note, err = s.cfg.Files.Store().ReadNote(idx.FilePath)
+	return note, plan, err
+}
+
+// planNarrativeInScope answers a by-slug miss whose slug is no note's but a
+// plan's -- agents hold plan slugs from briefings, plan:<slug> tags and
+// tasks_ready, and try them as note slugs -- with the plan's narrative note, but
+// only where that is no wider a read than the one asked for: the narrative is in
+// the scope the slug lookup just searched (the read scope, or the global scope
+// when that was searched too), and no note the caller may read elsewhere holds
+// the slug itself. A plan whose narrative lives in another project keeps
+// noteReadMiss's pointer, so reaching another project is still the caller's
+// explicit project= (which resolveReadScope judges, locks and all), never a
+// guess made here.
+func (s *Server) planNarrativeInScope(ctx context.Context, project, slug string, globalSearched bool) (core.Note, bool, error) {
+	scopes, err := store.ProjectsWithNoteSlug(ctx, s.cfg.DB, slug)
+	if err != nil {
+		return core.Note{}, false, err
+	}
+	if elsewhere, err := s.readableElsewhere(ctx, project, scopes); err != nil || len(elsewhere) > 0 {
+		return core.Note{}, false, err
+	}
+	primary, _, ok, err := plans.Composition(ctx, s.cfg.DB, slug)
+	if err != nil || !ok {
+		return core.Note{}, false, err
+	}
+	if primary.Project != project && (primary.Project != "" || !globalSearched) {
+		return core.Note{}, false, nil
+	}
+	if readable, err := store.CanRead(ctx, s.cfg.DB, s.callerScope(ctx), primary.Project); err != nil || !readable {
+		return core.Note{}, false, err
+	}
+	return store.NoteBySlug(ctx, s.cfg.DB, primary.Project, primary.Slug)
 }
 
 // noteReadMiss explains a by-slug notes_read miss, the twin of memoryReadMiss:

@@ -74,6 +74,15 @@ note `plan:<slug>` and it joins that plan's supporting context, so the next agen
 inherits the design and the reasoning behind it, not just the step list. See
 [Tasks](/reference/mcp/tasks/) for the step half of the composition.
 
+Briefings and tasks name a plan by its slug, and the plan's narrative note
+usually has a longer slug of its own. So `notes_read slug=<plan slug>`, when no
+note has that slug, answers with the plan's narrative note. The answer carries
+`plan` (the slug asked for) and a `note` saying so. It does that only when the
+narrative is in the scope the lookup searched: the read scope, or the global
+scope it falls back to. A plan whose narrative is in another project gets a miss
+that names the narrative's slug and its `project=` instead. Reading another
+project stays an explicit `project=`, never an inference.
+
 ## Projects and scope
 
 `project_list` and `project_create` manage the scopes everything else inherits.

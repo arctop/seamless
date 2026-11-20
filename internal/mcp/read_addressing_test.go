@@ -141,10 +141,36 @@ func TestNotesRead_MissNamesTheProjectOrThePlan(t *testing.T) {
 		"slug": "move-the-repo-to-its-new-home", "project": "tools",
 	})["body"], "the narrative")
 
-	// Inside the plan's own project the pointer needs no project.
+	// Inside the plan's own project the plan's slug answers with its narrative,
+	// saying so and naming the plan back: no wider a read than the slug asked for.
+	r := callJSON(t, ctx, tools, "notes_read", map[string]any{"slug": "move-home"})
+	require.Equal(t, "move-the-repo-to-its-new-home", r["slug"])
+	require.Contains(t, r["body"], "the narrative")
+	require.Equal(t, "move-home", r["plan"])
+	require.Equal(t, "move-home is a plan's slug, not a note's: this is the plan's narrative note "+
+		"(slug move-the-repo-to-its-new-home); its steps are tasks_list plan=move-home", r["note"])
+	// A note that IS named by its slug carries neither.
+	r = callJSON(t, ctx, tools, "notes_read", map[string]any{"slug": "move-the-repo-to-its-new-home"})
+	require.NotContains(t, r, "plan")
+	require.NotContains(t, r, "note")
+
+	// A note holding the plan's slug itself in a project the caller may read is
+	// the miss's to name: the slug is never answered with a different note.
+	callJSON(t, ctx, cli, "notes_create", map[string]any{
+		"title": "Move Home", "body": "a note of that very slug", "project": "series-b",
+	})
 	isErr, txt = callErr(t, ctx, tools, "notes_read", map[string]any{"slug": "move-home"})
 	require.True(t, isErr)
-	require.Contains(t, txt, "read the plan's narrative with slug=move-the-repo-to-its-new-home, and")
+	require.Contains(t, txt, "it is in project series-b: pass project=series-b")
+
+	// A global narrative answers a project-bound caller, whose by-slug lookup
+	// falls back to the global scope anyway.
+	callJSON(t, ctx, cli, "notes_create", map[string]any{
+		"title": "Shared Runbook Plan", "body": "global narrative", "tags": []string{"plan:shared-runbook"}, "project": "global",
+	})
+	r = callJSON(t, ctx, cli, "notes_read", map[string]any{"slug": "shared-runbook"})
+	require.Contains(t, r["body"], "global narrative")
+	require.Equal(t, "shared-runbook", r["plan"])
 
 	// A fenced project's notes never surface.
 	isErr, txt = callErr(t, ctx, cli, "notes_read", map[string]any{"slug": "client-notes"})
