@@ -17,10 +17,11 @@ see [Seamless in the Claude app](https://thereisnospoon.org/claude-app/).
 
 It gives a fleet of agents a shared, durable memory and a way to divide work
 without colliding: memories with a supersession lifecycle, hybrid recall, a
-dependency-aware task queue with lease-based claiming, captured plans, and
-research trials. Durable knowledge is stored as markdown files on disk; the
-`seamlessd` daemon indexes it, serves it over MCP, and renders a web console,
-while the companion `seam` CLI gives headless agents a direct interface.
+dependency-aware task queue with lease-based claiming, and captured plans,
+behind walls you choose. Durable knowledge is stored as markdown files on disk;
+the `seamlessd` daemon indexes it, serves it over MCP, and renders a web
+console, while the companion `seam` CLI gives headless agents a direct
+interface.
 
 **Full documentation: [thereisnospoon.org/docs/](https://thereisnospoon.org/docs/)**
 &nbsp;·&nbsp; Website: [thereisnospoon.org](https://thereisnospoon.org) (source in
@@ -36,8 +37,14 @@ Developed and published by [Arctop](https://arctop.com). MIT licensed.
 - **Files are the source of truth.** Every memory and note is a markdown file
   with YAML frontmatter under `~/.seamless` -- git-diffable, greppable,
   hand-editable. SQLite indexes those files and also stores operational state
-  such as sessions, tasks, trials, and events, so back up the whole data
-  directory.
+  such as sessions, tasks, trials, and events; a release install backs the
+  whole data directory up every day and keeps the last seven.
+- **Built for the day an agent gets tricked.** No account, no telemetry, and
+  nothing off your computer can reach it by default. Fence a client's project
+  so its knowledge stays put, hold suspicious agent writes for your review, and
+  run Seamless in its own OS account so a locked project opens only with your
+  Touch ID, a passkey, or your password. The limits are written down too:
+  [the security model](https://thereisnospoon.org/security/).
 - **Curation proposes, humans dispose.** Every gardener pass -- from
   deduplicating and archiving to flagging dead weight and knowledge gaps --
   only *proposes*; applying is an explicit action. Supersession preserves
@@ -52,15 +59,33 @@ because categories do not go stale:
 
 | | Seamless | Cloud memory APIs | Built-in agent memory | Knowledge-graph servers |
 |---|---|---|---|---|
-| Storage format | Markdown files on your disk; SQLite indexes them and stores operational state | Their database, reached by API key | Vendor-managed store inside one product | A graph database, often a separate server |
-| Runs where | Your machine, localhost only | Their cloud | The vendor's product | Your machine or theirs |
-| Account required | No | Yes | The vendor's | Usually no |
-| Multi-agent coordination | Task queue, lease-based claiming, shared plans | None | None -- one agent, one store | Shared reads at best |
-| Forgetting policy | Supersession with provenance; a gardener proposes, a human disposes | Automatic summarization you do not control | Vendor-defined | Manual |
+| Storage format | Markdown files on your disk; SQLite indexes them and stores operational state | Their database, reached by API key | Notes one client keeps, per repository or per product | A graph database, often a separate server |
+| Runs where | Your computer, or a Server of yours your other computers pair with | Their cloud | Inside one client | Your machine or theirs |
+| Account required | No | Yes | The client's | Usually no |
+| Multi-agent coordination | Task queue, lease-based claiming, shared plans | None | None -- one client, one store | Shared reads at best |
+| Walls between projects | Confidential and sealed projects; locked projects open only with your approval | Workspace permissions | One store per repository or product | Usually none |
+| Forgetting policy | Supersession with provenance; a gardener proposes, a human disposes | Automatic summarization you do not control | The model prunes | Manual |
 | Runtime | Static Go daemon and CLI | HTTP SDK against their service | None (built in) | Node or Python, plus the database |
 
 For the version with product names and receipts, see
 [the full comparison](https://thereisnospoon.org/compare/).
+
+## Security and privacy
+
+Seamless assumes an agent can be tricked: a web page, an issue, or an email can
+carry instructions it will follow. Out of the box it runs on your computer,
+sends no telemetry, and makes one request of its own, an anonymous check for
+new releases. On top of that come five layers, in the order the console's
+Privacy screen draws them: project fences, write screening, Seamless in its own
+account, locked projects, and restricted agent accounts. Every release is
+signed by the release workflow (Sigstore) and by the maintainer's hardware key,
+and checked before anything installs.
+
+[The security page](https://thereisnospoon.org/security/) has the whole model,
+limits included, and the [docs](https://thereisnospoon.org/docs/concepts/security/)
+have every mechanism. To report a vulnerability, use
+[private vulnerability reporting](https://github.com/arctop/seamless/security/advisories/new);
+see [SECURITY.md](SECURITY.md).
 
 ## Real transcripts
 
@@ -87,7 +112,7 @@ identical repo, with and without Seamless:
 
 Not a hosted team knowledge base, not a RAG framework, not a benchmark winner:
 it is memory and coordination for one owner's fleet of agents, on that owner's
-machine.
+computers.
 
 ## Quick start
 
@@ -102,8 +127,9 @@ irm https://thereisnospoon.org/install.ps1 | iex
 ```
 
 That is the whole install. It needs `curl` and `tar` and nothing else -- no Go,
-no CGO toolchain, no database, no Node. It fetches the checksum-verified release
-archive for your platform (macOS, Linux, and Windows; amd64 and arm64), installs
+no CGO toolchain, no database, no Node. It fetches the release archive for your
+platform (macOS, Linux, and Windows; amd64 and arm64), checks it against
+checksums the maintainer signed with a hardware key, installs
 `seamlessd` and `seam` into `~/.local/bin`, generates the bearer key, installs
 hooks, MCP, and skills for the detected Claude Code/Codex local hosts, and runs
 the daemon as a per-user service -- launchd on macOS, systemd `--user` on Linux, an
@@ -113,8 +139,9 @@ one computer keeping the data for the others
 ([Share one daemon across your computers](https://thereisnospoon.org/docs/guides/network-install/)).
 It keeps itself up to date: from v0.7.0 it
 installs each new release by itself, a day after it is published and at a moment
-no agent is using it -- backed up, and rolled back if the new release does not
-come up. To update right now, run `seamlessd update` (`--check` reports
+no agent is using it, or within a few days at the latest -- backed up, and
+rolled back if the new release does not come up. It also backs your data up
+every day and keeps the last seven. To update right now, run `seamlessd update` (`--check` reports
 installed vs latest): your config and `~/.seamless` are preserved.
 
 > **Early days, frequent releases.** Seamless is early in its development
@@ -154,8 +181,8 @@ The full docs are at
 
 | | |
 |---|---|
-| [Concepts](https://thereisnospoon.org/docs/concepts/) | Memory & notes, sessions & briefings, recall, tasks & plans, projects & scope, the gardener |
-| [Guides](https://thereisnospoon.org/docs/guides/) | Integrating an agent, writing memories that get recalled, coordinating a fleet, troubleshooting |
+| [Concepts](https://thereisnospoon.org/docs/concepts/) | How it works, security and privacy, memory & notes, sessions & briefings, recall, tasks & plans, projects & isolation, networked Seamless, the gardener, repo locks |
+| [Guides](https://thereisnospoon.org/docs/guides/) | Integrating an agent, writing memories that get recalled, coordinating a fleet, backups, a networked install, locked projects, write screening, a security monitor, troubleshooting |
 | [Reference](https://thereisnospoon.org/docs/reference/) | Every MCP tool, both CLIs, every config key, the hooks, and the file formats |
 | [Internals](https://thereisnospoon.org/docs/internals/) | Architecture, contributing, domain invariants |
 
