@@ -61,6 +61,10 @@ const (
 	// pasStatePath is the state file: root's, readable by every account
 	// (0644), so status and doctor read it as anyone while only root writes it.
 	pasStatePath = "/opt/seamless/etc/peer-auth-setup.state"
+	// pasReleaseSigners is the daemon's update.release_signers: root's copy
+	// (0644) of the owner's pin, under directories only root can write, as
+	// serve requires of a pin under peer_auth.
+	pasReleaseSigners = "/opt/seamless/etc/release_signers"
 	// pasBackupPath is the export taken before anything moves: root's alone
 	// (0600), with every project in it.
 	pasBackupPath = "/opt/seamless/before-peer-auth.tar.gz"
@@ -120,10 +124,20 @@ type pasPlan struct {
 	// OldSeam is the seam the owner's Claude Code hooks ran before the move,
 	// which undo puts them back on; "" when none was recorded.
 	OldSeam string `json:"old_seam,omitempty"`
+	// ReleaseSigners is the owner's update.release_signers, the file the
+	// daemon's pin (pasReleaseSigners) is copied from, and SignersSHA256 the
+	// hash of what it held when the move was planned: the release is held to
+	// those keys before it is installed, and root's copy to that hash, so the
+	// keys the owner confirmed are the keys pinned. "" without a pin.
+	ReleaseSigners string `json:"release_signers,omitempty"`
+	SignersSHA256  string `json:"signers_sha256,omitempty"`
 }
 
 // pasTeam is a Developer ID team identifier as codesign reports it.
 var pasTeam = regexp.MustCompile(`^[A-Z0-9]{10}$`)
+
+// pasSHA256 is a hex SHA-256, as the plan records one.
+var pasSHA256 = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // pasPath reports whether p is an absolute path a root command may carry.
 func pasPath(p string) bool {
@@ -167,6 +181,12 @@ func (p pasPlan) problem() string {
 		return "the plan names neither a release nor a source build"
 	case p.Source != "" && !pasPath(p.Source):
 		return "the source build's directory is not absolute"
+	case (p.ReleaseSigners == "") != (p.SignersSHA256 == ""):
+		return "the release signers file and its hash come as a pair"
+	case p.ReleaseSigners != "" && (!pasPath(p.ReleaseSigners) || !pasSHA256.MatchString(p.SignersSHA256)):
+		return "the release signers file in the plan is not an absolute path with its sha256"
+	case p.ReleaseSigners != "" && p.Release == "":
+		return "update.release_signers installs only a release the owner signed, and the plan installs a source build"
 	case p.OldSeam != "" && (!pasPath(p.OldSeam) || strings.HasPrefix(p.OldSeam, pasRoot+"/")):
 		return "the hooks' seam before the move is not an absolute path outside " + pasRoot
 	case p.Team != "" && (p.GOOS != "darwin" || p.Release == "" || !pasTeam.MatchString(p.Team)):
@@ -730,6 +750,10 @@ func pasShowPlan(w io.Writer, p pasPlan, st pasState, resume bool, warnings []st
 			row("passkeys", rest)
 			continue
 		}
+		if rest, ok := strings.CutPrefix(wr, "signers: "); ok {
+			row("signers", rest)
+			continue
+		}
 		fmt.Fprintf(w, "  warning   %s\n", wr)
 	}
 	fmt.Fprintln(w, "\nSteps (the ones that need root ask for your password through sudo):")
@@ -819,6 +843,14 @@ func pasTLSWords(p pasPlan) string {
 		return ""
 	}
 	return ", its TLS pair copied into " + pasTLSDir + " (the key root's and the daemon's alone)"
+}
+
+// pasSignersWords names the daemon's release signers pin, "" without one.
+func pasSignersWords(p pasPlan) string {
+	if p.ReleaseSigners == "" {
+		return ""
+	}
+	return ", and its release signers pin " + pasReleaseSigners
 }
 
 // pasServiceWords says which service replaces which.
@@ -960,6 +992,16 @@ type pasHostOwner struct {
 	uid               int
 }
 
+// pasRelease is a release setup downloaded and checked against its Sigstore
+// signature: its binaries (name -> contents), the checksums.txt they were
+// checked against, and the owner's signature over it (checksums.txt.sshsig),
+// fetched only when asked for and nil when the release has none.
+type pasRelease struct {
+	bins      map[string][]byte
+	checksums []byte
+	ownerSig  []byte
+}
+
 // pasHost is what setup reads and runs on the machine; realPasHost is this
 // one, and tests build their own.
 type pasHost struct {
@@ -983,8 +1025,14 @@ type pasHost struct {
 	// readFile reads a file as the owner (the state file, the owner's own).
 	readFile func(string) ([]byte, error)
 	// fetch downloads release v's binaries for this machine and checks them
-	// against the release's Sigstore-signed checksums: name -> contents.
-	fetch func(ctx context.Context, v update.Version) (map[string][]byte, error)
+	// against the release's Sigstore-signed checksums; with ownerSig it also
+	// downloads the owner's signature over those checksums, when the release
+	// has one.
+	fetch func(ctx context.Context, v update.Version, ownerSig bool) (pasRelease, error)
+	// readSigners reads the owner's update.release_signers as the updater
+	// would trust it on a per-user install (pasReadSigners), returning what it
+	// holds.
+	readSigners func(path string) ([]byte, error)
 	// team is the Developer ID team a binary is signed by ("" when none).
 	team func(ctx context.Context, path string) string
 	// health asks the daemon on the socket whether it serves.

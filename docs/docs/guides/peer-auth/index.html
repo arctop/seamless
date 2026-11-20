@@ -1611,7 +1611,10 @@ them, and name the file in the daemon's config:</p>
 </span></span></span><span class="line"><span class="cl"><span class="nt">update</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">release_signers</span><span class="p">:</span><span class="w"> </span><span class="l">/opt/seamless/etc/release_signers</span><span class="w">
 </span></span></span></code></pre></div>
-<p>(<code>root</code>'s group is <code>root</code> on Linux.) Then restart the daemon. Under peer_auth
+<p>(<code>root</code>'s group is <code>root</code> on Linux.) Then restart the daemon.
+<a href="../../reference/cli-seamlessd/#seamlessd_peer_auth"><code>seamlessd peer-auth setup</code></a>
+does this for you when your own config pins <code>update.release_signers</code>: it holds
+the release it installs to those keys and makes this copy. Under peer_auth
 <code>serve</code> refuses to start when the file is not root's, when a directory above it
 is writable by any account but root - the daemon's included, since the pin binds
 its own updater - or when it names no key for <code>seamless-release</code>; <code>seamlessd doctor</code>, run as the daemon's account, says which. Every update after that, by

@@ -1417,7 +1417,10 @@ update:
   release_signers: /opt/seamless/etc/release_signers
 ```
 
-(`root`'s group is `root` on Linux.) Then restart the daemon. Under peer_auth
+(`root`'s group is `root` on Linux.) Then restart the daemon.
+[`seamlessd peer-auth setup`](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_peer_auth)
+does this for you when your own config pins `update.release_signers`: it holds
+the release it installs to those keys and makes this copy. Under peer_auth
 `serve` refuses to start when the file is not root's, when a directory above it
 is writable by any account but root - the daemon's included, since the pin binds
 its own updater - or when it names no key for `seamless-release`; `seamlessd

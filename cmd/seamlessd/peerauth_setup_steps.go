@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/releasesig"
 	"github.com/arctop/seamless/internal/shellcmd"
 	"github.com/arctop/seamless/internal/update"
 )
@@ -41,7 +42,9 @@ var pasSteps = []pasStepDef{
 			return "the binaries into " + pasBin + ", each checked in root's staging first"
 		}},
 	{id: "config", build: pasConfigCommands,
-		title: func(p pasPlan) string { return "the daemon's config " + pasConfig + pasTLSWords(p) }},
+		title: func(p pasPlan) string {
+			return "the daemon's config " + pasConfig + pasTLSWords(p) + pasSignersWords(p)
+		}},
 	{id: "retire", before: pasWaitPerUserUpdater, build: pasRetireCommands, after: pasWaitOldDaemonGone,
 		beforeWords: func(p pasPlan) string {
 			return "wait until no update of the per-user install runs (" + pasHomeWords(p, update.LockPath(p.OldDataDir)) + ")"
@@ -196,12 +199,15 @@ func pasBinaryCommands(x *pasRun) ([]string, error) {
 		}
 	default:
 		v, _ := update.Parse(p.Release) // problem() checked it
-		files, err := x.h.fetch(x.ctx, v)
+		rel, err := x.h.fetch(x.ctx, v, p.ReleaseSigners != "")
 		if err != nil {
 			return nil, fmt.Errorf("download and check release v%s: %w", p.Release, err)
 		}
+		if err := pasCheckOwnerSignature(x, v, rel); err != nil {
+			return nil, err
+		}
 		for _, name := range systemBinaries {
-			data, ok := files[name]
+			data, ok := rel.bins[name]
 			if !ok {
 				return nil, fmt.Errorf("release v%s has no %s", p.Release, name)
 			}
@@ -243,9 +249,44 @@ func pasBinaryCommands(x *pasRun) ([]string, error) {
 	return cmds, nil
 }
 
-// pasConfigCommands write the daemon's config, and with TLS on its pair,
-// each a copy root checks against the hash of what this run prepared (the
-// config) or read (the pair) before it goes into place.
+// pasCheckOwnerSignature holds release v to the owner's release signers pin
+// when the plan carries one, as the updater does (verifyOwnerSignature): the
+// owner's signature over the checksums.txt the binaries were checked against,
+// by a key the pin lists, with the pin's file still holding what the plan
+// recorded. No pin, nothing to check.
+func pasCheckOwnerSignature(x *pasRun, v update.Version, rel pasRelease) error {
+	p := x.plan
+	if p.ReleaseSigners == "" {
+		return nil
+	}
+	data, err := x.h.readSigners(p.ReleaseSigners)
+	if err != nil {
+		return err
+	}
+	if sum := sha256.Sum256(data); hex.EncodeToString(sum[:]) != p.SignersSHA256 {
+		return fmt.Errorf("%s changed since the move was planned (the plan pinned what it held then, sha256 %s): "+
+			"put it back, or run seamlessd peer-auth undo and plan the move afresh", p.ReleaseSigners, p.SignersSHA256)
+	}
+	signers, err := releasesig.ParseOwnerSigners(data)
+	if err != nil {
+		return fmt.Errorf("%w: %s: %w", errReleaseSigners, p.ReleaseSigners, err)
+	}
+	if rel.ownerSig == nil {
+		return ownerSignatureMissing(v, p.ReleaseSigners)
+	}
+	who, err := verifyOwnerSignature(signers, p.ReleaseSigners, v, rel.checksums, rel.ownerSig)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(x.h.out, "  owner     signature verified -- v%s's checksums.txt signed by %s, a key %s lists\n",
+		v, who, pasHomeWords(p, p.ReleaseSigners))
+	return nil
+}
+
+// pasConfigCommands write the daemon's config, and with TLS on its pair and
+// with a release signers pin its copy, each a copy root checks against the
+// hash of what this run prepared (the config), read (the pair) or the plan
+// recorded (the pin) before it goes into place.
 func pasConfigCommands(x *pasRun) ([]string, error) {
 	p, t := x.plan, x.t
 	raw, err := x.h.readFile(p.OldConfig)
@@ -282,6 +323,13 @@ func pasConfigCommands(x *pasRun) ([]string, error) {
 				staged: filepath.Join(pasTLSDir, "."+base+".new"), dest: filepath.Join(pasTLSDir, base),
 				owner: "root", group: f.group, mode: f.mode})...)
 		}
+	}
+	if p.ReleaseSigners != "" {
+		// The hash is the plan's: the keys the owner confirmed are the keys
+		// the daemon is pinned to, and a file changed since then stops here.
+		cmds = append(cmds, rootstepCopyCommands(t, rootstepCopy{source: p.ReleaseSigners, sha256: p.SignersSHA256,
+			staged: filepath.Join(pasEtc, ".release_signers.new"), dest: pasReleaseSigners,
+			owner: "root", group: x.wheel(), mode: "0644"})...)
 	}
 	sum := sha256.Sum256(daemon)
 	cmds = append(cmds, rootstepCopyCommands(t, rootstepCopy{source: src, sha256: hex.EncodeToString(sum[:]),

@@ -1199,7 +1199,7 @@ it needs root:
 1. `backup`: an export of everything into `/opt/seamless/before-peer-auth.tar.gz`, root's alone (`0600`).
 2. `account`: `_seamless`, a system account (on macOS an id below 500 free as both a user id and a group id), the layout, and the pin.
 3. `binaries`: into `/opt/seamless/bin`, held by the daemon's account so it [updates itself](/guides/peer-auth/#updates).
-4. `config`: `/opt/seamless/etc/seamless.yaml` (`root:_seamless 0640`): your config with `data_dir`, the TLS pair (copied into `/opt/seamless/etc/tls`) and a `peer_auth` block changed, every other key kept, the bearer key and the LLM keys among them.
+4. `config`: `/opt/seamless/etc/seamless.yaml` (`root:_seamless 0640`): your config with `data_dir`, the TLS pair (copied into `/opt/seamless/etc/tls`), the release signers pin (copied to `/opt/seamless/etc/release_signers`) and a `peer_auth` block changed, every other key kept, the bearer key and the LLM keys among them.
 5. `retire`: your per-user service stopped, its LaunchAgent plist kept as `<label>.plist.pre-peer-auth` or its systemd user unit disabled. An update the per-user install is running (it holds `~/.seamless/update/update.lock`) is waited out first, up to five minutes: moving its data mid-update would fail it, and its rollback would start the per-user daemon again.
 6. `data`: your data directory moved to `/opt/seamless/data`, the daemon's account's alone.
 7. `service`: the LaunchDaemon `com.arctop.seamless.daemon` or the system unit `seamless-daemon.service` (on Linux the account lingers first).
@@ -1220,7 +1220,15 @@ into `/opt/seamless/stage`, a directory only root can write, and checks each
 copy there against the hash taken of the verified release - on macOS also
 against Apple's notarization and the Developer ID team this seamlessd carries
 (or, for a source build installing a release, the team that signed it) - before
-it goes into place. A source build refuses without `--source-build`, which
+it goes into place. When your config pins the owner's release keys
+([`update.release_signers`](/guides/peer-auth/#owner-signed-releases)), the
+release is also held to the owner's signature over that `checksums.txt`
+(`checksums.txt.sshsig`, by a key the file lists, as every update checks it)
+before anything is staged, and refused without one; the plan shows the keys,
+step 4 installs root's copy of the file as `/opt/seamless/etc/release_signers`
+(checked against the hash the plan took, so a file changed since stops the
+move) and points the daemon's config at it, and a source build is refused. A
+source build refuses without `--source-build`, which
 copies the binaries beside it with the hash check alone: no signature checks
 them, and the daemon never updates itself. `--root-owned-binaries` keeps
 `/opt/seamless/bin` root's, and the daemon then only tells you about a new

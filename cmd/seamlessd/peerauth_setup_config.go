@@ -19,8 +19,9 @@ import (
 )
 
 // pasDaemonConfig is the daemon's config: raw, the owner's server config,
-// with data_dir moved, the TLS pair pointed at the daemon's copies, and the
-// peer_auth block turned on for the owner on the socket. Comments and every
+// with data_dir moved, the TLS pair and the release signers pin pointed at
+// the daemon's copies, and the peer_auth block turned on for the owner on the
+// socket. Comments and every
 // other key are kept as they were.
 func pasDaemonConfig(raw []byte, p pasPlan, now time.Time) ([]byte, error) {
 	var doc yaml.Node
@@ -42,6 +43,15 @@ func pasDaemonConfig(raw []byte, p pasPlan, now time.Time) ([]byte, error) {
 		}
 		pasSetScalar(tls, "cert_file", filepath.Join(pasTLSDir, filepath.Base(p.TLSCert)), "")
 		pasSetScalar(tls, "key_file", filepath.Join(pasTLSDir, filepath.Base(p.TLSKey)), "")
+	}
+	if p.ReleaseSigners != "" {
+		// The daemon's own copy, root's: under peer_auth serve refuses a pin
+		// another account could rewrite, and the owner's is the owner's.
+		upd, err := pasMapping(root, "update")
+		if err != nil {
+			return nil, err
+		}
+		pasSetScalar(upd, "release_signers", pasReleaseSigners, "")
 	}
 	pa, err := pasMapping(root, "peer_auth")
 	if err != nil {

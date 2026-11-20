@@ -18,6 +18,7 @@ import (
 
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/releasesig"
 	"github.com/arctop/seamless/internal/shellcmd"
 	"github.com/arctop/seamless/internal/update"
 )
@@ -39,13 +40,21 @@ type pasFake struct {
 	pin      access.DaemonPin
 	pinned   bool
 	fetchErr error
-	team     string
-	cfgPath  string
-	dataDir  string
+	// ownerSig is the release's checksums.txt.sshsig, nil for none;
+	// fetchedOwnerSig records whether setup asked for it.
+	ownerSig        []byte
+	fetchedOwnerSig bool
+	team            string
+	cfgPath         string
+	dataDir         string
 }
 
 // pasTestTeam is a made-up Developer ID team.
 const pasTestTeam = "ABCDE12345"
+
+// pasTestChecksums is the checksums.txt the fake release's binaries were
+// checked against, which the owner's signature covers.
+const pasTestChecksums = "0123abcd  seamless_0.10.4_darwin_arm64.tar.gz\n"
 
 var pasAppendRe = regexp.MustCompile(`^printf '%s\\n' (.*) \| /usr/bin/sudo /usr/bin/tee -a ` + regexp.QuoteMeta(pasStatePath) + ` >/dev/null( &&)?$`)
 
@@ -126,11 +135,27 @@ func newPasFake(t *testing.T, goos string) *pasFake {
 		}
 		return os.ReadFile(p)
 	}
-	h.fetch = func(context.Context, update.Version) (map[string][]byte, error) {
+	h.fetch = func(_ context.Context, _ update.Version, ownerSig bool) (pasRelease, error) {
 		if f.fetchErr != nil {
-			return nil, f.fetchErr
+			return pasRelease{}, f.fetchErr
 		}
-		return map[string][]byte{"seam": []byte("seam of the release"), "seamlessd": []byte("seamlessd of the release")}, nil
+		f.fetchedOwnerSig = ownerSig
+		rel := pasRelease{bins: map[string][]byte{"seam": []byte("seam of the release"), "seamlessd": []byte("seamlessd of the release")},
+			checksums: []byte(pasTestChecksums)}
+		if ownerSig {
+			rel.ownerSig = f.ownerSig
+		}
+		return rel, nil
+	}
+	h.readSigners = func(p string) ([]byte, error) {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := releasesig.ParseOwnerSigners(data); err != nil {
+			return nil, err
+		}
+		return data, nil
 	}
 	h.team = func(context.Context, string) string { return f.team }
 	h.health = func(context.Context) error { return nil }

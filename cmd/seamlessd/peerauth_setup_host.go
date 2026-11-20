@@ -7,6 +7,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,6 +25,7 @@ import (
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/hooks"
 	"github.com/arctop/seamless/internal/releasesig"
+	"github.com/arctop/seamless/internal/sshsig"
 	"github.com/arctop/seamless/internal/update"
 )
 
@@ -188,12 +191,37 @@ func pasPreflight(ctx context.Context, h *pasHost, o pasOptions) (pasPlan, []str
 			p.Team = team
 		}
 	}
+	// The owner's release signers pin: the release is held to it before it is
+	// installed, and the daemon keeps a copy of it, root's.
+	var signersRow string
+	if path := cfg.Update.ReleaseSigners; path != "" {
+		if p.Source != "" {
+			return refuse("update.release_signers (%s) installs only a release the owner signed, and --source-build copies binaries nobody signed: "+
+				"install a release (--release X.Y.Z), or remove the key from %s", path, cfg.SourcePath())
+		}
+		data, err := h.readSigners(path)
+		if err != nil {
+			return refuse("%v", err)
+		}
+		signers, err := releasesig.ParseOwnerSigners(data)
+		if err != nil {
+			return refuse("update.release_signers %s: %v", path, err)
+		}
+		sum := sha256.Sum256(data)
+		p.ReleaseSigners, p.SignersSHA256 = filepath.Clean(path), hex.EncodeToString(sum[:])
+		signersRow = "signers: " + pasReleaseSigners + ", root's copy of " + pasHomeWords(p, p.ReleaseSigners) +
+			": v" + p.Release + " installs only once its " + update.OwnerSignatureAsset + " verifies against " +
+			strings.Join(releasesig.OwnerKeys(signers), "; ") + ", and so does every update after it"
+	}
 	if why := p.problem(); why != "" {
 		return refuse("%s", why)
 	}
 
 	// What the owner should know first.
 	var warnings []string
+	if signersRow != "" {
+		warnings = append(warnings, signersRow)
+	}
 	for _, kv := range h.environ {
 		name, _, _ := strings.Cut(kv, "=")
 		if strings.HasPrefix(name, "SEAMLESS_") && name != "SEAMLESS_CONFIG" {
@@ -201,7 +229,7 @@ func pasPreflight(ctx context.Context, h *pasHost, o pasOptions) (pasPlan, []str
 		}
 	}
 	for _, k := range []struct{ key, value string }{
-		{"tls.ca_file", cfg.TLS.CAFile}, {"backup.dir", cfg.Backup.Dir}, {"update.release_signers", cfg.Update.ReleaseSigners},
+		{"tls.ca_file", cfg.TLS.CAFile}, {"backup.dir", cfg.Backup.Dir},
 		{"commits.snapshot_file", cfg.Commits.SnapshotFile}, {"screening.lockdown_file", cfg.Screening.LockdownFile},
 		{"screening.feed_socket", cfg.Screening.FeedSocket}, {"screening.feed_spool", cfg.Screening.FeedSpool},
 	} {
@@ -358,6 +386,7 @@ func realPasHost() *pasHost {
 		return cmd.Run()
 	}
 	h.fetch = pasFetchRelease
+	h.readSigners = pasReadSigners
 	h.team = pasCodesignTeam
 	h.health = pasSocketHealth
 	return h
@@ -416,39 +445,76 @@ func pasCodesignTeam(ctx context.Context, path string) string {
 // pasFetchRelease downloads release v's checksums.txt, its Sigstore bundle
 // and this machine's archive, checks them as a system install's update does
 // (verifySystemDownload: the exact tag's identity, the archive's checksum,
-// its layout), and returns the binaries in it.
-func pasFetchRelease(ctx context.Context, v update.Version) (map[string][]byte, error) {
+// its layout), and returns the binaries in it with the checksums. With
+// ownerSig it also downloads the owner's checksums.txt.sshsig, as the
+// updater does under update.release_signers (fetchTarget): none listed
+// leaves it nil, which the caller refuses (ownerSignatureMissing); one still
+// uploading is errReleaseInFlight.
+func pasFetchRelease(ctx context.Context, v update.Version, ownerSig bool) (pasRelease, error) {
 	src := newReleaseSource()
 	rel, err := src.releaseByTag(ctx, v)
 	if err != nil {
-		return nil, err
+		return pasRelease{}, err
 	}
 	if err := checkPublished(rel, v, systemAssetNames(v, runtime.GOOS, runtime.GOARCH)); err != nil {
-		return nil, err
+		return pasRelease{}, err
 	}
 	dl := systemDownload{version: v, archiveName: platformArchive(v, runtime.GOOS, runtime.GOARCH)}
 	if dl.checksums, err = src.fetchAsset(ctx, v, checksumsAsset); err != nil {
-		return nil, err
+		return pasRelease{}, err
 	}
 	if dl.checksumsBundle, err = src.fetchAsset(ctx, v, checksumsAsset+bundleSuffix); err != nil {
-		return nil, err
+		return pasRelease{}, err
 	}
 	if dl.archive, err = src.fetchArchive(ctx, v, dl.archiveName); err != nil {
-		return nil, err
+		return pasRelease{}, err
 	}
 	if err := verifySystemDownload(dl, releasesig.Embedded()); err != nil {
-		return nil, err
+		return pasRelease{}, err
 	}
-	out := map[string][]byte{}
+	out := pasRelease{bins: map[string][]byte{}, checksums: dl.checksums}
+	if ownerSig {
+		switch listed, uploaded := listedAsset(rel, update.OwnerSignatureAsset); {
+		case listed && !uploaded:
+			return pasRelease{}, fmt.Errorf("%w: v%s is still uploading %s", errReleaseInFlight, v, update.OwnerSignatureAsset)
+		case listed:
+			if out.ownerSig, err = src.fetchAsset(ctx, v, update.OwnerSignatureAsset); err != nil {
+				return pasRelease{}, err
+			}
+		}
+	}
 	err = walkArchive(dl.archive, func(name string, r io.Reader) error {
 		data, err := io.ReadAll(io.LimitReader(r, maxBinaryBytes+1))
 		if err != nil {
 			return err
 		}
-		out[name] = data
+		out.bins[name] = data
 		return nil
 	})
 	return out, err
+}
+
+// pasReadSigners reads the owner's update.release_signers once and holds what
+// it read to the updater's own rules for a pin on a per-user install
+// (loadReleaseSigners: an absolute path, root's or this account's file under
+// directories no other account can write, a key for the release namespace),
+// so setup pins the bytes it checked.
+func pasReadSigners(path string) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s: %w", errReleaseSigners, path, err)
+	}
+	data, err := io.ReadAll(io.LimitReader(f, sshsig.MaxSignersBytes+1))
+	_ = f.Close()
+	if err != nil {
+		return nil, fmt.Errorf("%w: read %s: %w", errReleaseSigners, path, err)
+	}
+	fsys := hostSignersFS()
+	fsys.open = func(string) (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(data)), nil }
+	if _, err := loadReleaseSigners(path, false, fsys); err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 // pasSocketHealth asks the daemon on the socket for /healthz.
