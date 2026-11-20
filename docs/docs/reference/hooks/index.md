@@ -246,6 +246,24 @@ it first instead, and whichever does carries it alone. The conversation's
 sessions are its ambient session and every explicit session `session_start`
 linked to it. See [lease-based task claiming](https://thereisnospoon.org/docs/concepts/lease-based-task-claiming/).
 
+## Transcript copies {#transcripts}
+
+Every `SessionStart` records the `transcript_path` its payload names on the
+session, for every session: under peer_auth the daemon only records it, never
+opens it. A [flagged session's](https://thereisnospoon.org/docs/guides/data/#flagged-transcripts) copy is made
+at its end signal: Claude Code's `SessionEnd`, also for a session the agent
+already closed with `session_end`, and each Codex `Stop`, copied again only once
+the rollout grew. With peer_auth off the daemon copies the file itself in the
+background, on the agent's own computer only. Under peer_auth the end signal's
+answer to a flagged session carries `X-Seamless-Transcript-Wanted: <bytes>` (an
+unflagged session's never does), and `seam hook` - only when `server_url` names
+the socket - sends the file, gzip-compressed as it reads it, to `POST
+/api/hooks/transcript?session_id=<client session id>`, when the file is larger
+than that. The upload is taken only on the socket, for a flagged session the
+caller may act on, and checked as it arrives: it must decode whole, to no more
+than 256 MB. It runs inside the hook's deadline, and a failure costs only the
+copy (one line on the hook's stderr; the session records why).
+
 ## Repo locks in the briefing {#repo-locks}
 
 With [repo locks](https://thereisnospoon.org/docs/concepts/repo-locks/) on, a main session's `SessionStart`

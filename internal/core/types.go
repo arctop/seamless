@@ -222,6 +222,100 @@ var SessionStatuses = []SessionStatus{SessionActive, SessionCompleted, SessionEx
 // Valid reports whether s is a recognized session status.
 func (s SessionStatus) Valid() bool { return slices.Contains(SessionStatuses, s) }
 
+// SessionVerdict is a session's flag: the whole session went unusually well
+// (good) or unusually badly (bad), or is worth re-reading for another reason
+// (notable). none is the argument that clears a flag; it is never stored.
+type SessionVerdict string
+
+const (
+	VerdictGood    SessionVerdict = "good"
+	VerdictBad     SessionVerdict = "bad"
+	VerdictNotable SessionVerdict = "notable"
+	VerdictNone    SessionVerdict = "none"
+)
+
+// SessionVerdicts lists every value a verdict argument takes: the three flags,
+// then none, which clears one.
+var SessionVerdicts = []SessionVerdict{VerdictGood, VerdictBad, VerdictNotable, VerdictNone}
+
+// FlagVerdicts lists the verdicts a flagged session carries (SessionVerdicts
+// less none).
+var FlagVerdicts = []SessionVerdict{VerdictGood, VerdictBad, VerdictNotable}
+
+// Valid reports whether v is a value a verdict argument takes.
+func (v SessionVerdict) Valid() bool { return slices.Contains(SessionVerdicts, v) }
+
+// Flags reports whether v sets a flag (a valid verdict other than none).
+func (v SessionVerdict) Flags() bool { return slices.Contains(FlagVerdicts, v) }
+
+// MaxVerdictReasonRunes bounds a flag's reason: one line, said briefly.
+const MaxVerdictReasonRunes = 500
+
+// TranscriptCopy is what became of a flagged session's transcript copy:
+// copied, or the fixed word saying why none was made. "" means none was
+// attempted yet: the copy is made at the session's end signal.
+type TranscriptCopy string
+
+const (
+	// TranscriptCopied: the copy is kept.
+	TranscriptCopied TranscriptCopy = "copied"
+	// TranscriptNoPath: no hook named a transcript for the session (one from
+	// session_start without hooks).
+	TranscriptNoPath TranscriptCopy = "no_transcript"
+	// TranscriptRemote: the agent runs on another computer, whose files the
+	// daemon cannot read, and its hooks send none (they send one only to a
+	// peer_auth socket).
+	TranscriptRemote TranscriptCopy = "remote"
+	// TranscriptNotPushed: under peer_auth the daemon opens no file an agent
+	// names, and the agent's own hook sent none: it sends one only over the
+	// peer_auth socket, at the session's end signal (a session flagged after
+	// it ended, or an agent on the TCP key, sends none).
+	TranscriptNotPushed TranscriptCopy = "not_pushed"
+	// TranscriptUnreadable: the transcript file could not be read (gone, or
+	// not a regular file).
+	TranscriptUnreadable TranscriptCopy = "unreadable"
+	// TranscriptTooLarge: the transcript is over the size a copy may have.
+	TranscriptTooLarge TranscriptCopy = "too_large"
+	// TranscriptFailed: the copy could not be written, or its upload was cut
+	// off or did not decode.
+	TranscriptFailed TranscriptCopy = "failed"
+)
+
+// TranscriptCopies lists every TranscriptCopy value.
+var TranscriptCopies = []TranscriptCopy{
+	TranscriptCopied, TranscriptNoPath, TranscriptRemote, TranscriptNotPushed,
+	TranscriptUnreadable, TranscriptTooLarge, TranscriptFailed,
+}
+
+// Valid reports whether c is a TranscriptCopy value.
+func (c TranscriptCopy) Valid() bool { return slices.Contains(TranscriptCopies, c) }
+
+// Explain is the copy's state in words, for the owner's surfaces.
+func (c TranscriptCopy) Explain() string {
+	switch c {
+	case "":
+		return "no copy yet: it is made at the session's end"
+	case TranscriptCopied:
+		return "copy kept"
+	case TranscriptNoPath:
+		return "no copy: no hook named a transcript for this session"
+	case TranscriptRemote:
+		return "no copy: the agent ran on another computer, whose files this daemon cannot read"
+	case TranscriptNotPushed:
+		return "no copy: under peer_auth only the agent's own hook sends it, over the socket at the session's end, and none came"
+	case TranscriptUnreadable:
+		return "no copy: the transcript file could not be read"
+	case TranscriptTooLarge:
+		return "no copy: the transcript is larger than a copy may be"
+	case TranscriptFailed:
+		return "no copy: it could not be written, or its upload did not arrive whole"
+	}
+	return "no copy: " + string(c)
+}
+
+// Flagged reports whether the session carries a flag.
+func (s Session) Flagged() bool { return s.Verdict.Flags() }
+
 // SessionSources lists every valid Session.Source. Callers must not invent
 // values: retrieve/briefing.go branches on "compact" and "resume", so a
 // near-miss like "compacted" silently yields the wrong briefing shape.
@@ -329,10 +423,29 @@ type Session struct {
 	// transcript (Claude Code at SessionEnd, Codex every Stop) -- the actual burn,
 	// not the injection estimate. Zero until harvested, or for a client with no
 	// transcript token record. See TokenUsage.
-	Tokens    TokenUsage     `json:"tokens"`
-	Metadata  map[string]any `json:"metadata"`
-	CreatedAt time.Time      `json:"createdAt"`
-	UpdatedAt time.Time      `json:"updatedAt"`
+	Tokens TokenUsage `json:"tokens"`
+	// TranscriptPath is the agent client's transcript file as its hooks name
+	// it, recorded at every SessionStart; "" when no hook named one (a session
+	// from session_start without hooks). A path on the agent's computer: under
+	// peer_auth the daemon never opens it.
+	TranscriptPath string `json:"transcriptPath,omitempty"`
+	// The flag (session_update and session_end's verdict and reason): Verdict
+	// is good, bad or notable, "" while the session is not flagged; FlaggedAt
+	// is when it was last set. One flag per session, the last one set wins.
+	Verdict       SessionVerdict `json:"verdict,omitempty"`
+	VerdictReason string         `json:"verdictReason,omitempty"`
+	FlaggedAt     *time.Time     `json:"flaggedAt,omitempty"`
+	// The flagged session's transcript copy (internal/transcripts): Transcript
+	// is copied, or the word saying why none was made, "" while none was
+	// attempted; TranscriptBytes is the transcript's size when it was copied.
+	// The record alone does not prove the file is on this disk (a restored or
+	// merged database may name a copy made elsewhere): readers check the file.
+	Transcript         TranscriptCopy `json:"transcriptCopy,omitempty"`
+	TranscriptBytes    int64          `json:"transcriptBytes,omitempty"`
+	TranscriptCopiedAt *time.Time     `json:"transcriptCopiedAt,omitempty"`
+	Metadata           map[string]any `json:"metadata"`
+	CreatedAt          time.Time      `json:"createdAt"`
+	UpdatedAt          time.Time      `json:"updatedAt"`
 	// HeldUntil is when the furthest of the holds the session has lapses: the
 	// latest lease among the in_progress tasks it claimed and the repo locks
 	// it holds, lapsed or not; nil when it holds none. Every store read of a session fills it in the
@@ -586,6 +699,12 @@ const (
 	EventRecallMiss       EventKind = "recall.miss"  // a recall tool call that returned zero hits (payload: query, scope, limit, source)
 	EventHookError        EventKind = "hook.error"   // a hook-stage failure swallowed fail-open (payload: stage, error, client)
 	EventAgentMishap      EventKind = "agent.mishap" // a mishap the agent self-reported at session_end (payload: description, plus item_ids of the memories the text names)
+
+	// The session flag (session_update / session_end verdict) and the
+	// transcript copy it keeps (internal/transcripts).
+	EventSessionFlagged    EventKind = "session.flagged"    // a session was flagged, or its flag changed (session_id; payload: verdict, reason, by, retroactive)
+	EventSessionUnflagged  EventKind = "session.unflagged"  // a session's flag was cleared and its transcript copy removed (session_id; payload: verdict -- the one cleared -- by, copy_removed)
+	EventSessionTranscript EventKind = "session.transcript" // a flagged session's transcript was copied, or why not (session_id; payload: copy -- a core.TranscriptCopy word -- bytes, via: daemon or client)
 
 	// Claude Code plan-mode capture (PostToolUse/PermissionRequest/SubagentStop hooks).
 	EventPlanCaptured     EventKind = "plan.captured"     // a plan-file iteration landed as a cc-plan note

@@ -408,7 +408,7 @@ func lmFirstJSON(text string) string {
 // lmHookEvents are the hook events Handler serves (internal/hooks/handler.go
 // Register), the session end last.
 var lmHookEvents = []string{"session-start", "user-prompt-submit", "stop", "post-tool-use", "subagent-start",
-	"subagent-stop", "permission-request", "session-taint", "session-end"}
+	"subagent-stop", "permission-request", "session-taint", "transcript", "session-end"}
 
 // lmHookBody is one hook event's body naming the agent session id.
 func lmHookBody(id, cwd string) map[string]any {

@@ -19,7 +19,7 @@ import (
 const sessionCols = `id, name, project_slug, status, findings, claude_session_id,
 	external_client, cwd, host, source, model, ambient, favorite, metadata, created_at, updated_at,
 	input_tokens, cached_input_tokens, cache_creation_tokens, output_tokens, total_tokens, account,
-	parent_session_id, ` + sessionHeldUntil
+	parent_session_id, ` + sessionFlagCols + `, ` + sessionHeldUntil
 
 // The liveness rule in SQL (core.Session.LiveAsOf is the rule; these are its
 // SQL form, for the readers that judge or count sessions in the database).
@@ -838,6 +838,29 @@ func LatestSessionProject(ctx context.Context, db *sql.DB) (string, error) {
 // clock as well, however long ago it was last updated: such a session is live
 // (core.Session.LiveAsOf), so a list of the recent ones must not drop it.
 func ListSessions(ctx context.Context, db *sql.DB, status core.SessionStatus, since time.Time, limit int) ([]core.Session, error) {
+	return ListSessionsWhere(ctx, db, SessionFilter{Status: status, Since: since, Limit: limit})
+}
+
+// SessionFilter narrows ListSessionsWhere. The zero value lists every session,
+// the newest 100.
+type SessionFilter struct {
+	// Status keeps one status; "" keeps all.
+	Status core.SessionStatus
+	// Since keeps the sessions updated since then, as ListSessions reads it;
+	// zero means all time.
+	Since time.Time
+	// Flagged keeps only flagged sessions, and Verdict (one of
+	// core.FlagVerdicts, implying Flagged) only those with that verdict.
+	Flagged bool
+	Verdict core.SessionVerdict
+	// Limit caps the rows (default 100).
+	Limit int
+}
+
+// ListSessionsWhere is ListSessions with the whole filter: the console's
+// Sessions list and its flag filter.
+func ListSessionsWhere(ctx context.Context, db *sql.DB, f SessionFilter) ([]core.Session, error) {
+	limit := f.Limit
 	if limit <= 0 {
 		limit = 100
 	}
@@ -852,12 +875,18 @@ func ListSessions(ctx context.Context, db *sql.DB, status core.SessionStatus, si
 		}
 		args = append(args, vals...)
 	}
-	if status != "" {
-		add(`status = ?`, string(status))
+	if f.Status != "" {
+		add(`status = ?`, string(f.Status))
 	}
-	if !since.IsZero() {
+	if !f.Since.IsZero() {
 		add(`(updated_at >= ? OR (status = 'active' AND `+sessionHoldsLive+`))`,
-			core.FormatTime(since), core.FormatTime(time.Now().UTC()))
+			core.FormatTime(f.Since), core.FormatTime(time.Now().UTC()))
+	}
+	switch {
+	case f.Verdict != "":
+		add(`verdict = ?`, string(f.Verdict))
+	case f.Flagged:
+		add(`verdict IS NOT NULL`)
 	}
 	query += where + ` ORDER BY updated_at DESC, id DESC LIMIT ?`
 	args = append(args, limit)
@@ -1075,13 +1104,18 @@ func scanSession(rows interface{ Scan(dest ...any) error }) (core.Session, error
 		ambient          int
 		created, updated string
 		parent, held     sql.NullString
+		flag             sessionFlagScan
 	)
 	if err := rows.Scan(
 		&s.ID, &s.Name, &s.ProjectSlug, &status, &s.Findings, &s.ExternalSessionID,
 		&s.ExternalClient, &s.CWD, &s.Host, &s.Source, &s.Model, &ambient, &s.Favorite, &meta, &created, &updated,
 		&s.Tokens.Input, &s.Tokens.Cached, &s.Tokens.CacheCreation, &s.Tokens.Output, &s.Tokens.Total, &s.Account,
-		&parent, &held,
+		&parent, &flag.path, &flag.verdict, &flag.reason, &flag.flaggedAt, &flag.copy, &flag.bytes, &flag.copiedAt,
+		&held,
 	); err != nil {
+		return core.Session{}, err
+	}
+	if err := flag.apply(&s); err != nil {
 		return core.Session{}, err
 	}
 	if held.Valid {

@@ -25,6 +25,8 @@ _global/{name}.md Machine-wide memories
 notes/ Durable note tree
 _global/{slug}.md Machine-wide notes
 {project}/{slug}.md One project note per file
+transcripts/ Flagged sessions' transcript copies, 0700 (files 0600); not in backups
+{session ULID}.jsonl.gz One flagged session's whole transcript, gzip; removed when the flag is cleared
 backups/ Backups: the scheduled ones (unless backup.dir names another folder), the safety backups taken before a restore, and the pre-update archives (pre-update-v{old}-{time}.tar.gz), the newest two
 .schedule.json The schedule's record: the last run, the failure streak, the folder in use and this install's id
 restore/ Only around a restore: what it staged, and its result

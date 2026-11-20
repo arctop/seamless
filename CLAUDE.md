@@ -98,6 +98,10 @@ internal/mcp/mcpversion/ the MCP protocol versions: the one Seamless's clients
 internal/hooks/    session hooks + CC plan-mode capture (PostToolUse etc.) [P2/P3]
 internal/console/  server-rendered observability UI (html/template + SSE)  [P5]
 internal/capture/  SSRF-safe URL fetch                                     [P4]
+internal/transcripts/ the session flag's transcript copies: a flagged session's
+                   JSONL kept gzip under <data_dir>/transcripts, made at its
+                   end signal (the daemon's own read, or `seam hook`'s upload
+                   under peer_auth), read by the owner alone, removed with the flag
 internal/update/   update check + automatic updates: GitHub release list,
                    install-kind detection, Target/Decide policy, attempt-record
                    fold, <data_dir>/update/state.json, the Status every surface
@@ -260,6 +264,8 @@ on `/console/passkeys/add` and the owner approves the code it shows with
   seamlessd.lock                   serve's one-daemon-per-data-dir lock (holder's PID; never delete it)
   memory/{project|_global}/{name}.md   one memory per file (source of truth)
   notes/{project|_global}/{slug}.md    work artifacts (source of truth)
+  transcripts/<session ULID>.jsonl.gz  flagged sessions' transcript copies (0700/0600; the
+                                   owner's alone, removed with the flag, not in backups)
   backups/                         scheduled backups (unless backup.dir names another folder),
                                    *-before-restore safety backups, and the updater's
                                    pre-update-v*.tar.gz archives (newest 2)

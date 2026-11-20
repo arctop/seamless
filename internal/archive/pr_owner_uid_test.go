@@ -40,7 +40,8 @@ func prArchiveBefore050(t *testing.T) (string, store.Device) {
 		SecretHash: sum("secret:relay"), OwnerUID: 501}, time.Now())
 	require.NoError(t, err)
 	require.Equal(t, uint32(501), d.OwnerUID)
-	for _, q := range []string{`ALTER TABLE devices DROP COLUMN owner_uid`, `DELETE FROM schema_migrations WHERE version >= 50`} {
+	for _, q := range append(append([]string{`ALTER TABLE devices DROP COLUMN owner_uid`}, drop051()...),
+		`DELETE FROM schema_migrations WHERE version >= 50`) {
 		_, err := db.ExecContext(ctx, q)
 		require.NoError(t, err, q)
 	}
@@ -82,4 +83,17 @@ func TestPRImport_MergeFromBefore050(t *testing.T) {
 	var col sql.NullString
 	require.NoError(t, out.QueryRowContext(ctx, `SELECT name FROM pragma_table_info('devices') WHERE name = 'owner_uid'`).Scan(&col))
 	require.Equal(t, "owner_uid", col.String, "the destination keeps its own schema")
+}
+
+// drop051 puts a snapshot's sessions back in schema 50's shape: what migration
+// 051 (the session flag) added, gone. Every fixture that rolls a snapshot back
+// to an earlier schema drops it, or migrating forward again adds the columns
+// twice.
+func drop051() []string {
+	out := []string{`DROP INDEX idx_sessions_flagged`}
+	for _, c := range []string{"transcript_path", "verdict", "verdict_reason", "flagged_at",
+		"transcript_copy", "transcript_bytes", "transcript_copied_at"} {
+		out = append(out, `ALTER TABLE sessions DROP COLUMN `+c)
+	}
+	return out
 }

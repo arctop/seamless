@@ -65,6 +65,7 @@ import (
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/screening"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/transcripts"
 	"github.com/arctop/seamless/internal/update"
 )
 
@@ -628,9 +629,21 @@ func runServe(args []string) error {
 			return n + m, err
 		}
 	}
+	// The session flag's transcript copies (<data_dir>/transcripts): the hooks
+	// make them at a flagged session's end, MCP at once for a session flagged
+	// after it ended, and the console serves them to the owner. A copy still
+	// in flight at shutdown gets a bounded wait before the database closes.
+	transcriptCopies, err := transcripts.New(transcripts.Config{
+		DataDir: cfg.DataDir, DB: db, Events: rec, LocalHost: config.Hostname(), Logger: logger,
+	})
+	if err != nil {
+		return fmt.Errorf("seamlessd.serve: %w", err)
+	}
+	defer transcriptCopies.WaitFor(10 * time.Second)
 	mcpSrv := mcp.New(mcp.Config{
 		DB: db, Files: mgr, Retrieve: ret, Events: rec, Gardener: garden, Embedder: embedder, Screening: screen,
-		APIKey: cfg.MCP.APIKey, Version: buildVersion(), LocalHost: config.Hostname(),
+		Transcripts: transcriptCopies,
+		APIKey:      cfg.MCP.APIKey, Version: buildVersion(), LocalHost: config.Hostname(),
 		SocketURL:           retiredKeySocketURL(cfg),
 		ToolEventMaxChars:   cfg.Budgets.ToolEventMaxChars,
 		CaptureAllowedPorts: cfg.Capture.AllowedPorts, Logger: logger,
@@ -667,7 +680,7 @@ func runServe(args []string) error {
 		APIKey: cfg.MCP.APIKey, MaxEventChars: cfg.Budgets.ToolEventMaxChars,
 		PlanCapture: cfg.PlanCapture, LocalHost: config.Hostname(), Logger: logger,
 		Features: cfg.Features, Screening: screen, RevokeSessionLeases: revokeLeases, Approvals: hookApprovals,
-		ReadGrants: cfg.Isolation.Requests,
+		ReadGrants: cfg.Isolation.Requests, Transcripts: transcriptCopies,
 	})
 	// The console reads through a handle on which locked projects do not
 	// exist, when there are any (store.OpenView); its writes go to the main
@@ -752,6 +765,7 @@ func runServe(args []string) error {
 		// queue's list and Promote/Discard are served even with write screening
 		// off whenever peer_auth lists one.
 		RestrictedAccounts: peer != nil && peer.policy.HasRestricted(),
+		Transcripts:        transcriptCopies,
 		Deployment:         consoleDeployment(cfg, bind, mcpSrv.NumTools(), garden.CanRequest()),
 		Logger:             logger,
 	})

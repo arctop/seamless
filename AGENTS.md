@@ -29,7 +29,7 @@ Strict layering, no circular imports. `cmd/` wires everything; no package import
 ```
 cmd/seamlessd, cmd/seam, cmd/seambench, cmd/demoseed, cmd/docsgen
   -> internal/{mcp,hooks,console}         (API surfaces)
-    -> internal/{retrieve,lifecycle,gardener,files,capture,bench,demokit,update,screening,feed,commitfeed,approval,backup} (domains)
+    -> internal/{retrieve,lifecycle,gardener,files,capture,bench,demokit,update,screening,feed,commitfeed,approval,backup,transcripts} (domains)
       -> internal/{store,events,llm,core,config,validate,access}   (foundations)
 ```
 
@@ -1087,11 +1087,43 @@ any of it.
   never retried; a note lands where `View.SessionScope` places it; a leased
   locked project takes a note only from a session recorded in it. A field that
   does not validate refuses the whole push, and the format is additive.
+  A flagged session's transcript is the one capture that rides a request of
+  its own (`internal/hooks/transcript.go`): only a flagged session's
+  SessionEnd or Stop answer carries `harvest.TranscriptWantedHeader`, `seam
+  hook` sends the file only to the socket (`pushTranscript`), and the upload
+  route takes it only from `access.PeerAuthenticated`, for a `reachOK`
+  session that is flagged. Never put a wanted marker in a default answer.
 - **Prove it in the matrix.** The `TestPeerAuthMatrix_*` tests above drive
   every tool in `mcp.Catalog()` (a tool without a probe row fails the coverage
   check), every console route (read from console.go), the hooks, A2A and the
   live feed, and check state after every write. A new surface gets a row
   there.
+
+### The session flag (`internal/transcripts`)
+
+`session_update`/`session_end`'s `verdict` and `reason` (fields, not a tool:
+`ToolCount` does not move). Guide: docs-src/guides/data.md#flagged-transcripts.
+
+- **A flag is metadata.** `store.SetSessionFlag`/`ClearSessionFlag` never bump
+  `updated_at` (a star's rule), and a flag alone stamps nothing. One flag per
+  session, last write wins; `none` clears it and is never stored.
+- **Only a flagged session is copied, and the flag owns the copy.** Every copy
+  is recorded (`store.SetTranscriptCopy`) only while the session is still
+  flagged, under the service's per-session lock; clearing is the database
+  first, then the file. Readers judge a copy by the file (`Service.Kept`),
+  never the record alone: a restored or merged database names copies this
+  disk may not hold.
+- **The daemon reads an agent's transcript only where `Service.Readable` (or
+  the hooks' `localDiskOK`) says so**: no peer_auth View, the agent's own
+  computer. Everywhere else the copy is the client's push or is recorded as
+  not made, with the word for why.
+- **Reading a copy is the owner's alone** (`refusedTranscriptReader`): never a
+  restricted account, a relay's caller or a paired device. It is not fenced
+  per project; a locked project's session answers as locked because the
+  session is read through `s.db(ctx)`.
+- **Copies are not in archives.** `internal/archive` carries `memory/`,
+  `notes/` and the database, and an older release's extractor refuses any
+  other entry; do not add `transcripts/` without solving that rollback.
 
 ### Write screening (`internal/screening`)
 

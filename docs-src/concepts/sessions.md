@@ -418,3 +418,13 @@ cache-creation, and output counts read from the client's own transcript
 (Claude Code) or rollout file (Codex), not estimated from injected bytes. The
 session's console page shows them as its "Model tokens" panel; a session whose
 client exposes no transcript simply records none.
+
+## Flagging a session {#flag}
+
+A session that stands out as a whole - a big win, a bad failure, a run worth
+re-reading for another reason - can be flagged: `session_update` or
+`session_end` with `verdict` (`good`, `bad`, `notable`; `none` clears it) and a
+one-line `reason`. A flag is metadata, like a star: it never moves the
+session's `updated_at`, so flagging the session from an hour ago reorders
+nothing. It keeps the session's whole transcript for the owner to come back to;
+[what is kept, where, and who can read it](/guides/data/#flagged-transcripts).

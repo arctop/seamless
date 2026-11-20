@@ -1558,7 +1558,7 @@ project's own. A project with no stamped item shows no bar.</p>
 <p>A retired project still renders, with its banner - kept for provenance. Only an
 unknown slug is a 404.</p>
 <h2 id="sessions">Sessions</h2>
-<p><code>/console/sessions</code>, <code>/console/sessions/{id}</code></p>
+<p><code>/console/sessions</code>, <code>/console/sessions/{id}</code>, <code>/console/sessions/{id}/transcript</code></p>
 <p>The list separates <strong>active</strong> (live: active and heartbeated within the idle TTL)
 from <strong>idle</strong> (active but gone quiet past it, awaiting the reaper) from
 <strong>completed</strong> and <strong>expired</strong>. Filterable by status, searchable, windowed, and
@@ -1576,6 +1576,13 @@ from the console's, and its source only when it was not a normal startup.</p>
 timeline as interaction rows, per-session counts (tool calls, memory reads and
 writes, items injected, and read-after-inject), the tasks it currently claims with
 their lease countdowns, and the memories it produced.</p>
+<p>A <a href="../../guides/data/#flagged-transcripts">flagged session</a> carries a badge with its
+verdict (good, bad or notable) and its reason on the list, the peek and its
+page. Its page adds a card: when it was flagged, the transcript file the agent
+client wrote, and what became of the copy, with <strong>Download JSONL</strong> while a copy
+is kept (<code>/console/sessions/{id}/transcript</code>, the owner's alone: never a
+restricted account, a relay's caller or a paired device). Once any session is
+flagged, the list offers a <strong>Flag</strong> filter (<code>?verdict=flagged|good|bad|notable</code>).</p>
 <h3 id="conversation">The conversation</h3>
 <p>With <a href="../../concepts/project-isolation/#asking-for-access">access requests</a> on, a
 conversation can span sessions: a move into a fenced project continues it as a

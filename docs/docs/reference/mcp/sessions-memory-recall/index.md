@@ -197,25 +197,29 @@ Bind this connection to a work session and return its project briefing. Claude C
 
 ## session_update {#session_update}
 
-Record interim progress on the current session (working findings so far). Uses the bound session unless you pass one.
+Record interim progress on the current session (working findings so far), or flag the session with verdict. Uses the bound session unless you pass one.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `findings` | string | **yes** | Working findings / progress note so far |
+| `findings` | string | no | Working findings / progress note so far; required unless you pass verdict |
+| `reason` | string | no | Why the verdict, one short line; only with a verdict other than none |
 | `session` | string | no | Session to operate on: a name (the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, or a sess/* name) or a session ULID. Defaults to this connection's session -- bound automatically for Claude Code and Codex agents -- so pass it only to act on another session, or when a call reports the session as ambiguous |
 | `session_id` | string | no | Session ULID to operate on; takes precedence over session and the bound session |
+| `verdict` | string | no | Flag this whole session to re-read later: good (it went unusually well), bad (unusually badly), notable (worth re-reading for another reason), or none (clear the flag). One flag per session; the last one set wins. A flagged session's transcript is kept for the owner, copied at the session's end (at once if it already ended); clearing the flag deletes the copy. Independent of session_end's mishaps (one entry per incident, for recurrence review, whatever the verdict) and of favorite_set (a star on any item, for briefing and recall weight). One of: `good`, `bad`, `notable`, `none`. |
 
 ## session_end {#session_end}
 
-Complete the current session, persisting its findings for future briefings. Uses the bound session unless you pass one.
+Complete the current session, persisting its findings for future briefings, and optionally flag it with verdict. Uses the bound session unless you pass one.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `findings` | string | **yes** | Final findings: what was learned, decided, or left open. Prefer a tight summary (briefings show a short preview), but long findings are stored in full -- they are not rejected. |
 | `commits` | array | no | Full ids of the commits this session made, recorded on the session for an integrity monitor that matches a branch's commits to the work that made them: the 40- or 64-character hex id git prints, never an abbreviation (git rev-parse &lt;short id&gt; expands one); a short id here refuses the whole call. At most 256 per call; repeats are ignored. Offered only while this server records commits (commits.record) |
 | `mishaps` | array | no | Self-report mishaps this session caused: an action a warning or convention said not to take, live state touched by mistake, a command that hit the wrong target. Pass an array with one short entry per incident; omit when none happened. When a mishap violated a stored memory, name that memory by its exact slug in the entry (e.g. "violated chroma-boot-race by ...") -- the report is then linked to it. Recorded for recurrence review, not blame -- report them even when fully recovered. |
+| `reason` | string | no | Why the verdict, one short line; only with a verdict other than none |
 | `session` | string | no | Session to operate on: a name (the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, or a sess/* name) or a session ULID. Defaults to this connection's session -- bound automatically for Claude Code and Codex agents -- so pass it only to act on another session, or when a call reports the session as ambiguous |
 | `session_id` | string | no | Session ULID to operate on; takes precedence over session and the bound session |
+| `verdict` | string | no | Flag this whole session to re-read later: good (it went unusually well), bad (unusually badly), notable (worth re-reading for another reason), or none (clear the flag). One flag per session; the last one set wins. A flagged session's transcript is kept for the owner, copied at the session's end (at once if it already ended); clearing the flag deletes the copy. Independent of session_end's mishaps (one entry per incident, for recurrence review, whatever the verdict) and of favorite_set (a star on any item, for briefing and recall weight). One of: `good`, `bad`, `notable`, `none`. |
 
 ## memory_write {#memory_write}
 

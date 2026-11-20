@@ -960,13 +960,23 @@ result. Exit 1 means the server had a problem, not that the command line did
 (that is exit 2). <code>--json</code> prints <code>/healthz</code> and <code>project_list</code> as one object
 under the same rule (<a href="#json-output">JSON output</a>).</p>
 <h3 id="seam_sessions">seam sessions</h3>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam sessions <span class="o">[</span>--status STATUS<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span> <span class="o">[</span>&lt;id&gt;<span class="o">]</span>
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam sessions <span class="o">[</span>--status STATUS<span class="o">]</span> <span class="o">[</span>--flagged<span class="o">]</span> <span class="o">[</span>--verdict VERDICT<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span> <span class="o">[</span>&lt;id&gt;<span class="o">]</span>
+</span></span><span class="line"><span class="cl">seam sessions --transcript &lt;id&gt;
 </span></span></code></pre></div>
 <p>With no positional, lists sessions with name (or short id), project, status, age,
-and an ambient marker, under a total/active count. With an id, prints that
-session's detail: status, project, tool calls, memory writes and reads, the
-read-after-inject ratio, and findings when present. Both read the console's JSON
-endpoint.</p>
+an ambient marker and a flagged session's verdict, under a total/active count.
+With an id, prints that session's detail: status, project, its flag, tool calls,
+memory writes and reads, the read-after-inject ratio, and findings when present.
+Both read the console's JSON endpoint.</p>
+<p><code>--flagged</code> lists the <a href="../../guides/data/#flagged-transcripts">flagged sessions</a> of
+all time (<code>--verdict good|bad|notable</code>, one verdict's): each with its verdict
+and reason, the transcript file the agent client wrote and whether it is still
+there (looked for on this computer; a session from another computer says which),
+and whether a copy is kept. <code>--transcript &lt;id&gt;</code> writes that session's copy to
+stdout, decompressed - the JSONL the client wrote - through the daemon, so it
+works under peer_auth, where the daemon's data directory is not yours to read.
+It is the owner's alone, and fails rather than end early when the daemon could
+not read the copy whole.</p>
 <p><code>--status</code> is <code>active</code>, <code>completed</code>, or <code>expired</code>; anything else is a parse
 error. The console rejects an unrecognized <code>?status=</code> too, so a direct URL cannot
 silently list everything either.</p>
@@ -1148,8 +1158,12 @@ reads them and sends what it found beside the payload: the transcript's
 findings, token totals and model, the plan file, a subagent's prompt and
 report (waiting up to 3s for its final message), and the git head. A capture
 the daemon refuses (a locked project the owner has not approved) is named in
-one line on stderr and not retried. On any other <code>server_url</code> the payload is
-forwarded exactly as the client wrote it.</li>
+one line on stderr and not retried. When the daemon's answer to a
+<a href="../../guides/data/#flagged-transcripts">flagged session's</a> <code>session-end</code> (or
+Codex's <code>stop</code>) asks for it, the hook then sends the whole transcript,
+gzip-compressed, in a request of its own. On any other <code>server_url</code> the
+payload is forwarded exactly as the client wrote it, and no transcript is
+sent.</li>
 </ul>
 <p>Install these with <code>seamlessd install-hooks</code>. The one exception is
 <code>session-taint</code>, which no installer wires: an agent guard's own PostToolUse

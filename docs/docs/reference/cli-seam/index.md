@@ -946,14 +946,25 @@ under the same rule ([JSON output](#json-output)).
 ### seam sessions {#seam_sessions}
 
 ```bash
-seam sessions [--status STATUS] [--json] [<id>]
+seam sessions [--status STATUS] [--flagged] [--verdict VERDICT] [--json] [<id>]
+seam sessions --transcript <id>
 ```
 
 With no positional, lists sessions with name (or short id), project, status, age,
-and an ambient marker, under a total/active count. With an id, prints that
-session's detail: status, project, tool calls, memory writes and reads, the
-read-after-inject ratio, and findings when present. Both read the console's JSON
-endpoint.
+an ambient marker and a flagged session's verdict, under a total/active count.
+With an id, prints that session's detail: status, project, its flag, tool calls,
+memory writes and reads, the read-after-inject ratio, and findings when present.
+Both read the console's JSON endpoint.
+
+`--flagged` lists the [flagged sessions](https://thereisnospoon.org/docs/guides/data/#flagged-transcripts) of
+all time (`--verdict good|bad|notable`, one verdict's): each with its verdict
+and reason, the transcript file the agent client wrote and whether it is still
+there (looked for on this computer; a session from another computer says which),
+and whether a copy is kept. `--transcript <id>` writes that session's copy to
+stdout, decompressed - the JSONL the client wrote - through the daemon, so it
+works under peer_auth, where the daemon's data directory is not yours to read.
+It is the owner's alone, and fails rather than end early when the daemon could
+not read the copy whole.
 
 `--status` is `active`, `completed`, or `expired`; anything else is a parse
 error. The console rejects an unrecognized `?status=` too, so a direct URL cannot
@@ -1183,8 +1194,12 @@ Two behaviours matter if you are debugging a hook:
   findings, token totals and model, the plan file, a subagent's prompt and
   report (waiting up to 3s for its final message), and the git head. A capture
   the daemon refuses (a locked project the owner has not approved) is named in
-  one line on stderr and not retried. On any other `server_url` the payload is
-  forwarded exactly as the client wrote it.
+  one line on stderr and not retried. When the daemon's answer to a
+  [flagged session's](https://thereisnospoon.org/docs/guides/data/#flagged-transcripts) `session-end` (or
+  Codex's `stop`) asks for it, the hook then sends the whole transcript,
+  gzip-compressed, in a request of its own. On any other `server_url` the
+  payload is forwarded exactly as the client wrote it, and no transcript is
+  sent.
 
 Install these with `seamlessd install-hooks`. The one exception is
 `session-taint`, which no installer wires: an agent guard's own PostToolUse

@@ -44,6 +44,7 @@ import (
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/screening"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/transcripts"
 )
 
 // cookieName holds the console session token: a hash of the static key, never
@@ -182,7 +183,11 @@ type Config struct {
 	// computers; nil -- the default -- makes every such route a 404, and no
 	// page names it (devices.go).
 	Devices DevicesView
-	Logger  *slog.Logger
+	// Transcripts keeps flagged sessions' transcript copies: the session page
+	// says whether one is kept, and the owner reads it at
+	// /console/sessions/{id}/transcript. Nil keeps none.
+	Transcripts *transcripts.Service
+	Logger      *slog.Logger
 }
 
 // Service renders the console and serves its routes.
@@ -326,6 +331,7 @@ func (s *Service) Register(mux *http.ServeMux) {
 	handle("GET /console/privacy", s.auth(s.privacyPage))
 	handle("GET /console/sessions", s.auth(s.sessionsList))
 	handle("GET /console/sessions/{id}", s.auth(s.sessionDetail))
+	handle("GET /console/sessions/{id}/transcript", s.auth(s.sessionTranscript))
 	handle("GET /console/memories", s.auth(s.memoriesList))
 	handle("GET /console/memories/{id}", s.auth(s.memoryDetail))
 	post("POST /console/memories/{id}/archive", formBodySmall, s.memoryArchive)

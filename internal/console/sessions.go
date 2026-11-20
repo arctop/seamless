@@ -53,6 +53,17 @@ type sessionRow struct {
 	Findings string    `json:"findings"`
 	Tokens   int       `json:"tokens"` // real model tokens harvested from the transcript (0 = none)
 	Updated  time.Time `json:"updated"`
+	// The flag (session_update / session_end verdict): Verdict and its
+	// Reason, "" when not flagged; Tone is the badge's class. Kept is whether
+	// its transcript copy is on this disk, Copy the copy's record.
+	Verdict string `json:"verdict,omitempty"`
+	Reason  string `json:"reason,omitempty"`
+	Tone    string `json:"-"`
+	Copy    string `json:"transcriptCopy,omitempty"`
+	Kept    bool   `json:"transcriptKept,omitempty"`
+	// TranscriptPath is the file the agent client wrote, on its computer
+	// (shown for flagged sessions only).
+	TranscriptPath string `json:"transcriptPath,omitempty"`
 }
 
 // sessionsData is the payload for the sessions list page. Active counts genuinely
@@ -92,7 +103,15 @@ type sessionsData struct {
 	// not read, whose sessions the list leaves out: names only, never a count.
 	// nil while nothing is locked -- absent from the JSON.
 	Locked []string `json:"locked,omitempty"`
+	// Verdict carries the ?verdict= filter (flagged, or one verdict); "" for
+	// none. Flagged counts every flagged session this request reads, and the
+	// page offers the filter only once there is one (or it is in use).
+	Verdict string `json:"verdict,omitempty"`
+	Flagged int    `json:"flagged,omitempty"`
 }
+
+// ShowFlagFilter reports whether the page offers the flag filter.
+func (d sessionsData) ShowFlagFilter() bool { return d.Flagged > 0 || d.Verdict != "" }
 
 // captureStreak carries the calendar's two quiet numbers: the current run of
 // covered days and the longest ever (store.CaptureStreak).
@@ -152,6 +171,14 @@ func (s *Service) sessionsList(w http.ResponseWriter, r *http.Request) {
 		s.badRequest(w, r, fmt.Sprintf("invalid retained %q: valid values are yes, no", retained))
 		return
 	}
+	// The ?verdict= filter: flagged sessions, or one verdict's. Loud on a
+	// value it cannot read, like every other filter here.
+	verdict := r.URL.Query().Get("verdict")
+	listFilter := store.SessionFilter{Status: statusFilter}
+	if !verdictFilter(verdict, &listFilter) {
+		s.badRequest(w, r, fmt.Sprintf("invalid verdict %q: valid values are %s", verdict, strings.Join(verdictFilterValues(), ", ")))
+		return
+	}
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	q := strings.ToLower(query)
 	win := store.ResolveRetrievalWindow(r.URL.Query().Get("w"), time.Now())
@@ -184,7 +211,13 @@ func (s *Service) sessionsList(w http.ResponseWriter, r *http.Request) {
 		since, limit = dayStart, 1000
 	}
 
-	sessions, err := store.ListSessions(ctx, s.db(ctx), statusFilter, since, limit)
+	listFilter.Since, listFilter.Limit = since, limit
+	sessions, err := store.ListSessionsWhere(ctx, s.db(ctx), listFilter)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	flagged, err := store.CountFlaggedSessions(ctx, s.db(ctx))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -239,13 +272,19 @@ func (s *Service) sessionsList(w http.ResponseWriter, r *http.Request) {
 		default:
 			completed++
 		}
-		rows = append(rows, sessionRow{
+		row := sessionRow{
 			ID: sess.ID, Name: sess.Name, Project: sess.ProjectSlug,
 			Status: string(sess.Status), Source: sess.Source, Ambient: sess.Ambient,
 			Harness: harnessOf(sess), Model: sess.Model, Host: sess.Host, Account: sess.Account,
 			Live: live, Findings: snippet(plain, 120), Tokens: sess.Tokens.Total,
 			Updated: sess.UpdatedAt,
-		})
+		}
+		if sess.Flagged() {
+			row.Verdict, row.Reason, row.Tone = string(sess.Verdict), sess.VerdictReason, verdictTone(sess.Verdict)
+			row.Copy, row.TranscriptPath = string(sess.Transcript), sess.TranscriptPath
+			row.Kept = s.cfg.Transcripts != nil && s.cfg.Transcripts.Kept(sess.ID)
+		}
+		rows = append(rows, row)
 	}
 	if sortKey == "name" {
 		sort.SliceStable(rows, func(i, j int) bool {
@@ -264,7 +303,8 @@ func (s *Service) sessionsList(w http.ResponseWriter, r *http.Request) {
 			Day: dayParam, DayLabel: dayLabel, Retained: retained,
 			Sessions: rows,
 			Calendar: calendar, Streak: streak,
-			Locked: lockedProjects(ctx),
+			Locked:  lockedProjects(ctx),
+			Verdict: verdict, Flagged: flagged,
 		},
 	})
 }
@@ -359,6 +399,9 @@ type sessionDetail struct {
 	// from the JSON, no card -- for a conversation that never moved, asked for
 	// nothing and wrote nothing stamped.
 	Conversation *conversationView `json:"conversation,omitempty"`
+	// Flag is the session's flag and its transcript copy; nil -- absent from
+	// the JSON, no card -- for a session that is not flagged.
+	Flag *sessionFlagView `json:"flag,omitempty"`
 }
 
 // claimedTaskVM is a task the session currently holds (a live claim), shown on
@@ -478,6 +521,7 @@ func (s *Service) sessionDetail(w http.ResponseWriter, r *http.Request) {
 		Injected: len(injected), ReadBack: readBack, ByKind: sortedKinds(byKind),
 	}
 	data.FindingsHTML = s.renderBody(ctx, sess.Findings, sess.ProjectSlug)
+	data.Flag = s.flagView(sess)
 
 	// Claimed tasks (live claims this session holds) + memories it produced --
 	// the T2b relation joins. Best-effort: a legacy non-ULID session id or empty

@@ -35,6 +35,7 @@ import (
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/screening"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/transcripts"
 )
 
 // hookTimeout bounds briefing/recall assembly so a slow store never stalls the
@@ -98,6 +99,10 @@ type Config struct {
 	// confined elsewhere is refused (captureConfined). Off, no capture looks
 	// at a grant.
 	ReadGrants bool
+	// Transcripts keeps flagged sessions' transcript copies (the session
+	// flag): the end signals make them, and under peer_auth the upload route
+	// takes them. nil keeps none.
+	Transcripts *transcripts.Service
 	// Now is the clock the lease expiry warnings read; nil means time.Now.
 	Now    func() time.Time
 	Logger *slog.Logger
@@ -130,6 +135,7 @@ type Handler struct {
 	revokeLeases  func(ctx context.Context, sessionID string) (int64, error)
 	approvals     Approvals
 	readGrants    bool
+	transcripts   *transcripts.Service
 	now           func() time.Time
 	logger        *slog.Logger
 }
@@ -152,7 +158,7 @@ func NewHandler(cfg Config) *Handler {
 		apiKey: cfg.APIKey, maxEventChars: cfg.MaxEventChars,
 		planCapture: cfg.PlanCapture, plansDir: cfg.PlansDir,
 		localHost: strings.ToLower(strings.TrimSpace(cfg.LocalHost)),
-		features:  cfg.Features, screening: cfg.Screening, revokeLeases: cfg.RevokeSessionLeases, approvals: cfg.Approvals, readGrants: cfg.ReadGrants, now: cfg.Now, logger: cfg.Logger,
+		features:  cfg.Features, screening: cfg.Screening, revokeLeases: cfg.RevokeSessionLeases, approvals: cfg.Approvals, readGrants: cfg.ReadGrants, transcripts: cfg.Transcripts, now: cfg.Now, logger: cfg.Logger,
 	}
 }
 
@@ -167,6 +173,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/hooks/subagent-stop", h.subagentStop)
 	mux.HandleFunc("POST /api/hooks/permission-request", h.permissionRequest)
 	mux.HandleFunc("POST /api/hooks/session-taint", h.sessionTaint)
+	mux.HandleFunc("POST "+harvest.TranscriptEndpoint, h.transcriptUpload)
 }
 
 // hookPayload is the SessionStart request body (tolerant decode; unknown fields
@@ -410,6 +417,7 @@ func (h *Handler) sessionStart(w http.ResponseWriter, r *http.Request) {
 		if id, name := h.ensureAmbientSessionIn(ctx, client, host, p, ""); name != "" {
 			sessionID = id
 			briefing = injectAmbientLine(briefing, name, p.Identity.AgentProcess != "")
+			h.recordTranscriptPath(ctx, client, id, p.TranscriptPath)
 			h.setAmbientModel(ctx, client, host, p.SessionID, pushedModel(p.Model, p.Capture), p.TranscriptPath)
 			h.recordRepoLocks(ctx, client, sessionID, in.RepoLocks)
 		}
@@ -464,6 +472,9 @@ func (h *Handler) sessionEnd(w http.ResponseWriter, r *http.Request) {
 	if notice := h.completeClaudeSessions(ctx, client, p, reach == reachLocked); notice != "" {
 		h.refuseCapture(w, notice)
 	}
+	// A flagged session's transcript is kept from here, the last point at
+	// which the whole conversation is on disk (transcript.go).
+	h.snapshotAtEnd(ctx, w, client, h.hostOf(p.Identity), p.SessionID, p.TranscriptPath, reach, true)
 	// SessionEnd has no hookSpecificOutput variant in Claude Code's schema, so
 	// the response is a bare ack -- emitting one fails root validation.
 	writeHookAck(w)
@@ -516,6 +527,9 @@ func (h *Handler) stop(w http.ResponseWriter, r *http.Request) {
 		case pushCarries(p.Capture):
 			h.refuseCapture(w, captureRefusedNotice("this turn's findings and token totals", lockedProject))
 		}
+		// Codex has no SessionEnd: a flagged session's rollout is kept from
+		// each turn's end, copied again only once it grew (transcript.go).
+		h.snapshotAtEnd(ctx, w, client, host, p.SessionID, p.TranscriptPath, reach, false)
 	}
 
 	// Stop has no hookSpecificOutput variant in Codex's schema (it can only

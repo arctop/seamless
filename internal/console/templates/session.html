@@ -17,7 +17,8 @@
           {{else}}
             <span class="badge accent">completed</span>
           {{end}}
-          {{if .Session.Ambient}}<span class="kind faint">ambient</span>{{end}}
+          {{if .Session.Ambient}}<span class="kind faint">ambient</span>{{end}}{{with .Flag}}
+          <span class="badge {{.Tone}} flag-badge" data-verdict="{{.Verdict}}" title="Flagged {{.Verdict}}">{{icon "flag"}}{{.Verdict}}</span>{{end}}
           {{agentPill .Harness .Session.Model}}{{with .Session.Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}
         </div>
         <div class="session-detail-facts">
@@ -34,6 +35,21 @@
       <button class="star{{if .Session.Favorite}} on{{end}}" type="submit" aria-pressed="{{if .Session.Favorite}}true{{else}}false{{end}}" title="{{if .Session.Favorite}}Unstar{{else}}Star{{end}} this session">{{icon "star"}}</button>
     </form>
   </header>
+
+  {{- with .Flag}}
+  <section class="card session-flag-card" id="session-flag" aria-label="Session flag">
+    <header class="session-card-head">
+      <div><span class="session-card-eyebrow">Flagged {{.Verdict}}</span><h2>{{if .Reason}}{{.Reason}}{{else}}No reason given{{end}}</h2></div>
+      <span class="badge {{.Tone}} flag-badge" data-verdict="{{.Verdict}}">{{icon "flag"}}{{.Verdict}}</span>
+    </header>
+    <dl class="session-flag-facts">
+      <div><dt>Flagged</dt><dd><time title="{{ts .FlaggedAt}}">{{ago .FlaggedAt}}</time></dd></div>
+      <div><dt>Transcript</dt><dd>{{if .TranscriptPath}}<code class="mono">{{.TranscriptPath}}</code>{{else}}<span class="faint">no hook named one</span>{{end}}</dd></div>
+      <div><dt>Copy</dt><dd>{{.CopyText}}{{if .Kept}}{{with .Size}} &middot; {{.}}{{end}}{{with .CopiedAt}} &middot; <time title="{{ts .}}">{{ago .}}</time>{{end}} &middot; <a class="btn small" href="/console/sessions/{{$.Data.Session.ID}}/transcript" download>{{icon "arrow-down-to-line"}}Download JSONL</a>{{end}}</dd></div>
+    </dl>
+    <p class="faint session-flag-note">The copy is the whole conversation, kept for the owner only; clearing the flag (verdict none) deletes it.</p>
+  </section>
+  {{- end}}
 
   <section class="session-review-grid" aria-label="Session review">
     <article class="card session-outcome-card">

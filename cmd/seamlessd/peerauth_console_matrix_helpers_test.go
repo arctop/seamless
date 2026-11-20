@@ -59,6 +59,7 @@ import (
 	"github.com/arctop/seamless/internal/screening"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/store/storetest"
+	"github.com/arctop/seamless/internal/transcripts"
 )
 
 const (
@@ -144,7 +145,9 @@ type cmDaemon struct {
 	// holds both locked projects' secrets.
 	backups   *backup.Service
 	backupDir string
-	backupRef string
+	// transcripts keeps the flagged sessions' transcript copies.
+	transcripts *transcripts.Service
+	backupRef   string
 }
 
 // cmNewDaemon builds the daemon with the owner (and the restricted account,
@@ -206,11 +209,15 @@ func cmNewDaemon(t *testing.T, owner access.Account, restricted *access.Account,
 		Enabled: func(context.Context) bool { return true }})
 	svc, err := newApprovals(cfg, db, rec, logger)
 	require.NoError(t, err)
+	// The session flag's transcript copies: plant flags each locked project's
+	// session and keeps a copy holding its secret.
+	copies, err := transcripts.New(transcripts.Config{DataDir: dir, DB: db, Events: rec, LocalHost: host, Logger: logger})
+	require.NoError(t, err)
 
 	mcpSrv := mcp.New(mcp.Config{
 		DB: db, Files: mgr, Retrieve: ret, Events: rec, Gardener: garden, Screening: screen,
 		APIKey: cmKey, LocalHost: host, Features: feats,
-		Approvals: svc, OfferAccessRequest: true,
+		Approvals: svc, OfferAccessRequest: true, Transcripts: copies,
 	})
 	a2aSrv, err := a2a.New(a2a.Config{Retrieve: ret, Events: rec, APIKey: cmKey, Version: "test", Endpoint: "http://127.0.0.1:8081/api/a2a"})
 	require.NoError(t, err)
@@ -218,6 +225,7 @@ func cmNewDaemon(t *testing.T, owner access.Account, restricted *access.Account,
 		DB: db, Retrieve: ret, Events: rec, Files: mgr, APIKey: cmKey, LocalHost: host,
 		PlanCapture: config.PlanCapture{Enabled: true, AutoTask: true, InjectRelated: true},
 		Features:    feats, Screening: screen, Approvals: svc, RevokeSessionLeases: svc.RevokeSession,
+		Transcripts: copies,
 	})
 	// serve's wiring while projects are locked: a pool of filtered handles,
 	// the base one hiding every locked project.
@@ -246,8 +254,8 @@ func cmNewDaemon(t *testing.T, owner access.Account, restricted *access.Account,
 		DB: base, WriteDB: db, Files: mgr, Gardener: garden, Events: rec.ReadingFrom(base),
 		Screening: screen, Retrieve: ret, APIKey: cmKey, DataDir: dir, Features: feats, Level: "advanced",
 		Approvals: svc, Terminal: terminalApprover(cfg), Views: views, Backups: backups,
-		RestrictedAccounts: policy.HasRestricted(),
-		Logger:             slog.New(slog.NewTextHandler(consoleLog, nil)),
+		RestrictedAccounts: policy.HasRestricted(), Transcripts: copies,
+		Logger: slog.New(slog.NewTextHandler(consoleLog, nil)),
 	}
 	for _, fn := range tune {
 		fn(&consoleCfg)
@@ -260,7 +268,8 @@ func cmNewDaemon(t *testing.T, owner access.Account, restricted *access.Account,
 	}.mux()
 
 	d := &cmDaemon{db: db, path: path, dir: dir, host: host, mgr: mgr, rec: rec, cfg: cfg, policy: policy, svc: svc,
-		views: views, mux: mux, consoleLog: consoleLog, logger: logger, backups: backups, backupDir: backupDir}
+		views: views, mux: mux, consoleLog: consoleLog, logger: logger, backups: backups, backupDir: backupDir,
+		transcripts: copies}
 	d.owner = httptest.NewServer(ownerHandler(policy, mux))
 	t.Cleanup(func() { closeServer(d.owner) })
 	return d
@@ -352,6 +361,15 @@ func (d *cmDaemon) plant(t *testing.T, cli *mcpclient.Client, project, secret, p
 	sess := cmCallOK(t, cli, "session_start", map[string]any{"project": project, "name": it.sessName})
 	it.sessID = sess["session_id"].(string)
 	require.Equal(t, project, sess["project"], "a leased session is placed in the locked project")
+	// Flagged, its reason the secret, and a transcript copy holding it: the
+	// Sessions list's badge, the session page's card and the copy's route are
+	// the locked project's content too.
+	cmCallOK(t, cli, "session_update", map[string]any{"verdict": "notable", "reason": "the " + secret + " run"})
+	transcript := filepath.Join(t.TempDir(), prefix+".jsonl")
+	require.NoError(t, os.WriteFile(transcript, []byte(`{"type":"user","message":{"content":"`+secret+` transcript"}}`+"\n"), 0o600))
+	d.transcripts.Snapshot(ctx, it.sessID, transcript, true)
+	d.transcripts.Wait()
+	require.True(t, d.transcripts.Kept(it.sessID), "the copy is kept")
 
 	it.memName = prefix + "-ledger-rule"
 	mem := cmCallOK(t, cli, "memory_write", map[string]any{

@@ -117,7 +117,7 @@ func TestCommits_OffIsExactlyThePreviousBehavior(t *testing.T) {
 	isErr, txt = callErr(t, ctx, cli, "session_end", map[string]any{"findings": "done", "commits": []any{commitOne}})
 	require.True(t, isErr)
 	require.Contains(t, txt, `session_end: unknown parameter "commits": valid parameters are: `+
-		"findings, mishaps, session, session_id, summary")
+		"findings, mishaps, reason, session, session_id, summary, verdict")
 	end := callJSON(t, ctx, cli, "session_end", map[string]any{"findings": "done"})
 	require.Equal(t, "completed", end["status"], "the session was not ended by the refused call, and ends now")
 	require.NotContains(t, end, "commits_recorded", "the result keeps its old shape")

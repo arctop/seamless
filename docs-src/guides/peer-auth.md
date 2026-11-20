@@ -1333,7 +1333,10 @@ the locked notice, and `seam approve` in your own terminal shows its request.
   carries the current state. Agents on the TCP key make none of these
   captures; point their `server_url` at the socket. On another computer, an
   agent whose `server_url` names its relay's socket makes them the same way.
-  Agents can still record findings with `session_end`.
+  Agents can still record findings with `session_end`. A
+  [flagged session's transcript](/guides/data/#flagged-transcripts) is sent
+  the same way, in a request of its own, when the daemon's answer to the
+  session's end asks for it.
 - **It updates itself, as its own account.** The installer's per-user service
   cannot host peer_auth, so neither the installer nor a `seamlessd update` run
   as you touches this install. The daemon installs new releases by itself

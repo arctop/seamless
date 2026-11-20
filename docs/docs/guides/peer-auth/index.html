@@ -1538,7 +1538,10 @@ recorded; nothing is retried, and the next capture after the approval
 carries the current state. Agents on the TCP key make none of these
 captures; point their <code>server_url</code> at the socket. On another computer, an
 agent whose <code>server_url</code> names its relay's socket makes them the same way.
-Agents can still record findings with <code>session_end</code>.</li>
+Agents can still record findings with <code>session_end</code>. A
+<a href="../../guides/data/#flagged-transcripts">flagged session's transcript</a> is sent
+the same way, in a request of its own, when the daemon's answer to the
+session's end asks for it.</li>
 <li><strong>It updates itself, as its own account.</strong> The installer's per-user service
 cannot host peer_auth, so neither the installer nor a <code>seamlessd update</code> run
 as you touches this install. The daemon installs new releases by itself

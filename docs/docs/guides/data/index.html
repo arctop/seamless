@@ -246,7 +246,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#backups-in-the-console">Backups in the console</a></li><li class="lvl-3"><a href="#the-schedule">The schedule</a></li><li class="lvl-3"><a href="#the-folder">The folder</a></li><li class="lvl-3"><a href="#the-list">The list</a></li><li class="lvl-3"><a href="#restore-in-the-console">Restore, and undo</a></li><li class="lvl-2"><a href="#what-is-precious-and-what-is-not">What is precious, and what is not</a></li><li class="lvl-2"><a href="#put-it-in-git">Put it in git</a></li><li class="lvl-2"><a href="#the-whole-instance-in-one-archive">The whole instance in one archive</a></li><li class="lvl-2"><a href="#restore">Restore</a></li><li class="lvl-3"><a href="#restoring-with-seamlessd-import">Restoring with seamlessd import</a></li><li class="lvl-2"><a href="#locked-projects">Locked projects</a></li><li class="lvl-2"><a href="#merging-two-instances">Merging two instances</a></li><li class="lvl-2"><a href="#import-from-seam-v1">Import from Seam v1</a></li><li class="lvl-2"><a href="#hand-editing">Hand-editing</a></li><li class="lvl-2"><a href="#moving-machines">Moving machines</a></li>
+      <li class="lvl-2"><a href="#backups-in-the-console">Backups in the console</a></li><li class="lvl-3"><a href="#the-schedule">The schedule</a></li><li class="lvl-3"><a href="#the-folder">The folder</a></li><li class="lvl-3"><a href="#the-list">The list</a></li><li class="lvl-3"><a href="#restore-in-the-console">Restore, and undo</a></li><li class="lvl-2"><a href="#what-is-precious-and-what-is-not">What is precious, and what is not</a></li><li class="lvl-2"><a href="#flagged-transcripts">Flagged sessions&#39; transcripts</a></li><li class="lvl-2"><a href="#put-it-in-git">Put it in git</a></li><li class="lvl-2"><a href="#the-whole-instance-in-one-archive">The whole instance in one archive</a></li><li class="lvl-2"><a href="#restore">Restore</a></li><li class="lvl-3"><a href="#restoring-with-seamlessd-import">Restoring with seamlessd import</a></li><li class="lvl-2"><a href="#locked-projects">Locked projects</a></li><li class="lvl-2"><a href="#merging-two-instances">Merging two instances</a></li><li class="lvl-2"><a href="#import-from-seam-v1">Import from Seam v1</a></li><li class="lvl-2"><a href="#hand-editing">Hand-editing</a></li><li class="lvl-2"><a href="#moving-machines">Moving machines</a></li>
     </ul>
   </details>
   <p>Because durable knowledge is markdown files, backup and restore are boring - and
@@ -396,6 +396,50 @@ people either over-protect it or under-protect it:</p>
 </div>
 <p>So: <strong>deleting <code>seam.db</code> costs you the record of what happened, not the knowledge
 of what is true.</strong> Every memory and note survives, because they are files.</p>
+<h2 id="flagged-transcripts">Flagged sessions' transcripts</h2>
+<p>An agent can flag a whole session that went unusually well or unusually badly,
+or is worth re-reading for another reason: <code>session_update</code> or <code>session_end</code>
+with <code>verdict</code> set to <code>good</code>, <code>bad</code> or <code>notable</code>, and a one-line <code>reason</code>. One
+flag per session; the last one set wins, and <code>verdict: none</code> clears it. A flag
+is separate from <code>session_end</code>'s <code>mishaps</code> (one entry per incident, recorded
+whatever the verdict) and from a star (<code>favorite_set</code>, which weights an item in
+briefings and recall).</p>
+<p><strong>What is kept.</strong> The flagged session's whole transcript - the JSONL file
+Claude Code or Codex wrote - gzip-compressed in
+<code>&lt;data_dir&gt;/transcripts/&lt;session ULID&gt;.jsonl.gz</code> (the folder 0700, each file
+0600). Only flagged sessions are copied, so the copies survive the client
+pruning its own. Every session records its transcript's path when it starts,
+so a flag set later, even after the session ended, knows which file to keep.</p>
+<p><strong>When.</strong> At the session's end: Claude Code's <code>SessionEnd</code> (the transcript is
+complete by then), even when the agent already closed the session with
+<code>session_end</code>; for Codex, at the end of each turn, copied again only once the
+file grew. A session flagged after it ended is copied at once, if its
+transcript can be read. A transcript over 256 MB is not copied, and the
+session says so.</p>
+<p><strong>Who reads the agent's file.</strong> A daemon that runs as your account, on the
+agent's computer, copies it itself. Under <a href="../../guides/peer-auth/">peer_auth</a> the
+daemon opens no file an agent names: when the daemon's answer to the session's
+end asks for the transcript, <code>seam hook</code> (running as you, beside the agent)
+sends it over the socket, and only there. On a server without peer_auth, an
+agent on another computer gets no copy, and its session says why.</p>
+<p><strong>Who can read a copy.</strong> You, the owner, alone: the session's page in the
+console (<strong>Download JSONL</strong>) and <code>seam sessions &lt;id&gt; --transcript</code>, both
+through the daemon, with the console's key or cookie or your own account on
+the socket. A restricted local account, a relay's caller and a paired device
+are refused. A copy holds the whole conversation - other projects' content,
+anything pasted into it - so it is not fenced per project. <code>seam sessions --flagged</code> and the Sessions screen's <strong>Flag</strong> filter list the flagged
+sessions, with whether the original file is still there and whether a copy is
+kept.</p>
+<p><strong>Removing one.</strong> Clearing the flag deletes the copy. The event log keeps the
+history of the flag and its clearing, never the transcript.</p>
+<p><strong>Not in backups.</strong> Copies are left out of backups and <code>seamlessd export</code>
+archives: an archive carries <code>memory/</code>, <code>notes/</code> and the database, and the
+release before this one refuses an archive with anything else in it, so a
+backup holding copies could not be restored by a rollback or an older
+<code>seamlessd import</code>; an archive also holds each file in memory while it is
+written, and copies run to hundreds of megabytes. A restore leaves the folder
+as it is, and a session page says when its record names a copy this server
+does not hold. Copy the folder yourself if the copies must outlive the disk.</p>
 <h2 id="put-it-in-git">Put it in git</h2>
 <p>The strongest backup is the one you already know how to use:</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nb">cd</span> ~/.seamless
@@ -633,7 +677,7 @@ index rebuilds itself on first start either way.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#backups-in-the-console">Backups in the console</a></li><li class="lvl-3"><a href="#the-schedule">The schedule</a></li><li class="lvl-3"><a href="#the-folder">The folder</a></li><li class="lvl-3"><a href="#the-list">The list</a></li><li class="lvl-3"><a href="#restore-in-the-console">Restore, and undo</a></li><li class="lvl-2"><a href="#what-is-precious-and-what-is-not">What is precious, and what is not</a></li><li class="lvl-2"><a href="#put-it-in-git">Put it in git</a></li><li class="lvl-2"><a href="#the-whole-instance-in-one-archive">The whole instance in one archive</a></li><li class="lvl-2"><a href="#restore">Restore</a></li><li class="lvl-3"><a href="#restoring-with-seamlessd-import">Restoring with seamlessd import</a></li><li class="lvl-2"><a href="#locked-projects">Locked projects</a></li><li class="lvl-2"><a href="#merging-two-instances">Merging two instances</a></li><li class="lvl-2"><a href="#import-from-seam-v1">Import from Seam v1</a></li><li class="lvl-2"><a href="#hand-editing">Hand-editing</a></li><li class="lvl-2"><a href="#moving-machines">Moving machines</a></li>
+      <li class="lvl-2"><a href="#backups-in-the-console">Backups in the console</a></li><li class="lvl-3"><a href="#the-schedule">The schedule</a></li><li class="lvl-3"><a href="#the-folder">The folder</a></li><li class="lvl-3"><a href="#the-list">The list</a></li><li class="lvl-3"><a href="#restore-in-the-console">Restore, and undo</a></li><li class="lvl-2"><a href="#what-is-precious-and-what-is-not">What is precious, and what is not</a></li><li class="lvl-2"><a href="#flagged-transcripts">Flagged sessions&#39; transcripts</a></li><li class="lvl-2"><a href="#put-it-in-git">Put it in git</a></li><li class="lvl-2"><a href="#the-whole-instance-in-one-archive">The whole instance in one archive</a></li><li class="lvl-2"><a href="#restore">Restore</a></li><li class="lvl-3"><a href="#restoring-with-seamlessd-import">Restoring with seamlessd import</a></li><li class="lvl-2"><a href="#locked-projects">Locked projects</a></li><li class="lvl-2"><a href="#merging-two-instances">Merging two instances</a></li><li class="lvl-2"><a href="#import-from-seam-v1">Import from Seam v1</a></li><li class="lvl-2"><a href="#hand-editing">Hand-editing</a></li><li class="lvl-2"><a href="#moving-machines">Moving machines</a></li>
     </ul>
   </aside>
   

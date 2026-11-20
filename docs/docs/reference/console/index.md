@@ -708,7 +708,7 @@ unknown slug is a 404.
 
 ## Sessions
 
-`/console/sessions`, `/console/sessions/{id}`
+`/console/sessions`, `/console/sessions/{id}`, `/console/sessions/{id}/transcript`
 
 The list separates **active** (live: active and heartbeated within the idle TTL)
 from **idle** (active but gone quiet past it, awaiting the reaper) from
@@ -729,6 +729,14 @@ A session's page is the workspace: its findings (rendered), its full event
 timeline as interaction rows, per-session counts (tool calls, memory reads and
 writes, items injected, and read-after-inject), the tasks it currently claims with
 their lease countdowns, and the memories it produced.
+
+A [flagged session](https://thereisnospoon.org/docs/guides/data/#flagged-transcripts) carries a badge with its
+verdict (good, bad or notable) and its reason on the list, the peek and its
+page. Its page adds a card: when it was flagged, the transcript file the agent
+client wrote, and what became of the copy, with **Download JSONL** while a copy
+is kept (`/console/sessions/{id}/transcript`, the owner's alone: never a
+restricted account, a relay's caller or a paired device). Once any session is
+flagged, the list offers a **Flag** filter (`?verdict=flagged|good|bad|notable`).
 
 ### The conversation {#conversation}
 

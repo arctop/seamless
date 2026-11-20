@@ -570,8 +570,10 @@ const sessionArgDesc = "Session to operate on: a name (the cc/<id> or cx/<id> on
 
 func sessionUpdateTool() mcp.Tool {
 	return mcp.NewTool("session_update", hintSet(),
-		mcp.WithDescription("Record interim progress on the current session (working findings so far). Uses the bound session unless you pass one."),
-		mcp.WithString("findings", mcp.Required(), mcp.Description("Working findings / progress note so far")),
+		mcp.WithDescription("Record interim progress on the current session (working findings so far), or flag the session with verdict. Uses the bound session unless you pass one."),
+		mcp.WithString("findings", mcp.Description("Working findings / progress note so far; required unless you pass verdict")),
+		mcp.WithString(verdictParam, enumOf(core.SessionVerdicts), mcp.Description(sessionVerdictArgDesc)),
+		mcp.WithString(verdictReasonParam, mcp.Description(sessionReasonArgDesc)),
 		mcp.WithString("session", mcp.Description(sessionArgDesc)),
 		mcp.WithString("session_id", mcp.Description("Session ULID to operate on; takes precedence over session and the bound session")),
 	)
@@ -579,8 +581,12 @@ func sessionUpdateTool() mcp.Tool {
 
 func (s *Server) handleSessionUpdate(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	findings := argString(req, "findings")
-	if findings == "" {
-		return errResult("session_update", errors.New("findings is required"))
+	flag, err := sessionFlagArgs(req)
+	if err != nil {
+		return errResult("session_update", err)
+	}
+	if findings == "" && !flag.set {
+		return errResult("session_update", errors.New("findings is required, unless you pass verdict to flag the session"))
 	}
 	sess, ok, err := s.resolveSession(ctx, req)
 	if err != nil {
@@ -608,25 +614,38 @@ func (s *Server) handleSessionUpdate(ctx context.Context, req mcp.CallToolReques
 	// session this connection is not bound to -- is what this call operates on;
 	// attribute its tool.call there, not to the binding/ambient guess.
 	stashAttribution(ctx, sess.ID, sess.ProjectSlug)
-	// The findings' stamps go first (their only home is the index): a stamp
-	// that cannot be recorded leaves the findings unwritten, and a write that
-	// fails after it leaves only a warning the session's conversation earned.
-	if err := s.stampWorkItem(ctx, core.ItemKindSession, sess.ID, sess.ProjectSlug); err != nil {
-		return errResult("session_update", fmt.Errorf("the findings were not recorded, because their provenance stamp could not be: %w", err))
+	if findings != "" {
+		// The findings' stamps go first (their only home is the index): a stamp
+		// that cannot be recorded leaves the findings unwritten, and a write that
+		// fails after it leaves only a warning the session's conversation earned.
+		// A flag alone is metadata, and stamps nothing.
+		if err := s.stampWorkItem(ctx, core.ItemKindSession, sess.ID, sess.ProjectSlug); err != nil {
+			return errResult("session_update", fmt.Errorf("the findings were not recorded, because their provenance stamp could not be: %w", err))
+		}
+		sess.Findings = findings
+		sess.UpdatedAt = time.Now().UTC()
+		if err := store.UpdateSession(ctx, s.cfg.DB, sess); err != nil {
+			return errResult("session_update", err)
+		}
 	}
-	sess.Findings = findings
-	sess.UpdatedAt = time.Now().UTC()
-	if err := store.UpdateSession(ctx, s.cfg.DB, sess); err != nil {
-		return errResult("session_update", err)
+	out := withAccount(map[string]any{"session_id": sess.ID, "status": string(sess.Status)}, sess.Account)
+	if flag.set {
+		answer, err := s.applySessionFlag(ctx, sess, flag, sess.Status != core.SessionActive)
+		if err != nil {
+			return errResult("session_update", err)
+		}
+		out["flag"] = answer
 	}
-	return jsonResult(withAccount(map[string]any{"session_id": sess.ID, "status": string(sess.Status)}, sess.Account))
+	return jsonResult(out)
 }
 
 func sessionEndTool() mcp.Tool {
 	return mcp.NewTool("session_end", hintSet(),
-		mcp.WithDescription("Complete the current session, persisting its findings for future briefings. Uses the bound session unless you pass one."),
+		mcp.WithDescription("Complete the current session, persisting its findings for future briefings, and optionally flag it with verdict. Uses the bound session unless you pass one."),
 		mcp.WithString("findings", mcp.Required(), mcp.Description("Final findings: what was learned, decided, or left open. Prefer a tight summary (briefings show a short preview), but long findings are stored in full -- they are not rejected.")),
 		mcp.WithArray("mishaps", mcp.WithStringItems(), mcp.Description("Self-report mishaps this session caused: an action a warning or convention said not to take, live state touched by mistake, a command that hit the wrong target. Pass an array with one short entry per incident; omit when none happened. When a mishap violated a stored memory, name that memory by its exact slug in the entry (e.g. \"violated chroma-boot-race by ...\") -- the report is then linked to it. Recorded for recurrence review, not blame -- report them even when fully recovered.")),
+		mcp.WithString(verdictParam, enumOf(core.SessionVerdicts), mcp.Description(sessionVerdictArgDesc)),
+		mcp.WithString(verdictReasonParam, mcp.Description(sessionReasonArgDesc)),
 		mcp.WithString("session", mcp.Description(sessionArgDesc)),
 		mcp.WithString("session_id", mcp.Description("Session ULID to operate on; takes precedence over session and the bound session")),
 		mcp.WithArray(commitsParam, mcp.WithStringItems(), mcp.Description(sessionCommitsArgDesc)),
@@ -644,6 +663,11 @@ func (s *Server) handleSessionEnd(ctx context.Context, req mcp.CallToolRequest) 
 	if err != nil {
 		return errResult("session_end", err)
 	}
+	// The flag, likewise: a bad verdict or reason refuses the whole call.
+	flag, err := sessionFlagArgs(req)
+	if err != nil {
+		return errResult("session_end", err)
+	}
 	sess, ok, err := s.resolveSession(ctx, req)
 	if err != nil {
 		return errResult("session_end", err)
@@ -651,6 +675,9 @@ func (s *Server) handleSessionEnd(ctx context.Context, req mcp.CallToolRequest) 
 	if !ok {
 		return errResult("session_end", errNoSession)
 	}
+	// Whether the session had ended before this call: ending it here is not
+	// a flag after the end, so the copy waits for the end signal that follows.
+	endedBefore := sess.Status != core.SessionActive
 	// Fenced exactly like session_update, and for more: an end also completes the
 	// session and releases every task claim it holds, so an unfenced one lets a
 	// caller outside a sealed project reach into it and drop another agent's work
@@ -695,6 +722,16 @@ func (s *Server) handleSessionEnd(ctx context.Context, req mcp.CallToolRequest) 
 		// Recorded findings carry the conversation's stamps, first, as
 		// session_update's do; a withheld end records nothing it holds.
 		return errResult("session_end", fmt.Errorf("the session was not ended, because its findings' provenance stamp could not be recorded: %w", err))
+	}
+	// The flag lands before the end, so a flag that fails leaves the session
+	// open for the retry. A withheld end records nothing the conversation
+	// holds: the flag's reason is its text, so the flag goes unrecorded with
+	// the findings (flag_withheld).
+	var flagAnswer map[string]any
+	if flag.set && withheld == "" {
+		if flagAnswer, err = s.applySessionFlag(ctx, sess, flag, endedBefore); err != nil {
+			return errResult("session_end", fmt.Errorf("the session was not ended, because its flag could not be recorded: %w", err))
+		}
 	}
 	sess.Status = core.SessionCompleted
 	sess.Findings = findings
@@ -756,6 +793,12 @@ func (s *Server) handleSessionEnd(ctx context.Context, req mcp.CallToolRequest) 
 		if withheldMishaps > 0 {
 			out["mishaps_withheld"] = withheldMishaps
 		}
+	}
+	switch {
+	case flagAnswer != nil:
+		out["flag"] = flagAnswer
+	case flag.set:
+		out["flag_withheld"] = true
 	}
 	s.record(ctx, core.EventSessionEnded, sess.ID, sess.ProjectSlug, "", ended)
 	return jsonResult(out)

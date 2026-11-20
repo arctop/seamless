@@ -153,6 +153,59 @@ people either over-protect it or under-protect it:
 So: **deleting `seam.db` costs you the record of what happened, not the knowledge
 of what is true.** Every memory and note survives, because they are files.
 
+## Flagged sessions' transcripts {#flagged-transcripts}
+
+An agent can flag a whole session that went unusually well or unusually badly,
+or is worth re-reading for another reason: `session_update` or `session_end`
+with `verdict` set to `good`, `bad` or `notable`, and a one-line `reason`. One
+flag per session; the last one set wins, and `verdict: none` clears it. A flag
+is separate from `session_end`'s `mishaps` (one entry per incident, recorded
+whatever the verdict) and from a star (`favorite_set`, which weights an item in
+briefings and recall).
+
+**What is kept.** The flagged session's whole transcript - the JSONL file
+Claude Code or Codex wrote - gzip-compressed in
+`<data_dir>/transcripts/<session ULID>.jsonl.gz` (the folder 0700, each file
+0600). Only flagged sessions are copied, so the copies survive the client
+pruning its own. Every session records its transcript's path when it starts,
+so a flag set later, even after the session ended, knows which file to keep.
+
+**When.** At the session's end: Claude Code's `SessionEnd` (the transcript is
+complete by then), even when the agent already closed the session with
+`session_end`; for Codex, at the end of each turn, copied again only once the
+file grew. A session flagged after it ended is copied at once, if its
+transcript can be read. A transcript over 256 MB is not copied, and the
+session says so.
+
+**Who reads the agent's file.** A daemon that runs as your account, on the
+agent's computer, copies it itself. Under [peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/) the
+daemon opens no file an agent names: when the daemon's answer to the session's
+end asks for the transcript, `seam hook` (running as you, beside the agent)
+sends it over the socket, and only there. On a server without peer_auth, an
+agent on another computer gets no copy, and its session says why.
+
+**Who can read a copy.** You, the owner, alone: the session's page in the
+console (**Download JSONL**) and `seam sessions <id> --transcript`, both
+through the daemon, with the console's key or cookie or your own account on
+the socket. A restricted local account, a relay's caller and a paired device
+are refused. A copy holds the whole conversation - other projects' content,
+anything pasted into it - so it is not fenced per project. `seam sessions
+--flagged` and the Sessions screen's **Flag** filter list the flagged
+sessions, with whether the original file is still there and whether a copy is
+kept.
+
+**Removing one.** Clearing the flag deletes the copy. The event log keeps the
+history of the flag and its clearing, never the transcript.
+
+**Not in backups.** Copies are left out of backups and `seamlessd export`
+archives: an archive carries `memory/`, `notes/` and the database, and the
+release before this one refuses an archive with anything else in it, so a
+backup holding copies could not be restored by a rollback or an older
+`seamlessd import`; an archive also holds each file in memory while it is
+written, and copies run to hundreds of megabytes. A restore leaves the folder
+as it is, and a session page says when its record names a copy this server
+does not hold. Copy the folder yourself if the copies must outlive the disk.
+
 ## Put it in git
 
 The strongest backup is the one you already know how to use:

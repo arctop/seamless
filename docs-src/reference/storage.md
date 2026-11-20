@@ -27,6 +27,8 @@ it by hand, and what happens if you delete it.
     <div class="tree-branch"><code>notes/</code><span class="tree-note">Durable note tree</span></div>
     <div class="tree-leaf"><code>_global/{slug}.md</code><span class="tree-note">Machine-wide notes</span></div>
     <div class="tree-leaf"><code>{project}/{slug}.md</code><span class="tree-note">One project note per file</span></div>
+    <div class="tree-branch"><code>transcripts/</code><span class="tree-note">Flagged sessions' transcript copies, 0700 (files 0600); not in backups</span></div>
+    <div class="tree-leaf"><code>{session ULID}.jsonl.gz</code><span class="tree-note">One flagged session's whole transcript, gzip; removed when the flag is cleared</span></div>
     <div class="tree-branch"><code>backups/</code><span class="tree-note">Backups: the scheduled ones (unless backup.dir names another folder), the safety backups taken before a restore, and the pre-update archives (pre-update-v{old}-{time}.tar.gz), the newest two</span></div>
     <div class="tree-leaf"><code>.schedule.json</code><span class="tree-note">The schedule's record: the last run, the failure streak, the folder in use and this install's id</span></div>
     <div class="tree-branch"><code>restore/</code><span class="tree-note">Only around a restore: what it staged, and its result</span></div>

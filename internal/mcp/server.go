@@ -35,6 +35,7 @@ import (
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/screening"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/transcripts"
 	"github.com/arctop/seamless/internal/validate"
 )
 
@@ -318,7 +319,10 @@ type Config struct {
 	// tests turn it on to keep the stateless path -- the session= handle in
 	// place of the connection binding -- working ahead of that day.
 	ServeStatelessMCP bool
-	Logger            *slog.Logger
+	// Transcripts keeps flagged sessions' transcript copies (session_update
+	// and session_end's verdict). nil records the flag and keeps no copy.
+	Transcripts *transcripts.Service
+	Logger      *slog.Logger
 }
 
 // Server hosts the MCP tools and their per-connection session bindings.

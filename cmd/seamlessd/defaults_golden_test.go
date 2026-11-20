@@ -1303,13 +1303,51 @@ func (n *dgNormalizer) encode(t *testing.T, v any) []byte {
 // shows. Nothing is mapped while writing the golden from main. Once main
 // carries the change, drop the entry and regenerate the golden there.
 //
-// None is open: main carries every difference accepted so far, and the golden
-// is written from it.
+// Open: the session flag (task 01KXS26D8BGJS21CX1Z4X5S53H; owner decision
+// 2026-11-20, fields on session_update and session_end rather than a tool).
+// Every install's session_update and session_end gain verdict and reason, and
+// session_update's findings is no longer required (a flag alone needs none).
+// Entries apply in order: the verdict blocks go before the required list
+// they sit above.
 var dgAccepted = []struct {
 	file, why    string
 	branch, main string
 	n            int
-}{}
+}{
+	{"tools_list.json", "session flag: session_end's description",
+		`"Complete the current session, persisting its findings for future briefings, and optionally flag it with verdict. Uses`,
+		`"Complete the current session, persisting its findings for future briefings. Uses`, 1},
+	{"tools_list.json", "session flag: session_update's description",
+		`"Record interim progress on the current session (working findings so far), or flag the session with verdict. Uses`,
+		`"Record interim progress on the current session (working findings so far). Uses`, 1},
+	{"tools_list.json", "session flag: session_update's findings is optional with a verdict",
+		`"Working findings / progress note so far; required unless you pass verdict"`,
+		`"Working findings / progress note so far"`, 1},
+	{"tools_list.json", "session flag: the reason argument",
+		"          \"reason\": {\n" +
+			"            \"description\": \"Why the verdict, one short line; only with a verdict other than none\",\n" +
+			"            \"type\": \"string\"\n" +
+			"          },\n", "", 2},
+	{"tools_list.json", "session flag: the verdict argument",
+		"          },\n" +
+			"          \"verdict\": {\n" +
+			"            \"description\": \"Flag this whole session to re-read later: good (it went unusually well), bad (unusually badly), " +
+			"notable (worth re-reading for another reason), or none (clear the flag). One flag per session; the last one set wins. " +
+			"A flagged session's transcript is kept for the owner, copied at the session's end (at once if it already ended); " +
+			"clearing the flag deletes the copy. Independent of session_end's mishaps (one entry per incident, for recurrence " +
+			"review, whatever the verdict) and of favorite_set (a star on any item, for briefing and recall weight)\",\n" +
+			"            \"enum\": [\n" +
+			"              \"good\",\n" +
+			"              \"bad\",\n" +
+			"              \"notable\",\n" +
+			"              \"none\"\n" +
+			"            ],\n" +
+			"            \"type\": \"string\"\n" +
+			"          }\n", "          }\n", 2},
+	{"tools_list.json", "session flag: session_update requires nothing",
+		"        \"required\": [],\n        \"type\": \"object\"\n      },\n      \"name\": \"session_update\"",
+		"        \"required\": [\n          \"findings\"\n        ],\n        \"type\": \"object\"\n      },\n      \"name\": \"session_update\"", 1},
+}
 
 // dgAccept maps the accepted differences in file's normalized text back to
 // main's text.

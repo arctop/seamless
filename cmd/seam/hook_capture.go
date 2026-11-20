@@ -21,11 +21,27 @@ package main
 // peer_auth makes none of these captures, as before; the TCP key never
 // reaches a locked project either, and the guide sends such agents to the
 // socket.)
+//
+// One capture rides a request of its own: a flagged session's transcript
+// (pushTranscript), which runs past every hook body's cap. The same rule
+// holds for it: it is sent only to the peer_auth socket, and only when the
+// daemon's answer to the session's end signal names it in a header
+// (harvest.TranscriptWantedHeader) -- an answer that carries it only for a
+// flagged session, so no probe, no default-answer field and no state between
+// hooks is needed. The header is never printed: the agent client reads the
+// reply's body alone.
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/gitread"
@@ -215,4 +231,76 @@ func gitHead(cwd string) string {
 		return head
 	}
 	return ""
+}
+
+// pushTranscript sends the transcript a flagged session's end signal named
+// (the payload's transcript_path) to the daemon's upload route,
+// gzip-compressed as it is read, when the file is larger than wanted (the
+// copy the daemon already keeps; "0" for none). It never fails the hook: a
+// problem is one line on stderr, and the daemon records why it holds no copy.
+func pushTranscript(ctx context.Context, stderr io.Writer, cfg config.Config, client *http.Client, clientFlag string, payload []byte, wanted string) {
+	least, err := strconv.ParseInt(wanted, 10, 64)
+	if err != nil || least < 0 {
+		return
+	}
+	var in struct {
+		SessionID      string `json:"session_id"`
+		TranscriptPath string `json:"transcript_path"`
+	}
+	if err := json.Unmarshal(payload, &in); err != nil || in.SessionID == "" || in.TranscriptPath == "" {
+		return
+	}
+	f, err := os.Open(in.TranscriptPath) //nolint:gosec // the agent's own transcript, read as the owner beside it
+	if err != nil {
+		fmt.Fprintln(stderr, "seam hook: transcript not sent:", err)
+		return
+	}
+	defer func() { _ = f.Close() }()
+	fi, err := f.Stat()
+	if err != nil || !fi.Mode().IsRegular() || fi.Size() <= least {
+		return // nothing new since the copy kept, or nothing to send
+	}
+	q := url.Values{harvest.TranscriptSessionParam: {in.SessionID}}
+	if clientFlag != "" {
+		q.Set(clientQueryParam, clientFlag)
+	}
+	if host := config.Hostname(); host != "" {
+		q.Set("host", host)
+	}
+	// Compressed as it is read: the body is never held whole.
+	pr, pw := io.Pipe()
+	go func() {
+		gz, gerr := gzip.NewWriterLevel(pw, gzip.BestSpeed)
+		if gerr == nil {
+			_, gerr = io.Copy(gz, f)
+			gerr = errors.Join(gerr, gz.Close())
+		}
+		pw.CloseWithError(gerr) //nolint:errcheck // CloseWithError on a pipe writer always returns nil
+	}()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.ServerURL()+harvest.TranscriptEndpoint+"?"+q.Encode(), pr)
+	if err != nil {
+		_ = pr.Close()
+		fmt.Fprintln(stderr, "seam hook: transcript not sent:", err)
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+cfg.MCP.APIKey)
+	req.Header.Set("Content-Type", "application/gzip")
+	req.Header.Set(harvest.TranscriptSizeHeader, strconv.FormatInt(fi.Size(), 10))
+	resp, err := client.Do(req)
+	if err != nil {
+		_ = pr.Close()
+		fmt.Fprintln(stderr, "seam hook: transcript not sent:", err)
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_ = pr.Close() // ends the compressing goroutine if the daemon answered before reading it all
+	if resp.StatusCode != http.StatusOK {
+		var answer struct {
+			Error string `json:"error"`
+		}
+		if derr := json.NewDecoder(io.LimitReader(resp.Body, maxErrorBody)).Decode(&answer); derr != nil || answer.Error == "" {
+			answer.Error = resp.Status
+		}
+		fmt.Fprintln(stderr, "seam hook: transcript not kept:", answer.Error)
+	}
 }

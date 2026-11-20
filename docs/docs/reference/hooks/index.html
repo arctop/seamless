@@ -246,7 +246,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#session-taint">The outside-text mark: session-taint</a></li><li class="lvl-2"><a href="#claim-notices">Claim notices</a></li><li class="lvl-2"><a href="#repo-locks">Repo locks in the briefing</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-claude-code-uses-two-transports">Why Claude Code uses two transports</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
+      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#session-taint">The outside-text mark: session-taint</a></li><li class="lvl-2"><a href="#claim-notices">Claim notices</a></li><li class="lvl-2"><a href="#transcripts">Transcript copies</a></li><li class="lvl-2"><a href="#repo-locks">Repo locks in the briefing</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-claude-code-uses-two-transports">Why Claude Code uses two transports</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
     </ul>
   </details>
   <p>Seamless installs hooks for two clients: seven for Claude Code (including
@@ -596,6 +596,21 @@ one may see it, and what to do; a Seamless tool result may carry
 it first instead, and whichever does carries it alone. The conversation's
 sessions are its ambient session and every explicit session <code>session_start</code>
 linked to it. See <a href="../../concepts/lease-based-task-claiming/">lease-based task claiming</a>.</p>
+<h2 id="transcripts">Transcript copies</h2>
+<p>Every <code>SessionStart</code> records the <code>transcript_path</code> its payload names on the
+session, for every session: under peer_auth the daemon only records it, never
+opens it. A <a href="../../guides/data/#flagged-transcripts">flagged session's</a> copy is made
+at its end signal: Claude Code's <code>SessionEnd</code>, also for a session the agent
+already closed with <code>session_end</code>, and each Codex <code>Stop</code>, copied again only once
+the rollout grew. With peer_auth off the daemon copies the file itself in the
+background, on the agent's own computer only. Under peer_auth the end signal's
+answer to a flagged session carries <code>X-Seamless-Transcript-Wanted: &lt;bytes&gt;</code> (an
+unflagged session's never does), and <code>seam hook</code> - only when <code>server_url</code> names
+the socket - sends the file, gzip-compressed as it reads it, to <code>POST /api/hooks/transcript?session_id=&lt;client session id&gt;</code>, when the file is larger
+than that. The upload is taken only on the socket, for a flagged session the
+caller may act on, and checked as it arrives: it must decode whole, to no more
+than 256 MB. It runs inside the hook's deadline, and a failure costs only the
+copy (one line on the hook's stderr; the session records why).</p>
 <h2 id="repo-locks">Repo locks in the briefing</h2>
 <p>With <a href="../../concepts/repo-locks/">repo locks</a> on, a main session's <code>SessionStart</code>
 in a checkout of a repository with a declared lock - any checkout of it, or
@@ -955,7 +970,7 @@ live/schema evidence and the recapture procedure.</li>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#session-taint">The outside-text mark: session-taint</a></li><li class="lvl-2"><a href="#claim-notices">Claim notices</a></li><li class="lvl-2"><a href="#repo-locks">Repo locks in the briefing</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-claude-code-uses-two-transports">Why Claude Code uses two transports</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
+      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#session-taint">The outside-text mark: session-taint</a></li><li class="lvl-2"><a href="#claim-notices">Claim notices</a></li><li class="lvl-2"><a href="#transcripts">Transcript copies</a></li><li class="lvl-2"><a href="#repo-locks">Repo locks in the briefing</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-claude-code-uses-two-transports">Why Claude Code uses two transports</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
     </ul>
   </aside>
   

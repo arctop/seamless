@@ -289,8 +289,10 @@ agent's files, so the hook reads them itself -- the transcript's findings, token
 totals and model, a plan file, a subagent's prompt and report, the git head --
 and sends what it found beside the payload. A capture the daemon refuses (a
 locked project the owner has not approved) is named in one line on stderr and
-is not retried. On any other server_url the payload is sent as the client
-wrote it.
+is not retried. When the daemon's answer to a flagged session's session-end
+(or Codex's stop) asks for it, the hook then sends the whole transcript,
+gzip-compressed, in a request of its own. On any other server_url the payload
+is sent as the client wrote it, and no transcript is sent.
 
 A runtime failure (unreadable stdin, no config, server down) is reported on
 stderr and exits 0 -- a hook must never block the session it serves. A daemon
@@ -440,6 +442,7 @@ func runHook(ctx context.Context, e *env, o *hookOpts, pos []string) error {
 	// twice.
 	resp, err := retry(h.dialBudgetFor(o.client)).do(client, req)
 	var reply []byte
+	wanted := "" // a flagged session's transcript the daemon asks for (hook_capture.go)
 	if err == nil {
 		defer func() { _ = resp.Body.Close() }()
 		// A non-2xx reply is a failure like the rest, never hook output: a bad
@@ -473,6 +476,7 @@ func runHook(ctx context.Context, e *env, o *hookOpts, pos []string) error {
 		if notice := resp.Header.Get(harvest.RefusedHeader); notice != "" {
 			fmt.Fprintln(e.stderr, "seam hook:", notice)
 		}
+		wanted = resp.Header.Get(harvest.TranscriptWantedHeader)
 	}
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
@@ -487,6 +491,12 @@ func runHook(ctx context.Context, e *env, o *hookOpts, pos []string) error {
 	// One write of the whole reply; a failure means stdout is gone, and a hook
 	// must never block the agent by failing here.
 	_, _ = e.stdout.Write(reply) //nolint:errcheck // a hook must not fail on a broken stdout
+	// A flagged session's end signal under peer_auth: the daemon asked for
+	// its transcript, which it may not read itself (hook_capture.go). Sent
+	// after the reply is out, in what is left of the deadline.
+	if wanted != "" && pushesCaptures(cfg) && (event == "session-end" || event == "stop") {
+		pushTranscript(ctx, e.stderr, cfg, client, o.client, payload, wanted)
+	}
 	return nil
 }
 

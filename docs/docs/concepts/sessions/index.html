@@ -246,7 +246,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#ambient-vs-explicit-sessions">Ambient vs. explicit sessions</a></li><li class="lvl-2"><a href="#process-binding">How tool calls find their session</a></li><li class="lvl-3"><a href="#home">Home versus binding</a></li><li class="lvl-3"><a href="#when-to-call-session-start">When to call session_start</a></li><li class="lvl-3"><a href="#moved-record">Where a moved conversation&#39;s record goes</a></li><li class="lvl-3"><a href="#home-record">With isolation.requests on, the record follows the home</a></li><li class="lvl-2"><a href="#an-actual-briefing-annotated">An actual briefing, annotated</a></li><li class="lvl-2"><a href="#the-budget-and-what-survives-it">The budget, and what survives it</a></li><li class="lvl-2"><a href="#liveness">Liveness</a></li>
+      <li class="lvl-2"><a href="#ambient-vs-explicit-sessions">Ambient vs. explicit sessions</a></li><li class="lvl-2"><a href="#process-binding">How tool calls find their session</a></li><li class="lvl-3"><a href="#home">Home versus binding</a></li><li class="lvl-3"><a href="#when-to-call-session-start">When to call session_start</a></li><li class="lvl-3"><a href="#moved-record">Where a moved conversation&#39;s record goes</a></li><li class="lvl-3"><a href="#home-record">With isolation.requests on, the record follows the home</a></li><li class="lvl-2"><a href="#an-actual-briefing-annotated">An actual briefing, annotated</a></li><li class="lvl-2"><a href="#the-budget-and-what-survives-it">The budget, and what survives it</a></li><li class="lvl-2"><a href="#liveness">Liveness</a></li><li class="lvl-2"><a href="#flag">Flagging a session</a></li>
     </ul>
   </details>
   <p>A Seamless <strong>session</strong> is one agent's stretch of work. A <strong>briefing</strong> is what
@@ -683,6 +683,14 @@ cache-creation, and output counts read from the client's own transcript
 (Claude Code) or rollout file (Codex), not estimated from injected bytes. The
 session's console page shows them as its &quot;Model tokens&quot; panel; a session whose
 client exposes no transcript simply records none.</p>
+<h2 id="flag">Flagging a session</h2>
+<p>A session that stands out as a whole - a big win, a bad failure, a run worth
+re-reading for another reason - can be flagged: <code>session_update</code> or
+<code>session_end</code> with <code>verdict</code> (<code>good</code>, <code>bad</code>, <code>notable</code>; <code>none</code> clears it) and a
+one-line <code>reason</code>. A flag is metadata, like a star: it never moves the
+session's <code>updated_at</code>, so flagging the session from an hour ago reorders
+nothing. It keeps the session's whole transcript for the owner to come back to;
+<a href="../../guides/data/#flagged-transcripts">what is kept, where, and who can read it</a>.</p>
 
 </article>
 
@@ -700,7 +708,7 @@ client exposes no transcript simply records none.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#ambient-vs-explicit-sessions">Ambient vs. explicit sessions</a></li><li class="lvl-2"><a href="#process-binding">How tool calls find their session</a></li><li class="lvl-3"><a href="#home">Home versus binding</a></li><li class="lvl-3"><a href="#when-to-call-session-start">When to call session_start</a></li><li class="lvl-3"><a href="#moved-record">Where a moved conversation&#39;s record goes</a></li><li class="lvl-3"><a href="#home-record">With isolation.requests on, the record follows the home</a></li><li class="lvl-2"><a href="#an-actual-briefing-annotated">An actual briefing, annotated</a></li><li class="lvl-2"><a href="#the-budget-and-what-survives-it">The budget, and what survives it</a></li><li class="lvl-2"><a href="#liveness">Liveness</a></li>
+      <li class="lvl-2"><a href="#ambient-vs-explicit-sessions">Ambient vs. explicit sessions</a></li><li class="lvl-2"><a href="#process-binding">How tool calls find their session</a></li><li class="lvl-3"><a href="#home">Home versus binding</a></li><li class="lvl-3"><a href="#when-to-call-session-start">When to call session_start</a></li><li class="lvl-3"><a href="#moved-record">Where a moved conversation&#39;s record goes</a></li><li class="lvl-3"><a href="#home-record">With isolation.requests on, the record follows the home</a></li><li class="lvl-2"><a href="#an-actual-briefing-annotated">An actual briefing, annotated</a></li><li class="lvl-2"><a href="#the-budget-and-what-survives-it">The budget, and what survives it</a></li><li class="lvl-2"><a href="#liveness">Liveness</a></li><li class="lvl-2"><a href="#flag">Flagging a session</a></li>
     </ul>
   </aside>
   

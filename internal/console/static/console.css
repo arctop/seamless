@@ -4058,6 +4058,19 @@ button.star.on .ico { fill: currentColor; }
 .session-detail-star button.star { width: 30px; height: 30px; border: 1px solid var(--border); background: var(--surface-2); }
 
 .session-review-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(330px, .46fr); gap: 16px; margin-bottom: 16px; }
+/* The session flag (verdict): a badge on the session views, and its card on
+   the session page. */
+.flag-badge { gap: 4px; }
+.flag-badge svg { width: 12px; height: 12px; }
+.find.flag-reason { display: flex; align-items: center; gap: 6px; color: var(--ink-2, inherit); }
+.find.flag-reason svg { width: 12px; height: 12px; flex: none; }
+.session-flag-card { padding: 19px; margin-bottom: 16px; }
+.session-flag-facts { display: grid; gap: 8px; margin: 12px 0 8px; }
+.session-flag-facts > div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: baseline; }
+.session-flag-facts dt { color: var(--muted, inherit); font-size: 12px; }
+.session-flag-facts dd { margin: 0; overflow-wrap: anywhere; }
+.session-flag-facts .btn { margin-left: 4px; }
+.session-flag-note { margin: 0; font-size: 12px; }
 .session-review-grid > .card, .session-workspace .card { border-radius: var(--radius-lg); }
 .session-outcome-card, .session-scorecard, .session-timeline-card, .session-inspector > .card { padding: 19px; }
 .session-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 13px; }

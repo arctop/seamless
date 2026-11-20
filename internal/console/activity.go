@@ -156,6 +156,15 @@ func eventSummary(e core.Event) string {
 		return "session read outside text"
 	case core.EventSessionCleared:
 		return "outside-text mark cleared by the owner"
+	case core.EventSessionFlagged:
+		if reason := payloadStr(p, "reason"); reason != "" {
+			return "session flagged " + payloadStr(p, "verdict") + ": " + reason
+		}
+		return "session flagged " + payloadStr(p, "verdict")
+	case core.EventSessionUnflagged:
+		return "session flag cleared"
+	case core.EventSessionTranscript:
+		return "transcript " + core.TranscriptCopy(payloadStr(p, "copy")).Explain()
 	case core.EventAccessRefused:
 		line := "access refused (" + payloadStr(p, "reason") + ")"
 		if tool := payloadStr(p, "tool"); tool != "" {

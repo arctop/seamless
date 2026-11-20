@@ -4186,6 +4186,16 @@ cache-creation, and output counts read from the client's own transcript
 session's console page shows them as its "Model tokens" panel; a session whose
 client exposes no transcript simply records none.
 
+## Flagging a session {#flag}
+
+A session that stands out as a whole - a big win, a bad failure, a run worth
+re-reading for another reason - can be flagged: `session_update` or
+`session_end` with `verdict` (`good`, `bad`, `notable`; `none` clears it) and a
+one-line `reason`. A flag is metadata, like a star: it never moves the
+session's `updated_at`, so flagging the session from an hour ago reorders
+nothing. It keeps the session's whole transcript for the owner to come back to;
+[what is kept, where, and who can read it](/guides/data/#flagged-transcripts).
+
 ---
 
 # Recall
@@ -7719,6 +7729,59 @@ people either over-protect it or under-protect it:
 So: **deleting `seam.db` costs you the record of what happened, not the knowledge
 of what is true.** Every memory and note survives, because they are files.
 
+## Flagged sessions' transcripts {#flagged-transcripts}
+
+An agent can flag a whole session that went unusually well or unusually badly,
+or is worth re-reading for another reason: `session_update` or `session_end`
+with `verdict` set to `good`, `bad` or `notable`, and a one-line `reason`. One
+flag per session; the last one set wins, and `verdict: none` clears it. A flag
+is separate from `session_end`'s `mishaps` (one entry per incident, recorded
+whatever the verdict) and from a star (`favorite_set`, which weights an item in
+briefings and recall).
+
+**What is kept.** The flagged session's whole transcript - the JSONL file
+Claude Code or Codex wrote - gzip-compressed in
+`<data_dir>/transcripts/<session ULID>.jsonl.gz` (the folder 0700, each file
+0600). Only flagged sessions are copied, so the copies survive the client
+pruning its own. Every session records its transcript's path when it starts,
+so a flag set later, even after the session ended, knows which file to keep.
+
+**When.** At the session's end: Claude Code's `SessionEnd` (the transcript is
+complete by then), even when the agent already closed the session with
+`session_end`; for Codex, at the end of each turn, copied again only once the
+file grew. A session flagged after it ended is copied at once, if its
+transcript can be read. A transcript over 256 MB is not copied, and the
+session says so.
+
+**Who reads the agent's file.** A daemon that runs as your account, on the
+agent's computer, copies it itself. Under [peer_auth](/guides/peer-auth/) the
+daemon opens no file an agent names: when the daemon's answer to the session's
+end asks for the transcript, `seam hook` (running as you, beside the agent)
+sends it over the socket, and only there. On a server without peer_auth, an
+agent on another computer gets no copy, and its session says why.
+
+**Who can read a copy.** You, the owner, alone: the session's page in the
+console (**Download JSONL**) and `seam sessions <id> --transcript`, both
+through the daemon, with the console's key or cookie or your own account on
+the socket. A restricted local account, a relay's caller and a paired device
+are refused. A copy holds the whole conversation - other projects' content,
+anything pasted into it - so it is not fenced per project. `seam sessions
+--flagged` and the Sessions screen's **Flag** filter list the flagged
+sessions, with whether the original file is still there and whether a copy is
+kept.
+
+**Removing one.** Clearing the flag deletes the copy. The event log keeps the
+history of the flag and its clearing, never the transcript.
+
+**Not in backups.** Copies are left out of backups and `seamlessd export`
+archives: an archive carries `memory/`, `notes/` and the database, and the
+release before this one refuses an archive with anything else in it, so a
+backup holding copies could not be restored by a rollback or an older
+`seamlessd import`; an archive also holds each file in memory while it is
+written, and copies run to hundreds of megabytes. A restore leaves the folder
+as it is, and a session page says when its record names a copy this server
+does not hold. Copy the folder yourself if the copies must outlive the disk.
+
 ## Put it in git
 
 The strongest backup is the one you already know how to use:
@@ -10385,7 +10448,10 @@ the locked notice, and `seam approve` in your own terminal shows its request.
   carries the current state. Agents on the TCP key make none of these
   captures; point their `server_url` at the socket. On another computer, an
   agent whose `server_url` names its relay's socket makes them the same way.
-  Agents can still record findings with `session_end`.
+  Agents can still record findings with `session_end`. A
+  [flagged session's transcript](/guides/data/#flagged-transcripts) is sent
+  the same way, in a request of its own, when the daemon's answer to the
+  session's end asks for it.
 - **It updates itself, as its own account.** The installer's per-user service
   cannot host peer_auth, so neither the installer nor a `seamlessd update` run
   as you touches this install. The daemon installs new releases by itself
@@ -12872,25 +12938,29 @@ Bind this connection to a work session and return its project briefing. Claude C
 
 ## session_update {#session_update}
 
-Record interim progress on the current session (working findings so far). Uses the bound session unless you pass one.
+Record interim progress on the current session (working findings so far), or flag the session with verdict. Uses the bound session unless you pass one.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `findings` | string | **yes** | Working findings / progress note so far |
+| `findings` | string | no | Working findings / progress note so far; required unless you pass verdict |
+| `reason` | string | no | Why the verdict, one short line; only with a verdict other than none |
 | `session` | string | no | Session to operate on: a name (the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, or a sess/* name) or a session ULID. Defaults to this connection's session -- bound automatically for Claude Code and Codex agents -- so pass it only to act on another session, or when a call reports the session as ambiguous |
 | `session_id` | string | no | Session ULID to operate on; takes precedence over session and the bound session |
+| `verdict` | string | no | Flag this whole session to re-read later: good (it went unusually well), bad (unusually badly), notable (worth re-reading for another reason), or none (clear the flag). One flag per session; the last one set wins. A flagged session's transcript is kept for the owner, copied at the session's end (at once if it already ended); clearing the flag deletes the copy. Independent of session_end's mishaps (one entry per incident, for recurrence review, whatever the verdict) and of favorite_set (a star on any item, for briefing and recall weight). One of: `good`, `bad`, `notable`, `none`. |
 
 ## session_end {#session_end}
 
-Complete the current session, persisting its findings for future briefings. Uses the bound session unless you pass one.
+Complete the current session, persisting its findings for future briefings, and optionally flag it with verdict. Uses the bound session unless you pass one.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `findings` | string | **yes** | Final findings: what was learned, decided, or left open. Prefer a tight summary (briefings show a short preview), but long findings are stored in full -- they are not rejected. |
 | `commits` | array | no | Full ids of the commits this session made, recorded on the session for an integrity monitor that matches a branch's commits to the work that made them: the 40- or 64-character hex id git prints, never an abbreviation (git rev-parse &lt;short id&gt; expands one); a short id here refuses the whole call. At most 256 per call; repeats are ignored. Offered only while this server records commits (commits.record) |
 | `mishaps` | array | no | Self-report mishaps this session caused: an action a warning or convention said not to take, live state touched by mistake, a command that hit the wrong target. Pass an array with one short entry per incident; omit when none happened. When a mishap violated a stored memory, name that memory by its exact slug in the entry (e.g. "violated chroma-boot-race by ...") -- the report is then linked to it. Recorded for recurrence review, not blame -- report them even when fully recovered. |
+| `reason` | string | no | Why the verdict, one short line; only with a verdict other than none |
 | `session` | string | no | Session to operate on: a name (the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, or a sess/* name) or a session ULID. Defaults to this connection's session -- bound automatically for Claude Code and Codex agents -- so pass it only to act on another session, or when a call reports the session as ambiguous |
 | `session_id` | string | no | Session ULID to operate on; takes precedence over session and the bound session |
+| `verdict` | string | no | Flag this whole session to re-read later: good (it went unusually well), bad (unusually badly), notable (worth re-reading for another reason), or none (clear the flag). One flag per session; the last one set wins. A flagged session's transcript is kept for the owner, copied at the session's end (at once if it already ended); clearing the flag deletes the copy. Independent of session_end's mishaps (one entry per incident, for recurrence review, whatever the verdict) and of favorite_set (a star on any item, for briefing and recall weight). One of: `good`, `bad`, `notable`, `none`. |
 
 ## memory_write {#memory_write}
 
@@ -14812,14 +14882,25 @@ under the same rule ([JSON output](#json-output)).
 ### seam sessions {#seam_sessions}
 
 ```bash
-seam sessions [--status STATUS] [--json] [<id>]
+seam sessions [--status STATUS] [--flagged] [--verdict VERDICT] [--json] [<id>]
+seam sessions --transcript <id>
 ```
 
 With no positional, lists sessions with name (or short id), project, status, age,
-and an ambient marker, under a total/active count. With an id, prints that
-session's detail: status, project, tool calls, memory writes and reads, the
-read-after-inject ratio, and findings when present. Both read the console's JSON
-endpoint.
+an ambient marker and a flagged session's verdict, under a total/active count.
+With an id, prints that session's detail: status, project, its flag, tool calls,
+memory writes and reads, the read-after-inject ratio, and findings when present.
+Both read the console's JSON endpoint.
+
+`--flagged` lists the [flagged sessions](/guides/data/#flagged-transcripts) of
+all time (`--verdict good|bad|notable`, one verdict's): each with its verdict
+and reason, the transcript file the agent client wrote and whether it is still
+there (looked for on this computer; a session from another computer says which),
+and whether a copy is kept. `--transcript <id>` writes that session's copy to
+stdout, decompressed - the JSONL the client wrote - through the daemon, so it
+works under peer_auth, where the daemon's data directory is not yours to read.
+It is the owner's alone, and fails rather than end early when the daemon could
+not read the copy whole.
 
 `--status` is `active`, `completed`, or `expired`; anything else is a parse
 error. The console rejects an unrecognized `?status=` too, so a direct URL cannot
@@ -15049,8 +15130,12 @@ Two behaviours matter if you are debugging a hook:
   findings, token totals and model, the plan file, a subagent's prompt and
   report (waiting up to 3s for its final message), and the git head. A capture
   the daemon refuses (a locked project the owner has not approved) is named in
-  one line on stderr and not retried. On any other `server_url` the payload is
-  forwarded exactly as the client wrote it.
+  one line on stderr and not retried. When the daemon's answer to a
+  [flagged session's](/guides/data/#flagged-transcripts) `session-end` (or
+  Codex's `stop`) asks for it, the hook then sends the whole transcript,
+  gzip-compressed, in a request of its own. On any other `server_url` the
+  payload is forwarded exactly as the client wrote it, and no transcript is
+  sent.
 
 Install these with `seamlessd install-hooks`. The one exception is
 `session-taint`, which no installer wires: an agent guard's own PostToolUse
@@ -17835,6 +17920,24 @@ it first instead, and whichever does carries it alone. The conversation's
 sessions are its ambient session and every explicit session `session_start`
 linked to it. See [lease-based task claiming](/concepts/lease-based-task-claiming/).
 
+## Transcript copies {#transcripts}
+
+Every `SessionStart` records the `transcript_path` its payload names on the
+session, for every session: under peer_auth the daemon only records it, never
+opens it. A [flagged session's](/guides/data/#flagged-transcripts) copy is made
+at its end signal: Claude Code's `SessionEnd`, also for a session the agent
+already closed with `session_end`, and each Codex `Stop`, copied again only once
+the rollout grew. With peer_auth off the daemon copies the file itself in the
+background, on the agent's own computer only. Under peer_auth the end signal's
+answer to a flagged session carries `X-Seamless-Transcript-Wanted: <bytes>` (an
+unflagged session's never does), and `seam hook` - only when `server_url` names
+the socket - sends the file, gzip-compressed as it reads it, to `POST
+/api/hooks/transcript?session_id=<client session id>`, when the file is larger
+than that. The upload is taken only on the socket, for a flagged session the
+caller may act on, and checked as it arrives: it must decode whole, to no more
+than 256 MB. It runs inside the hook's deadline, and a failure costs only the
+copy (one line on the hook's stderr; the session records why).
+
 ## Repo locks in the briefing {#repo-locks}
 
 With [repo locks](/concepts/repo-locks/) on, a main session's `SessionStart`
@@ -19517,7 +19620,7 @@ unknown slug is a 404.
 
 ## Sessions
 
-`/console/sessions`, `/console/sessions/{id}`
+`/console/sessions`, `/console/sessions/{id}`, `/console/sessions/{id}/transcript`
 
 The list separates **active** (live: active and heartbeated within the idle TTL)
 from **idle** (active but gone quiet past it, awaiting the reaper) from
@@ -19538,6 +19641,14 @@ A session's page is the workspace: its findings (rendered), its full event
 timeline as interaction rows, per-session counts (tool calls, memory reads and
 writes, items injected, and read-after-inject), the tasks it currently claims with
 their lease countdowns, and the memories it produced.
+
+A [flagged session](/guides/data/#flagged-transcripts) carries a badge with its
+verdict (good, bad or notable) and its reason on the list, the peek and its
+page. Its page adds a card: when it was flagged, the transcript file the agent
+client wrote, and what became of the copy, with **Download JSONL** while a copy
+is kept (`/console/sessions/{id}/transcript`, the owner's alone: never a
+restricted account, a relay's caller or a paired device). Once any session is
+flagged, the list offers a **Flag** filter (`?verdict=flagged|good|bad|notable`).
 
 ### The conversation {#conversation}
 
@@ -20500,6 +20611,8 @@ _global/{name}.md Machine-wide memories
 notes/ Durable note tree
 _global/{slug}.md Machine-wide notes
 {project}/{slug}.md One project note per file
+transcripts/ Flagged sessions' transcript copies, 0700 (files 0600); not in backups
+{session ULID}.jsonl.gz One flagged session's whole transcript, gzip; removed when the flag is cleared
 backups/ Backups: the scheduled ones (unless backup.dir names another folder), the safety backups taken before a restore, and the pre-update archives (pre-update-v{old}-{time}.tar.gz), the newest two
 .schedule.json The schedule's record: the last run, the failure streak, the folder in use and this install's id
 restore/ Only around a restore: what it staged, and its result
