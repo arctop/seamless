@@ -269,13 +269,23 @@ takes were never committed, by design.
 
 ## Flow B: console screenshots
 
-`docs/static/shots/` holds six console pages x dark/light, WebP. They come from
-a throwaway instance seeded with the invented six-week fleet history in
-`internal/demokit/data.go` -- never from a live data dir.
+`docs/static/shots/` holds six console pages x dark/light, plus the Privacy
+screen's machine plan in two setups for the /security/ page, all WebP. They
+come from a throwaway instance seeded with the invented six-week fleet history
+in `internal/demokit/data.go` -- never from a live data dir.
+
+The Privacy screen prints the account the daemon runs as, and the data
+directory's path. Run the demo as a build that cannot see your account name:
+`-tags osusergo` makes Go's user lookup fall back to `$USER` on macOS (a plain
+build reads the real account through libSystem, cgo or not), and a scratch
+`HOME` gives the data directory a neutral path.
 
 ```bash
-# 1. seed a throwaway data dir (the console-fleet seed, not -scenes)
-go run ./cmd/demoseed -data /tmp/seamless-demo
+# 1. seed a throwaway data dir under a scratch home (the console-fleet seed,
+#    not -scenes)
+mkdir -p /tmp/demo-home
+go run ./cmd/demoseed -data /tmp/demo-home/.seamless
+CGO_ENABLED=0 go build -tags osusergo -o /tmp/seamlessd-demo ./cmd/seamlessd
 
 # 2. serve it on a port that is NOT your live daemon. The three SEAMLESS_FEATURES_*
 #    flags are load-bearing: optional features ship off and this throwaway data
@@ -291,12 +301,20 @@ go run ./cmd/demoseed -data /tmp/seamless-demo
 #    SEAMLESS_CONFIG must name a throwaway file (it can be empty): env vars only
 #    override keys, so without it serve still loads your LIVE
 #    ~/.config/seamless/seamless.yaml and inherits its llm key, tls, and briefing.
+#    SEAMLESS_FEATURES_SCREENING puts write screening on, so the Privacy screen
+#    shows that layer in use; USER and HOME keep your account name and home
+#    path off the shots.
 touch /tmp/seamless-demo.yaml
-SEAMLESS_CONFIG=/tmp/seamless-demo.yaml \
-  SEAMLESS_DATA_DIR=/tmp/seamless-demo SEAMLESS_ADDR=127.0.0.1:8090 \
+HOME=/tmp/demo-home USER=you SEAMLESS_CONFIG=/tmp/seamless-demo.yaml \
+  SEAMLESS_DATA_DIR=/tmp/demo-home/.seamless SEAMLESS_ADDR=127.0.0.1:8090 \
   SEAMLESS_FEATURES_RESEARCH=1 SEAMLESS_FEATURES_MOMENTUM=1 \
-  SEAMLESS_FEATURES_GAMIFICATION=1 SEAMLESS_CONSOLE_LEVEL=advanced \
-  SEAMLESS_MCP_API_KEY=<any key> ./bin/seamlessd serve
+  SEAMLESS_FEATURES_GAMIFICATION=1 SEAMLESS_FEATURES_SCREENING=1 \
+  SEAMLESS_CONSOLE_LEVEL=advanced SEAMLESS_MCP_API_KEY=<any key> \
+  /tmp/seamlessd-demo serve
+
+# 2b. fence one project, so the Privacy screen has a fence to draw
+SEAMLESS_CONFIG=/tmp/seamless-demo.yaml SEAMLESS_SERVER_URL=http://127.0.0.1:8090 \
+  SEAMLESS_MCP_API_KEY=<same key> ./bin/seam project isolation homelab confidential --yes
 
 # 3. capture both themes at 1440x900 @2x (Playwright driving installed Chrome)
 pnpm add playwright-core     # once, anywhere; NODE_PATH must point at its

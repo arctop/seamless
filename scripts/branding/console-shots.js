@@ -46,7 +46,23 @@ const PAGES = [
   // Keep the legacy asset basename so published and cached landing-page URLs
   // stay valid; the captured surface itself is the canonical Context view.
   { name: 'relations', url: '/console/context?scope=project&project=orbital' },
+  // The /security/ page's two plans: the Privacy screen's machine, with a
+  // compromised agent switched on, in the default setup and with Seamless in
+  // its own account. Element shots, not the whole screen.
+  { name: 'privacy-shared', url: '/console/privacy', element: '.pv-machine', prepare: (page) => breach(page, 'shared') },
+  { name: 'privacy-dedicated', url: '/console/privacy', element: '.pv-machine', prepare: (page) => breach(page, 'dedicated') },
 ];
+
+// breach picks a setup on the Privacy screen's machine plan and turns its
+// Compromised agent switch on.
+async function breach(page, mode) {
+  await page.click(`[data-pv-mode="${mode}"]`);
+  await page.waitForTimeout(400);
+  const sw = page.locator('#pv-breach');
+  if ((await sw.getAttribute('aria-checked')) !== 'true') await sw.click();
+  await page.waitForTimeout(1600);
+  await page.locator('.pv-machine').scrollIntoViewIfNeeded();
+}
 
 // A freshly seeded instance has never been welcomed, so the Overview opens
 // with the first-run level-choice card, which pushes the Knowledge sky below
@@ -96,7 +112,9 @@ async function dismissWelcome(browser) {
       await page.waitForTimeout(1500);
       if (p.prepare) await p.prepare(page);
       await page.waitForTimeout(500);
-      await page.screenshot({ path: path.join(outDir, `${p.name}-${theme}.png`) });
+      const shot = path.join(outDir, `${p.name}-${theme}.png`);
+      if (p.element) await page.locator(p.element).screenshot({ path: shot });
+      else await page.screenshot({ path: shot });
       console.log(`captured ${p.name}-${theme}.png`);
     }
     await context.close();
