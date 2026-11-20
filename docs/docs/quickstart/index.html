@@ -28,7 +28,7 @@
 var o=q.get("os")||localStorage.getItem("os");if(o==="unix"||!/^(macos|linux|windows|all)$/.test(o||""))o=/Windows/i.test(navigator.userAgent)?"windows":/Mac/i.test(navigator.userAgent)?"macos":"linux";d.dataset.os=o;
 var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").filter(function(x){return x==="claude"||x==="codex"||x==="claude-desktop";});if(cs.length&&cs.length<3)d.dataset.clients=cs.join(" ");})();</script>
 <link rel="stylesheet" href="../../static/site.css?v=658d0062">
-<link rel="stylesheet" href="../static/docs.css?v=761296eb">
+<link rel="stylesheet" href="../static/docs.css?v=4314abce">
 </head>
 <body class="docs" data-docs-root="../">
 
@@ -48,6 +48,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   </div>
 
   <nav class="docs-head-nav" aria-label="Site">
+    <a class="docs-site-link" href="../../security/">Security</a>
+    <a class="docs-site-link" href="../../compare/">Compare</a>
     <button class="ctx-chip-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="ctx-pop"><span class="ctx-chip-os"></span><span class="ctx-chip-rest"></span></button>
     <div class="ctx-pop" id="ctx-pop" hidden>
       <div class="ctx-seg" role="group" aria-label="Operating system">
@@ -109,6 +111,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
       <ul>
         
         <li><a href="../concepts/how-it-works/">How Seamless works</a></li>
+        
+        <li><a href="../concepts/security/">Security and privacy</a></li>
         
         <li><a href="../concepts/memory/">Memory &amp; notes</a></li>
         
@@ -288,21 +292,36 @@ Every fork in the road is a link, not a branch in these steps.</p>
   <label class="cfg-opt"><input type="checkbox" data-cfg="noservice"> Binaries only, no service (<code>SEAMLESS_NO_SERVICE=1</code>)</label>
   <pre class="cfg-out"><code data-cfg-out></code></pre>
 </div>
-<p>One command does the lot: it fetches the checksum-verified release archive for
-your platform (macOS, Linux, and Windows; amd64 and arm64), installs <code>seamlessd</code>
-and <code>seam</code>, generates the bearer key, wires the detected clients - Claude Code,
-the Claude app chat surface, Codex - with hooks, MCP, and skills, and starts
-the daemon as a per-user service on <code>127.0.0.1:8081</code> with data in <code>~/.seamless</code>.
+<p>One command does the lot: it fetches the release archive for your platform
+(macOS, Linux, and Windows; amd64 and arm64) and checks it against the
+release's signed checksums, installs <code>seamlessd</code> and <code>seam</code>, generates the
+bearer key, wires the detected clients - Claude Code, the Claude app chat
+surface, Codex - with hooks, MCP, and skills, and starts the daemon as a
+per-user service on <code>127.0.0.1:8081</code> with data in <code>~/.seamless</code>.
 No Go, no CGO toolchain, no database server, no Node; the installer needs
 <code>curl</code> and <code>tar</code>. <a href="../install/">Install &amp; deploy</a> has the override knobs and the
 other routes (Homebrew, a clone, <code>go install</code>, prebuilt archives);
 <a href="../reference/service/">The service &amp; where things live</a> has the service
 controls, logs, and every path.</p>
+<p>At a terminal, the installer asks two questions before it installs anything,
+and Enter takes the default both times:</p>
+<ol>
+<li><strong>How will you use Seamless?</strong> <strong>Standalone</strong> - everything on this computer -
+is the default. <strong>Networked</strong> makes this computer the Server your other
+computers connect to, or a Client of one
+(<a href="../concepts/networked/">networked Seamless</a>).</li>
+<li><strong>Start fresh, or from a backup?</strong> Fresh is the default; a backup restores
+an earlier instance into the new one.</li>
+</ol>
+<p>A script that sets no <code>SEAMLESS_*</code> variable is never asked and installs
+Standalone (<a href="../install/#install-in-one-command">the answers as variables</a>).</p>
 <p>Seamless is early in its development cycle, and releases with improvements and
 bug fixes land often. The installer's install keeps itself current: from v0.7.0
-it installs each new release by itself, a day after it is published and at a
-moment no agent is using it. To update right now, <code>seamlessd update</code> is the one
-command, on every OS. See <a href="../updating/#automatic-updates">Update &amp; uninstall</a>.</p>
+it installs each new release by itself, a day after it is published, at a
+moment no agent is using it, or at the latest within a few days. To update
+right now, <code>seamlessd update</code> is the one command, on every OS. It also backs
+your data up every day and keeps the last seven. See
+<a href="../updating/#automatic-updates">Update &amp; uninstall</a> and <a href="../guides/data/">backups</a>.</p>
 <p>Piping a stranger's script into a shell deserves a read first - it is
 <a href="https://thereisnospoon.org/install">one file</a>.</p>
 <p>On a true first run - no config file anywhere - the bearer key is generated and
@@ -402,7 +421,7 @@ instructions (<code>CLAUDE.md</code> or <code>AGENTS.md</code>) and edits only w
 </div>
 
 <footer class="docs-foot">
-  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../../">Home</a> · <a href="../../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a></p>
+  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../../">Home</a> · <a href="../../security/">Security</a> · <a href="../../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a> · <a href="https://github.com/arctop/seamless/security/advisories/new">Report a vulnerability</a></p>
 </footer>
 
 <script src="../static/docs.js?v=f91fb0cd"></script>

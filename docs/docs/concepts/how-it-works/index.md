@@ -5,11 +5,11 @@
 Seamless is a local-first memory and coordination system for coding agents.
 The release ships a daemon (`seamlessd`) and its headless client (`seam`); one
 daemon process owns one SQLite database and one directory of markdown files,
-bound to loopback on your machine. Agents reach it over MCP,
+and by default it listens on loopback on your machine. Agents reach it over MCP,
 hooks make sessions ambient for Claude Code and Codex, and you watch through a
 read-mostly console. It is deliberately not a distributed system - one
-instance, one port, one data directory per machine. Everything below follows
-from that.
+daemon, one port, one data directory, however many computers use it.
+Everything below follows from that.
 
 ## One daemon, three surfaces
 
@@ -35,8 +35,11 @@ One daemon, three interfaces. Agents and hooks write through the same process; h
 - **You** get a read-mostly console. It is an observability surface, not the way
   the system is driven.
 
-One instance per machine, one port, one data directory. Not a distributed system,
-by choice.
+One daemon, one port, one data directory. Not a distributed system, by choice.
+Several computers can still share one store: in a
+[networked setup](https://thereisnospoon.org/docs/concepts/networked/) one computer, the Server, runs the
+daemon and keeps the data, and the others are Clients that keep no data of
+their own and reach it over the network, normally with TLS.
 
 ## Files are truth; the database is an index
 
@@ -61,7 +64,7 @@ folder of markdown files that a human - or any other tool - can read.
 
 ```text
 Write path
-1 · request memory_write Validate name, content, and scope
+1 · request memory_write Validate name, content, scope, and fence
 2 · durable act Atomic Markdown write Fail closed when scope is ambiguous
 3 · rebuildable FTS + embedding Index the exact file content
 4 · observable Append event Record what happened
@@ -70,6 +73,14 @@ The file is the durable boundary. SQLite mirrors make the knowledge searchable a
 
 The file write is the one that matters. Indexing after it can fail and be
 rebuilt; the file is already on disk.
+
+A write can also stop before step 2. One that would cross a
+[confidential or sealed](https://thereisnospoon.org/docs/concepts/project-isolation/) project's fence, or
+reach a project a [peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/) caller may not, is refused.
+With [write screening](https://thereisnospoon.org/docs/guides/write-screening/) on, a suspicious one is held:
+it waits in a queue in the database, never under `memory/` or `notes/`, until
+you release it. [Security and privacy](https://thereisnospoon.org/docs/concepts/security/) covers how these
+fit together.
 
 ## The read path
 
@@ -92,9 +103,13 @@ All three are covered in [Recall](https://thereisnospoon.org/docs/concepts/recal
 - **Not a vector database.** Vectors are float32 blobs in SQLite, scanned
   exactly. No ANN index, no separate service.
 - **Not a cloud service.** No account, no sync, and no outbound product
-  telemetry. The local event and retrieval telemetry shown in the console never
-  leaves the machine. The bind is loopback and the key is static. The only
-  requests Seamless makes unprompted are the anonymous
+  telemetry. The event and retrieval telemetry shown in the console goes to no
+  one but you. By default the daemon listens on loopback and
+  every caller presents one static key; a Server's paired computers hold
+  credentials of their own, a peer_auth daemon names each caller by its uid
+  instead of a key, and the console can sign in with a passkey
+  ([Security and privacy](https://thereisnospoon.org/docs/concepts/security/)). Apart from the LLM provider
+  you configure, the only requests Seamless makes unprompted are the anonymous
   [update check](https://thereisnospoon.org/docs/updating/#automatic-update-checks) against GitHub's release
   list and, on an install the installer made, the downloads that
   [install a newer release by itself](https://thereisnospoon.org/docs/updating/#automatic-updates).

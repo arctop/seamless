@@ -29,6 +29,7 @@ sections:
     pages:
       - index.md
       - how-it-works.md
+      - security.md
       - memory.md
       - sessions.md
       - recall.md

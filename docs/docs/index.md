@@ -7,9 +7,9 @@ a **shared, persistent brain** for Claude Code, Codex, and any other MCP client
 you run. Memory survives the end of a conversation, tasks can be handed from one
 agent to another, and plans get executed together. All of it is stored as
 markdown files in a directory you own, indexed by one SQLite database, and
-served over MCP by the local `seamlessd` daemon. The companion `seam` CLI gives
-headless agents a direct interface. There is no hosted Seamless service,
-external vector database, or account.
+served over MCP by the `seamlessd` daemon on your own computer. The companion
+`seam` CLI gives headless agents a direct interface. There is no hosted
+Seamless service, external vector database, or account.
 
 The same store also works from chats in the Claude desktop app, for long-running
 work that isn't code: [Seamless in the Claude app](https://thereisnospoon.org/claude-app/)
@@ -56,15 +56,20 @@ everyone - one install command, then your client.
 | Update, uninstall, or add a client later | [Update & uninstall](https://thereisnospoon.org/docs/updating/) |
 | Control the service, find logs and paths | [The service & where things live](https://thereisnospoon.org/docs/reference/service/) |
 | Understand the model before trusting it | [How Seamless works](https://thereisnospoon.org/docs/concepts/how-it-works/) |
+| Know what is protected, and from whom | [Security and privacy](https://thereisnospoon.org/docs/concepts/security/) |
+| Keep a client's project away from your other work | [Project isolation](https://thereisnospoon.org/docs/concepts/project-isolation/) |
+| Share one memory across your computers | [Networked Seamless](https://thereisnospoon.org/docs/concepts/networked/) |
 | Point a hand-rolled agent at it | [Integrate your agent](https://thereisnospoon.org/docs/guides/integrate-your-agent/) |
 | Make a fleet divide work without colliding | [Coordinate multiple agents](https://thereisnospoon.org/docs/guides/coordinate-agents/) |
 | Look up a tool, key, or command | [Reference](https://thereisnospoon.org/docs/reference/) |
 | Fix something that is silently not working | [Troubleshooting](https://thereisnospoon.org/docs/guides/troubleshooting/) |
 
-Its clients are agents. You are the observer and editor - there is a console, but
-nothing in Seamless requires you to be in the loop for agents to use it. And it
-is one instance on one machine, bound to loopback: a personal substrate, not a
-hosted team knowledge base.
+Its clients are agents. You are the observer and editor - there is a console,
+and agents use Seamless without you in the loop until you ask to be: lock a
+project and they wait for your approval, turn on write screening and suspicious
+writes wait for your review. It is a personal substrate, not a hosted team
+knowledge base: one daemon on your computer, or one Server your other computers
+pair with.
 
 ## What it gives a fleet
 
@@ -78,6 +83,9 @@ hosted team knowledge base.
 - **Hybrid recall.** One search entry point fusing keyword and vector search.
 - **A console you can read.** Every memory, session, task, and retrieval decision
   is inspectable. The files are plain markdown; the store is not a black box.
+- **Walls you choose.** Fence a project so its knowledge stays put, hold
+  suspicious writes for review, and lock a project so even its own agents wait
+  for your Touch ID, passkey, or password ([security and privacy](https://thereisnospoon.org/docs/concepts/security/)).
 
 ## Design principles
 
@@ -85,10 +93,12 @@ hosted team knowledge base.
 read, `grep`, edit, and put in git. The database is a rebuildable index over
 them, plus the record for high-churn state (sessions, tasks, events).
 
-**Local-first.** One daemon process, one SQLite file, bound to loopback. No
-external database, no required cloud service, and no outbound product
-telemetry - the only unprompted request is an anonymous check for new releases,
-and one config line turns it off.
+**Local-first.** One daemon process and one SQLite file, listening on loopback
+unless you set up a Server for your other computers. No external database, no
+required cloud service, and no product telemetry. On its own it only checks
+GitHub for new releases, anonymously, and downloads the updates it installs;
+`update.check: false` turns that off. Text goes to a model provider only if you
+add one ([what leaves your computer](https://thereisnospoon.org/docs/concepts/security/#outbound)).
 
 **Propose, don't act.** The gardener finds duplicates, staleness, and drift - and
 proposes. Nothing rewrites your knowledge behind your back.

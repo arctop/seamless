@@ -28,7 +28,7 @@
 var o=q.get("os")||localStorage.getItem("os");if(o==="unix"||!/^(macos|linux|windows|all)$/.test(o||""))o=/Windows/i.test(navigator.userAgent)?"windows":/Mac/i.test(navigator.userAgent)?"macos":"linux";d.dataset.os=o;
 var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").filter(function(x){return x==="claude"||x==="codex"||x==="claude-desktop";});if(cs.length&&cs.length<3)d.dataset.clients=cs.join(" ");})();</script>
 <link rel="stylesheet" href="../../static/site.css?v=658d0062">
-<link rel="stylesheet" href="../static/docs.css?v=761296eb">
+<link rel="stylesheet" href="../static/docs.css?v=4314abce">
 </head>
 <body class="docs" data-docs-root="../">
 
@@ -48,6 +48,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   </div>
 
   <nav class="docs-head-nav" aria-label="Site">
+    <a class="docs-site-link" href="../../security/">Security</a>
+    <a class="docs-site-link" href="../../compare/">Compare</a>
     <button class="ctx-chip-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="ctx-pop"><span class="ctx-chip-os"></span><span class="ctx-chip-rest"></span></button>
     <div class="ctx-pop" id="ctx-pop" hidden>
       <div class="ctx-seg" role="group" aria-label="Operating system">
@@ -109,6 +111,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
       <ul>
         
         <li><a href="../concepts/how-it-works/">How Seamless works</a></li>
+        
+        <li><a href="../concepts/security/">Security and privacy</a></li>
         
         <li><a href="../concepts/memory/">Memory &amp; notes</a></li>
         
@@ -265,9 +269,10 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   </details>
   <p>Installing Seamless is one command: a script downloads a release archive
 containing the <code>seamlessd</code> daemon and <code>seam</code> CLI for macOS, Linux, or Windows,
-verifies its SHA-256, and registers the daemon as a per-user service - launchd,
-systemd, or a Scheduled Task - bound to loopback. No Docker, database server,
-or Go toolchain. The <a href="../quickstart/">Quickstart</a> runs that command and moves on;
+verifies it against the release's signed checksums, and registers the daemon as
+a per-user service - launchd, systemd, or a Scheduled Task - listening on
+loopback unless you set this computer up as a Server. No Docker, database
+server, or Go toolchain. The <a href="../quickstart/">Quickstart</a> runs that command and moves on;
 this page is what it did, and what to do when you want to steer it yourself.
 Where everything lands - the service, logs, ports, and every path - is on
 <a href="../reference/service/">The service &amp; where things live</a>.</p>
@@ -290,9 +295,11 @@ itself. No Go toolchain is involved. In order, it:</p>
 <ol>
 <li>resolves the latest release and downloads the archive for your platform
 (macOS, Linux, and Windows; amd64 and arm64), <strong>verifying its SHA-256</strong>
-against the release's <code>checksums.txt</code> before unpacking anything; when
-<code>cosign</code> is available it also verifies that manifest's keyless signature
-against this repository's release workflow identity;</li>
+against the release's <code>checksums.txt</code> before unpacking anything, and checks
+that manifest's hardware-key signature from the project's owner
+(<a href="#security-posture">below</a>); when <code>cosign</code> is available it also verifies
+the manifest's keyless signature against this repository's release
+workflow identity;</li>
 <li>asks the new <a href="../reference/cli-seamlessd/#seamlessd_setup"><code>seamlessd setup</code></a>
 how this computer will be used, before anything is installed:
 <strong>Standalone</strong> (everything on this computer, the default) or <strong>Networked</strong> -
@@ -564,8 +571,12 @@ default. See <a href="../updating/#uninstall">Update &amp; uninstall</a>.</p>
 <p>What you are accepting when you run this:</p>
 <ul>
 <li><strong>One static bearer key</strong> guards <code>/api/mcp</code> and the console. Not JWT, not
-OAuth, no user accounts. It is a single-user local tool and the key is in your
-config file with <code>0600</code> permissions.</li>
+OAuth, no user accounts. It is a single-user tool and the key is in your
+config file with <code>0600</code> permissions. Three things narrow its role:
+<a href="../reference/console/#sign-in-with-a-passkey">passkey sign-in</a> stops it
+signing a browser in to the console, a <a href="../concepts/networked/#pairing">paired computer</a>
+holds a credential of its own, and under <a href="../guides/peer-auth/">peer_auth</a> a
+caller on the Unix socket needs no key at all - the kernel names it.</li>
 <li><strong>Default agent registrations do not copy that key.</strong> Claude Code calls
 <code>seam mcp-headers</code> through <code>headersHelper</code>; Codex launches <code>seam mcp-proxy</code>.
 Both read the 0600 Seamless config at connection time, and neither puts the
@@ -598,7 +609,7 @@ an install the installer made, an
 <a href="../updating/#automatic-updates">automatic update</a> adds the same downloads
 <code>seamlessd update</code> makes. <code>update.check: false</code> turns both off and means no
 update traffic at all.</li>
-<li><strong>Release authenticity has two layers.</strong> Every installer verifies the
+<li><strong>Release authenticity has three layers.</strong> Every installer verifies the
 archive's SHA-256 against <code>checksums.txt</code>. When <code>cosign</code> is installed it also
 verifies the manifest's keyless signature against this repository's release
 workflow identity; without cosign it warns clearly and continues with checksum
@@ -624,7 +635,8 @@ as a missing cosign does. A <code>SEAMLESS_VERSION</code> at or below v0.8.3 pre
 the owner's signatures and installs as before.</li>
 <li><strong>The trust root of a fresh install is the site.</strong> The installer you pipe to
 a shell is served from thereisnospoon.org, which publishes only from release
-tags, and the keys it checks the owner's signature against are the ones it
+tags and the maintainers' <code>site-*</code> tags, and the keys it checks the owner's
+signature against are the ones it
 carries. So a fresh install trusts whoever can publish the site - TLS
 authenticates the host, nothing authenticates the script before it runs.
 What the installer's checks then add is that a release whose assets the
@@ -647,12 +659,13 @@ dial, and its host joins the allowlist, so the guard stays on.</li>
 (TLS 1.2 floor) and marks the console session cookie <code>Secure</code>. Without it
 the bearer key, every hook payload, and the whole console travel in the
 clear; <code>seamlessd doctor</code> reports that as a warning on the <code>bind</code> line.</li>
-<li><strong>Keep the blast radius small.</strong> There is still no rate limiting, no user
-accounts, and no per-client authorization: one key admits the whole corpus,
-and so does every computer paired with the Server. Only
-<a href="../guides/peer-auth/">locked projects</a> close a project to them. A network you
-trust - your LAN, your tailnet - is the supported boundary. The public
-internet is not.</li>
+<li><strong>Keep the blast radius small.</strong> There is still no rate limiting and no
+user accounts: one key admits the whole corpus, and so does every computer
+paired with the Server. <a href="../guides/peer-auth/">Locked projects</a> close a
+project to them, and under <code>peer_auth</code> a relay's
+<a href="../guides/peer-auth/#restricted-local-accounts">restricted accounts</a> reach
+only what you list. A network you trust - your LAN, your tailnet - is the
+supported boundary. The public internet is not.</li>
 </ol>
 <p><a href="../guides/network-install/">Share one daemon across your computers</a> is the
 walkthrough - the Server's setup, each Client, pairing, and what a remote
@@ -685,7 +698,7 @@ loopback bind is still the smaller change and the safer one.</p>
 </div>
 
 <footer class="docs-foot">
-  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../../">Home</a> · <a href="../../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a></p>
+  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../../">Home</a> · <a href="../../security/">Security</a> · <a href="../../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a> · <a href="https://github.com/arctop/seamless/security/advisories/new">Report a vulnerability</a></p>
 </footer>
 
 <script src="../static/docs.js?v=f91fb0cd"></script>

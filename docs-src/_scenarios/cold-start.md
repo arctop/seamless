@@ -38,7 +38,7 @@ index could vanish and this would not:
 
 ```
 ---
-id: 01JZFJ4S6M3T9BWKS60AQNDAA
+id: 01JZFJ4S6M3T9BWKS60AQNDAAX
 kind: gotcha
 name: rate-limit-not-in-memory
 description: In-memory rate limit on the refresh endpoint resets per instance; use shared storage.
@@ -48,7 +48,7 @@ updated: 2026-07-08T14:21:07Z
 valid_from: 2026-07-08T14:21:07Z
 invalid_at: null
 superseded_by: null
-source_session: cc/1a2b3c4d
+source_session: 01JZFJ3QK7Y2M8D4R6T1VNB5XC
 ---
 
 A rate limiter kept in a process map only sees one instance's traffic. myapp

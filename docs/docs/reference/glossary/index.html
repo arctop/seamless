@@ -28,7 +28,7 @@
 var o=q.get("os")||localStorage.getItem("os");if(o==="unix"||!/^(macos|linux|windows|all)$/.test(o||""))o=/Windows/i.test(navigator.userAgent)?"windows":/Mac/i.test(navigator.userAgent)?"macos":"linux";d.dataset.os=o;
 var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").filter(function(x){return x==="claude"||x==="codex"||x==="claude-desktop";});if(cs.length&&cs.length<3)d.dataset.clients=cs.join(" ");})();</script>
 <link rel="stylesheet" href="../../../static/site.css?v=658d0062">
-<link rel="stylesheet" href="../../static/docs.css?v=761296eb">
+<link rel="stylesheet" href="../../static/docs.css?v=4314abce">
 </head>
 <body class="docs" data-docs-root="../../">
 
@@ -48,6 +48,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   </div>
 
   <nav class="docs-head-nav" aria-label="Site">
+    <a class="docs-site-link" href="../../../security/">Security</a>
+    <a class="docs-site-link" href="../../../compare/">Compare</a>
     <button class="ctx-chip-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="ctx-pop"><span class="ctx-chip-os"></span><span class="ctx-chip-rest"></span></button>
     <div class="ctx-pop" id="ctx-pop" hidden>
       <div class="ctx-seg" role="group" aria-label="Operating system">
@@ -109,6 +111,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
       <ul>
         
         <li><a href="../../concepts/how-it-works/">How Seamless works</a></li>
+        
+        <li><a href="../../concepts/security/">Security and privacy</a></li>
         
         <li><a href="../../concepts/memory/">Memory &amp; notes</a></li>
         
@@ -259,9 +263,19 @@ briefings</a>.</p>
 or Codex SessionStart hook, without the agent asking, displayed with an opaque
 <code>cc/...</code> or <code>cx/...</code> handle. Lifecycle identity uses the full external session
 ID plus client, not the display handle. Contrast <em>explicit session</em>.</p>
+<p><strong>Approver</strong> - a credential that signs your approval of an agent's access to a
+<em>locked project</em>: a passkey, or on a Mac a Touch ID key kept by the Seamless
+Approve app. Each is enrolled once, with a one-time code only the daemon's
+account can mint. None is required: <code>seam approve</code> in your own terminal
+approves with <code>sudo</code> as the proof. See <a href="../../guides/peer-auth/#enroll-an-approver">Enroll an
+approver</a>.</p>
 <p><strong>Archive</strong> - marking a Seamless memory invalid because it is no longer
-relevant: it leaves the indexes and stays readable. Proposed by the gardener's
-staleness pass, never done to a <code>constraint</code> or a pinned <code>stage</code>.</p>
+relevant: it leaves the indexes and stays readable. The gardener's staleness
+pass proposes it, and never for a <code>constraint</code> or a pinned <code>stage</code>.</p>
+<p><strong>Backup</strong> - one archive of a whole Seamless instance, of the kind <code>seamlessd export</code> writes: every memory and note, a snapshot of the database, and a list
+of what each project holds. A release install takes one every day and keeps
+the newest 7 in <code>~/.seamless/backups</code>; <strong>Settings &gt; Backups</strong> in the console
+lists and restores them. See <a href="../../guides/data/">Import, back up &amp; restore</a>.</p>
 <p><strong>Binding</strong> - the association between an MCP connection and a Seamless session,
 set by <code>session_start</code> or, for a Claude Code or Codex agent, automatically
 through its <em>agent process</em>; an explicit <code>session_start</code> wins. Everything on
@@ -272,6 +286,13 @@ index, recent findings - assembled inside a token budget. See <a href="../../con
 briefings</a>.</p>
 <p><strong>Claim</strong> - an atomic, leased hold on a Seamless task, taken with <code>tasks_claim</code>;
 exactly one agent can hold a live claim.</p>
+<p><strong>Client</strong> - in a networked Seamless setup, a computer whose agents use the
+<em>Server</em>'s daemon and data. It runs no daemon and keeps no data of its own, and
+reaches the Server through a <em>relay</em> or with a key. See <a href="../../concepts/networked/">Networked
+Seamless</a>.</p>
+<p><strong>Confidential</strong> - the <em>isolation</em> state in which nothing leaves a Seamless
+project: sessions bound elsewhere cannot read it, and its own sessions cannot
+write outside it. Its agents still read global memories and open projects.</p>
 <p><strong>Console</strong> - Seamless's read-mostly web UI at <code>/console</code>, an observability
 surface for the human owner; agents use MCP.</p>
 <p><strong>Constraint</strong> - the Seamless memory kind for a rule the project cannot
@@ -305,27 +326,70 @@ gardener</a>.</p>
 what must happen. A step whose own gate is open, or that a gate task (<code>kind: gate</code>) blocks, is not ready; a person's action clears it. See <a href="../../concepts/tasks-and-plans/#gates">Tasks &amp;
 plans</a>.</p>
 <p><strong>Global</strong> - the Seamless scope with no project, visible to every agent in
-every repo; reached only by passing <code>project: global</code> deliberately.</p>
+every repo. A write lands there when it passes <code>project: global</code>, or when it
+comes from a session bound to the global scope: a <code>session_start</code> with neither
+<code>project</code> nor <code>cwd</code>, or a session started outside any git repo. A write with no
+scope at all is refused rather than defaulted here (see <em>fail closed</em>).</p>
+<p><strong>Held write</strong> - an agent write that <em>write screening</em> kept out of the corpus:
+one that failed a screen, a change to a binding rule from a session that read
+outside text, or a supersede, delete or demotion of a constraint. It waits in a
+queue in the database, never under <code>memory/</code> or <code>notes/</code>, until you release or
+discard it on the console's <strong>Held</strong> screen. The agent is told it is held.</p>
+<p><strong>Isolation</strong> - a Seamless project's fence: <code>open</code> (the default),
+<em>confidential</em> (nothing leaves) or <em>sealed</em> (nothing enters or leaves). It
+governs what flows in and out of a project; whether even its own agents need
+your approval first is the separate <em>locked project</em> setting. See <a href="../../concepts/project-isolation/">Project
+isolation</a>.</p>
 <p><strong>Kind</strong> - a Seamless memory's type: <code>constraint</code>, <code>convention</code>, <code>runbook</code>,
 <code>protocol</code>, <code>gotcha</code>, <code>decision</code>, <code>refuted</code>, <code>reference</code>, or <code>stage</code>. See
 <a href="../../concepts/memory/">Memory &amp; notes</a>.</p>
 <p><strong>Lab</strong> - a shared Seamless workspace for a systematic investigation, holding
 trials; opened with <code>lab_open</code>.</p>
-<p><strong>Lease</strong> - the expiry on a Seamless task claim (default 900 seconds).
-Re-claiming refreshes it; an expired lease is reclaimable, so a crashed agent
-does not strand a task.</p>
+<p><strong>Lease</strong> - a time limit on something held in Seamless. A task claim's lease
+(default 900 seconds) and a <em>repo lock</em>'s are refreshed by claiming or
+acquiring again, and once one runs out the task or lock is free to take, so a
+crashed agent strands nothing. Under <em>peer_auth</em>, your approval of an agent's
+access to a <em>locked project</em> is a lease too: it covers that agent's process
+tree until it expires, its session ends or you revoke it, and nothing extends
+it. See <a href="../../concepts/lease-based-task-claiming/">Lease-based task claiming</a> and
+<a href="../../guides/peer-auth/#leases-and-the-process-tree">Leases and the process tree</a>.</p>
+<p><strong>Locked project</strong> - a Seamless project that stays closed to every agent of
+yours until you approve one agent's access, for a limited time, with a proof
+the agent cannot produce: Touch ID, a passkey, or your own <code>sudo</code>. It needs
+<em>peer_auth</em> and is also confidential or sealed. You lock one from its Overview
+with a passkey, or force it in the config file (<code>peer_auth.force_locked</code>). See
+<a href="../../guides/peer-auth/">Lock projects behind your approval</a>.</p>
 <p><strong>Memory</strong> - in Seamless, a markdown file with YAML frontmatter holding one
 durable piece of knowledge; the unit that reaches briefings.</p>
 <p><strong>Note</strong> - in Seamless, a markdown file holding a work artifact - research
 findings, a meeting summary, a design record; found via recall, never injected
 into a briefing.</p>
+<p><strong>Open</strong> - the default <em>isolation</em> state: the project shares normally, global
+knowledge flows in, and family surfaces may include it.</p>
+<p><strong>Owner signature</strong> - the second signature on a Seamless release,
+<code>checksums.txt.sshsig</code>, made by the owner with a hardware security key before
+the release is published. The installers check it on every release that has
+one; the updater checks it only when <code>update.release_signers</code> pins the owner's
+keys. See <a href="../../updating/#owner-signed-releases">Owner-signed releases</a>.</p>
+<p><strong>Pairing</strong> - how a <em>Client</em> gets a credential of its own from the <em>Server</em>: a
+one-time code from the console's Devices page (or <code>seamlessd devices code</code>),
+after which the computer holds a key, or for a <em>relay</em> a TLS client
+certificate, that you can revoke. Under <em>peer_auth</em> the code alone pairs
+nothing until you approve the computer with a passkey. See
+<a href="../../concepts/networked/#pairing">Pairing</a>.</p>
+<p><strong>peer_auth</strong> - the optional Seamless deployment in which the daemon runs as an
+OS account of its own and names each caller by the uid the kernel reports for
+its Unix-socket connection, never by anything the caller sends. <em>Locked
+projects</em> and <em>restricted local accounts</em> rest on it. macOS and Linux only, and
+off by default. See <a href="../../guides/peer-auth/">Lock projects behind your approval</a>.</p>
 <p><strong>Plan</strong> - in Seamless, not a primitive but a composition keyed by
 <code>plan:&lt;slug&gt;</code>: a narrative note, supporting notes, and step tasks. See <a href="../../concepts/tasks-and-plans/">Tasks &amp;
 plans</a>.</p>
 <p><strong>Project</strong> - the scope a Seamless memory, note, task, or session belongs to;
 resolved from an explicit argument, a bound session, or the agent's cwd.</p>
 <p><strong>Proposal</strong> - the Seamless gardener's output: a suggestion for the owner to
-review, applied only with <code>gardener_apply</code>.</p>
+review, applied only when someone decides to, with <code>gardener_apply</code> or from the
+console's Gardener inbox.</p>
 <p><strong>Provenance</strong> - the Seamless record of where knowledge came from and what
 replaced it: <code>source_session</code>, <code>superseded_by</code>, <code>invalid_at</code>.</p>
 <p><strong>Ready</strong> - a Seamless task with no unfinished blocker and no open gate;
@@ -333,6 +397,11 @@ replaced it: <code>source_session</code>, <code>superseded_by</code>, <code>inva
 <p><strong>Recall</strong> - Seamless's single search entry point, fusing FTS5 keyword matching
 and vector similarity with RRF. Also, loosely, the <code>&lt;seam-recall&gt;</code> block
 injected on prompt match - see the disambiguation below.</p>
+<p><strong>Relay</strong> - the small daemon on a macOS or Linux <em>Client</em>, run by an account of
+its own, that serves the local socket its agents dial and forwards each request
+to the <em>Server</em> over TLS with its own client certificate, carrying the caller's
+uid and process chain. A computer with a relay holds no bearer key. See <a href="../../concepts/networked/#the-relay">The
+relay</a>.</p>
 <p><strong>Repo lock</strong> - a Seamless lock on a repository's refs (its main branch, or a
 tag pattern), declared once per repository and name and held with a lease by
 one session while it lands changes. It belongs to the repository, never to a
@@ -341,14 +410,33 @@ for a busy one queue for it and take it first come, first served
 (<code>seam lock acquire --wait</code>). An optional feature, off by default.</p>
 <p><strong>Reproject</strong> - moving a Seamless memory to a different project that <strong>already
 exists</strong>; moving it to one that does not is a <em>split</em>.</p>
+<p><strong>Restricted local account</strong> - a second OS account whose agents work beside
+yours under <em>peer_auth</em>, listed in <code>peer_auth.restricted</code>. It reaches every
+open project that is not locked, reads the global scope without writing it, and
+everything it writes is labeled with its name. The console's Privacy screen
+calls it a &quot;Restricted agent account&quot;. See <a href="../../guides/peer-auth/#restricted-local-accounts">Restricted local
+accounts</a>.</p>
 <p><strong>RRF (reciprocal rank fusion)</strong> - the method Seamless recall uses to combine
 the keyword and vector rankings so neither retriever gets a veto.</p>
+<p><strong>Sealed</strong> - the <em>isolation</em> state in which nothing enters or leaves a Seamless
+project: <em>confidential</em> plus no global memories, no family, and no
+cross-project reads in either direction. Its agents are told the mode in their
+briefing.</p>
+<p><strong>Server</strong> - in a networked Seamless setup, the one computer that runs the
+daemon and keeps the data for every computer; its <em>Clients</em> reach it over the
+network. macOS or Linux, never Windows. See <a href="../../concepts/networked/">Networked
+Seamless</a>.</p>
 <p><strong>Session</strong> - one agent's stretch of work in Seamless. Sessions heartbeat; an
 idle one is reaped and marked <code>expired</code>.</p>
 <p><strong>Split</strong> - dividing one Seamless project into new child projects, creating
 them and a shared parent; planned as a unit by <code>gardener_split</code>.</p>
-<p><strong>Stage</strong> - the Seamless memory kind recording where multi-session work stands;
-pinned into briefings like a constraint.</p>
+<p><strong>Stage</strong> - the Seamless memory kind recording where multi-session work stands.
+It is pinned into briefings while its <code>Status:</code> header names a live gate
+(<code>open</code>, <code>in_progress</code> or <code>blocked</code>); <code>done</code> unpins it, and a stage with no
+readable header leaves the briefing after a grace window. See <a href="../../concepts/memory/">Memory &amp;
+notes</a>.</p>
+<p><strong>Standalone</strong> - the default Seamless setup: the daemon, the data and the
+agents that use them, all on one computer. Contrast <em>Server</em> and <em>Client</em>.</p>
 <p><strong>Supersede</strong> - replacing an outdated Seamless memory with a new one: the old
 is marked invalid, leaves the indexes, and stays readable pointing at its
 replacement.</p>
@@ -356,6 +444,11 @@ replacement.</p>
 expected, what happened.</p>
 <p><strong>ULID</strong> - the id format Seamless uses everywhere, sortable by creation time.
 Never UUID.</p>
+<p><strong>Write screening</strong> - the optional Seamless feature that screens every agent
+write to a memory or note for secrets, injection markers, hidden characters,
+encoded blobs and unlisted links, and keeps the suspicious ones as <em>held
+writes</em> for you to release. Off by default. See <a href="../../guides/write-screening/">Screen writes and hold the
+suspicious ones</a>.</p>
 <h2 id="four-distinctions-worth-getting-right">Four distinctions worth getting right</h2>
 <p><strong>Memory vs. note vs. finding.</strong> A <em>memory</em> is what is true (injected into
 briefings). A <em>note</em> is what you produced (found by searching). A <em>finding</em> is
@@ -403,7 +496,7 @@ things that stopped being true; archive is for things that stopped mattering.</p
 </div>
 
 <footer class="docs-foot">
-  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../../../">Home</a> · <a href="../../../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a></p>
+  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../../../">Home</a> · <a href="../../../security/">Security</a> · <a href="../../../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a> · <a href="https://github.com/arctop/seamless/security/advisories/new">Report a vulnerability</a></p>
 </footer>
 
 <script src="../../static/docs.js?v=f91fb0cd"></script>

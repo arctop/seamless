@@ -38,6 +38,7 @@ computer: one Server keeps the data, and the others connect to it as Clients,
 through a relay or with a key.
 
 - [How Seamless works](https://thereisnospoon.org/docs/concepts/how-it-works/): One daemon, three surfaces, and a hard line between the files that are truth and the database that is an index.
+- [Security and privacy](https://thereisnospoon.org/docs/concepts/security/): What Seamless protects and from whom - what a fresh install does, what can leave your computer, the five layers you can add, and the limits, stated plainly.
 - [Memory & notes](https://thereisnospoon.org/docs/concepts/memory/): What a memory is, the nine kinds, how supersession keeps the store honest, and when to write a note instead.
 - [Sessions & briefings](https://thereisnospoon.org/docs/concepts/sessions/): How an agent gets your knowledge injected before it does anything - ambient sessions, how its tool calls bind to them, the briefing's packing order, and what never gets dropped.
 - [Recall](https://thereisnospoon.org/docs/concepts/recall/): One search entry point fusing keyword and vector search - and the three different ways your knowledge actually reaches an agent.

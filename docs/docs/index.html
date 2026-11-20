@@ -27,7 +27,7 @@
 var o=q.get("os")||localStorage.getItem("os");if(o==="unix"||!/^(macos|linux|windows|all)$/.test(o||""))o=/Windows/i.test(navigator.userAgent)?"windows":/Mac/i.test(navigator.userAgent)?"macos":"linux";d.dataset.os=o;
 var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").filter(function(x){return x==="claude"||x==="codex"||x==="claude-desktop";});if(cs.length&&cs.length<3)d.dataset.clients=cs.join(" ");})();</script>
 <link rel="stylesheet" href="../static/site.css?v=658d0062">
-<link rel="stylesheet" href="static/docs.css?v=761296eb">
+<link rel="stylesheet" href="static/docs.css?v=4314abce">
 </head>
 <body class="docs" data-docs-root="">
 
@@ -47,6 +47,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   </div>
 
   <nav class="docs-head-nav" aria-label="Site">
+    <a class="docs-site-link" href="../security/">Security</a>
+    <a class="docs-site-link" href="../compare/">Compare</a>
     <button class="ctx-chip-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="ctx-pop"><span class="ctx-chip-os"></span><span class="ctx-chip-rest"></span></button>
     <div class="ctx-pop" id="ctx-pop" hidden>
       <div class="ctx-seg" role="group" aria-label="Operating system">
@@ -108,6 +110,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
       <ul>
         
         <li><a href="concepts/how-it-works/">How Seamless works</a></li>
+        
+        <li><a href="concepts/security/">Security and privacy</a></li>
         
         <li><a href="concepts/memory/">Memory &amp; notes</a></li>
         
@@ -236,9 +240,9 @@ a <strong>shared, persistent brain</strong> for Claude Code, Codex, and any othe
 you run. Memory survives the end of a conversation, tasks can be handed from one
 agent to another, and plans get executed together. All of it is stored as
 markdown files in a directory you own, indexed by one SQLite database, and
-served over MCP by the local <code>seamlessd</code> daemon. The companion <code>seam</code> CLI gives
-headless agents a direct interface. There is no hosted Seamless service,
-external vector database, or account.</p>
+served over MCP by the <code>seamlessd</code> daemon on your own computer. The companion
+<code>seam</code> CLI gives headless agents a direct interface. There is no hosted
+Seamless service, external vector database, or account.</p>
 <p>The same store also works from chats in the Claude desktop app, for long-running
 work that isn't code: <a href="https://thereisnospoon.org/claude-app/">Seamless in the Claude app</a>
 covers that side in plain terms.</p>
@@ -301,6 +305,18 @@ everyone - one install command, then your client.</p>
 <td><a href="concepts/how-it-works/">How Seamless works</a></td>
 </tr>
 <tr>
+<td>Know what is protected, and from whom</td>
+<td><a href="concepts/security/">Security and privacy</a></td>
+</tr>
+<tr>
+<td>Keep a client's project away from your other work</td>
+<td><a href="concepts/project-isolation/">Project isolation</a></td>
+</tr>
+<tr>
+<td>Share one memory across your computers</td>
+<td><a href="concepts/networked/">Networked Seamless</a></td>
+</tr>
+<tr>
 <td>Point a hand-rolled agent at it</td>
 <td><a href="guides/integrate-your-agent/">Integrate your agent</a></td>
 </tr>
@@ -319,10 +335,12 @@ everyone - one install command, then your client.</p>
 </tbody>
 </table>
 </div>
-<p>Its clients are agents. You are the observer and editor - there is a console, but
-nothing in Seamless requires you to be in the loop for agents to use it. And it
-is one instance on one machine, bound to loopback: a personal substrate, not a
-hosted team knowledge base.</p>
+<p>Its clients are agents. You are the observer and editor - there is a console,
+and agents use Seamless without you in the loop until you ask to be: lock a
+project and they wait for your approval, turn on write screening and suspicious
+writes wait for your review. It is a personal substrate, not a hosted team
+knowledge base: one daemon on your computer, or one Server your other computers
+pair with.</p>
 <h2 id="what-it-gives-a-fleet">What it gives a fleet</h2>
 <ul>
 <li><strong>Memory with a lifecycle.</strong> Not an append-only log: memories are superseded
@@ -335,15 +353,20 @@ parallel agents divide work without stepping on each other.</li>
 <li><strong>Hybrid recall.</strong> One search entry point fusing keyword and vector search.</li>
 <li><strong>A console you can read.</strong> Every memory, session, task, and retrieval decision
 is inspectable. The files are plain markdown; the store is not a black box.</li>
+<li><strong>Walls you choose.</strong> Fence a project so its knowledge stays put, hold
+suspicious writes for review, and lock a project so even its own agents wait
+for your Touch ID, passkey, or password (<a href="concepts/security/">security and privacy</a>).</li>
 </ul>
 <h2 id="design-principles">Design principles</h2>
 <p><strong>Files are the source of truth.</strong> Durable knowledge lives in markdown you can
 read, <code>grep</code>, edit, and put in git. The database is a rebuildable index over
 them, plus the record for high-churn state (sessions, tasks, events).</p>
-<p><strong>Local-first.</strong> One daemon process, one SQLite file, bound to loopback. No
-external database, no required cloud service, and no outbound product
-telemetry - the only unprompted request is an anonymous check for new releases,
-and one config line turns it off.</p>
+<p><strong>Local-first.</strong> One daemon process and one SQLite file, listening on loopback
+unless you set up a Server for your other computers. No external database, no
+required cloud service, and no product telemetry. On its own it only checks
+GitHub for new releases, anonymously, and downloads the updates it installs;
+<code>update.check: false</code> turns that off. Text goes to a model provider only if you
+add one (<a href="concepts/security/#outbound">what leaves your computer</a>).</p>
 <p><strong>Propose, don't act.</strong> The gardener finds duplicates, staleness, and drift - and
 proposes. Nothing rewrites your knowledge behind your back.</p>
 
@@ -356,7 +379,7 @@ proposes. Nothing rewrites your knowledge behind your back.</p>
   <a class="doc-card" href="concepts/">
     <h2>Concepts</h2>
     <p>How the pieces fit - memory with a lifecycle, ambient sessions, recall, tasks, scope, and the gardener.</p>
-    <span class="card-count">14 pages</span>
+    <span class="card-count">15 pages</span>
   </a>
   
   <a class="doc-card" href="guides/">
@@ -400,7 +423,7 @@ proposes. Nothing rewrites your knowledge behind your back.</p>
 </div>
 
 <footer class="docs-foot">
-  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../">Home</a> · <a href="../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a></p>
+  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../">Home</a> · <a href="../security/">Security</a> · <a href="../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a> · <a href="https://github.com/arctop/seamless/security/advisories/new">Report a vulnerability</a></p>
 </footer>
 
 <script src="static/docs.js?v=f91fb0cd"></script>

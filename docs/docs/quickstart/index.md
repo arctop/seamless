@@ -25,22 +25,38 @@ irm https://thereisnospoon.org/install.ps1 | iex
 
 
 
-One command does the lot: it fetches the checksum-verified release archive for
-your platform (macOS, Linux, and Windows; amd64 and arm64), installs `seamlessd`
-and `seam`, generates the bearer key, wires the detected clients - Claude Code,
-the Claude app chat surface, Codex - with hooks, MCP, and skills, and starts
-the daemon as a per-user service on `127.0.0.1:8081` with data in `~/.seamless`.
+One command does the lot: it fetches the release archive for your platform
+(macOS, Linux, and Windows; amd64 and arm64) and checks it against the
+release's signed checksums, installs `seamlessd` and `seam`, generates the
+bearer key, wires the detected clients - Claude Code, the Claude app chat
+surface, Codex - with hooks, MCP, and skills, and starts the daemon as a
+per-user service on `127.0.0.1:8081` with data in `~/.seamless`.
 No Go, no CGO toolchain, no database server, no Node; the installer needs
 `curl` and `tar`. [Install & deploy](https://thereisnospoon.org/docs/install/) has the override knobs and the
 other routes (Homebrew, a clone, `go install`, prebuilt archives);
 [The service & where things live](https://thereisnospoon.org/docs/reference/service/) has the service
 controls, logs, and every path.
 
+At a terminal, the installer asks two questions before it installs anything,
+and Enter takes the default both times:
+
+1. **How will you use Seamless?** **Standalone** - everything on this computer -
+   is the default. **Networked** makes this computer the Server your other
+   computers connect to, or a Client of one
+   ([networked Seamless](https://thereisnospoon.org/docs/concepts/networked/)).
+2. **Start fresh, or from a backup?** Fresh is the default; a backup restores
+   an earlier instance into the new one.
+
+A script that sets no `SEAMLESS_*` variable is never asked and installs
+Standalone ([the answers as variables](https://thereisnospoon.org/docs/install/#install-in-one-command)).
+
 Seamless is early in its development cycle, and releases with improvements and
 bug fixes land often. The installer's install keeps itself current: from v0.7.0
-it installs each new release by itself, a day after it is published and at a
-moment no agent is using it. To update right now, `seamlessd update` is the one
-command, on every OS. See [Update & uninstall](https://thereisnospoon.org/docs/updating/#automatic-updates).
+it installs each new release by itself, a day after it is published, at a
+moment no agent is using it, or at the latest within a few days. To update
+right now, `seamlessd update` is the one command, on every OS. It also backs
+your data up every day and keeps the last seven. See
+[Update & uninstall](https://thereisnospoon.org/docs/updating/#automatic-updates) and [backups](https://thereisnospoon.org/docs/guides/data/).
 
 Piping a stranger's script into a shell deserves a read first - it is
 [one file](https://thereisnospoon.org/install).

@@ -23,12 +23,15 @@ organization's [managed settings](https://thereisnospoon.org/docs/reference/cli-
 already carry a Seamless hook, that event is left to them and not written
 again, because Claude Code would run both copies.
 
-It then registers the MCP server with `claude mcp add-json --scope user`. The
-registration uses `seam mcp-headers --config <absolute yaml>` as
+It then registers the MCP server with `claude mcp add-json --scope user`. For a
+daemon reached over plain http, which a default install is, the registration
+names the daemon's URL and uses `seam mcp-headers --config <absolute yaml>` as
 `headersHelper`, so the bearer key stays out of subprocess argv and
-`~/.claude.json`. Pass `--mcp=false` to skip that half; if the CLI is missing or
-registration fails, the hooks still land and the command prints the exact
-invocation to run yourself.
+`~/.claude.json`. Over https or a socket it registers the `seam mcp-proxy`
+bridge instead ([below](#https-and-socket-servers)). Pass
+`--mcp=false` to skip that half; if the CLI is missing or registration fails,
+the hooks still land and the command prints the exact invocation to run
+yourself.
 
 The hooks are what make sessions **ambient** - an agent gets a briefing at
 startup, its prompts get matched against your memories, its Task subagents get
@@ -46,6 +49,17 @@ SessionEnd as http races Claude Code's teardown, and the plan-capture hooks
 pre-filter locally so the machine-wide `Write`/`Edit` hot path never touches
 the network. The full rationale, hook by hook, is in
 [the hooks reference](https://thereisnospoon.org/docs/reference/hooks/#why-claude-code-uses-two-transports).
+
+### Over https or a socket {#https-and-socket-servers}
+
+That mix, and the `headersHelper` registration, are the shape for a daemon
+reached over plain http. When `server_url` is `https://` (a Client reaching its
+Server over TLS) or `unix://` (a [relay](https://thereisnospoon.org/docs/concepts/networked/#the-relay), or a
+[peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/) daemon's socket), every hook is a `seam hook`
+command and MCP is registered as the `seam mcp-proxy` stdio bridge. Claude
+Code's own http client cannot be told about a private CA, and cannot dial a
+socket at all, so both go through `seam`
+([why](https://thereisnospoon.org/docs/guides/network-install/#why-https-changes-the-claude-code-wiring)).
 
 ## Registering the MCP endpoint by hand
 
@@ -68,6 +82,14 @@ Use the absolute installed `seam` and config paths. The helper reads
 which exposes the daemon's sole credential in process argv and client config -
 and drops the agent-process header the helper also prints, which is what binds
 each agent's tool calls to its own session.
+
+With an `https://` or `unix://` `server_url`, register the stdio bridge
+instead, as `install-hooks` does:
+
+```bash
+claude mcp add-json --scope user seamless \
+  '{"type":"stdio","command":"/abs/path/seam","args":["mcp-proxy","--config","/abs/path/seamless.yaml"]}'
+```
 
 ## Map your repos
 
@@ -160,7 +182,7 @@ hooks, no `CLAUDE.md`, an explicit opt-in MCP registration of its own. See
 ## Verify
 
 ```bash
-./bin/seamlessd doctor    # config, database, tool count, and the hooks check
+seamlessd doctor    # config, database, tool count, and the hooks check
 ```
 
 Then start a Claude Code session in a mapped repo and look for the injected

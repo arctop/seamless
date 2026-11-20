@@ -28,7 +28,7 @@
 var o=q.get("os")||localStorage.getItem("os");if(o==="unix"||!/^(macos|linux|windows|all)$/.test(o||""))o=/Windows/i.test(navigator.userAgent)?"windows":/Mac/i.test(navigator.userAgent)?"macos":"linux";d.dataset.os=o;
 var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").filter(function(x){return x==="claude"||x==="codex"||x==="claude-desktop";});if(cs.length&&cs.length<3)d.dataset.clients=cs.join(" ");})();</script>
 <link rel="stylesheet" href="../../../static/site.css?v=658d0062">
-<link rel="stylesheet" href="../../static/docs.css?v=761296eb">
+<link rel="stylesheet" href="../../static/docs.css?v=4314abce">
 </head>
 <body class="docs" data-docs-root="../../">
 
@@ -48,6 +48,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   </div>
 
   <nav class="docs-head-nav" aria-label="Site">
+    <a class="docs-site-link" href="../../../security/">Security</a>
+    <a class="docs-site-link" href="../../../compare/">Compare</a>
     <button class="ctx-chip-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="ctx-pop"><span class="ctx-chip-os"></span><span class="ctx-chip-rest"></span></button>
     <div class="ctx-pop" id="ctx-pop" hidden>
       <div class="ctx-seg" role="group" aria-label="Operating system">
@@ -109,6 +111,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
       <ul>
         
         <li><a href="../../concepts/how-it-works/">How Seamless works</a></li>
+        
+        <li><a href="../../concepts/security/">Security and privacy</a></li>
         
         <li><a href="../../concepts/memory/">Memory &amp; notes</a></li>
         
@@ -1990,7 +1994,7 @@ wherever step 10 put it, is the fallback if anything in the move went wrong.</p>
 </div>
 
 <footer class="docs-foot">
-  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../../../">Home</a> · <a href="../../../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a></p>
+  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../../../">Home</a> · <a href="../../../security/">Security</a> · <a href="../../../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a> · <a href="https://github.com/arctop/seamless/security/advisories/new">Report a vulnerability</a></p>
 </footer>
 
 <script src="../../static/docs.js?v=f91fb0cd"></script>

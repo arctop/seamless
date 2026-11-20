@@ -28,7 +28,7 @@
 var o=q.get("os")||localStorage.getItem("os");if(o==="unix"||!/^(macos|linux|windows|all)$/.test(o||""))o=/Windows/i.test(navigator.userAgent)?"windows":/Mac/i.test(navigator.userAgent)?"macos":"linux";d.dataset.os=o;
 var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").filter(function(x){return x==="claude"||x==="codex"||x==="claude-desktop";});if(cs.length&&cs.length<3)d.dataset.clients=cs.join(" ");})();</script>
 <link rel="stylesheet" href="../../static/site.css?v=658d0062">
-<link rel="stylesheet" href="../static/docs.css?v=761296eb">
+<link rel="stylesheet" href="../static/docs.css?v=4314abce">
 </head>
 <body class="docs" data-docs-root="../">
 
@@ -48,6 +48,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   </div>
 
   <nav class="docs-head-nav" aria-label="Site">
+    <a class="docs-site-link" href="../../security/">Security</a>
+    <a class="docs-site-link" href="../../compare/">Compare</a>
     <button class="ctx-chip-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="ctx-pop"><span class="ctx-chip-os"></span><span class="ctx-chip-rest"></span></button>
     <div class="ctx-pop" id="ctx-pop" hidden>
       <div class="ctx-seg" role="group" aria-label="Operating system">
@@ -109,6 +111,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
       <ul>
         
         <li><a href="../concepts/how-it-works/">How Seamless works</a></li>
+        
+        <li><a href="../concepts/security/">Security and privacy</a></li>
         
         <li><a href="../concepts/memory/">Memory &amp; notes</a></li>
         
@@ -276,9 +280,10 @@ go there instead. &quot;Save this to Seamless as a constraint&quot; cannot.</li>
 loaded until you ask (see <a href="../claude-app/">the Claude app guide</a>). In Claude
 Code and Codex, the repo you start in is the project.</li>
 </ul>
-<p>Everything the agent saves is a file under <code>~/.seamless</code>: memories in
-<code>memory/&lt;project&gt;/</code>, notes in <code>notes/&lt;project&gt;/</code>. <code>seamlessd console-open</code> shows
-all of it in the browser.</p>
+<p>Memories and notes the agent saves are files under <code>~/.seamless</code>: memories in
+<code>memory/&lt;project&gt;/</code>, notes in <code>notes/&lt;project&gt;/</code>. Tasks and session findings are
+rows in the database beside them, <code>seam.db</code>. <code>seamlessd console-open</code> shows all
+of it in the browser.</p>
 <h2 id="remember-a-rule">Remember a rule</h2>
 <div class="ctx-variant" data-ctx-client="claude codex">
 <p class="ctx-label"><span class="ctx-chip">Claude Code</span><span class="ctx-chip">Codex</span></p>
@@ -467,7 +472,9 @@ agent or chat opens it.</p>
 <h2 id="more-to-try">More to try</h2>
 <ul>
 <li><code>Star the deploy-runbook memory in Seamless.</code> <code>favorite_set</code> pins a starred
-memory into every briefing as a <code>FAVORITE:</code> line.</li>
+memory in its project's briefings: a runbook like this one heads the Memories
+list, and a starred constraint or convention heads its own section. No trim
+or budget drops it.</li>
 <li><code>What does Seamless have on this project?</code> A quick inventory, by kind.</li>
 <li><code>Ask the Seamless gardener to find duplicate memories about deploys.</code>
 <code>gardener_request</code> turns the request into proposals that wait for your
@@ -500,7 +507,7 @@ gardener</a> for what it can propose.</li>
 </div>
 
 <footer class="docs-foot">
-  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../../">Home</a> · <a href="../../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a></p>
+  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../../">Home</a> · <a href="../../security/">Security</a> · <a href="../../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a> · <a href="https://github.com/arctop/seamless/security/advisories/new">Report a vulnerability</a></p>
 </footer>
 
 <script src="../static/docs.js?v=f91fb0cd"></script>

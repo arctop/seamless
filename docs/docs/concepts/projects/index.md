@@ -24,11 +24,15 @@ Precedence is also the safety model. Broader fallback stops before it could sile
 
 Worked through, rung by rung:
 
-**1. An explicit `project` argument.** You said it, so it happens. This is also
+**1. An explicit `project` argument.** You said it, so it happens, unless a
+fence refuses it ([isolation](#isolation-and-locked-projects)). This is also
 how you deliberately reach another project (`project: otherrepo`) or the global
 scope (`project: global`). A slug Seamless has never seen is **not** an error: the
 write registers it, and the new project appears in `project_list` and the console
-like any other. Naming a project into existence is an ordinary thing to do.
+like any other. Naming a project into existence is an ordinary thing to do, and
+one named by mistake is retired with
+[`seamlessd retire-project`](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_retire_project)
+once it holds nothing active and no repo maps to it.
 
 **2. The bound session.** A connection bound to a session passes that session's
 project to every later call on it. A Claude Code or Codex agent is bound
@@ -97,7 +101,9 @@ repos sharing a directory name still get distinct projects (`backend`,
 `backend-2`) so unrelated repos never inherit each other's memories. The one
 case the healing cannot recognize is a repo that was moved *and renamed* - it
 derives a different slug - and that is what the override below is for.
-`seamlessd doctor` lists mapped paths that no longer exist.
+`seamlessd doctor` lists mapped paths that no longer exist, and
+[`seamlessd unmap-repo --stale`](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_unmap_repo)
+removes them.
 
 Map by hand only to override the derived slug - an `ios` directory that should be
 the `example-ios` project, or a renamed repo that should keep its old project:
@@ -128,6 +134,21 @@ Two briefing knobs control the cross-over:
 Splitting one project into children is planned as a unit - see
 [The gardener](https://thereisnospoon.org/docs/concepts/gardener/), which handles it as a `split` rather than a
 pile of individual moves.
+
+## Isolation and locked projects {#isolation-and-locked-projects}
+
+By default projects are cooperative: any agent can read or write any project by
+naming it. **Isolation** is the per-project setting that draws a boundary:
+`open` (the default), `confidential` (nothing leaves the project, and its own
+sessions cannot write outside it), or `sealed` (nothing enters or leaves). A
+fenced project stands outside any family, and a read or write across its fence
+is refused rather than redirected. See
+[Project isolation](https://thereisnospoon.org/docs/concepts/project-isolation/).
+
+**Locked** is a separate setting: even a locked project's own agents reach it
+only after you approve each one, for a limited time. It needs
+[peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/), and a locked project is also confidential or
+sealed. See [Lock projects behind your approval](https://thereisnospoon.org/docs/guides/peer-auth/).
 
 ## When scope goes wrong
 

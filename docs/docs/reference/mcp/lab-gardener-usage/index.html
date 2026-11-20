@@ -28,7 +28,7 @@
 var o=q.get("os")||localStorage.getItem("os");if(o==="unix"||!/^(macos|linux|windows|all)$/.test(o||""))o=/Windows/i.test(navigator.userAgent)?"windows":/Mac/i.test(navigator.userAgent)?"macos":"linux";d.dataset.os=o;
 var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").filter(function(x){return x==="claude"||x==="codex"||x==="claude-desktop";});if(cs.length&&cs.length<3)d.dataset.clients=cs.join(" ");})();</script>
 <link rel="stylesheet" href="../../../../static/site.css?v=658d0062">
-<link rel="stylesheet" href="../../../static/docs.css?v=761296eb">
+<link rel="stylesheet" href="../../../static/docs.css?v=4314abce">
 </head>
 <body class="docs" data-docs-root="../../../">
 
@@ -48,6 +48,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   </div>
 
   <nav class="docs-head-nav" aria-label="Site">
+    <a class="docs-site-link" href="../../../../security/">Security</a>
+    <a class="docs-site-link" href="../../../../compare/">Compare</a>
     <button class="ctx-chip-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="ctx-pop"><span class="ctx-chip-os"></span><span class="ctx-chip-rest"></span></button>
     <div class="ctx-pop" id="ctx-pop" hidden>
       <div class="ctx-seg" role="group" aria-label="Operating system">
@@ -109,6 +111,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
       <ul>
         
         <li><a href="../../../concepts/how-it-works/">How Seamless works</a></li>
+        
+        <li><a href="../../../concepts/security/">Security and privacy</a></li>
         
         <li><a href="../../../concepts/memory/">Memory &amp; notes</a></li>
         
@@ -293,7 +297,11 @@ one) instead of a single &quot;tidy up&quot; button.</p>
 </tr>
 <tr>
 <td>stale-plan</td>
-<td>Plans idle for <code>gardener.stale_plan_days</code> with steps still open.</td>
+<td>A captured plan still unapproved after <code>gardener.stale_plan_days</code>. Proposes settling it: <strong>ship_plan</strong> when commits show the work landed, <strong>merge_plans</strong> when another composition holds its steps, <strong>abandon_plan</strong> otherwise.</td>
+</tr>
+<tr>
+<td>stale-copy</td>
+<td>A memory with a <a href="../../../concepts/project-isolation/#provenance-stamps">provenance stamp</a> whose cited source in another project changed after the memory was written. Proposes an <strong>archive</strong>.</td>
 </tr>
 <tr>
 <td>memory-wanted</td>
@@ -302,6 +310,10 @@ one) instead of a single &quot;tidy up&quot; button.</p>
 <tr>
 <td>tool-error</td>
 <td>The same normalized tool or hook error recurring (tool errors across 2+ sessions). Proposes a <strong>tool_error</strong>: applying opens an investigation task with the observed evidence.</td>
+</tr>
+<tr>
+<td>copy-relocate</td>
+<td>A stamped memory whose stamps and source references all name one other project. Proposes a <strong>relocate</strong> into that project.</td>
 </tr>
 </tbody>
 </table>
@@ -332,8 +344,10 @@ this thing working, and on how much?&quot; - the same question the console's Ove
 answers, for an agent that cannot open a browser.</p>
 <h2 id="favorite-set">favorite_set</h2>
 <p><code>favorite_set</code> stars or unstars an item - a memory, note, project, plan, task,
-session, or trial. A starred memory is pinned into every session briefing as a
-<code>FAVORITE:</code> line and gets a mild recall rank boost; in the console, favorites
+session, or trial. A starred memory keeps a pinned place in its project's
+briefings, inside its own section: a starred constraint or convention heads
+that section, any other starred memory heads the Memories list, and no trim or
+budget drops it. It also gets a mild recall rank boost; in the console, favorites
 carry a star, sort first, and can be filtered. For memories and notes the flag
 lives in the file's frontmatter (<code>favorite: true</code>), so it survives an index
 rebuild and can be hand-edited. A plan's favorite lives on its primary note, so
@@ -727,7 +741,7 @@ writes, and occupied-path protections remain the same as direct tools.</p>
 </div>
 
 <footer class="docs-foot">
-  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../../../../">Home</a> · <a href="../../../../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a></p>
+  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../../../../">Home</a> · <a href="../../../../security/">Security</a> · <a href="../../../../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a> · <a href="https://github.com/arctop/seamless/security/advisories/new">Report a vulnerability</a></p>
 </footer>
 
 <script src="../../../static/docs.js?v=f91fb0cd"></script>

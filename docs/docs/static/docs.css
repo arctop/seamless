@@ -103,6 +103,16 @@ body.docs::before { content: none; }
   margin-left: auto;
 }
 .docs-head .theme-toggle, .docs-head .gh-link { width: 36px; height: 36px; }
+/* the way back to the rest of the site: quiet text links before the context
+   chip, the landing header's voice; they give way first on narrow screens */
+.docs-site-link {
+  flex: none;
+  padding: 7px 10px; border-radius: 999px;
+  font-size: 14px; font-weight: 500; color: var(--muted);
+  text-decoration: none;
+  transition: color 0.25s, background-color 0.25s;
+}
+.docs-site-link:hover { color: var(--ink); background: color-mix(in oklab, var(--accent) 9%, transparent); text-decoration: none; }
 
 .nav-toggle {
   display: none;
@@ -1371,6 +1381,7 @@ a.nav-head.current { color: var(--accent); }
 @media (max-width: 1100px) {
   .docs-shell { grid-template-columns: var(--sidebar-w) minmax(0, 1fr); gap: 0 32px; }
   .docs-toc { display: none; }
+  .docs-site-link { display: none; }
 }
 @media (max-width: 900px) {
   .nav-toggle { display: inline-grid; }

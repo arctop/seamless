@@ -28,7 +28,7 @@
 var o=q.get("os")||localStorage.getItem("os");if(o==="unix"||!/^(macos|linux|windows|all)$/.test(o||""))o=/Windows/i.test(navigator.userAgent)?"windows":/Mac/i.test(navigator.userAgent)?"macos":"linux";d.dataset.os=o;
 var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").filter(function(x){return x==="claude"||x==="codex"||x==="claude-desktop";});if(cs.length&&cs.length<3)d.dataset.clients=cs.join(" ");})();</script>
 <link rel="stylesheet" href="../../../static/site.css?v=658d0062">
-<link rel="stylesheet" href="../../static/docs.css?v=761296eb">
+<link rel="stylesheet" href="../../static/docs.css?v=4314abce">
 </head>
 <body class="docs" data-docs-root="../../">
 
@@ -48,6 +48,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   </div>
 
   <nav class="docs-head-nav" aria-label="Site">
+    <a class="docs-site-link" href="../../../security/">Security</a>
+    <a class="docs-site-link" href="../../../compare/">Compare</a>
     <button class="ctx-chip-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="ctx-pop"><span class="ctx-chip-os"></span><span class="ctx-chip-rest"></span></button>
     <div class="ctx-pop" id="ctx-pop" hidden>
       <div class="ctx-seg" role="group" aria-label="Operating system">
@@ -109,6 +111,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
       <ul>
         
         <li><a href="../../concepts/how-it-works/">How Seamless works</a></li>
+        
+        <li><a href="../../concepts/security/">Security and privacy</a></li>
         
         <li><a href="../../concepts/memory/">Memory &amp; notes</a></li>
         
@@ -297,7 +301,7 @@ the file lands in <code>memory/_global/</code>. Notes work the same way, under
 </span></span></span><span class="line"><span class="cl"><span class="nt">valid_from</span><span class="p">:</span><span class="w"> </span><span class="ld">2026-07-10T18:00:00Z</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">invalid_at</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">superseded_by</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="nt">source_session</span><span class="p">:</span><span class="w"> </span><span class="l">cc/019f7291-7ccbc0d8f16e51a4</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">source_session</span><span class="p">:</span><span class="w"> </span><span class="l">01K...</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l">claude-fable-5</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">x, y]</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nn">---</span><span class="w">
@@ -367,7 +371,7 @@ the file lands in <code>memory/_global/</code>. Notes work the same way, under
 <tr>
 <td><code>source_session</code></td>
 <td>system</td>
-<td>Provenance - an ambient session name such as <code>cc/019f7291-7ccbc0d8f16e51a4</code>, or the ULID of a bound explicit session. Consumers resolve both; treat names as opaque.</td>
+<td>Provenance - the ULID of the session that first wrote the memory, whether its calls were bound to an ambient session or by <code>session_start</code>. A rewrite keeps it. Consumers also resolve a session name (<code>cc/...</code>, <code>cx/...</code>) here; treat names as opaque. Omitted when no session was bound.</td>
 </tr>
 <tr>
 <td><code>model</code></td>
@@ -375,14 +379,24 @@ the file lands in <code>memory/_global/</code>. Notes work the same way, under
 <td>The model that produced the content, verbatim as the provider names it (<code>claude-fable-5</code>, <code>gpt-5.5</code>). Stamped from the writing session; a rewrite by a known model re-attributes, an unknown one preserves the prior value. Omitted when unknown.</td>
 </tr>
 <tr>
+<td><code>account</code></td>
+<td>system</td>
+<td>The <a href="../../guides/peer-auth/#restricted-local-accounts">restricted local account</a> that wrote the current content, as the kernel named it. Omitted for the owner and on every install without restricted accounts.</td>
+</tr>
+<tr>
 <td><code>favorite</code></td>
 <td>author</td>
-<td><code>true</code> when starred (console, <code>seam fav</code>, or <code>favorite_set</code>). A starred memory is pinned into every briefing and boosted in recall. Omitted when false; hand-editing it works - the watcher reindexes. Starring never bumps <code>updated</code>.</td>
+<td><code>true</code> when starred (console, <code>seam fav</code>, or <code>favorite_set</code>). A starred memory is pinned within its section of its project's briefings and boosted in recall. Omitted when false; hand-editing it works - the watcher reindexes. Starring never bumps <code>updated</code>.</td>
 </tr>
 <tr>
 <td><code>tags</code></td>
 <td>author</td>
 <td>Flow-style list. Omitted when empty. Also the <code>plan:&lt;slug&gt;</code> composition key.</td>
+</tr>
+<tr>
+<td><code>may_contain</code></td>
+<td>system</td>
+<td><a href="../../concepts/project-isolation/#provenance-stamps">Provenance stamps</a>: one entry per confidential or sealed project whose content the writing conversation held, naming the grant or move that let it in. Written only with <code>isolation.requests</code> on, and no write removes one.</td>
 </tr>
 </tbody>
 </table>
@@ -471,8 +485,9 @@ Unlike a memory it has <strong>no lifecycle and no validity window</strong>:</p>
 omitted when empty (or, for <code>favorite</code>, false). <code>source_url</code> is set when the
 note came from <code>capture_url</code>; <code>model</code> is the producing model, stamped exactly
 as for memories; <code>favorite</code> marks a starred note, exactly as for memories.
-Empty <code>project</code> means <code>notes/_global/</code>. Unknown keys round-trip losslessly,
-same as memories.</p>
+<code>account</code> and <code>may_contain</code> appear on notes exactly as on memories, and only
+when set. Empty <code>project</code> means <code>notes/_global/</code>. Unknown keys round-trip
+losslessly, same as memories.</p>
 <h2 id="what-lives-only-in-sqlite">What lives only in SQLite</h2>
 <p><code>seam.db</code> holds two categories of data with very different recovery stories.</p>
 <p><strong>Rebuildable mirrors of the files.</strong> Delete these and they come back:</p>
@@ -507,8 +522,8 @@ retrieval stats.</li>
 utility score with its per-signal demand breakdown, rebuilt from events.</li>
 <li><code>projects</code> - slugs, parent topology, retirement.</li>
 <li><code>gardener_proposals</code> - pending proposals, one row per kind-and-key
-(merge, consolidate, archive, digest, reproject, rekind, split, abandon-plan,
-memory-wanted, tool-error).</li>
+(merge, consolidate, archive, digest, reproject, rekind, split, relocate,
+abandon-plan, ship-plan, merge-plans, memory-wanted, tool-error).</li>
 <li><code>settings</code> - <code>repo_project_map</code>, project families, the runtime briefing
 overrides the console writes, the console's update override (checks and
 automatic updates), the per-scope utility-activation latch, and the embedder
@@ -666,7 +681,7 @@ including <code>memory_write</code>'s <code>supersedes</code>.</li>
 </div>
 
 <footer class="docs-foot">
-  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../../../">Home</a> · <a href="../../../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a></p>
+  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../../../">Home</a> · <a href="../../../security/">Security</a> · <a href="../../../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a> · <a href="https://github.com/arctop/seamless/security/advisories/new">Report a vulnerability</a></p>
 </footer>
 
 <script src="../../static/docs.js?v=f91fb0cd"></script>

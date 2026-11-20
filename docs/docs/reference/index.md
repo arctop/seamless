@@ -11,7 +11,8 @@ error, not a doc bug.
 
 Agents mostly care about the [MCP API](https://thereisnospoon.org/docs/reference/mcp/): the endpoint and auth
 model, the scope rules, and every tool grouped by area - sessions, memory and
-recall, notes and projects, tasks, and the research lab. Humans get the two
+recall; notes, projects and capture; tasks; the research lab, the gardener and
+usage; and repo locks. Humans get the two
 CLIs: [seam](https://thereisnospoon.org/docs/reference/cli-seam/), the short handle an agent or owner types,
 and [seamlessd](https://thereisnospoon.org/docs/reference/cli-seamlessd/), the daemon and operator commands.
 

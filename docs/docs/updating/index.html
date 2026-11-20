@@ -28,7 +28,7 @@
 var o=q.get("os")||localStorage.getItem("os");if(o==="unix"||!/^(macos|linux|windows|all)$/.test(o||""))o=/Windows/i.test(navigator.userAgent)?"windows":/Mac/i.test(navigator.userAgent)?"macos":"linux";d.dataset.os=o;
 var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").filter(function(x){return x==="claude"||x==="codex"||x==="claude-desktop";});if(cs.length&&cs.length<3)d.dataset.clients=cs.join(" ");})();</script>
 <link rel="stylesheet" href="../../static/site.css?v=658d0062">
-<link rel="stylesheet" href="../static/docs.css?v=761296eb">
+<link rel="stylesheet" href="../static/docs.css?v=4314abce">
 </head>
 <body class="docs" data-docs-root="../">
 
@@ -48,6 +48,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   </div>
 
   <nav class="docs-head-nav" aria-label="Site">
+    <a class="docs-site-link" href="../../security/">Security</a>
+    <a class="docs-site-link" href="../../compare/">Compare</a>
     <button class="ctx-chip-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="ctx-pop"><span class="ctx-chip-os"></span><span class="ctx-chip-rest"></span></button>
     <div class="ctx-pop" id="ctx-pop" hidden>
       <div class="ctx-seg" role="group" aria-label="Operating system">
@@ -109,6 +111,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
       <ul>
         
         <li><a href="../concepts/how-it-works/">How Seamless works</a></li>
+        
+        <li><a href="../concepts/security/">Security and privacy</a></li>
         
         <li><a href="../concepts/memory/">Memory &amp; notes</a></li>
         
@@ -252,8 +256,10 @@ manager and paths for you. The OS-specific detail all lives on
 <h2 id="update">Update</h2>
 <p>Seamless is early in its development cycle: releases with improvements and bug
 fixes land often. From v0.7.0, an install made by the curl or PowerShell
-installer installs them by itself, once a release has been out for a day and
-nothing is using the daemon (<a href="#automatic-updates">automatic updates</a>). Every
+installer installs them by itself once a release has been out for a day: when
+nothing is using the daemon, or, if that moment has not come within
+<code>update.max_defer</code> (a day by default), at a lull in requests, and past twice
+that even mid-request (<a href="#automatic-updates">automatic updates</a>). Every
 other install checks for them and tells you when one is out
 (<a href="#automatic-update-checks">automatic update checks</a>). Either way, updating
 right now is one command.</p>
@@ -429,8 +435,10 @@ check it before you debug anything else - a stale daemon still serving the old
 binary looks exactly like a bug in the new one.</p>
 <h2 id="automatic-updates">Automatic updates</h2>
 <p>From v0.7.0, an install made by the curl or PowerShell installer installs new
-releases by itself. It waits until a release has been out for a day, then until
-nothing is using the daemon, and then runs the same verified update
+releases by itself. It waits until a release has been out for a day, then
+until nothing is using the daemon. Once it has waited <code>update.max_defer</code> it
+settles for a lull in requests, and past twice that it installs even with a
+request in flight (<a href="#when-it-installs">when</a>). It runs the same verified update
 <code>seamlessd update</code> does - backed up, confirmed, and rolled back if the new
 release does not come up. You can watch it, hurry it, or turn it off in
 <strong>Settings -&gt; Updates</strong>.</p>
@@ -622,9 +630,13 @@ says how to read it and recover.</p>
 <h3 id="owner-signed-releases">Owner-signed releases</h3>
 <p>Every release after v0.8.3 carries a second signature over <code>checksums.txt</code>
 besides the Sigstore one: <code>checksums.txt.sshsig</code>, made by the project's owner
-with a hardware security key, in an attended session, after the release
-workflow built the release and before it was published. The Sigstore signature
-says the release workflow built it; this one says the owner released it.
+with a hardware security key, in an attended session, once the release's draft
+is complete and before it is published. A release is built in two places: the
+owner's Mac builds, signs and notarizes the macOS binaries, and the release
+workflow builds the Linux and Windows ones, accepts the macOS ones only when
+they match the sha256 manifest in the owner's signed tag, and signs
+<code>checksums.txt</code> with Sigstore. The Sigstore signature says the release workflow
+assembled the release; this one says the owner released it.
 Whoever holds a token that can push tags and approve the release workflow can
 produce the first, but not the second. <code>checksums.txt</code> lists every archive and
 both installer scripts, so the one signature covers everything an update runs.</p>
@@ -737,6 +749,12 @@ place - the uninstall of a program should not delete your knowledge. Add
 <code>--purge</code> (or <code>make uninstall PURGE=1</code>) only when you actually mean to delete
 them; a guard refuses to purge a path that resolves to your home directory or the
 filesystem root. See <a href="../reference/storage/">Storage</a> for what is in there.</p>
+<p><code>--purge</code> deletes your backups too. <code>~/.seamless/backups</code> is inside the data
+directory, so the scheduled backups, the safety backups taken before a restore
+and the updater's pre-update archives go with it. Only a backup in a folder
+outside <code>~/.seamless</code> survives: one written to a <code>backup.dir</code> set elsewhere, or
+a <code>seamlessd export</code> archive saved outside it. Copy one out first if you may
+want the data back.</p>
 <p>The hooks come out of <code>~/.claude/settings.json</code> and Codex's <code>hooks.json</code> through
 the same exact classifier the installer and doctor use. Current, marked-stale,
 and unmistakable legacy Seamless entries are removed; foreign entries survive,
@@ -796,7 +814,7 @@ uninstall - the service and binaries come out regardless.</p>
 </div>
 
 <footer class="docs-foot">
-  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../../">Home</a> · <a href="../../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a></p>
+  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../../">Home</a> · <a href="../../security/">Security</a> · <a href="../../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a> · <a href="https://github.com/arctop/seamless/security/advisories/new">Report a vulnerability</a></p>
 </footer>
 
 <script src="../static/docs.js?v=f91fb0cd"></script>

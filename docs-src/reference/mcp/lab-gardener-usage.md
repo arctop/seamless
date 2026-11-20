@@ -44,9 +44,11 @@ Its passes:
 | stale-stage | A `stage` memory whose gate is done, missing, or unparseable, unchanged for `gardener.stale_stage_days`. Proposes an **archive**. |
 | dead-weight | A memory briefings keep injecting with zero recall hits, prompt matches, or reads. Proposes an **archive**. |
 | digest | Enough recent activity to be worth a summary over `gardener.digest_days`. Proposes a **digest** note. |
-| stale-plan | Plans idle for `gardener.stale_plan_days` with steps still open. |
+| stale-plan | A captured plan still unapproved after `gardener.stale_plan_days`. Proposes settling it: **ship_plan** when commits show the work landed, **merge_plans** when another composition holds its steps, **abandon_plan** otherwise. |
+| stale-copy | A memory with a [provenance stamp](/concepts/project-isolation/#provenance-stamps) whose cited source in another project changed after the memory was written. Proposes an **archive**. |
 | memory-wanted | The same recall query missing across sessions. Proposes a **memory_wanted**: applying opens a task to write the knowledge agents keep searching for. |
 | tool-error | The same normalized tool or hook error recurring (tool errors across 2+ sessions). Proposes a **tool_error**: applying opens an investigation task with the observed evidence. |
+| copy-relocate | A stamped memory whose stamps and source references all name one other project. Proposes a **relocate** into that project. |
 
 Constraints and pinned stages are never age-filtered or staleness-archived. A
 constraint does not become less true by sitting still.
@@ -82,8 +84,10 @@ answers, for an agent that cannot open a browser.
 ## favorite_set
 
 `favorite_set` stars or unstars an item - a memory, note, project, plan, task,
-session, or trial. A starred memory is pinned into every session briefing as a
-`FAVORITE:` line and gets a mild recall rank boost; in the console, favorites
+session, or trial. A starred memory keeps a pinned place in its project's
+briefings, inside its own section: a starred constraint or convention heads
+that section, any other starred memory heads the Memories list, and no trim or
+budget drops it. It also gets a mild recall rank boost; in the console, favorites
 carry a star, sort first, and can be filtered. For memories and notes the flag
 lives in the file's frontmatter (`favorite: true`), so it survives an index
 rebuild and can be hand-edited. A plan's favorite lives on its primary note, so

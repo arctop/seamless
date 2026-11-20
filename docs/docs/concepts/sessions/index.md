@@ -40,11 +40,11 @@ process adopts the sole active ambient session sharing its working directory. A
 caller that names its process but owns no live session is never handed another
 agent's.
 
-That distinction also appears in knowledge provenance. A write attributed by an
-ambient hook stores the session's `cc/...` or `cx/...` **name** in
-`source_session`; a write made through a bound MCP connection stores the
-session's ULID. Readers resolve both forms. Do not infer client, scope, or
-liveness from the spelling of `source_session`.
+Knowledge provenance is recorded the same way for both. A memory's
+`source_session` holds the writing session's **ULID**, never its `cc/...` or
+`cx/...` handle, whether the agent's calls were bound to an ambient session or
+by `session_start`. Readers resolve a session name there too, so do not infer
+client, scope, or liveness from the spelling of `source_session`.
 
 ## How tool calls find their session {#process-binding}
 

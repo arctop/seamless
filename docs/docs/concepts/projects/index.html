@@ -28,7 +28,7 @@
 var o=q.get("os")||localStorage.getItem("os");if(o==="unix"||!/^(macos|linux|windows|all)$/.test(o||""))o=/Windows/i.test(navigator.userAgent)?"windows":/Mac/i.test(navigator.userAgent)?"macos":"linux";d.dataset.os=o;
 var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").filter(function(x){return x==="claude"||x==="codex"||x==="claude-desktop";});if(cs.length&&cs.length<3)d.dataset.clients=cs.join(" ");})();</script>
 <link rel="stylesheet" href="../../../static/site.css?v=658d0062">
-<link rel="stylesheet" href="../../static/docs.css?v=761296eb">
+<link rel="stylesheet" href="../../static/docs.css?v=4314abce">
 </head>
 <body class="docs" data-docs-root="../../">
 
@@ -48,6 +48,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   </div>
 
   <nav class="docs-head-nav" aria-label="Site">
+    <a class="docs-site-link" href="../../../security/">Security</a>
+    <a class="docs-site-link" href="../../../compare/">Compare</a>
     <button class="ctx-chip-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="ctx-pop"><span class="ctx-chip-os"></span><span class="ctx-chip-rest"></span></button>
     <div class="ctx-pop" id="ctx-pop" hidden>
       <div class="ctx-seg" role="group" aria-label="Operating system">
@@ -109,6 +111,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
       <ul>
         
         <li><a href="../../concepts/how-it-works/">How Seamless works</a></li>
+        
+        <li><a href="../../concepts/security/">Security and privacy</a></li>
         
         <li><a href="../../concepts/memory/">Memory &amp; notes</a></li>
         
@@ -242,7 +246,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#the-precedence-chain">The precedence chain</a></li><li class="lvl-2"><a href="#why-writes-fail-closed">Why writes fail closed</a></li><li class="lvl-2"><a href="#mapping-a-repo">Mapping a repo</a></li><li class="lvl-2"><a href="#families-parents-and-siblings">Families: parents and siblings</a></li><li class="lvl-2"><a href="#when-scope-goes-wrong">When scope goes wrong</a></li>
+      <li class="lvl-2"><a href="#the-precedence-chain">The precedence chain</a></li><li class="lvl-2"><a href="#why-writes-fail-closed">Why writes fail closed</a></li><li class="lvl-2"><a href="#mapping-a-repo">Mapping a repo</a></li><li class="lvl-2"><a href="#families-parents-and-siblings">Families: parents and siblings</a></li><li class="lvl-2"><a href="#isolation-and-locked-projects">Isolation and locked projects</a></li><li class="lvl-2"><a href="#when-scope-goes-wrong">When scope goes wrong</a></li>
     </ul>
   </details>
   <p>A <strong>project</strong> is the scope everything else inherits. Get scope right and agents
@@ -263,11 +267,15 @@ scope resolves from where the agent already is.</p>
   <figcaption id="scope-precedence-caption"><strong>Precedence is also the safety model.</strong> Broader fallback stops before it could silently create machine-wide knowledge.</figcaption>
 </figure>
 <p>Worked through, rung by rung:</p>
-<p><strong>1. An explicit <code>project</code> argument.</strong> You said it, so it happens. This is also
+<p><strong>1. An explicit <code>project</code> argument.</strong> You said it, so it happens, unless a
+fence refuses it (<a href="#isolation-and-locked-projects">isolation</a>). This is also
 how you deliberately reach another project (<code>project: otherrepo</code>) or the global
 scope (<code>project: global</code>). A slug Seamless has never seen is <strong>not</strong> an error: the
 write registers it, and the new project appears in <code>project_list</code> and the console
-like any other. Naming a project into existence is an ordinary thing to do.</p>
+like any other. Naming a project into existence is an ordinary thing to do, and
+one named by mistake is retired with
+<a href="../../reference/cli-seamlessd/#seamlessd_retire_project"><code>seamlessd retire-project</code></a>
+once it holds nothing active and no repo maps to it.</p>
 <p><strong>2. The bound session.</strong> A connection bound to a session passes that session's
 project to every later call on it. A Claude Code or Codex agent is bound
 automatically: its SessionStart hook opens an ambient session in the project its
@@ -323,7 +331,9 @@ repos sharing a directory name still get distinct projects (<code>backend</code>
 <code>backend-2</code>) so unrelated repos never inherit each other's memories. The one
 case the healing cannot recognize is a repo that was moved <em>and renamed</em> - it
 derives a different slug - and that is what the override below is for.
-<code>seamlessd doctor</code> lists mapped paths that no longer exist.</p>
+<code>seamlessd doctor</code> lists mapped paths that no longer exist, and
+<a href="../../reference/cli-seamlessd/#seamlessd_unmap_repo"><code>seamlessd unmap-repo --stale</code></a>
+removes them.</p>
 <p>Map by hand only to override the derived slug - an <code>ios</code> directory that should be
 the <code>example-ios</code> project, or a renamed repo that should keep its old project:</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd map-repo --path ~/code/ios --project example-ios
@@ -347,6 +357,18 @@ sibling often is not true of another.</li>
 <p>Splitting one project into children is planned as a unit - see
 <a href="../../concepts/gardener/">The gardener</a>, which handles it as a <code>split</code> rather than a
 pile of individual moves.</p>
+<h2 id="isolation-and-locked-projects">Isolation and locked projects</h2>
+<p>By default projects are cooperative: any agent can read or write any project by
+naming it. <strong>Isolation</strong> is the per-project setting that draws a boundary:
+<code>open</code> (the default), <code>confidential</code> (nothing leaves the project, and its own
+sessions cannot write outside it), or <code>sealed</code> (nothing enters or leaves). A
+fenced project stands outside any family, and a read or write across its fence
+is refused rather than redirected. See
+<a href="../../concepts/project-isolation/">Project isolation</a>.</p>
+<p><strong>Locked</strong> is a separate setting: even a locked project's own agents reach it
+only after you approve each one, for a limited time. It needs
+<a href="../../guides/peer-auth/">peer_auth</a>, and a locked project is also confidential or
+sealed. See <a href="../../guides/peer-auth/">Lock projects behind your approval</a>.</p>
 <h2 id="when-scope-goes-wrong">When scope goes wrong</h2>
 <p>The symptom is almost always &quot;the agent wrote it somewhere I can't find it&quot; or
 &quot;the write was rejected as ambiguous&quot;. Both are the chain above:</p>
@@ -380,7 +402,7 @@ rebind.</li>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#the-precedence-chain">The precedence chain</a></li><li class="lvl-2"><a href="#why-writes-fail-closed">Why writes fail closed</a></li><li class="lvl-2"><a href="#mapping-a-repo">Mapping a repo</a></li><li class="lvl-2"><a href="#families-parents-and-siblings">Families: parents and siblings</a></li><li class="lvl-2"><a href="#when-scope-goes-wrong">When scope goes wrong</a></li>
+      <li class="lvl-2"><a href="#the-precedence-chain">The precedence chain</a></li><li class="lvl-2"><a href="#why-writes-fail-closed">Why writes fail closed</a></li><li class="lvl-2"><a href="#mapping-a-repo">Mapping a repo</a></li><li class="lvl-2"><a href="#families-parents-and-siblings">Families: parents and siblings</a></li><li class="lvl-2"><a href="#isolation-and-locked-projects">Isolation and locked projects</a></li><li class="lvl-2"><a href="#when-scope-goes-wrong">When scope goes wrong</a></li>
     </ul>
   </aside>
   
@@ -388,7 +410,7 @@ rebind.</li>
 </div>
 
 <footer class="docs-foot">
-  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../../../">Home</a> · <a href="../../../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a></p>
+  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../../../">Home</a> · <a href="../../../security/">Security</a> · <a href="../../../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a> · <a href="https://github.com/arctop/seamless/security/advisories/new">Report a vulnerability</a></p>
 </footer>
 
 <script src="../../static/docs.js?v=f91fb0cd"></script>

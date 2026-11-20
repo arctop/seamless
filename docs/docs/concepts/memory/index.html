@@ -28,7 +28,7 @@
 var o=q.get("os")||localStorage.getItem("os");if(o==="unix"||!/^(macos|linux|windows|all)$/.test(o||""))o=/Windows/i.test(navigator.userAgent)?"windows":/Mac/i.test(navigator.userAgent)?"macos":"linux";d.dataset.os=o;
 var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").filter(function(x){return x==="claude"||x==="codex"||x==="claude-desktop";});if(cs.length&&cs.length<3)d.dataset.clients=cs.join(" ");})();</script>
 <link rel="stylesheet" href="../../../static/site.css?v=658d0062">
-<link rel="stylesheet" href="../../static/docs.css?v=761296eb">
+<link rel="stylesheet" href="../../static/docs.css?v=4314abce">
 </head>
 <body class="docs" data-docs-root="../../">
 
@@ -48,6 +48,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   </div>
 
   <nav class="docs-head-nav" aria-label="Site">
+    <a class="docs-site-link" href="../../../security/">Security</a>
+    <a class="docs-site-link" href="../../../compare/">Compare</a>
     <button class="ctx-chip-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="ctx-pop"><span class="ctx-chip-os"></span><span class="ctx-chip-rest"></span></button>
     <div class="ctx-pop" id="ctx-pop" hidden>
       <div class="ctx-seg" role="group" aria-label="Operating system">
@@ -109,6 +111,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
       <ul>
         
         <li><a href="../../concepts/how-it-works/">How Seamless works</a></li>
+        
+        <li><a href="../../concepts/security/">Security and privacy</a></li>
         
         <li><a href="../../concepts/memory/" class="current" aria-current="page">Memory &amp; notes</a></li>
         
@@ -242,7 +246,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#the-description-is-the-product">The description is the product</a></li><li class="lvl-2"><a href="#the-nine-kinds">The nine kinds</a></li><li class="lvl-2"><a href="#supersession-how-the-store-stays-honest">Supersession: how the store stays honest</a></li><li class="lvl-2"><a href="#update-append-supersede-or-delete">Update, append, supersede, or delete</a></li><li class="lvl-2"><a href="#memory-or-note">Memory or note?</a></li><li class="lvl-2"><a href="#global-vs-project">Global vs. project</a></li>
+      <li class="lvl-2"><a href="#the-description-is-the-product">The description is the product</a></li><li class="lvl-2"><a href="#the-nine-kinds">The nine kinds</a></li><li class="lvl-2"><a href="#supersession-how-the-store-stays-honest">Supersession: how the store stays honest</a></li><li class="lvl-2"><a href="#edit-update-append-supersede-or-delete">Edit, update, append, supersede, or delete</a></li><li class="lvl-2"><a href="#memory-or-note">Memory or note?</a></li><li class="lvl-2"><a href="#global-vs-project">Global vs. project</a></li>
     </ul>
   </details>
   <p>In Seamless, a memory is one markdown file with YAML frontmatter holding one
@@ -265,12 +269,19 @@ the system needs your permission to be inspected.</p>
 </span></span></span><span class="line"><span class="cl"><span class="nt">valid_from</span><span class="p">:</span><span class="w"> </span><span class="ld">2026-07-10T18:00:00Z</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">invalid_at</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="w">           </span><span class="c"># set on supersession/archive; invalid memories leave indexes</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">superseded_by</span><span class="p">:</span><span class="w"> </span><span class="kc">null</span><span class="w">        </span><span class="c"># ULID of the replacement</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="nt">source_session</span><span class="p">:</span><span class="w"> </span><span class="l">cc/019f7291-7ccbc0d8f16e51a4</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">source_session</span><span class="p">:</span><span class="w"> </span><span class="l">01K...    </span><span class="w"> </span><span class="c"># ULID of the session that first wrote it</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">model</span><span class="p">:</span><span class="w"> </span><span class="l">claude-fable-5     </span><span class="w"> </span><span class="c"># the model that produced the content, as the provider names it</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="nt">favorite</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w">             </span><span class="c"># present only while the memory is starred</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">tags</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="l">x, y]</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nn">---</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="l">body markdown</span><span class="w">
 </span></span></span></code></pre></div>
+<p>Two more keys appear only with optional features: <code>account</code> names the
+<a href="../../guides/peer-auth/#restricted-local-accounts">restricted local account</a> that
+wrote the content, and <code>may_contain</code> lists
+<a href="../../concepts/project-isolation/#provenance-stamps">provenance stamps</a> naming the
+fenced projects whose content the writing conversation held.
+<a href="../../reference/storage/#memory-frontmatter">Storage</a> has every field.</p>
 <h2 id="the-description-is-the-product">The description is the product</h2>
 <p>Everything above the body is bookkeeping except one field. <strong>The <code>description</code> is
 the only text an index ever shows</strong> - the briefing, the memory list, the recall
@@ -353,9 +364,10 @@ then leaves the briefing, and the gardener proposes archiving gateless stages
 after <code>gardener.stale_stage_days</code> (14). A milestone breadcrumb (&quot;X landed&quot;) is
 a note or a finding, not a stage - written as a stage without a live gate, it
 now expires instead of pinning forever.</p>
-<p>Update a stage's status by re-writing it with <code>memory_write</code> (same name, in
-place) - <code>memory_append</code> adds below the existing body and cannot change the
-header, which is parsed from the top of the body. And the rule of thumb that
+<p>Update a stage's status with <code>memory_edit</code> (replace the <code>Status:</code> line) or by
+re-writing it with <code>memory_write</code> (same name, in place) - <code>memory_append</code> adds
+below the existing body and cannot change the header, which is parsed from the
+top of the body. And the rule of thumb that
 keeps stages out of the task queue: a task is work someone here can claim and
 finish; a stage is a state of the world you wait on that every session must
 know while it holds.</p>
@@ -384,7 +396,7 @@ three contradictory answers and the agent picks one. <strong>Destructive overwri
 means the reasoning is gone and the same argument happens again in six weeks.
 <a href="../../concepts/memory-supersession/">Memory supersession</a> defines the idea on its
 own and contrasts it with decay-style forgetting as well.</p>
-<h2 id="update-append-supersede-or-delete">Update, append, supersede, or delete</h2>
+<h2 id="edit-update-append-supersede-or-delete">Edit, update, append, supersede, or delete</h2>
 <div class="table-wrap">
 <table>
 <thead>
@@ -394,6 +406,10 @@ own and contrasts it with decay-style forgetting as well.</p>
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>Fix part of <em>this</em> memory without resending it - a typo, a stale path, a stage's <code>Status</code>, its description or tags</td>
+<td><code>memory_edit</code> (exact search/replace; returns a diff)</td>
+</tr>
 <tr>
 <td>Correct or extend what <em>this</em> memory says</td>
 <td><code>memory_write</code>, same <code>name</code> (updated in place, id stable)</td>
@@ -415,7 +431,9 @@ own and contrasts it with decay-style forgetting as well.</p>
 </div>
 <p>The line that matters: <strong>delete is for things that were never true; supersede is
 for things that stopped being true.</strong> Deleting the latter destroys the history
-that explains the current state.</p>
+that explains the current state. <code>memory_edit</code> has a line of its own: it is
+for changes that carry no new claim. When what the memory says changes, write
+the new memory with <code>supersedes</code>, so the old one stays readable as history.</p>
 <p>Never hand-stamp <code>invalid_at</code> or <code>superseded_by</code> in a file. They are set by the
 supersede path, which also updates the indexes; editing them by hand leaves the
 database disagreeing with the disk.</p>
@@ -473,7 +491,7 @@ the global scope. Pass <code>project: global</code> to mean it on purpose. See
 
     
     <nav class="page-nav" aria-label="Pagination">
-      <a class="prev" href="../../concepts/how-it-works/"><span class="dir">Previous</span><span class="t">How Seamless works</span></a>
+      <a class="prev" href="../../concepts/security/"><span class="dir">Previous</span><span class="t">Security and privacy</span></a>
       <a class="next" href="../../concepts/sessions/"><span class="dir">Next</span><span class="t">Sessions &amp; briefings</span></a>
     </nav>
     
@@ -483,7 +501,7 @@ the global scope. Pass <code>project: global</code> to mean it on purpose. See
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#the-description-is-the-product">The description is the product</a></li><li class="lvl-2"><a href="#the-nine-kinds">The nine kinds</a></li><li class="lvl-2"><a href="#supersession-how-the-store-stays-honest">Supersession: how the store stays honest</a></li><li class="lvl-2"><a href="#update-append-supersede-or-delete">Update, append, supersede, or delete</a></li><li class="lvl-2"><a href="#memory-or-note">Memory or note?</a></li><li class="lvl-2"><a href="#global-vs-project">Global vs. project</a></li>
+      <li class="lvl-2"><a href="#the-description-is-the-product">The description is the product</a></li><li class="lvl-2"><a href="#the-nine-kinds">The nine kinds</a></li><li class="lvl-2"><a href="#supersession-how-the-store-stays-honest">Supersession: how the store stays honest</a></li><li class="lvl-2"><a href="#edit-update-append-supersede-or-delete">Edit, update, append, supersede, or delete</a></li><li class="lvl-2"><a href="#memory-or-note">Memory or note?</a></li><li class="lvl-2"><a href="#global-vs-project">Global vs. project</a></li>
     </ul>
   </aside>
   
@@ -491,7 +509,7 @@ the global scope. Pass <code>project: global</code> to mean it on purpose. See
 </div>
 
 <footer class="docs-foot">
-  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../../../">Home</a> · <a href="../../../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a></p>
+  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../../../">Home</a> · <a href="../../../security/">Security</a> · <a href="../../../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a> · <a href="https://github.com/arctop/seamless/security/advisories/new">Report a vulnerability</a></p>
 </footer>
 
 <script src="../../static/docs.js?v=f91fb0cd"></script>

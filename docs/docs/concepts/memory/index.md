@@ -25,12 +25,20 @@ updated: 2026-07-10T18:00:00Z
 valid_from: 2026-07-10T18:00:00Z
 invalid_at: null           # set on supersession/archive; invalid memories leave indexes
 superseded_by: null        # ULID of the replacement
-source_session: cc/019f7291-7ccbc0d8f16e51a4
+source_session: 01K...     # ULID of the session that first wrote it
 model: claude-fable-5      # the model that produced the content, as the provider names it
+favorite: true             # present only while the memory is starred
 tags: [x, y]
 ---
 body markdown
 ```
+
+Two more keys appear only with optional features: `account` names the
+[restricted local account](https://thereisnospoon.org/docs/guides/peer-auth/#restricted-local-accounts) that
+wrote the content, and `may_contain` lists
+[provenance stamps](https://thereisnospoon.org/docs/concepts/project-isolation/#provenance-stamps) naming the
+fenced projects whose content the writing conversation held.
+[Storage](https://thereisnospoon.org/docs/reference/storage/#memory-frontmatter) has every field.
 
 ## The description is the product
 
@@ -75,9 +83,10 @@ after `gardener.stale_stage_days` (14). A milestone breadcrumb ("X landed") is
 a note or a finding, not a stage - written as a stage without a live gate, it
 now expires instead of pinning forever.
 
-Update a stage's status by re-writing it with `memory_write` (same name, in
-place) - `memory_append` adds below the existing body and cannot change the
-header, which is parsed from the top of the body. And the rule of thumb that
+Update a stage's status with `memory_edit` (replace the `Status:` line) or by
+re-writing it with `memory_write` (same name, in place) - `memory_append` adds
+below the existing body and cannot change the header, which is parsed from the
+top of the body. And the rule of thumb that
 keeps stages out of the task queue: a task is work someone here can claim and
 finish; a stage is a state of the world you wait on that every session must
 know while it holds.
@@ -113,10 +122,11 @@ means the reasoning is gone and the same argument happens again in six weeks.
 [Memory supersession](https://thereisnospoon.org/docs/concepts/memory-supersession/) defines the idea on its
 own and contrasts it with decay-style forgetting as well.
 
-## Update, append, supersede, or delete
+## Edit, update, append, supersede, or delete
 
 | You want to | Use |
 |---|---|
+| Fix part of *this* memory without resending it - a typo, a stale path, a stage's `Status`, its description or tags | `memory_edit` (exact search/replace; returns a diff) |
 | Correct or extend what *this* memory says | `memory_write`, same `name` (updated in place, id stable) |
 | Add to the end without rereading it | `memory_append` |
 | Replace a **different**, now-outdated memory | `memory_write` with `supersedes` |
@@ -124,7 +134,9 @@ own and contrasts it with decay-style forgetting as well.
 
 The line that matters: **delete is for things that were never true; supersede is
 for things that stopped being true.** Deleting the latter destroys the history
-that explains the current state.
+that explains the current state. `memory_edit` has a line of its own: it is
+for changes that carry no new claim. When what the memory says changes, write
+the new memory with `supersedes`, so the old one stays readable as history.
 
 Never hand-stamp `invalid_at` or `superseded_by` in a file. They are set by the
 supersede path, which also updates the indexes; editing them by hand leaves the

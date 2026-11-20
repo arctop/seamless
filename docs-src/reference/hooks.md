@@ -375,9 +375,13 @@ A Codex session's line carries its `cx/...` handle.
 
 ## Why Claude Code uses two transports
 
-Six of the Claude Code hooks are `command`, one is `http`. (Codex, above, uses
-`command` for all five - its trust gate applies only to command hooks.) The
-split is not stylistic:
+Against a plain-http loopback daemon, six of the Claude Code hooks are
+`command` and one is `http`. (Codex, above, uses `command` for all five - its
+trust gate applies only to command hooks.) Against an `https://` or `unix://`
+`server_url` - a networked Client, a relay, a peer_auth socket - all seven are
+`command` hooks
+([why](/claude-code/#https-and-socket-servers)). Where the split exists, it is
+not stylistic:
 
 - **`SessionStart` must be a command hook.** Claude Code only runs
   `command`/`mcp_tool` hooks for `SessionStart`. An `http` hook there is silently

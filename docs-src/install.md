@@ -5,9 +5,10 @@ description: The one-command install and every other route to the same place - H
 
 Installing Seamless is one command: a script downloads a release archive
 containing the `seamlessd` daemon and `seam` CLI for macOS, Linux, or Windows,
-verifies its SHA-256, and registers the daemon as a per-user service - launchd,
-systemd, or a Scheduled Task - bound to loopback. No Docker, database server,
-or Go toolchain. The [Quickstart](/quickstart/) runs that command and moves on;
+verifies it against the release's signed checksums, and registers the daemon as
+a per-user service - launchd, systemd, or a Scheduled Task - listening on
+loopback unless you set this computer up as a Server. No Docker, database
+server, or Go toolchain. The [Quickstart](/quickstart/) runs that command and moves on;
 this page is what it did, and what to do when you want to steer it yourself.
 Where everything lands - the service, logs, ports, and every path - is on
 [The service & where things live](/reference/service/).
@@ -39,9 +40,11 @@ itself. No Go toolchain is involved. In order, it:
 
 1. resolves the latest release and downloads the archive for your platform
    (macOS, Linux, and Windows; amd64 and arm64), **verifying its SHA-256**
-   against the release's `checksums.txt` before unpacking anything; when
-   `cosign` is available it also verifies that manifest's keyless signature
-   against this repository's release workflow identity;
+   against the release's `checksums.txt` before unpacking anything, and checks
+   that manifest's hardware-key signature from the project's owner
+   ([below](#security-posture)); when `cosign` is available it also verifies
+   the manifest's keyless signature against this repository's release
+   workflow identity;
 2. asks the new [`seamlessd setup`](/reference/cli-seamlessd/#seamlessd_setup)
    how this computer will be used, before anything is installed:
    **Standalone** (everything on this computer, the default) or **Networked** -
@@ -287,8 +290,12 @@ default. See [Update & uninstall](/updating/#uninstall).
 What you are accepting when you run this:
 
 - **One static bearer key** guards `/api/mcp` and the console. Not JWT, not
-  OAuth, no user accounts. It is a single-user local tool and the key is in your
-  config file with `0600` permissions.
+  OAuth, no user accounts. It is a single-user tool and the key is in your
+  config file with `0600` permissions. Three things narrow its role:
+  [passkey sign-in](/reference/console/#sign-in-with-a-passkey) stops it
+  signing a browser in to the console, a [paired computer](/concepts/networked/#pairing)
+  holds a credential of its own, and under [peer_auth](/guides/peer-auth/) a
+  caller on the Unix socket needs no key at all - the kernel names it.
 - **Default agent registrations do not copy that key.** Claude Code calls
   `seam mcp-headers` through `headersHelper`; Codex launches `seam mcp-proxy`.
   Both read the 0600 Seamless config at connection time, and neither puts the
@@ -322,7 +329,7 @@ What you are accepting when you run this:
   [automatic update](/updating/#automatic-updates) adds the same downloads
   `seamlessd update` makes. `update.check: false` turns both off and means no
   update traffic at all.
-- **Release authenticity has two layers.** Every installer verifies the
+- **Release authenticity has three layers.** Every installer verifies the
   archive's SHA-256 against `checksums.txt`. When `cosign` is installed it also
   verifies the manifest's keyless signature against this repository's release
   workflow identity; without cosign it warns clearly and continues with checksum
@@ -348,7 +355,8 @@ What you are accepting when you run this:
   the owner's signatures and installs as before.
 - **The trust root of a fresh install is the site.** The installer you pipe to
   a shell is served from thereisnospoon.org, which publishes only from release
-  tags, and the keys it checks the owner's signature against are the ones it
+  tags and the maintainers' `site-*` tags, and the keys it checks the owner's
+  signature against are the ones it
   carries. So a fresh install trusts whoever can publish the site - TLS
   authenticates the host, nothing authenticates the script before it runs.
   What the installer's checks then add is that a release whose assets the
@@ -372,12 +380,13 @@ name, its certificate, and a bind that holds every address of the name.
    (TLS 1.2 floor) and marks the console session cookie `Secure`. Without it
    the bearer key, every hook payload, and the whole console travel in the
    clear; `seamlessd doctor` reports that as a warning on the `bind` line.
-3. **Keep the blast radius small.** There is still no rate limiting, no user
-   accounts, and no per-client authorization: one key admits the whole corpus,
-   and so does every computer paired with the Server. Only
-   [locked projects](/guides/peer-auth/) close a project to them. A network you
-   trust - your LAN, your tailnet - is the supported boundary. The public
-   internet is not.
+3. **Keep the blast radius small.** There is still no rate limiting and no
+   user accounts: one key admits the whole corpus, and so does every computer
+   paired with the Server. [Locked projects](/guides/peer-auth/) close a
+   project to them, and under `peer_auth` a relay's
+   [restricted accounts](/guides/peer-auth/#restricted-local-accounts) reach
+   only what you list. A network you trust - your LAN, your tailnet - is the
+   supported boundary. The public internet is not.
 
 [Share one daemon across your computers](/guides/network-install/) is the
 walkthrough - the Server's setup, each Client, pairing, and what a remote

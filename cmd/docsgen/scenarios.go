@@ -220,7 +220,7 @@ func renderScenarios(site *Site) error {
 // docs pages (under /docs/), the other scenario pages, and the hand-written
 // root surfaces are linkable; anything else is a build error.
 func checkScenarioLinks(site *Site) error {
-	targets := map[string]bool{"/": true, "/compare/": true}
+	targets := map[string]bool{"/": true, "/compare/": true, "/security/": true}
 	for _, p := range site.Pages {
 		targets[docsPathPrefix+p.URL] = true
 	}

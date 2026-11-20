@@ -17,9 +17,10 @@ Two habits make them land:
   loaded until you ask (see [the Claude app guide](/claude-app/)). In Claude
   Code and Codex, the repo you start in is the project.
 
-Everything the agent saves is a file under `~/.seamless`: memories in
-`memory/<project>/`, notes in `notes/<project>/`. `seamlessd console-open` shows
-all of it in the browser.
+Memories and notes the agent saves are files under `~/.seamless`: memories in
+`memory/<project>/`, notes in `notes/<project>/`. Tasks and session findings are
+rows in the database beside them, `seam.db`. `seamlessd console-open` shows all
+of it in the browser.
 
 ## Remember a rule
 
@@ -276,7 +277,9 @@ agent or chat opens it.
 ## More to try
 
 - `Star the deploy-runbook memory in Seamless.` `favorite_set` pins a starred
-  memory into every briefing as a `FAVORITE:` line.
+  memory in its project's briefings: a runbook like this one heads the Memories
+  list, and a starred constraint or convention heads its own section. No trim
+  or budget drops it.
 - `What does Seamless have on this project?` A quick inventory, by kind.
 - `Ask the Seamless gardener to find duplicate memories about deploys.`
   `gardener_request` turns the request into proposals that wait for your

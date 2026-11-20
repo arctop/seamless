@@ -12,8 +12,10 @@ manager and paths for you. The OS-specific detail all lives on
 
 Seamless is early in its development cycle: releases with improvements and bug
 fixes land often. From v0.7.0, an install made by the curl or PowerShell
-installer installs them by itself, once a release has been out for a day and
-nothing is using the daemon ([automatic updates](#automatic-updates)). Every
+installer installs them by itself once a release has been out for a day: when
+nothing is using the daemon, or, if that moment has not come within
+`update.max_defer` (a day by default), at a lull in requests, and past twice
+that even mid-request ([automatic updates](#automatic-updates)). Every
 other install checks for them and tells you when one is out
 ([automatic update checks](#automatic-update-checks)). Either way, updating
 right now is one command.
@@ -188,8 +190,10 @@ binary looks exactly like a bug in the new one.
 ## Automatic updates {#automatic-updates}
 
 From v0.7.0, an install made by the curl or PowerShell installer installs new
-releases by itself. It waits until a release has been out for a day, then until
-nothing is using the daemon, and then runs the same verified update
+releases by itself. It waits until a release has been out for a day, then
+until nothing is using the daemon. Once it has waited `update.max_defer` it
+settles for a lull in requests, and past twice that it installs even with a
+request in flight ([when](#when-it-installs)). It runs the same verified update
 `seamlessd update` does - backed up, confirmed, and rolled back if the new
 release does not come up. You can watch it, hurry it, or turn it off in
 **Settings -> Updates**.
@@ -367,9 +371,13 @@ says how to read it and recover.
 
 Every release after v0.8.3 carries a second signature over `checksums.txt`
 besides the Sigstore one: `checksums.txt.sshsig`, made by the project's owner
-with a hardware security key, in an attended session, after the release
-workflow built the release and before it was published. The Sigstore signature
-says the release workflow built it; this one says the owner released it.
+with a hardware security key, in an attended session, once the release's draft
+is complete and before it is published. A release is built in two places: the
+owner's Mac builds, signs and notarizes the macOS binaries, and the release
+workflow builds the Linux and Windows ones, accepts the macOS ones only when
+they match the sha256 manifest in the owner's signed tag, and signs
+`checksums.txt` with Sigstore. The Sigstore signature says the release workflow
+assembled the release; this one says the owner released it.
 Whoever holds a token that can push tags and approve the release workflow can
 produce the first, but not the second. `checksums.txt` lists every archive and
 both installer scripts, so the one signature covers everything an update runs.
@@ -510,6 +518,13 @@ place - the uninstall of a program should not delete your knowledge. Add
 `--purge` (or `make uninstall PURGE=1`) only when you actually mean to delete
 them; a guard refuses to purge a path that resolves to your home directory or the
 filesystem root. See [Storage](https://thereisnospoon.org/docs/reference/storage/) for what is in there.
+
+`--purge` deletes your backups too. `~/.seamless/backups` is inside the data
+directory, so the scheduled backups, the safety backups taken before a restore
+and the updater's pre-update archives go with it. Only a backup in a folder
+outside `~/.seamless` survives: one written to a `backup.dir` set elsewhere, or
+a `seamlessd export` archive saved outside it. Copy one out first if you may
+want the data back.
 
 The hooks come out of `~/.claude/settings.json` and Codex's `hooks.json` through
 the same exact classifier the installer and doctor use. Current, marked-stale,

@@ -14,9 +14,9 @@ a **shared, persistent brain** for Claude Code, Codex, and any other MCP client
 you run. Memory survives the end of a conversation, tasks can be handed from one
 agent to another, and plans get executed together. All of it is stored as
 markdown files in a directory you own, indexed by one SQLite database, and
-served over MCP by the local `seamlessd` daemon. The companion `seam` CLI gives
-headless agents a direct interface. There is no hosted Seamless service,
-external vector database, or account.
+served over MCP by the `seamlessd` daemon on your own computer. The companion
+`seam` CLI gives headless agents a direct interface. There is no hosted
+Seamless service, external vector database, or account.
 
 The same store also works from chats in the Claude desktop app, for long-running
 work that isn't code: [Seamless in the Claude app](https://thereisnospoon.org/claude-app/)
@@ -63,15 +63,20 @@ everyone - one install command, then your client.
 | Update, uninstall, or add a client later | [Update & uninstall](/updating/) |
 | Control the service, find logs and paths | [The service & where things live](/reference/service/) |
 | Understand the model before trusting it | [How Seamless works](/concepts/how-it-works/) |
+| Know what is protected, and from whom | [Security and privacy](/concepts/security/) |
+| Keep a client's project away from your other work | [Project isolation](/concepts/project-isolation/) |
+| Share one memory across your computers | [Networked Seamless](/concepts/networked/) |
 | Point a hand-rolled agent at it | [Integrate your agent](/guides/integrate-your-agent/) |
 | Make a fleet divide work without colliding | [Coordinate multiple agents](/guides/coordinate-agents/) |
 | Look up a tool, key, or command | [Reference](/reference/) |
 | Fix something that is silently not working | [Troubleshooting](/guides/troubleshooting/) |
 
-Its clients are agents. You are the observer and editor - there is a console, but
-nothing in Seamless requires you to be in the loop for agents to use it. And it
-is one instance on one machine, bound to loopback: a personal substrate, not a
-hosted team knowledge base.
+Its clients are agents. You are the observer and editor - there is a console,
+and agents use Seamless without you in the loop until you ask to be: lock a
+project and they wait for your approval, turn on write screening and suspicious
+writes wait for your review. It is a personal substrate, not a hosted team
+knowledge base: one daemon on your computer, or one Server your other computers
+pair with.
 
 ## What it gives a fleet
 
@@ -85,6 +90,9 @@ hosted team knowledge base.
 - **Hybrid recall.** One search entry point fusing keyword and vector search.
 - **A console you can read.** Every memory, session, task, and retrieval decision
   is inspectable. The files are plain markdown; the store is not a black box.
+- **Walls you choose.** Fence a project so its knowledge stays put, hold
+  suspicious writes for review, and lock a project so even its own agents wait
+  for your Touch ID, passkey, or password ([security and privacy](/concepts/security/)).
 
 ## Design principles
 
@@ -92,10 +100,12 @@ hosted team knowledge base.
 read, `grep`, edit, and put in git. The database is a rebuildable index over
 them, plus the record for high-churn state (sessions, tasks, events).
 
-**Local-first.** One daemon process, one SQLite file, bound to loopback. No
-external database, no required cloud service, and no outbound product
-telemetry - the only unprompted request is an anonymous check for new releases,
-and one config line turns it off.
+**Local-first.** One daemon process and one SQLite file, listening on loopback
+unless you set up a Server for your other computers. No external database, no
+required cloud service, and no product telemetry. On its own it only checks
+GitHub for new releases, anonymously, and downloads the updates it installs;
+`update.check: false` turns that off. Text goes to a model provider only if you
+add one ([what leaves your computer](/concepts/security/#outbound)).
 
 **Propose, don't act.** The gardener finds duplicates, staleness, and drift - and
 proposes. Nothing rewrites your knowledge behind your back.
@@ -130,22 +140,38 @@ irm https://thereisnospoon.org/install.ps1 | iex
 
 
 
-One command does the lot: it fetches the checksum-verified release archive for
-your platform (macOS, Linux, and Windows; amd64 and arm64), installs `seamlessd`
-and `seam`, generates the bearer key, wires the detected clients - Claude Code,
-the Claude app chat surface, Codex - with hooks, MCP, and skills, and starts
-the daemon as a per-user service on `127.0.0.1:8081` with data in `~/.seamless`.
+One command does the lot: it fetches the release archive for your platform
+(macOS, Linux, and Windows; amd64 and arm64) and checks it against the
+release's signed checksums, installs `seamlessd` and `seam`, generates the
+bearer key, wires the detected clients - Claude Code, the Claude app chat
+surface, Codex - with hooks, MCP, and skills, and starts the daemon as a
+per-user service on `127.0.0.1:8081` with data in `~/.seamless`.
 No Go, no CGO toolchain, no database server, no Node; the installer needs
 `curl` and `tar`. [Install & deploy](/install/) has the override knobs and the
 other routes (Homebrew, a clone, `go install`, prebuilt archives);
 [The service & where things live](/reference/service/) has the service
 controls, logs, and every path.
 
+At a terminal, the installer asks two questions before it installs anything,
+and Enter takes the default both times:
+
+1. **How will you use Seamless?** **Standalone** - everything on this computer -
+   is the default. **Networked** makes this computer the Server your other
+   computers connect to, or a Client of one
+   ([networked Seamless](/concepts/networked/)).
+2. **Start fresh, or from a backup?** Fresh is the default; a backup restores
+   an earlier instance into the new one.
+
+A script that sets no `SEAMLESS_*` variable is never asked and installs
+Standalone ([the answers as variables](/install/#install-in-one-command)).
+
 Seamless is early in its development cycle, and releases with improvements and
 bug fixes land often. The installer's install keeps itself current: from v0.7.0
-it installs each new release by itself, a day after it is published and at a
-moment no agent is using it. To update right now, `seamlessd update` is the one
-command, on every OS. See [Update & uninstall](/updating/#automatic-updates).
+it installs each new release by itself, a day after it is published, at a
+moment no agent is using it, or at the latest within a few days. To update
+right now, `seamlessd update` is the one command, on every OS. It also backs
+your data up every day and keeps the last seven. See
+[Update & uninstall](/updating/#automatic-updates) and [backups](/guides/data/).
 
 Piping a stranger's script into a shell deserves a read first - it is
 [one file](https://thereisnospoon.org/install).
@@ -268,9 +294,10 @@ Two habits make them land:
   loaded until you ask (see [the Claude app guide](/claude-app/)). In Claude
   Code and Codex, the repo you start in is the project.
 
-Everything the agent saves is a file under `~/.seamless`: memories in
-`memory/<project>/`, notes in `notes/<project>/`. `seamlessd console-open` shows
-all of it in the browser.
+Memories and notes the agent saves are files under `~/.seamless`: memories in
+`memory/<project>/`, notes in `notes/<project>/`. Tasks and session findings are
+rows in the database beside them, `seam.db`. `seamlessd console-open` shows all
+of it in the browser.
 
 ## Remember a rule
 
@@ -508,7 +535,9 @@ agent or chat opens it.
 ## More to try
 
 - `Star the deploy-runbook memory in Seamless.` `favorite_set` pins a starred
-  memory into every briefing as a `FAVORITE:` line.
+  memory in its project's briefings: a runbook like this one heads the Memories
+  list, and a starred constraint or convention heads its own section. No trim
+  or budget drops it.
 - `What does Seamless have on this project?` A quick inventory, by kind.
 - `Ask the Seamless gardener to find duplicate memories about deploys.`
   `gardener_request` turns the request into proposals that wait for your
@@ -544,12 +573,15 @@ organization's [managed settings](/reference/cli-seamlessd/#seamlessd_install_ho
 already carry a Seamless hook, that event is left to them and not written
 again, because Claude Code would run both copies.
 
-It then registers the MCP server with `claude mcp add-json --scope user`. The
-registration uses `seam mcp-headers --config <absolute yaml>` as
+It then registers the MCP server with `claude mcp add-json --scope user`. For a
+daemon reached over plain http, which a default install is, the registration
+names the daemon's URL and uses `seam mcp-headers --config <absolute yaml>` as
 `headersHelper`, so the bearer key stays out of subprocess argv and
-`~/.claude.json`. Pass `--mcp=false` to skip that half; if the CLI is missing or
-registration fails, the hooks still land and the command prints the exact
-invocation to run yourself.
+`~/.claude.json`. Over https or a socket it registers the `seam mcp-proxy`
+bridge instead ([below](#https-and-socket-servers)). Pass
+`--mcp=false` to skip that half; if the CLI is missing or registration fails,
+the hooks still land and the command prints the exact invocation to run
+yourself.
 
 The hooks are what make sessions **ambient** - an agent gets a briefing at
 startup, its prompts get matched against your memories, its Task subagents get
@@ -567,6 +599,17 @@ SessionEnd as http races Claude Code's teardown, and the plan-capture hooks
 pre-filter locally so the machine-wide `Write`/`Edit` hot path never touches
 the network. The full rationale, hook by hook, is in
 [the hooks reference](/reference/hooks/#why-claude-code-uses-two-transports).
+
+### Over https or a socket {#https-and-socket-servers}
+
+That mix, and the `headersHelper` registration, are the shape for a daemon
+reached over plain http. When `server_url` is `https://` (a Client reaching its
+Server over TLS) or `unix://` (a [relay](/concepts/networked/#the-relay), or a
+[peer_auth](/guides/peer-auth/) daemon's socket), every hook is a `seam hook`
+command and MCP is registered as the `seam mcp-proxy` stdio bridge. Claude
+Code's own http client cannot be told about a private CA, and cannot dial a
+socket at all, so both go through `seam`
+([why](/guides/network-install/#why-https-changes-the-claude-code-wiring)).
 
 ## Registering the MCP endpoint by hand
 
@@ -589,6 +632,14 @@ Use the absolute installed `seam` and config paths. The helper reads
 which exposes the daemon's sole credential in process argv and client config -
 and drops the agent-process header the helper also prints, which is what binds
 each agent's tool calls to its own session.
+
+With an `https://` or `unix://` `server_url`, register the stdio bridge
+instead, as `install-hooks` does:
+
+```bash
+claude mcp add-json --scope user seamless \
+  '{"type":"stdio","command":"/abs/path/seam","args":["mcp-proxy","--config","/abs/path/seamless.yaml"]}'
+```
 
 ## Map your repos
 
@@ -681,7 +732,7 @@ hooks, no `CLAUDE.md`, an explicit opt-in MCP registration of its own. See
 ## Verify
 
 ```bash
-./bin/seamlessd doctor    # config, database, tool count, and the hooks check
+seamlessd doctor    # config, database, tool count, and the hooks check
 ```
 
 Then start a Claude Code session in a mapped repo and look for the injected
@@ -1191,9 +1242,10 @@ URL: https://thereisnospoon.org/docs/install/
 
 Installing Seamless is one command: a script downloads a release archive
 containing the `seamlessd` daemon and `seam` CLI for macOS, Linux, or Windows,
-verifies its SHA-256, and registers the daemon as a per-user service - launchd,
-systemd, or a Scheduled Task - bound to loopback. No Docker, database server,
-or Go toolchain. The [Quickstart](/quickstart/) runs that command and moves on;
+verifies it against the release's signed checksums, and registers the daemon as
+a per-user service - launchd, systemd, or a Scheduled Task - listening on
+loopback unless you set this computer up as a Server. No Docker, database
+server, or Go toolchain. The [Quickstart](/quickstart/) runs that command and moves on;
 this page is what it did, and what to do when you want to steer it yourself.
 Where everything lands - the service, logs, ports, and every path - is on
 [The service & where things live](/reference/service/).
@@ -1223,9 +1275,11 @@ itself. No Go toolchain is involved. In order, it:
 
 1. resolves the latest release and downloads the archive for your platform
    (macOS, Linux, and Windows; amd64 and arm64), **verifying its SHA-256**
-   against the release's `checksums.txt` before unpacking anything; when
-   `cosign` is available it also verifies that manifest's keyless signature
-   against this repository's release workflow identity;
+   against the release's `checksums.txt` before unpacking anything, and checks
+   that manifest's hardware-key signature from the project's owner
+   ([below](#security-posture)); when `cosign` is available it also verifies
+   the manifest's keyless signature against this repository's release
+   workflow identity;
 2. asks the new [`seamlessd setup`](/reference/cli-seamlessd/#seamlessd_setup)
    how this computer will be used, before anything is installed:
    **Standalone** (everything on this computer, the default) or **Networked** -
@@ -1468,8 +1522,12 @@ default. See [Update & uninstall](/updating/#uninstall).
 What you are accepting when you run this:
 
 - **One static bearer key** guards `/api/mcp` and the console. Not JWT, not
-  OAuth, no user accounts. It is a single-user local tool and the key is in your
-  config file with `0600` permissions.
+  OAuth, no user accounts. It is a single-user tool and the key is in your
+  config file with `0600` permissions. Three things narrow its role:
+  [passkey sign-in](/reference/console/#sign-in-with-a-passkey) stops it
+  signing a browser in to the console, a [paired computer](/concepts/networked/#pairing)
+  holds a credential of its own, and under [peer_auth](/guides/peer-auth/) a
+  caller on the Unix socket needs no key at all - the kernel names it.
 - **Default agent registrations do not copy that key.** Claude Code calls
   `seam mcp-headers` through `headersHelper`; Codex launches `seam mcp-proxy`.
   Both read the 0600 Seamless config at connection time, and neither puts the
@@ -1503,7 +1561,7 @@ What you are accepting when you run this:
   [automatic update](/updating/#automatic-updates) adds the same downloads
   `seamlessd update` makes. `update.check: false` turns both off and means no
   update traffic at all.
-- **Release authenticity has two layers.** Every installer verifies the
+- **Release authenticity has three layers.** Every installer verifies the
   archive's SHA-256 against `checksums.txt`. When `cosign` is installed it also
   verifies the manifest's keyless signature against this repository's release
   workflow identity; without cosign it warns clearly and continues with checksum
@@ -1529,7 +1587,8 @@ What you are accepting when you run this:
   the owner's signatures and installs as before.
 - **The trust root of a fresh install is the site.** The installer you pipe to
   a shell is served from thereisnospoon.org, which publishes only from release
-  tags, and the keys it checks the owner's signature against are the ones it
+  tags and the maintainers' `site-*` tags, and the keys it checks the owner's
+  signature against are the ones it
   carries. So a fresh install trusts whoever can publish the site - TLS
   authenticates the host, nothing authenticates the script before it runs.
   What the installer's checks then add is that a release whose assets the
@@ -1553,12 +1612,13 @@ name, its certificate, and a bind that holds every address of the name.
    (TLS 1.2 floor) and marks the console session cookie `Secure`. Without it
    the bearer key, every hook payload, and the whole console travel in the
    clear; `seamlessd doctor` reports that as a warning on the `bind` line.
-3. **Keep the blast radius small.** There is still no rate limiting, no user
-   accounts, and no per-client authorization: one key admits the whole corpus,
-   and so does every computer paired with the Server. Only
-   [locked projects](/guides/peer-auth/) close a project to them. A network you
-   trust - your LAN, your tailnet - is the supported boundary. The public
-   internet is not.
+3. **Keep the blast radius small.** There is still no rate limiting and no
+   user accounts: one key admits the whole corpus, and so does every computer
+   paired with the Server. [Locked projects](/guides/peer-auth/) close a
+   project to them, and under `peer_auth` a relay's
+   [restricted accounts](/guides/peer-auth/#restricted-local-accounts) reach
+   only what you list. A network you trust - your LAN, your tailnet - is the
+   supported boundary. The public internet is not.
 
 [Share one daemon across your computers](/guides/network-install/) is the
 walkthrough - the Server's setup, each Client, pairing, and what a remote
@@ -1585,8 +1645,10 @@ manager and paths for you. The OS-specific detail all lives on
 
 Seamless is early in its development cycle: releases with improvements and bug
 fixes land often. From v0.7.0, an install made by the curl or PowerShell
-installer installs them by itself, once a release has been out for a day and
-nothing is using the daemon ([automatic updates](#automatic-updates)). Every
+installer installs them by itself once a release has been out for a day: when
+nothing is using the daemon, or, if that moment has not come within
+`update.max_defer` (a day by default), at a lull in requests, and past twice
+that even mid-request ([automatic updates](#automatic-updates)). Every
 other install checks for them and tells you when one is out
 ([automatic update checks](#automatic-update-checks)). Either way, updating
 right now is one command.
@@ -1761,8 +1823,10 @@ binary looks exactly like a bug in the new one.
 ## Automatic updates {#automatic-updates}
 
 From v0.7.0, an install made by the curl or PowerShell installer installs new
-releases by itself. It waits until a release has been out for a day, then until
-nothing is using the daemon, and then runs the same verified update
+releases by itself. It waits until a release has been out for a day, then
+until nothing is using the daemon. Once it has waited `update.max_defer` it
+settles for a lull in requests, and past twice that it installs even with a
+request in flight ([when](#when-it-installs)). It runs the same verified update
 `seamlessd update` does - backed up, confirmed, and rolled back if the new
 release does not come up. You can watch it, hurry it, or turn it off in
 **Settings -> Updates**.
@@ -1940,9 +2004,13 @@ says how to read it and recover.
 
 Every release after v0.8.3 carries a second signature over `checksums.txt`
 besides the Sigstore one: `checksums.txt.sshsig`, made by the project's owner
-with a hardware security key, in an attended session, after the release
-workflow built the release and before it was published. The Sigstore signature
-says the release workflow built it; this one says the owner released it.
+with a hardware security key, in an attended session, once the release's draft
+is complete and before it is published. A release is built in two places: the
+owner's Mac builds, signs and notarizes the macOS binaries, and the release
+workflow builds the Linux and Windows ones, accepts the macOS ones only when
+they match the sha256 manifest in the owner's signed tag, and signs
+`checksums.txt` with Sigstore. The Sigstore signature says the release workflow
+assembled the release; this one says the owner released it.
 Whoever holds a token that can push tags and approve the release workflow can
 produce the first, but not the second. `checksums.txt` lists every archive and
 both installer scripts, so the one signature covers everything an update runs.
@@ -2083,6 +2151,13 @@ place - the uninstall of a program should not delete your knowledge. Add
 `--purge` (or `make uninstall PURGE=1`) only when you actually mean to delete
 them; a guard refuses to purge a path that resolves to your home directory or the
 filesystem root. See [Storage](/reference/storage/) for what is in there.
+
+`--purge` deletes your backups too. `~/.seamless/backups` is inside the data
+directory, so the scheduled backups, the safety backups taken before a restore
+and the updater's pre-update archives go with it. Only a backup in a folder
+outside `~/.seamless` survives: one written to a `backup.dir` set elsewhere, or
+a `seamlessd export` archive saved outside it. Copy one out first if you may
+want the data back.
 
 The hooks come out of `~/.claude/settings.json` and Codex's `hooks.json` through
 the same exact classifier the installer and doctor use. Current, marked-stale,
@@ -3117,11 +3192,11 @@ URL: https://thereisnospoon.org/docs/concepts/how-it-works/
 Seamless is a local-first memory and coordination system for coding agents.
 The release ships a daemon (`seamlessd`) and its headless client (`seam`); one
 daemon process owns one SQLite database and one directory of markdown files,
-bound to loopback on your machine. Agents reach it over MCP,
+and by default it listens on loopback on your machine. Agents reach it over MCP,
 hooks make sessions ambient for Claude Code and Codex, and you watch through a
 read-mostly console. It is deliberately not a distributed system - one
-instance, one port, one data directory per machine. Everything below follows
-from that.
+daemon, one port, one data directory, however many computers use it.
+Everything below follows from that.
 
 ## One daemon, three surfaces
 
@@ -3147,8 +3222,11 @@ One daemon, three interfaces. Agents and hooks write through the same process; h
 - **You** get a read-mostly console. It is an observability surface, not the way
   the system is driven.
 
-One instance per machine, one port, one data directory. Not a distributed system,
-by choice.
+One daemon, one port, one data directory. Not a distributed system, by choice.
+Several computers can still share one store: in a
+[networked setup](/concepts/networked/) one computer, the Server, runs the
+daemon and keeps the data, and the others are Clients that keep no data of
+their own and reach it over the network, normally with TLS.
 
 ## Files are truth; the database is an index
 
@@ -3173,7 +3251,7 @@ folder of markdown files that a human - or any other tool - can read.
 
 ```text
 Write path
-1 · request memory_write Validate name, content, and scope
+1 · request memory_write Validate name, content, scope, and fence
 2 · durable act Atomic Markdown write Fail closed when scope is ambiguous
 3 · rebuildable FTS + embedding Index the exact file content
 4 · observable Append event Record what happened
@@ -3182,6 +3260,14 @@ The file is the durable boundary. SQLite mirrors make the knowledge searchable a
 
 The file write is the one that matters. Indexing after it can fail and be
 rebuilt; the file is already on disk.
+
+A write can also stop before step 2. One that would cross a
+[confidential or sealed](/concepts/project-isolation/) project's fence, or
+reach a project a [peer_auth](/guides/peer-auth/) caller may not, is refused.
+With [write screening](/guides/write-screening/) on, a suspicious one is held:
+it waits in a queue in the database, never under `memory/` or `notes/`, until
+you release it. [Security and privacy](/concepts/security/) covers how these
+fit together.
 
 ## The read path
 
@@ -3204,9 +3290,13 @@ All three are covered in [Recall](/concepts/recall/) and
 - **Not a vector database.** Vectors are float32 blobs in SQLite, scanned
   exactly. No ANN index, no separate service.
 - **Not a cloud service.** No account, no sync, and no outbound product
-  telemetry. The local event and retrieval telemetry shown in the console never
-  leaves the machine. The bind is loopback and the key is static. The only
-  requests Seamless makes unprompted are the anonymous
+  telemetry. The event and retrieval telemetry shown in the console goes to no
+  one but you. By default the daemon listens on loopback and
+  every caller presents one static key; a Server's paired computers hold
+  credentials of their own, a peer_auth daemon names each caller by its uid
+  instead of a key, and the console can sign in with a passkey
+  ([Security and privacy](/concepts/security/)). Apart from the LLM provider
+  you configure, the only requests Seamless makes unprompted are the anonymous
   [update check](/updating/#automatic-update-checks) against GitHub's release
   list and, on an install the installer made, the downloads that
   [install a newer release by itself](/updating/#automatic-updates).
@@ -3216,6 +3306,259 @@ All three are covered in [Recall](/concepts/recall/) and
 - **Not a chat memory.** It is not trying to remember your conversation. It
   remembers decisions, constraints, and dead ends across many agents and many
   months.
+
+---
+
+# Security and privacy
+
+URL: https://thereisnospoon.org/docs/concepts/security/
+
+
+Seamless holds what your agents learn about your work: its rules, its
+decisions, sometimes the names of its clients. This page is the map of how that
+is protected. It covers what a fresh install does, what can leave your
+computer, the five layers you can add when the work calls for them, and what
+none of them cover. Each layer has a guide of its own; this page says what each
+one is for and links there.
+
+## What Seamless defends against {#threat-model}
+
+An agent is capable and usually well behaved, and it can still be tricked. A
+web page, an issue, an email or a file it reads can carry instructions, and an
+agent that follows them acts with everything it can reach. Seamless is built
+around that case. Each layer narrows what a tricked agent can read, what it can
+plant for the sessions that come after it, and what it can open without you.
+
+The other risks are the usual ones for software that runs on your computer: a
+program elsewhere on your network, another account on the same computer, a
+release that is not what it claims to be, and lost data.
+
+## A fresh install {#fresh-install}
+
+A **Standalone** install, the installer's default, starts like this:
+
+- **It answers this computer only.** The daemon listens on `127.0.0.1:8081`,
+  and a request naming any host it does not serve gets `421`, which closes DNS
+  rebinding.
+- **A key guards it.** The first run writes a random 32-byte key into
+  `~/.config/seamless/seamless.yaml` with `0600` permissions. The agent
+  registrations read it from there when they connect; none copies it into the
+  agent's own config ([how](/install/#security-posture)). The console signs in
+  with it, or with a [passkey](/reference/console/#sign-in-with-a-passkey) once
+  you switch to passkey sign-in.
+- **Your knowledge is files on your disk.** Memories and notes are markdown
+  under `~/.seamless`, and sessions, tasks and events live in a SQLite file
+  beside them. There is no Seamless account and no hosted service.
+- **It backs itself up.** A release install takes a backup every day and keeps
+  the last seven, in `~/.seamless/backups`. A restore can be undone
+  ([backups](/guides/data/)).
+- **Updates prove where they came from** before they install
+  ([below](#releases-and-updates)).
+
+Every project starts `open`, and the five layers below start off.
+
+## What leaves your computer {#outbound}
+
+Seamless sends no usage data. On its own it makes one kind of request: a
+release build asks GitHub's release list for new versions every six hours,
+anonymously, and an install the installer made downloads the updates it
+installs. `update.check: false` turns all of that off.
+
+Everything else is something you set up or an agent asked for:
+
+- **A model provider, once you add its key.** With OpenAI or Anthropic
+  configured, the text of every memory and note is sent to the provider to be
+  embedded, from every project, fenced and locked ones included, and so is
+  each recall query. The gardener's monthly digests send a project's session
+  findings to the chat model, and `gardener_request` and `gardener_split` call
+  it when an agent invokes them. [Ollama](/reference/configuration/) keeps all
+  of it on your computer. With no provider, recall runs on full-text search
+  alone.
+- **`capture_url`** fetches only the URLs an agent asks for, on ports 80 and
+  443, and refuses private, loopback and link-local addresses.
+- **Your own computers.** A networked Client talks to your Server.
+- **The Touch ID approver**, if you choose to download it.
+
+Two things are outside Seamless's reach: what it puts in an agent's context
+travels to that agent's model provider with the rest of the conversation, and
+the agent's own client keeps its transcripts.
+
+## The five layers {#layers}
+
+The console's [Privacy](/reference/console/#privacy) screen draws these for
+your own server: which are on, which wait on an earlier one, and how far a
+compromised agent gets in each arrangement.
+
+```text
+From a fresh install inward
+1 · Project fences open · confidential · sealed Keep one project's knowledge away from agents working anywhere else.
+2 · Write screening held writes · provenance marks · quarantine Keep planted instructions and leaked secrets out of what agents read.
+3 · Seamless in its own account peer_auth Move the data out of your agents' reach, and let the kernel name every caller.
+4 · Locked projects Touch ID · passkey · seam approve A locked project opens only for an agent you approve, for as long as you choose.
+5 · Restricted agent accounts peer_auth.restricted Agents run as an account of their own and reach only what you open to it.
+Layers 1 and 2 work in any install, on every OS. Layers 3 to 5 build on each other and run on macOS and Linux.
+```
+
+### 1. Project fences {#fences}
+
+A project is `open` by default and shares the way a personal knowledge base
+should. Make it `confidential` and nothing in it reaches an agent working in
+another project, whether through briefings, recall, tool reads, family
+surfaces or the gardener. Make it `sealed` and nothing outside reaches in
+either: global memories and family stop at its edge. A refusal never echoes
+the content it protects.
+
+With access requests on, an agent that needs a fenced project asks, and you
+approve a read-only or read-and-write grant, or a move of the whole
+conversation into the project. What a conversation writes after reading fenced
+content carries a provenance stamp
+([project isolation](/concepts/project-isolation/)).
+
+A fence binds what Seamless serves. Until layer 3 it does not stop an agent
+that reads `~/.seamless` directly, and it trusts the session an agent says it
+belongs to.
+
+### 2. Write screening {#screening}
+
+Briefings and recall make the shared memory the most leveraged place to plant
+a prompt injection: a poisoned constraint reaches every session until someone
+notices. Write screening checks every agent write to a memory or note, on your
+computer, for secrets, instructions aimed at agents, hidden text and
+characters, long encoded blobs and links outside an allowlist.
+
+- A write that fails waits on the console's **Held** screen until you release
+  or discard it, and the agent is told not to rephrase its way past the hold.
+- A supersede or delete of a constraint is always held, and so is a change to
+  a rule from a session that read outside text.
+- Injected memories say whether you confirmed them or an agent wrote them.
+- A memory or note file changed on disk by anything but Seamless is
+  quarantined until you accept it, and a lockdown switch narrows briefings to
+  what you confirmed.
+
+It is off by default, and the console's Home welcome card offers it after
+install ([write screening](/guides/write-screening/)). The screens are
+heuristics: they catch the known shapes of an attack and surface the rest for
+review.
+
+### 3. Seamless in its own account {#own-account}
+
+Out of the box Seamless runs as you, so any program of yours can read its
+files and its key. `peer_auth` moves it into an operating-system account of its
+own with a `0700` data directory, and serves agents on a Unix socket where the
+kernel reports each caller's account. Your agents reach Seamless through that
+socket, and its data directory is out of their reach. The daemon refuses to start
+if another account could rewrite its data, its socket's directory, its config
+or its binary ([peer_auth](/guides/peer-auth/)).
+
+### 4. Locked projects {#locked}
+
+Under `peer_auth` you can lock a project. A locked project is closed to every
+agent, its own included, until you approve one:
+
+- in a terminal of your own, with `seam approve` and your password;
+- in the console, with a passkey;
+- with Touch ID, through the optional Seamless Approve app on a Mac with Apple
+  silicon.
+
+An approval is a lease on that agent's process tree, as the kernel reports it,
+for the session, an hour or four hours, capped at eight hours unless you
+change the cap. The Touch ID prompt is built from the daemon's facts, never
+from the agent's own words, so a request cannot dress itself up as something
+else ([locked projects](/guides/peer-auth/)).
+
+### 5. Restricted agent accounts {#restricted}
+
+Run unattended agents as an operating-system account of their own and list it
+under `peer_auth.restricted`. That account reaches the open, unlocked projects,
+or only the ones you name. It reads global memories without writing them,
+cannot create projects or ask for access, and its changes to binding rules wait
+for you on the Held screen
+([restricted local accounts](/guides/peer-auth/#restricted-local-accounts)).
+
+## Your other computers {#networked}
+
+Networked mode shares one daemon across your computers with no service in
+between ([networked Seamless](/concepts/networked/)):
+
+- The **Server** gets a name and a certificate at setup and serves https, TLS
+  1.2 or later.
+- A **Client** checks the Server's certificate fingerprint, then pairs with a
+  one-time code: 80 bits, ten minutes, used once, stored hashed. Pairing over
+  plain http is refused.
+- On macOS and Linux the Client runs a **relay** that pins the Server's exact
+  certificate, holds a client certificate of its own, and reports each local
+  caller's account and process chain. A Windows Client holds a key of its own
+  and never opens a locked project.
+- Every paired device can be revoked on the console's **Devices** page.
+
+Your own network or tailnet is the boundary. The public internet is not a
+supported one.
+
+## Releases and updates {#releases-and-updates}
+
+- The installers check every archive against the release's `checksums.txt`,
+  and that file against the maintainer's hardware-key signature
+  (`checksums.txt.sshsig`, on every release after v0.8.3) using the keys they
+  carry. With `cosign` installed they also verify its Sigstore signature.
+- `seamlessd update`, and every automatic update, verifies the release's
+  installer and `checksums.txt` against their Sigstore bundles in-process,
+  pinned to this repository's release workflow at that exact tag and to a
+  trusted root built into the binary, before it runs anything.
+- macOS binaries are signed with a Developer ID and notarized by Apple.
+- An automatic update waits a day after a release is published, backs up
+  first, and rolls back if the new version does not come up.
+- `update.release_signers` pins the maintainer's keys, so that every later
+  update needs their signature as well
+  ([owner-signed releases](/updating/#owner-signed-releases)).
+
+A fresh install trusts the site that serves the installer. Read the script
+first if that boundary matters to you.
+
+## For a security monitor {#monitoring}
+
+Two optional outputs let a separate tool watch what agents do without reading
+what they wrote: a **metadata feed** of every event to a Unix socket you name,
+and a **commit-matching snapshot** of the sessions and tasks that recorded each
+commit ([security monitor](/guides/security-monitor/)). Both are off by
+default.
+
+## What Seamless does not claim {#limits}
+
+- **No encryption at rest.** Memories and notes are plain markdown, the
+  database is plain SQLite, and backups are not encrypted. Disk encryption is
+  the operating system's job.
+- **Your own account, without layer 3.** Any program running as you can read
+  `~/.seamless` and the key, whatever the fences say.
+- **Root.** Root, and anyone who can become the daemon's account, reads
+  everything. A passwordless `sudo` to it voids the arrangement.
+- **What a session already read.** An approval that ends does not unread what
+  is in the agent's transcript.
+- **Seamless guards its own surfaces.** An agent can still copy what it read
+  into a file, a commit or a pull request.
+- **Hooks fail open.** A daemon that is down never blocks an agent, so a
+  session can start without its briefing.
+- **Your model provider.** Text you send for embeddings goes to the provider
+  you configure ([above](#outbound)).
+- **Windows** has no `peer_auth`, relay or Server role.
+
+## Choosing a setup {#choosing}
+
+| You want | Turn on | Guide |
+|---|---|---|
+| One person, one computer, ordinary projects | Nothing: a Standalone install | [Quickstart](/quickstart/) |
+| Client work that must not leak into other projects | `confidential` or `sealed` on those projects | [Project isolation](/concepts/project-isolation/) |
+| Agents that read the web, issues or email | Write screening | [Write screening](/guides/write-screening/) |
+| A project even your own agents open only with your approval | `peer_auth`, then lock the project | [peer_auth](/guides/peer-auth/) |
+| Unattended agents with a narrower reach | A restricted agent account | [Restricted accounts](/guides/peer-auth/#restricted-local-accounts) |
+| One memory across your computers | Networked mode | [Network install](/guides/network-install/) |
+
+## Report a security problem {#report}
+
+Report a vulnerability privately through
+[GitHub's private vulnerability reporting](https://github.com/arctop/seamless/security/advisories/new),
+not in a public issue. The repository's
+[security policy](https://github.com/arctop/seamless/blob/main/SECURITY.md)
+says what is in scope.
 
 ---
 
@@ -3247,12 +3590,20 @@ updated: 2026-07-10T18:00:00Z
 valid_from: 2026-07-10T18:00:00Z
 invalid_at: null           # set on supersession/archive; invalid memories leave indexes
 superseded_by: null        # ULID of the replacement
-source_session: cc/019f7291-7ccbc0d8f16e51a4
+source_session: 01K...     # ULID of the session that first wrote it
 model: claude-fable-5      # the model that produced the content, as the provider names it
+favorite: true             # present only while the memory is starred
 tags: [x, y]
 ---
 body markdown
 ```
+
+Two more keys appear only with optional features: `account` names the
+[restricted local account](/guides/peer-auth/#restricted-local-accounts) that
+wrote the content, and `may_contain` lists
+[provenance stamps](/concepts/project-isolation/#provenance-stamps) naming the
+fenced projects whose content the writing conversation held.
+[Storage](/reference/storage/#memory-frontmatter) has every field.
 
 ## The description is the product
 
@@ -3297,9 +3648,10 @@ after `gardener.stale_stage_days` (14). A milestone breadcrumb ("X landed") is
 a note or a finding, not a stage - written as a stage without a live gate, it
 now expires instead of pinning forever.
 
-Update a stage's status by re-writing it with `memory_write` (same name, in
-place) - `memory_append` adds below the existing body and cannot change the
-header, which is parsed from the top of the body. And the rule of thumb that
+Update a stage's status with `memory_edit` (replace the `Status:` line) or by
+re-writing it with `memory_write` (same name, in place) - `memory_append` adds
+below the existing body and cannot change the header, which is parsed from the
+top of the body. And the rule of thumb that
 keeps stages out of the task queue: a task is work someone here can claim and
 finish; a stage is a state of the world you wait on that every session must
 know while it holds.
@@ -3335,10 +3687,11 @@ means the reasoning is gone and the same argument happens again in six weeks.
 [Memory supersession](/concepts/memory-supersession/) defines the idea on its
 own and contrasts it with decay-style forgetting as well.
 
-## Update, append, supersede, or delete
+## Edit, update, append, supersede, or delete
 
 | You want to | Use |
 |---|---|
+| Fix part of *this* memory without resending it - a typo, a stale path, a stage's `Status`, its description or tags | `memory_edit` (exact search/replace; returns a diff) |
 | Correct or extend what *this* memory says | `memory_write`, same `name` (updated in place, id stable) |
 | Add to the end without rereading it | `memory_append` |
 | Replace a **different**, now-outdated memory | `memory_write` with `supersedes` |
@@ -3346,7 +3699,9 @@ own and contrasts it with decay-style forgetting as well.
 
 The line that matters: **delete is for things that were never true; supersede is
 for things that stopped being true.** Deleting the latter destroys the history
-that explains the current state.
+that explains the current state. `memory_edit` has a line of its own: it is
+for changes that carry no new claim. When what the memory says changes, write
+the new memory with `supersedes`, so the old one stays readable as history.
 
 Never hand-stamp `invalid_at` or `superseded_by` in a file. They are set by the
 supersede path, which also updates the indexes; editing them by hand leaves the
@@ -3424,11 +3779,11 @@ process adopts the sole active ambient session sharing its working directory. A
 caller that names its process but owns no live session is never handed another
 agent's.
 
-That distinction also appears in knowledge provenance. A write attributed by an
-ambient hook stores the session's `cc/...` or `cx/...` **name** in
-`source_session`; a write made through a bound MCP connection stores the
-session's ULID. Readers resolve both forms. Do not infer client, scope, or
-liveness from the spelling of `source_session`.
+Knowledge provenance is recorded the same way for both. A memory's
+`source_session` holds the writing session's **ULID**, never its `cc/...` or
+`cx/...` handle, whether the agent's calls were bound to an ambient session or
+by `session_start`. Readers resolve a session name there too, so do not infer
+client, scope, or liveness from the spelling of `source_session`.
 
 ## How tool calls find their session {#process-binding}
 
@@ -4198,11 +4553,15 @@ Precedence is also the safety model. Broader fallback stops before it could sile
 
 Worked through, rung by rung:
 
-**1. An explicit `project` argument.** You said it, so it happens. This is also
+**1. An explicit `project` argument.** You said it, so it happens, unless a
+fence refuses it ([isolation](#isolation-and-locked-projects)). This is also
 how you deliberately reach another project (`project: otherrepo`) or the global
 scope (`project: global`). A slug Seamless has never seen is **not** an error: the
 write registers it, and the new project appears in `project_list` and the console
-like any other. Naming a project into existence is an ordinary thing to do.
+like any other. Naming a project into existence is an ordinary thing to do, and
+one named by mistake is retired with
+[`seamlessd retire-project`](/reference/cli-seamlessd/#seamlessd_retire_project)
+once it holds nothing active and no repo maps to it.
 
 **2. The bound session.** A connection bound to a session passes that session's
 project to every later call on it. A Claude Code or Codex agent is bound
@@ -4271,7 +4630,9 @@ repos sharing a directory name still get distinct projects (`backend`,
 `backend-2`) so unrelated repos never inherit each other's memories. The one
 case the healing cannot recognize is a repo that was moved *and renamed* - it
 derives a different slug - and that is what the override below is for.
-`seamlessd doctor` lists mapped paths that no longer exist.
+`seamlessd doctor` lists mapped paths that no longer exist, and
+[`seamlessd unmap-repo --stale`](/reference/cli-seamlessd/#seamlessd_unmap_repo)
+removes them.
 
 Map by hand only to override the derived slug - an `ios` directory that should be
 the `example-ios` project, or a renamed repo that should keep its old project:
@@ -4302,6 +4663,21 @@ Two briefing knobs control the cross-over:
 Splitting one project into children is planned as a unit - see
 [The gardener](/concepts/gardener/), which handles it as a `split` rather than a
 pile of individual moves.
+
+## Isolation and locked projects {#isolation-and-locked-projects}
+
+By default projects are cooperative: any agent can read or write any project by
+naming it. **Isolation** is the per-project setting that draws a boundary:
+`open` (the default), `confidential` (nothing leaves the project, and its own
+sessions cannot write outside it), or `sealed` (nothing enters or leaves). A
+fenced project stands outside any family, and a read or write across its fence
+is refused rather than redirected. See
+[Project isolation](/concepts/project-isolation/).
+
+**Locked** is a separate setting: even a locked project's own agents reach it
+only after you approve each one, for a limited time. It needs
+[peer_auth](/guides/peer-auth/), and a locked project is also confidential or
+sealed. See [Lock projects behind your approval](/guides/peer-auth/).
 
 ## When scope goes wrong
 
@@ -5737,10 +6113,17 @@ wait for your release instead of reaching every briefing.
 a metadata feed of events tells a monitor what agents did as it happens, and a
 snapshot of sessions, tasks and the commits they recorded lets it flag the
 commits no tracked work accounts for.
+[Lock projects behind your approval](/guides/peer-auth/) is for when the threat
+is your own account: with peer_auth, the daemon runs as an OS account of its
+own, names each caller by its uid, and opens a locked project to an agent only
+after you approve it. [Security and privacy](/concepts/security/) explains how
+these fit together.
 
 The last three are operational. [Import, back up & restore](/guides/data/) covers
-putting `~/.seamless` in git, what deleting `seam.db` actually costs (an index
-rebuild, not data loss), and moving to a new machine.
+the daily backups a release install takes on its own and restoring one from the
+console, putting `~/.seamless` in git, what deleting `seam.db` actually costs
+(the record of sessions, tasks, trials and events, never a memory or note), and
+moving to a new machine.
 [Share one daemon across your computers](/guides/network-install/) is the
 opt-in multi-computer shape: the Server's setup, each Client, pairing on the
 Devices page, approvals from any browser, and the daemon-side captures a
@@ -12120,7 +12503,8 @@ error, not a doc bug.
 
 Agents mostly care about the [MCP API](/reference/mcp/): the endpoint and auth
 model, the scope rules, and every tool grouped by area - sessions, memory and
-recall, notes and projects, tasks, and the research lab. Humans get the two
+recall; notes, projects and capture; tasks; the research lab, the gardener and
+usage; and repo locks. Humans get the two
 CLIs: [seam](/reference/cli-seam/), the short handle an agent or owner types,
 and [seamlessd](/reference/cli-seamlessd/), the daemon and operator commands.
 
@@ -13271,9 +13655,11 @@ Its passes:
 | stale-stage | A `stage` memory whose gate is done, missing, or unparseable, unchanged for `gardener.stale_stage_days`. Proposes an **archive**. |
 | dead-weight | A memory briefings keep injecting with zero recall hits, prompt matches, or reads. Proposes an **archive**. |
 | digest | Enough recent activity to be worth a summary over `gardener.digest_days`. Proposes a **digest** note. |
-| stale-plan | Plans idle for `gardener.stale_plan_days` with steps still open. |
+| stale-plan | A captured plan still unapproved after `gardener.stale_plan_days`. Proposes settling it: **ship_plan** when commits show the work landed, **merge_plans** when another composition holds its steps, **abandon_plan** otherwise. |
+| stale-copy | A memory with a [provenance stamp](/concepts/project-isolation/#provenance-stamps) whose cited source in another project changed after the memory was written. Proposes an **archive**. |
 | memory-wanted | The same recall query missing across sessions. Proposes a **memory_wanted**: applying opens a task to write the knowledge agents keep searching for. |
 | tool-error | The same normalized tool or hook error recurring (tool errors across 2+ sessions). Proposes a **tool_error**: applying opens an investigation task with the observed evidence. |
+| copy-relocate | A stamped memory whose stamps and source references all name one other project. Proposes a **relocate** into that project. |
 
 Constraints and pinned stages are never age-filtered or staleness-archived. A
 constraint does not become less true by sitting still.
@@ -13309,8 +13695,10 @@ answers, for an agent that cannot open a browser.
 ## favorite_set
 
 `favorite_set` stars or unstars an item - a memory, note, project, plan, task,
-session, or trial. A starred memory is pinned into every session briefing as a
-`FAVORITE:` line and gets a mild recall rank boost; in the console, favorites
+session, or trial. A starred memory keeps a pinned place in its project's
+briefings, inside its own section: a starred constraint or convention heads
+that section, any other starred memory heads the Memories list, and no trim or
+budget drops it. It also gets a mild recall rank boost; in the console, favorites
 carry a star, sort first, and can be filtered. For memories and notes the flag
 lives in the file's frontmatter (`favorite: true`), so it survives an index
 rebuild and can be hand-edited. A plan's favorite lives on its primary note, so
@@ -17444,9 +17832,13 @@ A Codex session's line carries its `cx/...` handle.
 
 ## Why Claude Code uses two transports
 
-Six of the Claude Code hooks are `command`, one is `http`. (Codex, above, uses
-`command` for all five - its trust gate applies only to command hooks.) The
-split is not stylistic:
+Against a plain-http loopback daemon, six of the Claude Code hooks are
+`command` and one is `http`. (Codex, above, uses `command` for all five - its
+trust gate applies only to command hooks.) Against an `https://` or `unix://`
+`server_url` - a networked Client, a relay, a peer_auth socket - all seven are
+`command` hooks
+([why](/claude-code/#https-and-socket-servers)). Where the split exists, it is
+not stylistic:
 
 - **`SessionStart` must be a command hook.** Claude Code only runs
   `command`/`mcp_tool` hooks for `SessionStart`. An `http` hook there is silently
@@ -20010,7 +20402,7 @@ updated: 2026-07-10T18:00:00Z
 valid_from: 2026-07-10T18:00:00Z
 invalid_at: null
 superseded_by: null
-source_session: cc/019f7291-7ccbc0d8f16e51a4
+source_session: 01K...
 model: claude-fable-5
 tags: [x, y]
 ---
@@ -20031,10 +20423,12 @@ Field by field:
 | `valid_from` | system | RFC3339. Start of the validity window. |
 | `invalid_at` | **system only** | RFC3339 or `null`. `null` means active. Set on supersession or archive; a memory with it set leaves every active index. |
 | `superseded_by` | **system only** | ULID of the replacement, or `null`. |
-| `source_session` | system | Provenance - an ambient session name such as `cc/019f7291-7ccbc0d8f16e51a4`, or the ULID of a bound explicit session. Consumers resolve both; treat names as opaque. |
+| `source_session` | system | Provenance - the ULID of the session that first wrote the memory, whether its calls were bound to an ambient session or by `session_start`. A rewrite keeps it. Consumers also resolve a session name (`cc/...`, `cx/...`) here; treat names as opaque. Omitted when no session was bound. |
 | `model` | system | The model that produced the content, verbatim as the provider names it (`claude-fable-5`, `gpt-5.5`). Stamped from the writing session; a rewrite by a known model re-attributes, an unknown one preserves the prior value. Omitted when unknown. |
-| `favorite` | author | `true` when starred (console, `seam fav`, or `favorite_set`). A starred memory is pinned into every briefing and boosted in recall. Omitted when false; hand-editing it works - the watcher reindexes. Starring never bumps `updated`. |
+| `account` | system | The [restricted local account](/guides/peer-auth/#restricted-local-accounts) that wrote the current content, as the kernel named it. Omitted for the owner and on every install without restricted accounts. |
+| `favorite` | author | `true` when starred (console, `seam fav`, or `favorite_set`). A starred memory is pinned within its section of its project's briefings and boosted in recall. Omitted when false; hand-editing it works - the watcher reindexes. Starring never bumps `updated`. |
 | `tags` | author | Flow-style list. Omitted when empty. Also the `plan:<slug>` composition key. |
+| `may_contain` | system | [Provenance stamps](/concepts/project-isolation/#provenance-stamps): one entry per confidential or sealed project whose content the writing conversation held, naming the grant or move that let it in. Written only with `isolation.requests` on, and no write removes one. |
 
 Timestamps are RFC3339 strings on disk. Any key not in that set is preserved
 verbatim through a parse/render round-trip (Obsidian plugin fields and the like
@@ -20093,8 +20487,9 @@ body markdown
 omitted when empty (or, for `favorite`, false). `source_url` is set when the
 note came from `capture_url`; `model` is the producing model, stamped exactly
 as for memories; `favorite` marks a starred note, exactly as for memories.
-Empty `project` means `notes/_global/`. Unknown keys round-trip losslessly,
-same as memories.
+`account` and `may_contain` appear on notes exactly as on memories, and only
+when set. Empty `project` means `notes/_global/`. Unknown keys round-trip
+losslessly, same as memories.
 
 ## What lives only in SQLite
 
@@ -20132,8 +20527,8 @@ so losing `seam.db` loses them:
   utility score with its per-signal demand breakdown, rebuilt from events.
 - `projects` - slugs, parent topology, retirement.
 - `gardener_proposals` - pending proposals, one row per kind-and-key
-  (merge, consolidate, archive, digest, reproject, rekind, split, abandon-plan,
-  memory-wanted, tool-error).
+  (merge, consolidate, archive, digest, reproject, rekind, split, relocate,
+  abandon-plan, ship-plan, merge-plans, memory-wanted, tool-error).
 - `settings` - `repo_project_map`, project families, the runtime briefing
   overrides the console writes, the console's update override (checks and
   automatic updates), the per-scope utility-activation latch, and the embedder
@@ -20311,9 +20706,22 @@ or Codex SessionStart hook, without the agent asking, displayed with an opaque
 `cc/...` or `cx/...` handle. Lifecycle identity uses the full external session
 ID plus client, not the display handle. Contrast *explicit session*.
 
+**Approver** - a credential that signs your approval of an agent's access to a
+*locked project*: a passkey, or on a Mac a Touch ID key kept by the Seamless
+Approve app. Each is enrolled once, with a one-time code only the daemon's
+account can mint. None is required: `seam approve` in your own terminal
+approves with `sudo` as the proof. See [Enroll an
+approver](/guides/peer-auth/#enroll-an-approver).
+
 **Archive** - marking a Seamless memory invalid because it is no longer
-relevant: it leaves the indexes and stays readable. Proposed by the gardener's
-staleness pass, never done to a `constraint` or a pinned `stage`.
+relevant: it leaves the indexes and stays readable. The gardener's staleness
+pass proposes it, and never for a `constraint` or a pinned `stage`.
+
+**Backup** - one archive of a whole Seamless instance, of the kind `seamlessd
+export` writes: every memory and note, a snapshot of the database, and a list
+of what each project holds. A release install takes one every day and keeps
+the newest 7 in `~/.seamless/backups`; **Settings > Backups** in the console
+lists and restores them. See [Import, back up & restore](/guides/data/).
 
 **Binding** - the association between an MCP connection and a Seamless session,
 set by `session_start` or, for a Claude Code or Codex agent, automatically
@@ -20327,6 +20735,15 @@ briefings](/concepts/sessions/).
 
 **Claim** - an atomic, leased hold on a Seamless task, taken with `tasks_claim`;
 exactly one agent can hold a live claim.
+
+**Client** - in a networked Seamless setup, a computer whose agents use the
+*Server*'s daemon and data. It runs no daemon and keeps no data of its own, and
+reaches the Server through a *relay* or with a key. See [Networked
+Seamless](/concepts/networked/).
+
+**Confidential** - the *isolation* state in which nothing leaves a Seamless
+project: sessions bound elsewhere cannot read it, and its own sessions cannot
+write outside it. Its agents still read global memories and open projects.
 
 **Console** - Seamless's read-mostly web UI at `/console`, an observability
 surface for the human owner; agents use MCP.
@@ -20374,7 +20791,22 @@ gate`) blocks, is not ready; a person's action clears it. See [Tasks &
 plans](/concepts/tasks-and-plans/#gates).
 
 **Global** - the Seamless scope with no project, visible to every agent in
-every repo; reached only by passing `project: global` deliberately.
+every repo. A write lands there when it passes `project: global`, or when it
+comes from a session bound to the global scope: a `session_start` with neither
+`project` nor `cwd`, or a session started outside any git repo. A write with no
+scope at all is refused rather than defaulted here (see *fail closed*).
+
+**Held write** - an agent write that *write screening* kept out of the corpus:
+one that failed a screen, a change to a binding rule from a session that read
+outside text, or a supersede, delete or demotion of a constraint. It waits in a
+queue in the database, never under `memory/` or `notes/`, until you release or
+discard it on the console's **Held** screen. The agent is told it is held.
+
+**Isolation** - a Seamless project's fence: `open` (the default),
+*confidential* (nothing leaves) or *sealed* (nothing enters or leaves). It
+governs what flows in and out of a project; whether even its own agents need
+your approval first is the separate *locked project* setting. See [Project
+isolation](/concepts/project-isolation/).
 
 **Kind** - a Seamless memory's type: `constraint`, `convention`, `runbook`,
 `protocol`, `gotcha`, `decision`, `refuted`, `reference`, or `stage`. See
@@ -20383,9 +20815,21 @@ every repo; reached only by passing `project: global` deliberately.
 **Lab** - a shared Seamless workspace for a systematic investigation, holding
 trials; opened with `lab_open`.
 
-**Lease** - the expiry on a Seamless task claim (default 900 seconds).
-Re-claiming refreshes it; an expired lease is reclaimable, so a crashed agent
-does not strand a task.
+**Lease** - a time limit on something held in Seamless. A task claim's lease
+(default 900 seconds) and a *repo lock*'s are refreshed by claiming or
+acquiring again, and once one runs out the task or lock is free to take, so a
+crashed agent strands nothing. Under *peer_auth*, your approval of an agent's
+access to a *locked project* is a lease too: it covers that agent's process
+tree until it expires, its session ends or you revoke it, and nothing extends
+it. See [Lease-based task claiming](/concepts/lease-based-task-claiming/) and
+[Leases and the process tree](/guides/peer-auth/#leases-and-the-process-tree).
+
+**Locked project** - a Seamless project that stays closed to every agent of
+yours until you approve one agent's access, for a limited time, with a proof
+the agent cannot produce: Touch ID, a passkey, or your own `sudo`. It needs
+*peer_auth* and is also confidential or sealed. You lock one from its Overview
+with a passkey, or force it in the config file (`peer_auth.force_locked`). See
+[Lock projects behind your approval](/guides/peer-auth/).
 
 **Memory** - in Seamless, a markdown file with YAML frontmatter holding one
 durable piece of knowledge; the unit that reaches briefings.
@@ -20393,6 +20837,28 @@ durable piece of knowledge; the unit that reaches briefings.
 **Note** - in Seamless, a markdown file holding a work artifact - research
 findings, a meeting summary, a design record; found via recall, never injected
 into a briefing.
+
+**Open** - the default *isolation* state: the project shares normally, global
+knowledge flows in, and family surfaces may include it.
+
+**Owner signature** - the second signature on a Seamless release,
+`checksums.txt.sshsig`, made by the owner with a hardware security key before
+the release is published. The installers check it on every release that has
+one; the updater checks it only when `update.release_signers` pins the owner's
+keys. See [Owner-signed releases](/updating/#owner-signed-releases).
+
+**Pairing** - how a *Client* gets a credential of its own from the *Server*: a
+one-time code from the console's Devices page (or `seamlessd devices code`),
+after which the computer holds a key, or for a *relay* a TLS client
+certificate, that you can revoke. Under *peer_auth* the code alone pairs
+nothing until you approve the computer with a passkey. See
+[Pairing](/concepts/networked/#pairing).
+
+**peer_auth** - the optional Seamless deployment in which the daemon runs as an
+OS account of its own and names each caller by the uid the kernel reports for
+its Unix-socket connection, never by anything the caller sends. *Locked
+projects* and *restricted local accounts* rest on it. macOS and Linux only, and
+off by default. See [Lock projects behind your approval](/guides/peer-auth/).
 
 **Plan** - in Seamless, not a primitive but a composition keyed by
 `plan:<slug>`: a narrative note, supporting notes, and step tasks. See [Tasks &
@@ -20402,7 +20868,8 @@ plans](/concepts/tasks-and-plans/).
 resolved from an explicit argument, a bound session, or the agent's cwd.
 
 **Proposal** - the Seamless gardener's output: a suggestion for the owner to
-review, applied only with `gardener_apply`.
+review, applied only when someone decides to, with `gardener_apply` or from the
+console's Gardener inbox.
 
 **Provenance** - the Seamless record of where knowledge came from and what
 replaced it: `source_session`, `superseded_by`, `invalid_at`.
@@ -20414,6 +20881,12 @@ replaced it: `source_session`, `superseded_by`, `invalid_at`.
 and vector similarity with RRF. Also, loosely, the `<seam-recall>` block
 injected on prompt match - see the disambiguation below.
 
+**Relay** - the small daemon on a macOS or Linux *Client*, run by an account of
+its own, that serves the local socket its agents dial and forwards each request
+to the *Server* over TLS with its own client certificate, carrying the caller's
+uid and process chain. A computer with a relay holds no bearer key. See [The
+relay](/concepts/networked/#the-relay).
+
 **Repo lock** - a Seamless lock on a repository's refs (its main branch, or a
 tag pattern), declared once per repository and name and held with a lease by
 one session while it lands changes. It belongs to the repository, never to a
@@ -20424,8 +20897,25 @@ for a busy one queue for it and take it first come, first served
 **Reproject** - moving a Seamless memory to a different project that **already
 exists**; moving it to one that does not is a *split*.
 
+**Restricted local account** - a second OS account whose agents work beside
+yours under *peer_auth*, listed in `peer_auth.restricted`. It reaches every
+open project that is not locked, reads the global scope without writing it, and
+everything it writes is labeled with its name. The console's Privacy screen
+calls it a "Restricted agent account". See [Restricted local
+accounts](/guides/peer-auth/#restricted-local-accounts).
+
 **RRF (reciprocal rank fusion)** - the method Seamless recall uses to combine
 the keyword and vector rankings so neither retriever gets a veto.
+
+**Sealed** - the *isolation* state in which nothing enters or leaves a Seamless
+project: *confidential* plus no global memories, no family, and no
+cross-project reads in either direction. Its agents are told the mode in their
+briefing.
+
+**Server** - in a networked Seamless setup, the one computer that runs the
+daemon and keeps the data for every computer; its *Clients* reach it over the
+network. macOS or Linux, never Windows. See [Networked
+Seamless](/concepts/networked/).
 
 **Session** - one agent's stretch of work in Seamless. Sessions heartbeat; an
 idle one is reaped and marked `expired`.
@@ -20433,8 +20923,14 @@ idle one is reaped and marked `expired`.
 **Split** - dividing one Seamless project into new child projects, creating
 them and a shared parent; planned as a unit by `gardener_split`.
 
-**Stage** - the Seamless memory kind recording where multi-session work stands;
-pinned into briefings like a constraint.
+**Stage** - the Seamless memory kind recording where multi-session work stands.
+It is pinned into briefings while its `Status:` header names a live gate
+(`open`, `in_progress` or `blocked`); `done` unpins it, and a stage with no
+readable header leaves the briefing after a grace window. See [Memory &
+notes](/concepts/memory/).
+
+**Standalone** - the default Seamless setup: the daemon, the data and the
+agents that use them, all on one computer. Contrast *Server* and *Client*.
 
 **Supersede** - replacing an outdated Seamless memory with a new one: the old
 is marked invalid, leaves the indexes, and stays readable pointing at its
@@ -20445,6 +20941,12 @@ expected, what happened.
 
 **ULID** - the id format Seamless uses everywhere, sortable by creation time.
 Never UUID.
+
+**Write screening** - the optional Seamless feature that screens every agent
+write to a memory or note for secrets, injection markers, hidden characters,
+encoded blobs and unlisted links, and keeps the suspicious ones as *held
+writes* for you to release. Off by default. See [Screen writes and hold the
+suspicious ones](/guides/write-screening/).
 
 ## Four distinctions worth getting right
 

@@ -46,7 +46,7 @@ updated: 2026-07-03T09:12:44Z
 valid_from: 2026-07-03T09:12:44Z
 invalid_at: null
 superseded_by: null
-source_session: cc/1a2b3c4d
+source_session: 01JZFJ3QK7Y2M8D4R6T1VNB5XC
 ---
 
 Keep the session and refresh cookies on SameSite=Lax; do not move them to

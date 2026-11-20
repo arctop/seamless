@@ -3,6 +3,7 @@
   <url><loc>https://thereisnospoon.org/</loc></url>
   <url><loc>https://thereisnospoon.org/compare/</loc></url>
   <url><loc>https://thereisnospoon.org/claude-app/</loc></url>
+  <url><loc>https://thereisnospoon.org/security/</loc></url>
   <url><loc>https://thereisnospoon.org/scenarios/cold-start/</loc></url>
   <url><loc>https://thereisnospoon.org/scenarios/constraint-violation/</loc></url>
   <url><loc>https://thereisnospoon.org/scenarios/token-safety/</loc></url>
@@ -18,6 +19,7 @@
   <url><loc>https://thereisnospoon.org/docs/changelog/</loc></url>
   <url><loc>https://thereisnospoon.org/docs/concepts/</loc></url>
   <url><loc>https://thereisnospoon.org/docs/concepts/how-it-works/</loc></url>
+  <url><loc>https://thereisnospoon.org/docs/concepts/security/</loc></url>
   <url><loc>https://thereisnospoon.org/docs/concepts/memory/</loc></url>
   <url><loc>https://thereisnospoon.org/docs/concepts/sessions/</loc></url>
   <url><loc>https://thereisnospoon.org/docs/concepts/recall/</loc></url>

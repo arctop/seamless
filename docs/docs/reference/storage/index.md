@@ -61,7 +61,7 @@ updated: 2026-07-10T18:00:00Z
 valid_from: 2026-07-10T18:00:00Z
 invalid_at: null
 superseded_by: null
-source_session: cc/019f7291-7ccbc0d8f16e51a4
+source_session: 01K...
 model: claude-fable-5
 tags: [x, y]
 ---
@@ -82,10 +82,12 @@ Field by field:
 | `valid_from` | system | RFC3339. Start of the validity window. |
 | `invalid_at` | **system only** | RFC3339 or `null`. `null` means active. Set on supersession or archive; a memory with it set leaves every active index. |
 | `superseded_by` | **system only** | ULID of the replacement, or `null`. |
-| `source_session` | system | Provenance - an ambient session name such as `cc/019f7291-7ccbc0d8f16e51a4`, or the ULID of a bound explicit session. Consumers resolve both; treat names as opaque. |
+| `source_session` | system | Provenance - the ULID of the session that first wrote the memory, whether its calls were bound to an ambient session or by `session_start`. A rewrite keeps it. Consumers also resolve a session name (`cc/...`, `cx/...`) here; treat names as opaque. Omitted when no session was bound. |
 | `model` | system | The model that produced the content, verbatim as the provider names it (`claude-fable-5`, `gpt-5.5`). Stamped from the writing session; a rewrite by a known model re-attributes, an unknown one preserves the prior value. Omitted when unknown. |
-| `favorite` | author | `true` when starred (console, `seam fav`, or `favorite_set`). A starred memory is pinned into every briefing and boosted in recall. Omitted when false; hand-editing it works - the watcher reindexes. Starring never bumps `updated`. |
+| `account` | system | The [restricted local account](https://thereisnospoon.org/docs/guides/peer-auth/#restricted-local-accounts) that wrote the current content, as the kernel named it. Omitted for the owner and on every install without restricted accounts. |
+| `favorite` | author | `true` when starred (console, `seam fav`, or `favorite_set`). A starred memory is pinned within its section of its project's briefings and boosted in recall. Omitted when false; hand-editing it works - the watcher reindexes. Starring never bumps `updated`. |
 | `tags` | author | Flow-style list. Omitted when empty. Also the `plan:<slug>` composition key. |
+| `may_contain` | system | [Provenance stamps](https://thereisnospoon.org/docs/concepts/project-isolation/#provenance-stamps): one entry per confidential or sealed project whose content the writing conversation held, naming the grant or move that let it in. Written only with `isolation.requests` on, and no write removes one. |
 
 Timestamps are RFC3339 strings on disk. Any key not in that set is preserved
 verbatim through a parse/render round-trip (Obsidian plugin fields and the like
@@ -144,8 +146,9 @@ body markdown
 omitted when empty (or, for `favorite`, false). `source_url` is set when the
 note came from `capture_url`; `model` is the producing model, stamped exactly
 as for memories; `favorite` marks a starred note, exactly as for memories.
-Empty `project` means `notes/_global/`. Unknown keys round-trip losslessly,
-same as memories.
+`account` and `may_contain` appear on notes exactly as on memories, and only
+when set. Empty `project` means `notes/_global/`. Unknown keys round-trip
+losslessly, same as memories.
 
 ## What lives only in SQLite
 
@@ -183,8 +186,8 @@ so losing `seam.db` loses them:
   utility score with its per-signal demand breakdown, rebuilt from events.
 - `projects` - slugs, parent topology, retirement.
 - `gardener_proposals` - pending proposals, one row per kind-and-key
-  (merge, consolidate, archive, digest, reproject, rekind, split, abandon-plan,
-  memory-wanted, tool-error).
+  (merge, consolidate, archive, digest, reproject, rekind, split, relocate,
+  abandon-plan, ship-plan, merge-plans, memory-wanted, tool-error).
 - `settings` - `repo_project_map`, project families, the runtime briefing
   overrides the console writes, the console's update override (checks and
   automatic updates), the per-scope utility-activation latch, and the embedder

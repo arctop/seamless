@@ -37,10 +37,17 @@ wait for your release instead of reaching every briefing.
 a metadata feed of events tells a monitor what agents did as it happens, and a
 snapshot of sessions, tasks and the commits they recorded lets it flag the
 commits no tracked work accounts for.
+[Lock projects behind your approval](/guides/peer-auth/) is for when the threat
+is your own account: with peer_auth, the daemon runs as an OS account of its
+own, names each caller by its uid, and opens a locked project to an agent only
+after you approve it. [Security and privacy](/concepts/security/) explains how
+these fit together.
 
 The last three are operational. [Import, back up & restore](/guides/data/) covers
-putting `~/.seamless` in git, what deleting `seam.db` actually costs (an index
-rebuild, not data loss), and moving to a new machine.
+the daily backups a release install takes on its own and restoring one from the
+console, putting `~/.seamless` in git, what deleting `seam.db` actually costs
+(the record of sessions, tasks, trials and events, never a memory or note), and
+moving to a new machine.
 [Share one daemon across your computers](/guides/network-install/) is the
 opt-in multi-computer shape: the Server's setup, each Client, pairing on the
 Devices page, approvals from any browser, and the daemon-side captures a

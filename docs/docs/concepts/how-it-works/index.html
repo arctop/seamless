@@ -28,7 +28,7 @@
 var o=q.get("os")||localStorage.getItem("os");if(o==="unix"||!/^(macos|linux|windows|all)$/.test(o||""))o=/Windows/i.test(navigator.userAgent)?"windows":/Mac/i.test(navigator.userAgent)?"macos":"linux";d.dataset.os=o;
 var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").filter(function(x){return x==="claude"||x==="codex"||x==="claude-desktop";});if(cs.length&&cs.length<3)d.dataset.clients=cs.join(" ");})();</script>
 <link rel="stylesheet" href="../../../static/site.css?v=658d0062">
-<link rel="stylesheet" href="../../static/docs.css?v=761296eb">
+<link rel="stylesheet" href="../../static/docs.css?v=4314abce">
 </head>
 <body class="docs" data-docs-root="../../">
 
@@ -48,6 +48,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   </div>
 
   <nav class="docs-head-nav" aria-label="Site">
+    <a class="docs-site-link" href="../../../security/">Security</a>
+    <a class="docs-site-link" href="../../../compare/">Compare</a>
     <button class="ctx-chip-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="ctx-pop"><span class="ctx-chip-os"></span><span class="ctx-chip-rest"></span></button>
     <div class="ctx-pop" id="ctx-pop" hidden>
       <div class="ctx-seg" role="group" aria-label="Operating system">
@@ -109,6 +111,8 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
       <ul>
         
         <li><a href="../../concepts/how-it-works/" class="current" aria-current="page">How Seamless works</a></li>
+        
+        <li><a href="../../concepts/security/">Security and privacy</a></li>
         
         <li><a href="../../concepts/memory/">Memory &amp; notes</a></li>
         
@@ -248,11 +252,11 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   <p>Seamless is a local-first memory and coordination system for coding agents.
 The release ships a daemon (<code>seamlessd</code>) and its headless client (<code>seam</code>); one
 daemon process owns one SQLite database and one directory of markdown files,
-bound to loopback on your machine. Agents reach it over MCP,
+and by default it listens on loopback on your machine. Agents reach it over MCP,
 hooks make sessions ambient for Claude Code and Codex, and you watch through a
 read-mostly console. It is deliberately not a distributed system - one
-instance, one port, one data directory per machine. Everything below follows
-from that.</p>
+daemon, one port, one data directory, however many computers use it.
+Everything below follows from that.</p>
 <h2 id="one-daemon-three-surfaces">One daemon, three surfaces</h2>
 <figure class="doc-figure" aria-labelledby="daemon-map-caption">
   <span class="figure-kicker">Local architecture</span>
@@ -291,8 +295,11 @@ with no <code>session_start</code>.</li>
 <li><strong>You</strong> get a read-mostly console. It is an observability surface, not the way
 the system is driven.</li>
 </ul>
-<p>One instance per machine, one port, one data directory. Not a distributed system,
-by choice.</p>
+<p>One daemon, one port, one data directory. Not a distributed system, by choice.
+Several computers can still share one store: in a
+<a href="../../concepts/networked/">networked setup</a> one computer, the Server, runs the
+daemon and keeps the data, and the others are Clients that keep no data of
+their own and reach it over the network, normally with TLS.</p>
 <h2 id="files-are-truth-the-database-is-an-index">Files are truth; the database is an index</h2>
 <p>This is the load-bearing decision in the whole design.</p>
 <div class="table-wrap">
@@ -334,7 +341,7 @@ folder of markdown files that a human - or any other tool - can read.</p>
 <figure class="doc-figure" data-tone="ok" aria-labelledby="write-path-caption">
   <span class="figure-kicker">Write path</span>
   <div class="doc-flow cols-4">
-    <div class="flow-node"><span class="flow-step">1 · request</span><strong>memory_write</strong><small>Validate name, content, and scope</small></div>
+    <div class="flow-node"><span class="flow-step">1 · request</span><strong>memory_write</strong><small>Validate name, content, scope, and fence</small></div>
     <div class="flow-node emphasis"><span class="flow-step">2 · durable act</span><strong>Atomic Markdown write</strong><small>Fail closed when scope is ambiguous</small></div>
     <div class="flow-node"><span class="flow-step">3 · rebuildable</span><strong>FTS + embedding</strong><small>Index the exact file content</small></div>
     <div class="flow-node success"><span class="flow-step">4 · observable</span><strong>Append event</strong><small>Record what happened</small></div>
@@ -343,6 +350,13 @@ folder of markdown files that a human - or any other tool - can read.</p>
 </figure>
 <p>The file write is the one that matters. Indexing after it can fail and be
 rebuilt; the file is already on disk.</p>
+<p>A write can also stop before step 2. One that would cross a
+<a href="../../concepts/project-isolation/">confidential or sealed</a> project's fence, or
+reach a project a <a href="../../guides/peer-auth/">peer_auth</a> caller may not, is refused.
+With <a href="../../guides/write-screening/">write screening</a> on, a suspicious one is held:
+it waits in a queue in the database, never under <code>memory/</code> or <code>notes/</code>, until
+you release it. <a href="../../concepts/security/">Security and privacy</a> covers how these
+fit together.</p>
 <h2 id="the-read-path">The read path</h2>
 <figure class="doc-figure" data-tone="pop" aria-labelledby="read-path-caption">
   <span class="figure-kicker">Three retrieval paths</span>
@@ -363,9 +377,13 @@ is how a store fills with noise.</li>
 <li><strong>Not a vector database.</strong> Vectors are float32 blobs in SQLite, scanned
 exactly. No ANN index, no separate service.</li>
 <li><strong>Not a cloud service.</strong> No account, no sync, and no outbound product
-telemetry. The local event and retrieval telemetry shown in the console never
-leaves the machine. The bind is loopback and the key is static. The only
-requests Seamless makes unprompted are the anonymous
+telemetry. The event and retrieval telemetry shown in the console goes to no
+one but you. By default the daemon listens on loopback and
+every caller presents one static key; a Server's paired computers hold
+credentials of their own, a peer_auth daemon names each caller by its uid
+instead of a key, and the console can sign in with a passkey
+(<a href="../../concepts/security/">Security and privacy</a>). Apart from the LLM provider
+you configure, the only requests Seamless makes unprompted are the anonymous
 <a href="../../updating/#automatic-update-checks">update check</a> against GitHub's release
 list and, on an install the installer made, the downloads that
 <a href="../../updating/#automatic-updates">install a newer release by itself</a>.
@@ -384,7 +402,7 @@ months.</li>
     
     <nav class="page-nav" aria-label="Pagination">
       <a class="prev" href="../../concepts/"><span class="dir">Previous</span><span class="t">Concepts</span></a>
-      <a class="next" href="../../concepts/memory/"><span class="dir">Next</span><span class="t">Memory &amp; notes</span></a>
+      <a class="next" href="../../concepts/security/"><span class="dir">Next</span><span class="t">Security and privacy</span></a>
     </nav>
     
   </main>
@@ -401,7 +419,7 @@ months.</li>
 </div>
 
 <footer class="docs-foot">
-  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../../../">Home</a> · <a href="../../../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a></p>
+  <p>Seamless - local-first agent memory and coordination, published by <a href="https://arctop.com">Arctop</a>. <a href="../../../">Home</a> · <a href="../../../security/">Security</a> · <a href="../../../compare/">Compare</a> · <a href="https://github.com/arctop/seamless">GitHub</a> · <a href="https://github.com/arctop/seamless/security/advisories/new">Report a vulnerability</a></p>
 </footer>
 
 <script src="../../static/docs.js?v=f91fb0cd"></script>
