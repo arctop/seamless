@@ -317,6 +317,170 @@ func TestPeerAuthStatus_PrintsEachStep(t *testing.T) {
 	require.Regexp(t, `2\. account\s+pending`, out)
 }
 
+// An undo that stopped after the data moved back and before the chown hands
+// the data to the owner when it runs again: the data is back already, and
+// still the daemon's account's.
+func TestPeerAuthUndo_RerunAfterTheMoveStillHandsTheDataBack(t *testing.T) {
+	for _, goos := range []string{"darwin", "linux"} {
+		t.Run(goos, func(t *testing.T) {
+			f := newPasFake(t, goos)
+			require.NoError(t, pasSetup(context.Background(), f.h, pasOptions{yes: true}))
+			f.moved()
+			f.h.health = func(context.Context) error { return errors.New("connection refused") }
+			f.failOn = "chown -R alice:staff " + f.dataDir
+			require.Error(t, pasUndo(context.Background(), f.h, true, false))
+
+			// The move itself happened: the data is at the old path, the account's.
+			delete(f.files, pasData)
+			f.files[f.dataDir] = fileFacts{uid: 479, isDir: true, mode: fs.ModeDir | 0o700}
+			f.failOn = ""
+			n := len(f.scripts)
+			require.NoError(t, pasUndo(context.Background(), f.h, true, false))
+			again := strings.Join(f.scripts[n:], "\n---\n")
+			require.NotContains(t, again, "/bin/mv "+pasData, "nothing left to move")
+			require.Contains(t, again, "-f "+filepath.Join(f.dataDir, "seam.db"))
+			require.Contains(t, again, "chown -R alice:staff "+f.dataDir, "the data is handed back all the same")
+		})
+	}
+}
+
+// Undo puts the hooks back on the seam they ran before the move, wherever the
+// seamlessd that runs undo lives.
+func TestPeerAuthUndo_HooksGoBackToTheirOldSeam(t *testing.T) {
+	f := newPasFake(t, "darwin")
+	old := filepath.Join(f.h.owner.home, ".local", "bin", "seam")
+	f.h.hookSeam = func() string { return old }
+	require.NoError(t, pasSetup(context.Background(), f.h, pasOptions{yes: true}))
+	require.Equal(t, old, f.st().plan.OldSeam)
+	f.moved()
+	f.h.health = func(context.Context) error { return errors.New("connection refused") }
+	f.owner = nil
+	require.NoError(t, pasUndo(context.Background(), f.h, true, false))
+	require.Equal(t, [][]string{{f.h.exe, "install-hooks", "--config", f.cfgPath, "--seam", old}}, f.owner)
+
+	// A seam under the layout already (a move made by hand) is not recorded.
+	g := newPasFake(t, "linux")
+	g.h.hookSeam = func() string { return pasBin + "/seam" }
+	require.NoError(t, pasSetup(context.Background(), g.h, pasOptions{yes: true}))
+	require.Empty(t, g.st().plan.OldSeam)
+}
+
+// The per-user install's own update is waited out before its service stops:
+// an update running while the data moves failed its backup, re-created the
+// data directory for its record, and its rollback would bring the per-user
+// daemon back (caught live on 2026-11-20).
+func TestPeerAuthSetup_WaitsOutAPerUserUpdate(t *testing.T) {
+	f := newPasFake(t, "darwin")
+	polls := 0
+	f.h.updaterBusy = func(dir string) (bool, error) {
+		require.Equal(t, f.dataDir, dir)
+		polls++
+		return polls <= 3, nil // an update finishing
+	}
+	require.NoError(t, pasSetup(context.Background(), f.h, pasOptions{yes: true}))
+	require.Greater(t, polls, 3, "the retire step polled the lock until it was free")
+	require.Equal(t, 1, strings.Count(f.out(), "the per-user install is updating itself; waiting"), "said once, not per poll")
+	require.Equal(t, pasLineDone, f.st().status["retire"])
+
+	// One that never finishes stops the move before the service stops.
+	g := newPasFake(t, "darwin")
+	g.h.updaterBusy = func(string) (bool, error) { return true, nil }
+	err := pasSetup(context.Background(), g.h, pasOptions{yes: true})
+	require.ErrorContains(t, err, "an update of the per-user install is still running")
+	require.NotContains(t, g.all(), "bootout gui/501/"+launchdLabel)
+	require.NotEqual(t, pasLineDone, g.st().status["retire"])
+	require.NotEqual(t, pasLineDone, g.st().status["data"])
+
+	// The dry run says so.
+	h := newPasFake(t, "darwin")
+	require.NoError(t, pasSetup(context.Background(), h.h, pasOptions{dryRun: true}))
+	require.Contains(t, h.out(), "# first, in this process: wait until no update of the per-user install runs")
+}
+
+// A plist the per-user install's update wrote back beside the one an earlier
+// run set aside is the one kept: it matches the binaries now on disk.
+func TestPeerAuthSetup_RetireKeepsAPlistAnUpdateWroteBack(t *testing.T) {
+	f := newPasFake(t, "darwin")
+	plist := launchdPlist(f.h.owner.home, launchdLabel)
+	f.files[plist+pasKeptSuffix] = fileFacts{uid: 501, mode: 0o644}
+	require.NoError(t, pasSetup(context.Background(), f.h, pasOptions{yes: true}))
+	require.Contains(t, f.all(), "/bin/mv -f "+plist+" "+plist+pasKeptSuffix)
+}
+
+// Undo waits out an update the daemon runs before its service stops.
+func TestPeerAuthUndo_WaitsOutTheDaemonsUpdate(t *testing.T) {
+	for _, goos := range []string{"darwin", "linux"} {
+		t.Run(goos, func(t *testing.T) {
+			f := newPasFake(t, goos)
+			require.NoError(t, pasSetup(context.Background(), f.h, pasOptions{yes: true}))
+			f.moved()
+			f.h.health = func(context.Context) error { return errors.New("connection refused") }
+			n := len(f.scripts)
+			require.NoError(t, pasUndo(context.Background(), f.h, true, false))
+			undo := strings.Join(f.scripts[n:], "\n---\n")
+			wait := strings.Index(undo, "/usr/bin/pgrep -u _seamless -f 'seamlessd update'")
+			stop := strings.Index(undo, "bootout system/"+systemDaemonLabel)
+			if goos == "linux" {
+				stop = strings.Index(undo, "disable --now seamless-daemon")
+			}
+			require.GreaterOrEqual(t, wait, 0, undo)
+			require.Less(t, wait, stop, "the wait comes before the service stops")
+		})
+	}
+}
+
+// Undo waits for the per-user daemon it started again, and says where to look
+// when it does not answer. On macOS the address stays the other account's for
+// up to a minute after the system daemon stops (TIME_WAIT is kept per
+// account), so the restored daemon's first binds fail (seen live 2026-11-20).
+func TestPeerAuthUndo_WaitsForThePerUserDaemonToAnswer(t *testing.T) {
+	f := newPasFake(t, "darwin")
+	require.NoError(t, pasSetup(context.Background(), f.h, pasOptions{yes: true}))
+	f.moved()
+	f.h.health = func(context.Context) error { return errors.New("connection refused") }
+	probes := 0
+	f.h.reachable = func(string) bool { probes++; return probes > 7 }
+	require.NoError(t, pasUndo(context.Background(), f.h, true, false))
+	require.Equal(t, 1, strings.Count(f.out(), "macOS keeps 127.0.0.1:8081 for the connections the other account's daemon had"), f.out())
+	require.NotContains(t, f.out(), "does not answer at")
+
+	g := newPasFake(t, "linux")
+	require.NoError(t, pasSetup(context.Background(), g.h, pasOptions{yes: true}))
+	g.moved()
+	g.h.health = func(context.Context) error { return errors.New("connection refused") }
+	require.NoError(t, pasUndo(context.Background(), g.h, true, false), "the undo ran; a daemon slow to answer does not fail it")
+	require.Contains(t, g.out(), "the per-user daemon does not answer at 127.0.0.1:8081 yet: systemctl --user status seamless.service")
+}
+
+// The per-user service starts again only once the server config is back: on
+// the client config the daemon refuses to serve and crash-loops.
+func TestPeerAuthUndo_RestoresTheServerConfigBeforeThePerUserService(t *testing.T) {
+	for _, goos := range []string{"darwin", "linux"} {
+		t.Run(goos, func(t *testing.T) {
+			f := newPasFake(t, goos)
+			require.NoError(t, pasSetup(context.Background(), f.h, pasOptions{yes: true}))
+			f.moved()
+			f.h.health = func(context.Context) error { return errors.New("connection refused") }
+			start := "/bin/launchctl bootstrap gui/501 "
+			if goos == "linux" {
+				start = "systemctl --user enable --now " + systemdUnit
+			}
+			shell, checked := f.h.shell, false
+			f.h.shell = func(ctx context.Context, script string) error {
+				if strings.Contains(script, start) {
+					cfg, err := config.LoadFrom(f.cfgPath)
+					require.NoError(t, err)
+					require.False(t, cfg.IsClient(), "the per-user service starts on the server config")
+					checked = true
+				}
+				return shell(ctx, script)
+			}
+			require.NoError(t, pasUndo(context.Background(), f.h, true, false))
+			require.True(t, checked, "the per-user service was started")
+		})
+	}
+}
+
 // Another account cannot continue the owner's move.
 func TestPeerAuthSetup_ResumeIsTheOwnersOnly(t *testing.T) {
 	f := newPasFake(t, "linux")
@@ -356,7 +520,12 @@ func TestPeerAuthUndo_ReversesInTheGuidesOrder(t *testing.T) {
 				require.Greater(t, i, at, "%q:\n%s", m, undo)
 				at = i
 			}
-			require.Contains(t, undo, "[ -e "+filepath.Join(f.dataDir, "seam.db")+" ]", "the data came back whole, not into a directory made meanwhile")
+			// Root makes the check: until the chown the directory is still the
+			// daemon's account's, 0700, and the owner's shell cannot see into
+			// it (caught live on 2026-11-20, macOS 26).
+			require.Contains(t, undo, "/usr/bin/sudo "+shellcmd.ToolsFor(goos).Test+" -f "+filepath.Join(f.dataDir, "seam.db"),
+				"the data came back whole, not into a directory made meanwhile")
+			require.NotContains(t, undo, "[ -e "+filepath.Join(f.dataDir, "seam.db")+" ]")
 			require.Contains(t, undo, "chown -R alice:staff "+f.dataDir)
 			require.NotContains(t, undo, "userdel")
 			require.NotContains(t, undo, "dscl . -delete")

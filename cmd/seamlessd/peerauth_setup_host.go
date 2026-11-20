@@ -21,6 +21,7 @@ import (
 
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/hooks"
 	"github.com/arctop/seamless/internal/releasesig"
 	"github.com/arctop/seamless/internal/update"
 )
@@ -73,6 +74,13 @@ func pasPreflight(ctx context.Context, h *pasHost, o pasOptions) (pasPlan, []str
 	p := pasPlan{V: pasPlanVersion, GOOS: h.goos, Owner: h.owner.name, OwnerUID: h.owner.uid, OwnerGroup: h.owner.group,
 		Home: h.owner.home, Account: pasAccount, OldConfig: path, OldDataDir: filepath.Clean(cfg.DataDir),
 		ServerURL: cfg.ServerURL(), RootOwnedBinaries: o.rootOwned}
+	if h.hookSeam != nil {
+		// What undo puts the hooks back on. One that already runs a seam under
+		// the layout (a move made by hand) is no per-user seam to go back to.
+		if s := h.hookSeam(); pasPath(s) && !strings.HasPrefix(s, pasRoot+"/") {
+			p.OldSeam = s
+		}
+	}
 
 	// The data directory: the owner's, a real directory, not under the layout.
 	if f, err := w.inspect(p.OldDataDir); err != nil || !f.isDir || f.symlink {
@@ -261,6 +269,23 @@ func pasSystemServiceFiles(goos string) []string {
 	return out
 }
 
+// pasHookSeam is the seam the owner's Claude Code hooks run
+// (~/.claude/settings.json), "" when there are none.
+func pasHookSeam() string {
+	path, err := expandHome("~/.claude/settings.json")
+	if err != nil {
+		return ""
+	}
+	bin, _, ok := hooks.RecordedCommandPaths(hooks.ClientClaudeCode, path)
+	if !ok {
+		return ""
+	}
+	if expanded, err := expandHome(bin); err == nil {
+		bin = expanded
+	}
+	return bin
+}
+
 // realPasHost is this machine.
 func realPasHost() *pasHost {
 	h := &pasHost{
@@ -268,6 +293,7 @@ func realPasHost() *pasHost {
 		environ: os.Environ(), interactive: stdinIsTerminal(), in: bufio.NewReader(os.Stdin), out: os.Stdout,
 		now: time.Now, version: version, distribution: distribution, wait: time.Second,
 		readFile: os.ReadFile, reachable: serverReachable, tempDir: pasTempDir,
+		hookSeam: pasHookSeam, updaterBusy: updaterLockHeld,
 	}
 	if u, err := user.Current(); err == nil {
 		h.owner = pasHostOwner{name: u.Username, home: u.HomeDir}

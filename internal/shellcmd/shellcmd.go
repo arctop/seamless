@@ -33,6 +33,12 @@ type Tools struct {
 	// system keeps it (/bin/tar holds on a Debian whose /bin is not merged
 	// into /usr/bin, and wherever it is).
 	Rm, Tar, Sleep string
+	// Test is test(1), for a check only root can make (a path inside a
+	// directory another account holds): /bin/test on macOS, /usr/bin/test on
+	// Linux, where coreutils keeps it whether or not /bin is merged.
+	Test string
+	// Pgrep is pgrep(1), /usr/bin/pgrep on macOS and Linux (procps).
+	Pgrep string
 	// Sum is the SHA-256 check, which reads its list from stdin with -c.
 	Sum string
 	// macOS's account and service tools, and its code-signature check.
@@ -49,17 +55,17 @@ type Tools struct {
 // ToolsFor is goos's tools: macOS ("darwin"), else Linux.
 func ToolsFor(goos string) Tools {
 	t := Tools{Sudo: Sudo, Env: Env, ID: "/usr/bin/id", Install: "/usr/bin/install",
-		Tee: "/usr/bin/tee", Chmod: "/bin/chmod", Mv: "/bin/mv", Rm: "/bin/rm", Sleep: "/bin/sleep"}
+		Tee: "/usr/bin/tee", Chmod: "/bin/chmod", Mv: "/bin/mv", Rm: "/bin/rm", Sleep: "/bin/sleep", Pgrep: "/usr/bin/pgrep"}
 	if goos == "darwin" {
 		t.Chown, t.Sum, t.Tar = "/usr/sbin/chown", "/usr/bin/shasum -a 256", "/usr/bin/tar"
 		t.Dscl, t.Launchctl = "/usr/bin/dscl", "/bin/launchctl"
-		t.Plutil, t.Codesign = "/usr/bin/plutil", "/usr/bin/codesign"
+		t.Plutil, t.Codesign, t.Test = "/usr/bin/plutil", "/usr/bin/codesign", "/bin/test"
 		t.Tailscale = "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
 		return t
 	}
 	t.Chown, t.Sum, t.Tar = "/bin/chown", "/usr/bin/sha256sum", "/bin/tar"
 	t.Useradd, t.Groupadd, t.Usermod, t.Systemctl = "/usr/sbin/useradd", "/usr/sbin/groupadd", "/usr/sbin/usermod", "/bin/systemctl"
-	t.Loginctl = "/bin/loginctl"
+	t.Loginctl, t.Test = "/bin/loginctl", "/usr/bin/test"
 	t.Tailscale = "/usr/bin/tailscale"
 	return t
 }

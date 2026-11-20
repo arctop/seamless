@@ -42,9 +42,14 @@ var pasSteps = []pasStepDef{
 		}},
 	{id: "config", build: pasConfigCommands,
 		title: func(p pasPlan) string { return "the daemon's config " + pasConfig + pasTLSWords(p) }},
-	{id: "retire", build: pasRetireCommands, after: pasWaitOldDaemonGone,
-		afterWords: func(p pasPlan) string { return "wait until no daemon answers at " + p.ServerURL },
-		title:      func(p pasPlan) string { return "stop and retire the per-user service" }},
+	{id: "retire", before: pasWaitPerUserUpdater, build: pasRetireCommands, after: pasWaitOldDaemonGone,
+		beforeWords: func(p pasPlan) string {
+			return "wait until no update of the per-user install runs (" + pasHomeWords(p, update.LockPath(p.OldDataDir)) + ")"
+		},
+		afterWords: func(p pasPlan) string {
+			return "wait until no update of the per-user install runs and no daemon answers at " + p.ServerURL
+		},
+		title: func(p pasPlan) string { return "stop and retire the per-user service" }},
 	{id: "data", build: pasMoveDataCommands,
 		title: func(p pasPlan) string {
 			return "move " + pasHomeWords(p, p.OldDataDir) + " to " + pasData + ", the daemon's account's"
@@ -80,6 +85,7 @@ var pasSteps = []pasStepDef{
 // them.
 var pasUndoSteps = []pasStepDef{
 	{id: "service", build: pasUndoServiceCommands, after: pasWaitDaemonGone,
+		// pasUndoServiceCommands first wait out an update the daemon runs.
 		title: func(p pasPlan) string {
 			if p.GOOS == "darwin" {
 				return "stop and remove the LaunchDaemon " + systemDaemonLabel
@@ -90,10 +96,14 @@ var pasUndoSteps = []pasStepDef{
 		title: func(p pasPlan) string {
 			return "move " + pasData + " back to " + pasHomeWords(p, p.OldDataDir) + ", yours again"
 		}},
-	{id: "retire", build: pasUndoRetireCommands,
-		title: func(pasPlan) string { return "put the per-user service back and start it" }},
+	// The server config goes back before the per-user service starts: a
+	// daemon started on the client config refuses to serve ("role: client
+	// runs no daemon") and its service retries every ten seconds (caught live
+	// on 2026-11-20).
 	{id: "client", after: pasUndoClientConfig,
 		title: func(p pasPlan) string { return "put your server config back at " + pasHomeWords(p, p.OldConfig) }},
+	{id: "retire", build: pasUndoRetireCommands, after: pasWaitPerUserBack,
+		title: func(pasPlan) string { return "put the per-user service back and start it" }},
 	{id: "hooks", after: pasUndoHooks,
 		title: func(pasPlan) string { return "reinstall the hooks to run the seam beside your seamlessd" }},
 }
@@ -310,7 +320,10 @@ func pasRetireCommands(x *pasRun) ([]string, error) {
 			_, kerr := x.h.world.inspect(kept)
 			switch {
 			case perr == nil && kerr == nil:
-				return nil, fmt.Errorf("both %s and %s are there: remove the one you do not need", plist, kept)
+				// An earlier run set the plist aside, and the per-user install's
+				// own update (its installer, or its rollback) wrote one back: that
+				// one matches the binaries now on disk, so it is the one to keep.
+				cmds = append(cmds, t.Mv+" -f "+shellcmd.PosixArg(plist)+" "+shellcmd.PosixArg(kept))
 			case perr == nil:
 				cmds = append(cmds, t.Mv+" "+shellcmd.PosixArg(plist)+" "+shellcmd.PosixArg(kept))
 			}
@@ -333,6 +346,56 @@ func pasHostPort(raw string) string {
 	return hp
 }
 
+// pasPortNotice explains a daemon that takes a while to start after the other
+// account's daemon stopped: macOS keeps a port that account's connections
+// held (TIME_WAIT, and connections still closing) for it alone, so the next
+// account's daemon cannot bind the address for up to a minute, and its
+// service starts it again every ten seconds (seen live on 2026-11-20).
+func pasPortNotice(p pasPlan) string {
+	if p.GOOS != "darwin" {
+		return "  still starting..."
+	}
+	return "  still starting: macOS keeps " + pasHostPort(p.ServerURL) + " for the connections the other account's daemon had, for up to a minute, and the service tries again every ten seconds"
+}
+
+// pasPollNoting is pasPoll that prints notice once, when ok has failed for
+// five polls.
+func pasPollNoting(x *pasRun, tries int, notice string, ok func() bool) bool {
+	n := 0
+	return pasPoll(x, tries, func() bool {
+		if ok() {
+			return true
+		}
+		if n++; n == 5 {
+			fmt.Fprintln(x.h.out, notice)
+		}
+		return false
+	})
+}
+
+// pasWaitPerUserBack waits until the per-user daemon undo started again
+// answers at its address. It does not fail the undo, which has run: it says
+// where to look when the daemon does not come up.
+func pasWaitPerUserBack(x *pasRun) error {
+	hp := pasHostPort(x.plan.ServerURL)
+	if pasPollNoting(x, 90, pasPortNotice(x.plan), func() bool { return x.h.reachable(hp) }) {
+		return nil
+	}
+	svc := systemdUnit
+	if x.plan.GOOS == "darwin" {
+		svc = launchdLabel
+	}
+	if len(x.plan.Services) > 0 {
+		svc = x.plan.Services[0]
+	}
+	where := "systemctl --user status " + svc + " and journalctl --user -u " + svc
+	if x.plan.GOOS == "darwin" {
+		where = "launchctl print gui/" + strconv.Itoa(x.plan.OwnerUID) + "/" + svc + " and " + pasHomeWords(x.plan, filepath.Join(x.plan.OldDataDir, "seamlessd.log"))
+	}
+	fmt.Fprintf(x.h.out, "  the per-user daemon does not answer at %s yet: %s say why\n", hp, where)
+	return nil
+}
+
 // pasPoll calls ok every h.wait until it reports true or tries run out.
 func pasPoll(x *pasRun, tries int, ok func() bool) bool {
 	for i := 0; i < tries; i++ {
@@ -348,9 +411,47 @@ func pasPoll(x *pasRun, tries int, ok func() bool) bool {
 	return ok()
 }
 
+// pasUpdaterTries is how many polls (h.wait apart) setup waits for an update
+// of the per-user install to finish: an update takes well under a minute, and
+// its installer and confirmation are bounded far below this.
+const pasUpdaterTries = 300
+
+// pasWaitPerUserUpdater waits until no updater holds the per-user install's
+// update lock. The per-user daemon updates itself at a quiet moment, and an
+// update that runs while its data moves fails its backup, writes its record
+// into a <data_dir> it re-creates, and its installer or rollback puts the
+// per-user service back: the data would then not move back on undo, and two
+// daemons would contend for the address. Waiting before the service stops
+// lets the update finish against its own daemon (caught live on 2026-11-20).
+func pasWaitPerUserUpdater(x *pasRun) error {
+	if x.h.updaterBusy == nil {
+		return nil
+	}
+	busy, told := false, false
+	done := pasPoll(x, pasUpdaterTries, func() bool {
+		held, err := x.h.updaterBusy(x.plan.OldDataDir)
+		busy = held
+		if held && !told {
+			fmt.Fprintln(x.h.out, "  the per-user install is updating itself; waiting for the update to finish (up to five minutes)")
+			told = true
+		}
+		return err != nil || !held // a lock that cannot be read rules nothing out; the daemon check still runs
+	})
+	if !done && busy {
+		return fmt.Errorf("an update of the per-user install is still running (it holds %s): run setup again once it finishes",
+			update.LockPath(x.plan.OldDataDir))
+	}
+	return nil
+}
+
 // pasWaitOldDaemonGone waits until nothing answers at the old address: the
-// data directory moves only once no daemon holds it.
+// data directory moves only once no daemon holds it. An updater the per-user
+// daemon spawned just before it stopped is waited out first: its rollback
+// would start that daemon again.
 func pasWaitOldDaemonGone(x *pasRun) error {
+	if err := pasWaitPerUserUpdater(x); err != nil {
+		return err
+	}
 	hp := pasHostPort(x.plan.ServerURL)
 	if pasPoll(x, 30, func() bool { return !x.h.reachable(hp) }) {
 		return nil
@@ -477,7 +578,7 @@ WantedBy=multi-user.target
 // migrate the database.
 func pasWaitHealthy(x *pasRun) error {
 	var last error
-	if pasPoll(x, 90, func() bool { last = x.h.health(x.ctx); return last == nil }) {
+	if pasPollNoting(x, 90, pasPortNotice(x.plan), func() bool { last = x.h.health(x.ctx); return last == nil }) {
 		return nil
 	}
 	where := "sudo /bin/launchctl print system/" + systemDaemonLabel + " and " + pasData + "/seamlessd.log"
@@ -577,15 +678,29 @@ func pasReinstallHooks(x *pasRun) error {
 }
 
 // pasUndoServiceCommands stop the system service and remove it.
+// pasUndoWaitUpdater are commands that wait, up to five minutes, until no
+// updater of the daemon's account runs, then fail if one still does: an
+// update under way when its service stops would roll back into a data
+// directory that is moving. pgrep sees every account's processes, root or not.
+func pasUndoWaitUpdater(t shellcmd.Tools, acct string) []string {
+	probe := t.Pgrep + " -u " + shellcmd.PosixArg(acct) + " -f " + shellcmd.PosixArg("seamlessd update") + " >/dev/null"
+	return []string{
+		"seamless_u=0",
+		"while " + probe + "; do [ \"$seamless_u\" -lt 600 ] || break; seamless_u=$((seamless_u + 1)); " + t.Sleep + " 0.5; done",
+		"if " + probe + "; then echo " + shellcmd.PosixArg("an update of the daemon is still running: run seamlessd peer-auth undo again once it finishes") + " >&2; false; fi",
+	}
+}
+
 func pasUndoServiceCommands(x *pasRun) ([]string, error) {
 	p, t := x.plan, x.t
+	wait := pasUndoWaitUpdater(t, p.Account)
 	if p.GOOS == "darwin" {
 		probe := t.AsRoot(t.Launchctl, "print", "system/"+systemDaemonLabel)
-		cmds := []string{"if " + probe + " >/dev/null 2>&1; then " + t.AsRoot(t.Launchctl, "bootout", "system/"+systemDaemonLabel) + "; fi"}
+		cmds := append(wait, "if "+probe+" >/dev/null 2>&1; then "+t.AsRoot(t.Launchctl, "bootout", "system/"+systemDaemonLabel)+"; fi")
 		cmds = append(cmds, pasLaunchdWait(t, probe)...)
 		return append(cmds, t.AsRoot(t.Rm, "-f", pasDaemonPlistPath())), nil
 	}
-	var cmds []string
+	cmds := wait
 	if _, err := x.h.world.inspect(pasDaemonUnitPath()); err == nil {
 		cmds = append(cmds, t.AsRoot(t.Systemctl, "disable", "--now", strings.TrimSuffix(systemDaemonUnit, ".service")),
 			t.AsRoot(t.Rm, "-f", pasDaemonUnitPath()))
@@ -596,23 +711,28 @@ func pasUndoServiceCommands(x *pasRun) ([]string, error) {
 // pasUndoDataCommands move the data back and make it the owner's again. The
 // old path must be free, and after the move it must hold the database
 // itself: a directory made there meanwhile would have taken the data inside.
+// Root makes that check: until the chown the directory is still the daemon's
+// account's (0700), so the owner's shell cannot see into it. A run that
+// stopped after the move and before the chown finds the data back already,
+// and still hands it to the owner.
 func pasUndoDataCommands(x *pasRun) ([]string, error) {
 	p, t := x.plan, x.t
 	_, oerr := x.h.world.inspect(p.OldDataDir)
 	_, nerr := x.h.world.inspect(pasData)
+	old := shellcmd.PosixArg(p.OldDataDir)
+	var cmds []string
 	switch {
 	case oerr == nil && nerr == nil:
 		return nil, fmt.Errorf("both %s and %s are there: one of them has to go before the data can move back", p.OldDataDir, pasData)
-	case nerr != nil:
-		return nil, nil // back already
+	case nerr == nil:
+		cmds = append(cmds, "[ ! -e "+old+" ]", "[ ! -h "+old+" ]", t.AsRoot(t.Mv, pasData, old))
+	case oerr != nil:
+		return nil, fmt.Errorf("neither %s nor %s is there", pasData, p.OldDataDir)
 	}
-	old := shellcmd.PosixArg(p.OldDataDir)
-	return []string{
-		"[ ! -e " + old + " ]", "[ ! -h " + old + " ]",
-		t.AsRoot(t.Mv, pasData, old),
-		"[ -e " + shellcmd.PosixArg(filepath.Join(p.OldDataDir, "seam.db")) + " ]",
-		t.AsRoot(t.Chown, "-R", shellcmd.PosixArg(p.Owner+":"+p.OwnerGroup), old),
-	}, nil
+	return append(cmds,
+		t.AsRoot(t.Test, "!", "-h", old),
+		t.AsRoot(t.Test, "-f", shellcmd.PosixArg(filepath.Join(p.OldDataDir, "seam.db"))),
+		t.AsRoot(t.Chown, "-R", shellcmd.PosixArg(p.Owner+":"+p.OwnerGroup), old)), nil
 }
 
 // pasUndoRetireCommands put each per-user service back and start it.
@@ -657,7 +777,13 @@ func pasUndoClientConfig(x *pasRun) error {
 }
 
 // pasUndoHooks reinstall the hooks against the restored server config, with
-// the seam beside this seamlessd.
+// the seam they ran before the move (the plan's OldSeam), else the seam
+// beside this seamlessd: undo run from /opt/seamless/bin or a download would
+// otherwise point them at a seam the per-user install does not keep.
 func pasUndoHooks(x *pasRun) error {
-	return x.h.runOwner(x.ctx, []string{x.h.exe, "install-hooks", "--config", x.plan.OldConfig}, nil)
+	argv := []string{x.h.exe, "install-hooks", "--config", x.plan.OldConfig}
+	if x.plan.OldSeam != "" {
+		argv = append(argv, "--seam", x.plan.OldSeam)
+	}
+	return x.h.runOwner(x.ctx, argv, nil)
 }

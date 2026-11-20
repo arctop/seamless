@@ -117,6 +117,9 @@ type pasPlan struct {
 	// RootOwnedBinaries keeps /opt/seamless/bin root's: the daemon then only
 	// tells the owner about a new release (--root-owned-binaries).
 	RootOwnedBinaries bool `json:"root_owned_binaries,omitempty"`
+	// OldSeam is the seam the owner's Claude Code hooks ran before the move,
+	// which undo puts them back on; "" when none was recorded.
+	OldSeam string `json:"old_seam,omitempty"`
 }
 
 // pasTeam is a Developer ID team identifier as codesign reports it.
@@ -164,6 +167,8 @@ func (p pasPlan) problem() string {
 		return "the plan names neither a release nor a source build"
 	case p.Source != "" && !pasPath(p.Source):
 		return "the source build's directory is not absolute"
+	case p.OldSeam != "" && (!pasPath(p.OldSeam) || strings.HasPrefix(p.OldSeam, pasRoot+"/")):
+		return "the hooks' seam before the move is not an absolute path outside " + pasRoot
 	case p.Team != "" && (p.GOOS != "darwin" || p.Release == "" || !pasTeam.MatchString(p.Team)):
 		return fmt.Sprintf("%q is not a Developer ID team", p.Team)
 	}
@@ -471,6 +476,11 @@ func pasSetup(ctx context.Context, h *pasHost, o pasOptions) error {
 // pasRunStep runs one step: its commands, built from the world as it is now,
 // then its owner-side half.
 func pasRunStep(x *pasRun, s *pasStepDef) error {
+	if s.before != nil {
+		if err := s.before(x); err != nil {
+			return err
+		}
+	}
 	if s.build != nil {
 		cmds, err := s.build(x)
 		if err != nil {
@@ -637,6 +647,11 @@ func pasUndo(ctx context.Context, h *pasHost, yes, dryRun bool) error {
 	}
 	for _, u := range todo {
 		fmt.Fprintf(h.out, "\n%s\n", u.title(plan))
+		if u.before != nil {
+			if err := u.before(x); err != nil {
+				return fmt.Errorf("%w: undo %s stopped: %w; run seamlessd peer-auth undo again once it is fixed", errPasRefused, u.id, err)
+			}
+		}
 		if u.build != nil {
 			cmds, err := u.build(x)
 			if err != nil {
@@ -739,6 +754,9 @@ func pasShowCommands(x *pasRun, st pasState) error {
 			continue
 		}
 		fmt.Fprintf(x.h.out, "\n# %d. %s\n", i+1, s.title(x.plan))
+		if s.before != nil {
+			fmt.Fprintf(x.h.out, "# first, in this process: %s\n", s.beforeWords(x.plan))
+		}
 		if s.build != nil {
 			cmds, err := s.build(x)
 			if err != nil {
@@ -906,11 +924,14 @@ type pasStepWords func(pasPlan) string
 // is when the step runs (a re-run of a step half done skips what is there
 // already); after runs its owner-side half once the commands succeeded.
 type pasStepDef struct {
-	id         string
-	title      pasStepWords
-	build      func(*pasRun) ([]string, error)
-	after      func(*pasRun) error
-	afterWords pasStepWords
+	id    string
+	title pasStepWords
+	// before runs in this process ahead of the step's commands.
+	before      func(*pasRun) error
+	beforeWords pasStepWords
+	build       func(*pasRun) ([]string, error)
+	after       func(*pasRun) error
+	afterWords  pasStepWords
 }
 
 // pasStepByID finds a step of the move.
@@ -972,7 +993,13 @@ type pasHost struct {
 	reachable func(hostport string) bool
 	// runOwner runs a command as the owner (install-hooks), on this terminal.
 	runOwner func(ctx context.Context, argv []string, env []string) error
-	tempDir  func() (string, error)
+	// hookSeam is the seam the owner's Claude Code hooks run now, "" when
+	// there are none (nil in tests that do not set it).
+	hookSeam func() string
+	// updaterBusy reports whether an updater holds the per-user install's
+	// update lock (updaterLockHeld; nil in tests that do not set it).
+	updaterBusy func(dataDir string) (bool, error)
+	tempDir     func() (string, error)
 	// wait is the interval between two polls of a daemon starting or stopping.
 	wait time.Duration
 }

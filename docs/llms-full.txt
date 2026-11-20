@@ -16245,10 +16245,10 @@ it needs root:
 2. `account`: `_seamless`, a system account (on macOS an id below 500 free as both a user id and a group id), the layout, and the pin.
 3. `binaries`: into `/opt/seamless/bin`, held by the daemon's account so it [updates itself](/guides/peer-auth/#updates).
 4. `config`: `/opt/seamless/etc/seamless.yaml` (`root:_seamless 0640`): your config with `data_dir`, the TLS pair (copied into `/opt/seamless/etc/tls`) and a `peer_auth` block changed, every other key kept, the bearer key and the LLM keys among them.
-5. `retire`: your per-user service stopped, its LaunchAgent plist kept as `<label>.plist.pre-peer-auth` or its systemd user unit disabled.
+5. `retire`: your per-user service stopped, its LaunchAgent plist kept as `<label>.plist.pre-peer-auth` or its systemd user unit disabled. An update the per-user install is running (it holds `~/.seamless/update/update.lock`) is waited out first, up to five minutes: moving its data mid-update would fail it, and its rollback would start the per-user daemon again.
 6. `data`: your data directory moved to `/opt/seamless/data`, the daemon's account's alone.
 7. `service`: the LaunchDaemon `com.arctop.seamless.daemon` or the system unit `seamless-daemon.service` (on Linux the account lingers first).
-8. `health`: the daemon answers on the socket.
+8. `health`: the daemon answers on the socket. On macOS this can take up to a minute: the address stays your account's while the connections your per-user daemon had finish closing, so the daemon's first starts cannot bind it and its service tries again every ten seconds.
 9. `doctor`: `seamlessd doctor`, as the daemon's account, against its config.
 10. `client`: your config set aside as `seamless.yaml.pre-peer-auth`, never edited, and a client's config on the socket written in its place, with `console.yaml` (`0600`) beside it keeping the key for the console.
 11. `hooks`: `seamlessd install-hooks --seam /opt/seamless/bin/seam`.
@@ -16280,11 +16280,15 @@ on a computer that began one. `--dry-run` prints every command a step would run
 now, and changes nothing.
 
 `undo` follows the guide's [Roll back](/guides/peer-auth/#roll-back) for what
-ran: the system service stopped and removed, the data moved back and made yours
-again, the per-user service put back and started, your server config back in
-place, and the hooks reinstalled against it. It keeps the account, the layout,
-the binaries, the daemon's config and the backup, which the next `setup` reuses;
-delete them by hand once you no longer need them.
+ran: the system service stopped and removed (after waiting out an update the
+daemon is running), the data moved back and made yours again, your server
+config back in place, the per-user service put back and started, and the hooks
+reinstalled against it, on the `seam` they ran before the move. It waits until
+the per-user daemon answers - on macOS up to a minute, for the reason step 8
+gives - and says where to look if it does not. A run that stops continues
+where it stopped, like `setup`. It keeps the account, the layout, the binaries,
+the daemon's config and the backup, which the next `setup` reuses; delete them
+by hand once you no longer need them.
 
 ## seamlessd console-open {#seamlessd_console_open}
 

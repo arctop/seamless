@@ -1752,10 +1752,10 @@ it needs root:</p>
 <li><code>account</code>: <code>_seamless</code>, a system account (on macOS an id below 500 free as both a user id and a group id), the layout, and the pin.</li>
 <li><code>binaries</code>: into <code>/opt/seamless/bin</code>, held by the daemon's account so it <a href="../../guides/peer-auth/#updates">updates itself</a>.</li>
 <li><code>config</code>: <code>/opt/seamless/etc/seamless.yaml</code> (<code>root:_seamless 0640</code>): your config with <code>data_dir</code>, the TLS pair (copied into <code>/opt/seamless/etc/tls</code>) and a <code>peer_auth</code> block changed, every other key kept, the bearer key and the LLM keys among them.</li>
-<li><code>retire</code>: your per-user service stopped, its LaunchAgent plist kept as <code>&lt;label&gt;.plist.pre-peer-auth</code> or its systemd user unit disabled.</li>
+<li><code>retire</code>: your per-user service stopped, its LaunchAgent plist kept as <code>&lt;label&gt;.plist.pre-peer-auth</code> or its systemd user unit disabled. An update the per-user install is running (it holds <code>~/.seamless/update/update.lock</code>) is waited out first, up to five minutes: moving its data mid-update would fail it, and its rollback would start the per-user daemon again.</li>
 <li><code>data</code>: your data directory moved to <code>/opt/seamless/data</code>, the daemon's account's alone.</li>
 <li><code>service</code>: the LaunchDaemon <code>com.arctop.seamless.daemon</code> or the system unit <code>seamless-daemon.service</code> (on Linux the account lingers first).</li>
-<li><code>health</code>: the daemon answers on the socket.</li>
+<li><code>health</code>: the daemon answers on the socket. On macOS this can take up to a minute: the address stays your account's while the connections your per-user daemon had finish closing, so the daemon's first starts cannot bind it and its service tries again every ten seconds.</li>
 <li><code>doctor</code>: <code>seamlessd doctor</code>, as the daemon's account, against its config.</li>
 <li><code>client</code>: your config set aside as <code>seamless.yaml.pre-peer-auth</code>, never edited, and a client's config on the socket written in its place, with <code>console.yaml</code> (<code>0600</code>) beside it keeping the key for the console.</li>
 <li><code>hooks</code>: <code>seamlessd install-hooks --seam /opt/seamless/bin/seam</code>.</li>
@@ -1784,11 +1784,15 @@ where the move stands, step by step, and doctor has a <code>peer_auth setup</cod
 on a computer that began one. <code>--dry-run</code> prints every command a step would run
 now, and changes nothing.</p>
 <p><code>undo</code> follows the guide's <a href="../../guides/peer-auth/#roll-back">Roll back</a> for what
-ran: the system service stopped and removed, the data moved back and made yours
-again, the per-user service put back and started, your server config back in
-place, and the hooks reinstalled against it. It keeps the account, the layout,
-the binaries, the daemon's config and the backup, which the next <code>setup</code> reuses;
-delete them by hand once you no longer need them.</p>
+ran: the system service stopped and removed (after waiting out an update the
+daemon is running), the data moved back and made yours again, your server
+config back in place, the per-user service put back and started, and the hooks
+reinstalled against it, on the <code>seam</code> they ran before the move. It waits until
+the per-user daemon answers - on macOS up to a minute, for the reason step 8
+gives - and says where to look if it does not. A run that stops continues
+where it stopped, like <code>setup</code>. It keeps the account, the layout, the binaries,
+the daemon's config and the backup, which the next <code>setup</code> reuses; delete them
+by hand once you no longer need them.</p>
 <h2 id="seamlessd_console_open">seamlessd console-open</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd console-open <span class="o">[</span>--browser APP<span class="o">]</span>
 </span></span><span class="line"><span class="cl">seamlessd console-open --unlock PROJECT <span class="o">[</span>--code CODE<span class="o">]</span> <span class="o">[</span>--for DURATION<span class="o">]</span>
