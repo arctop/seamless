@@ -446,7 +446,7 @@ function Test-Signature {
             Step 'signature' 'verified by seamlessd'
             return
         }
-        Warn "cosign not found -- archive verified by checksum only.`n    For signature verification: https://docs.sigstore.dev/system_config/installation/"
+        Warn "cosign not found -- skipping the Sigstore check of checksums.txt; the owner's signature is still checked.`n    For Sigstore verification too: https://docs.sigstore.dev/system_config/installation/"
         return
     }
     $sig = Join-Path $Tmp 'checksums.txt.sig'

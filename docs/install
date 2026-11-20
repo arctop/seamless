@@ -563,8 +563,8 @@ verify_signature() {
 			step signature "verified by seamlessd"
 			return 0
 		fi
-		warn "cosign not found -- archive verified by checksum only.
-    For signature verification: https://docs.sigstore.dev/system_config/installation/"
+		warn "cosign not found -- skipping the Sigstore check of checksums.txt; the owner's signature is still checked.
+    For Sigstore verification too: https://docs.sigstore.dev/system_config/installation/"
 		return 0
 	fi
 	# Missing signature files are the expected case for releases cut before
