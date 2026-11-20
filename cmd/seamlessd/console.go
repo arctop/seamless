@@ -296,7 +296,9 @@ func consoleOpenPath(raw string) (string, error) {
 			path = path[:i]
 		}
 		for _, seg := range strings.Split(path, "/") {
-			if seg == "." || seg == ".." {
+			// A browser reads %2e as a dot here too (the URL standard's
+			// single- and double-dot segments).
+			if seg = strings.ReplaceAll(strings.ToLower(seg), "%2e", "."); seg == "." || seg == ".." {
 				bad = true
 			}
 		}

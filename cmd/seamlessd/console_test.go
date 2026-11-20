@@ -319,7 +319,7 @@ func TestConsoleOpenPath_OnlyAConsolePage(t *testing.T) {
 		}
 	}
 	for _, bad := range []string{"approvers", "/console", "/other", "//evil.example/console/", "/console//evil.example",
-		"https://evil.example/console/", "/console/../logout", "/console/./x", "/console/a\\b", "/console/a b", "/console/a\nb"} {
+		"https://evil.example/console/", "/console/../logout", "/console/./x", "/console/%2e%2e/logout", "/console/.%2E/x", "/console/%2E/x", "/console/a\\b", "/console/a b", "/console/a\nb"} {
 		_, err := consoleOpenPath(bad)
 		require.ErrorContains(t, err, "is not a console page", bad)
 	}
