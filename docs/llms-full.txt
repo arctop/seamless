@@ -11290,7 +11290,11 @@ Uppercase is read as lowercase, and a repeat counts once - within the call, and
 against what the session or task already holds. One call records at most 256
 distinct ids, and one session or task holds at most 10,000. Any bad entry
 refuses the whole call: a refused `session_end` leaves the session open, and a
-refused `tasks_update` changes nothing, its other fields included.
+refused `tasks_update` changes nothing, its other fields included. The refusal
+names every bad entry (up to eight, then a count) and the `git rev-parse`
+command that expands the abbreviations among them. Only short hex names go into
+that command, never other caller text. The caller can then fix every entry and
+resend the call once.
 
 A successful call reports `commits_recorded`, and its event
 (`session.ended`, `task.transition`) carries the same count. The ids
@@ -12460,7 +12464,7 @@ Complete the current session, persisting its findings for future briefings. Uses
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `findings` | string | **yes** | Final findings: what was learned, decided, or left open. Prefer a tight summary (briefings show a short preview), but long findings are stored in full -- they are not rejected. |
-| `commits` | array | no | Full ids of the commits this session made, recorded on the session for an integrity monitor that matches a branch's commits to the work that made them: the 40- or 64-character hex id git prints (git rev-parse HEAD), never an abbreviation. At most 256 per call; repeats are ignored. Offered only while this server records commits (commits.record) |
+| `commits` | array | no | Full ids of the commits this session made, recorded on the session for an integrity monitor that matches a branch's commits to the work that made them: the 40- or 64-character hex id git prints, never an abbreviation (git rev-parse &lt;short id&gt; expands one); a short id here refuses the whole call. At most 256 per call; repeats are ignored. Offered only while this server records commits (commits.record) |
 | `mishaps` | array | no | Self-report mishaps this session caused: an action a warning or convention said not to take, live state touched by mistake, a command that hit the wrong target. Pass an array with one short entry per incident; omit when none happened. When a mishap violated a stored memory, name that memory by its exact slug in the entry (e.g. "violated chroma-boot-race by ...") -- the report is then linked to it. Recorded for recurrence review, not blame -- report them even when fully recovered. |
 | `session` | string | no | Session to operate on: a name (the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, or a sess/* name) or a session ULID. Defaults to this connection's session -- bound automatically for Claude Code and Codex agents -- so pass it only to act on another session, or when a call reports the session as ambiguous |
 | `session_id` | string | no | Session ULID to operate on; takes precedence over session and the bound session |
@@ -13015,7 +13019,7 @@ Update a task: change status (open|in_progress|done|dropped), edit title/body, a
 | `id` | string | **yes** | task id |
 | `add_depends_on` | array | no | task ids to add as blockers (a comma-separated string is also accepted) |
 | `body` | string | no | new body (aliases: content, text) |
-| `commits` | array | no | Full ids of the commits that did this task's work, recorded on the task for an integrity monitor that matches a branch's commits to the work that made them: the 40- or 64-character hex id git prints (git rev-parse HEAD), never an abbreviation. Recording them is an update like any other: a task another session holds refuses it. At most 256 per call; repeats are ignored. Offered only while this server records commits (commits.record) |
+| `commits` | array | no | Full ids of the commits that did this task's work, recorded on the task for an integrity monitor that matches a branch's commits to the work that made them: the 40- or 64-character hex id git prints, never an abbreviation (git rev-parse &lt;short id&gt; expands one); a short id here refuses the whole call. Recording them is an update like any other: a task another session holds refuses it. At most 256 per call; repeats are ignored. Offered only while this server records commits (commits.record) |
 | `gate_clear` | boolean | no | true: clear the task's open gate now that the person has acted (not with the gate_* edits) |
 | `gate_decision` | string | no | optional: the open question the person answers, one line |
 | `gate_note` | string | no | optional, with gate_clear: what the person decided or did, kept with the cleared gate |

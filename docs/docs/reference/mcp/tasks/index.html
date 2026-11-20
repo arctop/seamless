@@ -524,7 +524,7 @@ sealed sends none. Off, the argument does not exist. See
 <td><code>commits</code></td>
 <td>array</td>
 <td>no</td>
-<td>Full ids of the commits that did this task's work, recorded on the task for an integrity monitor that matches a branch's commits to the work that made them: the 40- or 64-character hex id git prints (git rev-parse HEAD), never an abbreviation. Recording them is an update like any other: a task another session holds refuses it. At most 256 per call; repeats are ignored. Offered only while this server records commits (commits.record)</td>
+<td>Full ids of the commits that did this task's work, recorded on the task for an integrity monitor that matches a branch's commits to the work that made them: the 40- or 64-character hex id git prints, never an abbreviation (git rev-parse &lt;short id&gt; expands one); a short id here refuses the whole call. Recording them is an update like any other: a task another session holds refuses it. At most 256 per call; repeats are ignored. Offered only while this server records commits (commits.record)</td>
 </tr>
 <tr>
 <td><code>gate_clear</code></td>

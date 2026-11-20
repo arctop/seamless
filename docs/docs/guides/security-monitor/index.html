@@ -964,7 +964,11 @@ Uppercase is read as lowercase, and a repeat counts once - within the call, and
 against what the session or task already holds. One call records at most 256
 distinct ids, and one session or task holds at most 10,000. Any bad entry
 refuses the whole call: a refused <code>session_end</code> leaves the session open, and a
-refused <code>tasks_update</code> changes nothing, its other fields included.</p>
+refused <code>tasks_update</code> changes nothing, its other fields included. The refusal
+names every bad entry (up to eight, then a count) and the <code>git rev-parse</code>
+command that expands the abbreviations among them. Only short hex names go into
+that command, never other caller text. The caller can then fix every entry and
+resend the call once.</p>
 <p>A successful call reports <code>commits_recorded</code>, and its event
 (<code>session.ended</code>, <code>task.transition</code>) carries the same count. The ids
 themselves live in the record, never in an event.</p>

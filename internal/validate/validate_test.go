@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -229,4 +230,40 @@ func TestCommitIDs(t *testing.T) {
 	require.Equal(t, []string{sha1}, got)
 	require.True(t, core.IsCommitID(sha256))
 	require.False(t, core.IsCommitID(strings.ToUpper(sha1)), "the canonical form is lowercase")
+}
+
+// A refusal names every entry that is not a full id, at once, and the command
+// that expands the abbreviations among them. The list arrives with a whole
+// update that the refusal loses, so a retry per bad entry is a resend per entry
+// (the gardener's recurring tool error 01M7X4PQ4R1ZS9TVRZME049AG9).
+func TestCommitIDs_RefusalNamesEveryBadEntryAndHowToExpandIt(t *testing.T) {
+	sha1 := "0123456789abcdef0123456789abcdef01234567"
+
+	_, err := CommitIDs([]string{"A6BFF526", sha1, "3b119f86", " a6bff526 "}, 10)
+	require.EqualError(t, err, `entries 0 ("A6BFF526"), 2 ("3b119f86"), 3 (" a6bff526 ") are not full commit ids: `+
+		`pass the 40- or 64-character hex ids git prints, never abbreviations `+
+		`(git rev-parse a6bff526 3b119f86 in their repository expands them)`)
+
+	_, err = CommitIDs([]string{sha1, "abc1234"}, 10)
+	require.EqualError(t, err, `entry 1 ("abc1234") is not a full commit id: pass the 40- or 64-character hex id `+
+		`git prints, never an abbreviation (git rev-parse abc1234 in its repository expands it)`)
+
+	// Caller text that is no hex name never reaches the command line.
+	_, err = CommitIDs([]string{"HEAD; rm -rf ~", "not-a-commit"}, 10)
+	require.ErrorContains(t, err, `entries 0 ("HEAD; rm -rf ~"), 1 ("not-a-commit") are not full commit ids`)
+	require.ErrorContains(t, err, "(git rev-parse <commit> prints it)")
+	require.NotContains(t, err.Error(), "git rev-parse HEAD; rm")
+
+	// A long list of bad entries is named up to a bound, then counted.
+	many := make([]string, 12)
+	for i := range many {
+		many[i] = fmt.Sprintf("%07x", i+1)
+	}
+	_, err = CommitIDs(many, 0)
+	require.ErrorContains(t, err, `7 ("0000008"), and 4 more are not full commit ids`)
+	require.NotContains(t, err.Error(), "0000009")
+
+	// A bad entry is reported before the bound: it is the fix the caller needs first.
+	_, err = CommitIDs([]string{sha1, "abc1234", strings.Repeat("e", 40)}, 1)
+	require.ErrorContains(t, err, `entry 1 ("abc1234")`)
 }

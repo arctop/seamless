@@ -28,8 +28,9 @@ const commitsParam = "commits"
 // The parts of the argument's description both tools share: the format, and
 // the bound with when the argument exists at all.
 var (
-	commitIDFormatDesc = "the 40- or 64-character hex id git prints (git rev-parse HEAD), never an abbreviation"
-	commitIDBoundDesc  = fmt.Sprintf("At most %d per call; repeats are ignored. Offered only while this server "+
+	commitIDFormatDesc = "the 40- or 64-character hex id git prints, never an abbreviation (git rev-parse <short id> " +
+		"expands one); a short id here refuses the whole call"
+	commitIDBoundDesc = fmt.Sprintf("At most %d per call; repeats are ignored. Offered only while this server "+
 		"records commits (commits.record)", store.MaxCommitsPerCall)
 )
 
@@ -90,7 +91,11 @@ func (s *Server) commitsArg(req mcp.CallToolRequest) ([]string, error) {
 	}
 	ids, err := validate.CommitIDs(raw, store.MaxCommitsPerCall)
 	if err != nil {
-		return nil, fmt.Errorf("invalid %s: %w", commitsParam, err)
+		// Both callers read commits before anything changes, so the refusal
+		// loses the rest of the call too (a closing body, a gate): say so, or
+		// the caller may resend only the commits.
+		return nil, fmt.Errorf("invalid %s: %w; this call changed nothing, so resend all of it with the full ids",
+			commitsParam, err)
 	}
 	return ids, nil
 }

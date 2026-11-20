@@ -569,7 +569,7 @@ is surfaced instead of hidden - the two cases are deliberately not treated alike
 <td><code>commits</code></td>
 <td>array</td>
 <td>no</td>
-<td>Full ids of the commits this session made, recorded on the session for an integrity monitor that matches a branch's commits to the work that made them: the 40- or 64-character hex id git prints (git rev-parse HEAD), never an abbreviation. At most 256 per call; repeats are ignored. Offered only while this server records commits (commits.record)</td>
+<td>Full ids of the commits this session made, recorded on the session for an integrity monitor that matches a branch's commits to the work that made them: the 40- or 64-character hex id git prints, never an abbreviation (git rev-parse &lt;short id&gt; expands one); a short id here refuses the whole call. At most 256 per call; repeats are ignored. Offered only while this server records commits (commits.record)</td>
 </tr>
 <tr>
 <td><code>mishaps</code></td>

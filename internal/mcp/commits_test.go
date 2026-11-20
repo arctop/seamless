@@ -159,6 +159,8 @@ func TestCommits_RecordedOnTheSessionAndTheTask(t *testing.T) {
 	isErr, txt = callErr(t, ctx, cli, "tasks_update", map[string]any{"id": task, "status": "done", "commits": []any{commitThree, "abc1234"}})
 	require.True(t, isErr)
 	require.Contains(t, txt, `tasks_update: invalid commits: entry 1 ("abc1234") is not a full commit id`)
+	require.Contains(t, txt, "(git rev-parse abc1234 in its repository expands it); "+
+		"this call changed nothing, so resend all of it with the full ids", "the retry is told what it must resend")
 	same := callJSON(t, ctx, cli, "tasks_list", map[string]any{"id": task})["tasks"].([]any)[0].(map[string]any)
 	require.Equal(t, "open", same["status"], "a refused call changes nothing")
 

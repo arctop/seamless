@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -186,8 +187,14 @@ func Isolation(s string) (core.Isolation, error) {
 // commit in every repository that grows a colliding prefix. A blank entry is
 // dropped, a repeat keeps its first place, and more than max distinct ids is
 // refused rather than cut (max <= 0 sets no bound). Nothing valid is nil.
+//
+// A refusal names every entry that is not a full id (commitIDsError), not only
+// the first: the list arrives with a whole update (a closing body, a gate), the
+// refusal loses all of it, and a retry fixed one entry at a time costs a resend
+// per entry.
 func CommitIDs(raw []string, max int) ([]string, error) {
 	var out []string
+	var bad []int
 	seen := make(map[string]bool, len(raw))
 	for i, r := range raw {
 		id := strings.ToLower(strings.TrimSpace(r))
@@ -195,8 +202,8 @@ func CommitIDs(raw []string, max int) ([]string, error) {
 			continue
 		}
 		if !core.IsCommitID(id) {
-			return nil, fmt.Errorf("entry %d (%s) is not a full commit id: pass the 40- or 64-character hex "+
-				"name git prints for the commit (git rev-parse HEAD), not an abbreviation", i, quoteShort(r))
+			bad = append(bad, i)
+			continue
 		}
 		if seen[id] {
 			continue
@@ -204,10 +211,53 @@ func CommitIDs(raw []string, max int) ([]string, error) {
 		seen[id] = true
 		out = append(out, id)
 	}
+	if len(bad) > 0 {
+		return nil, commitIDsError(raw, bad)
+	}
 	if max > 0 && len(out) > max {
 		return nil, fmt.Errorf("%d distinct commit ids: one call records at most %d", len(out), max)
 	}
 	return out, nil
+}
+
+// commitIDsShown bounds how many refused entries one error names, so a long
+// paste of junk is not echoed back whole.
+const commitIDsShown = 8
+
+// commitAbbrevRe is a short hex commit name: what git rev-parse can expand.
+var commitAbbrevRe = regexp.MustCompile(`^[0-9a-f]{4,39}$`)
+
+// commitIDsError names the entries of raw at the indexes bad, and how to
+// expand them: git rev-parse with the abbreviations themselves, ready to run in
+// their repository. Only a short hex name goes into that command -- an entry is
+// caller text, and a command line is no place to echo it -- so a list with no
+// abbreviation in it gets the command's general form.
+func commitIDsError(raw []string, bad []int) error {
+	parts := make([]string, 0, min(len(bad), commitIDsShown))
+	var abbrevs []string
+	for _, i := range bad[:min(len(bad), commitIDsShown)] {
+		parts = append(parts, fmt.Sprintf("%d (%s)", i, quoteShort(raw[i])))
+		if a := strings.ToLower(strings.TrimSpace(raw[i])); commitAbbrevRe.MatchString(a) && !slices.Contains(abbrevs, a) {
+			abbrevs = append(abbrevs, a)
+		}
+	}
+	list := strings.Join(parts, ", ")
+	if more := len(bad) - len(parts); more > 0 {
+		list += fmt.Sprintf(", and %d more", more)
+	}
+	expand := "git rev-parse <commit> prints it"
+	if len(abbrevs) > 0 {
+		expand = "git rev-parse " + strings.Join(abbrevs, " ") + " in their repository expands them"
+		if len(abbrevs) == 1 {
+			expand = "git rev-parse " + abbrevs[0] + " in its repository expands it"
+		}
+	}
+	if len(bad) == 1 {
+		return fmt.Errorf("entry %s is not a full commit id: pass the 40- or 64-character hex id git prints, "+
+			"never an abbreviation (%s)", list, expand)
+	}
+	return fmt.Errorf("entries %s are not full commit ids: pass the 40- or 64-character hex ids git prints, "+
+		"never abbreviations (%s)", list, expand)
 }
 
 // quoteShort quotes a caller's value for an error message, cut to a readable

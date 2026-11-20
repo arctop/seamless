@@ -192,7 +192,7 @@ Update a task: change status (open|in_progress|done|dropped), edit title/body, a
 | `id` | string | **yes** | task id |
 | `add_depends_on` | array | no | task ids to add as blockers (a comma-separated string is also accepted) |
 | `body` | string | no | new body (aliases: content, text) |
-| `commits` | array | no | Full ids of the commits that did this task's work, recorded on the task for an integrity monitor that matches a branch's commits to the work that made them: the 40- or 64-character hex id git prints (git rev-parse HEAD), never an abbreviation. Recording them is an update like any other: a task another session holds refuses it. At most 256 per call; repeats are ignored. Offered only while this server records commits (commits.record) |
+| `commits` | array | no | Full ids of the commits that did this task's work, recorded on the task for an integrity monitor that matches a branch's commits to the work that made them: the 40- or 64-character hex id git prints, never an abbreviation (git rev-parse &lt;short id&gt; expands one); a short id here refuses the whole call. Recording them is an update like any other: a task another session holds refuses it. At most 256 per call; repeats are ignored. Offered only while this server records commits (commits.record) |
 | `gate_clear` | boolean | no | true: clear the task's open gate now that the person has acted (not with the gate_* edits) |
 | `gate_decision` | string | no | optional: the open question the person answers, one line |
 | `gate_note` | string | no | optional, with gate_clear: what the person decided or did, kept with the cleared gate |
