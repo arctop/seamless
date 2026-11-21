@@ -544,7 +544,7 @@ a.brand .dot.on.ping::after { animation: orb-halo 1.6s var(--ease-out); }
 /* The collapsed rail's name tag (positioned by shell.js: fixed, so the
    sidebar's own scroll box cannot clip it). */
 .side-tip {
-  position: fixed; z-index: 95; pointer-events: none; transform: translateY(-50%);
+  position: fixed; z-index: 95; pointer-events: none; translate: 0 -50%;
   padding: 5px 9px; border-radius: var(--radius-sm); background: var(--ink); color: var(--paper);
   font-size: var(--text-xs); font-weight: 600; white-space: nowrap; box-shadow: var(--shadow-md);
   animation: seam-pop var(--dur-fast) var(--ease-out) both;
@@ -2532,7 +2532,7 @@ kbd {
 
 /* g was pressed: the hint lists where the next key goes. */
 .chord-hint {
-  position: fixed; left: 50%; bottom: 22px; z-index: 96; transform: translateX(-50%);
+  position: fixed; left: 50%; bottom: 22px; z-index: 96; translate: -50% 0;
   display: flex; align-items: center; gap: 10px; max-width: min(92vw, 860px);
   padding: 8px 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-pill);
   background: var(--surface); color: var(--muted); font-size: var(--text-xs); box-shadow: var(--shadow-lg);
@@ -7855,7 +7855,7 @@ a.dy-commit:hover code { color: var(--brand); }
   right: 20px;
   bottom: calc(20px + env(safe-area-inset-bottom, 0px));
   z-index: 72; /* above #live-toast (71) and #live-pill (70) */
-  max-width: min(26rem, calc(100vw - 40px));
+  max-width: min(32rem, calc(100vw - 40px));
   pointer-events: none; /* the empty live region never takes a click */
 }
 .build-notice-card {
@@ -7876,11 +7876,13 @@ a.dy-commit:hover code { color: var(--brand); }
 .build-notice-copy { margin: 0; flex: 1 1 auto; min-width: 0; }
 .build-notice-card .btn { flex: none; }
 body:has(.build-notice-card:not([hidden])) #live-pill,
-body:has(.build-notice-card:not([hidden])) #live-toast { bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
+body:has(.build-notice-card:not([hidden])) #live-toast,
+body:has(.build-notice-card:not([hidden])) .chord-hint { bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
 body:has(.build-notice-card:not([hidden])) .main { padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px)); }
 @media (max-width: 720px) {
   .build-notice { left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); max-width: none; }
   body:has(.build-notice-card:not([hidden])) #live-pill,
-  body:has(.build-notice-card:not([hidden])) #live-toast { bottom: calc(104px + env(safe-area-inset-bottom, 0px)); }
+  body:has(.build-notice-card:not([hidden])) #live-toast { right: 12px; bottom: calc(104px + env(safe-area-inset-bottom, 0px)); }
+  body:has(.build-notice-card:not([hidden])) .chord-hint { bottom: calc(104px + env(safe-area-inset-bottom, 0px)); }
   body:has(.build-notice-card:not([hidden])) .main { padding-bottom: calc(124px + env(safe-area-inset-bottom, 0px)); }
 }
