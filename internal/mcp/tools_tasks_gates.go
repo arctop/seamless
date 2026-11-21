@@ -54,7 +54,7 @@ func gateArgOptions() []mcp.ToolOption {
 				"Seamless, that the tasks depending on it wait for: never ready and never claimed; gate_who and gate_what "+
 				"describe it, and clearing it closes it and unblocks its dependents)")),
 		mcp.WithString(gateWhoParam, mcp.Description(
-			"who must act before this task can go ahead: owner, founder:<name>, sitting:<name>, hardware, "+
+			"who must act before this task can go ahead: owner, reviewer:<name>, sitting:<name>, hardware, "+
 				"sealed:<project>, or free text (one line). With gate_what it gives the task a gate: a step whose gate is "+
 				"open is not ready, and tasks_ready lists it under gated")),
 		mcp.WithString(gateWhatParam, mcp.Description("what must happen, one line (with gate_who)")),

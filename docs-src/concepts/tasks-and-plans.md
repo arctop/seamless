@@ -36,12 +36,12 @@ time.
 ## Gates: work that waits on people {#gates}
 
 Some steps cannot go ahead until a person acts, or something happens outside
-Seamless: the owner signs off, a founder picks a name, a security sitting runs
+Seamless: the owner signs off, a reviewer approves a design, a security sitting runs
 a drill, hardware arrives. Agents cannot clear those, so a step that waits on
 one should not read as ready. A **gate** says so, in two forms:
 
 - **A step's own gate.** `gate_who` names who must act (`owner`,
-  `founder:<name>`, `sitting:<name>`, `hardware`, `sealed:<project>`, or free
+  `reviewer:<name>`, `sitting:<name>`, `hardware`, `sealed:<project>`, or free
   text) and `gate_what` what must happen, each one line; `gate_decision` (the
   open question the person answers) and `gate_ready_when` are optional. While the
   gate is open the step is not ready and cannot be claimed.
@@ -66,7 +66,7 @@ answer:
 | Call | Answers |
 |---|---|
 | `tasks_ready agent=true` | Only `ready`, with the other groups' sizes under `omitted` - the queue a fan-out dispatches from |
-| `tasks_ready who=owner` | Only the `gates` and `gated` tasks waiting on the owner; `who=founder` matches every `founder:<name>` |
+| `tasks_ready who=owner` | Only the `gates` and `gated` tasks waiting on the owner; `who=reviewer` matches every `reviewer:<name>` |
 
 A task without a gate reads and behaves exactly as before.
 

@@ -88,7 +88,7 @@ A task that waits on a person, or on an event outside Seamless, carries a gate
   each lists its unfinished blockers; a blocker that is a gate carries its
   `kind` and `gate`. `agent=true` answers `ready` alone with `omitted: {blocked,
   gated, gates}` counts; `who=<who>` answers only the `gates` and `gated` tasks
-  waiting on that person (case-insensitive; `founder` matches `founder:dana`).
+  waiting on that person (case-insensitive; `reviewer` matches `reviewer:dana`).
   The two filters cannot be combined, and a blank `who` is refused.
 - The `task.transition` record of a call that set, cleared or removed a gate
   carries `gate: set|cleared|removed`, and of one that changed the kind,

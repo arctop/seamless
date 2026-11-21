@@ -1,6 +1,6 @@
 -- Task gates: a step that waits on a person or an event outside Seamless.
 --
--- A task's gate names who must act (gate_who: owner, founder:<name>,
+-- A task's gate names who must act (gate_who: owner, reviewer:<name>,
 -- sitting:<name>, hardware, sealed:<project>, or free text) and what must
 -- happen (gate_what), optionally the open question the person answers
 -- (gate_decision) and when the step is ready (gate_ready_when). The gate is

@@ -30,7 +30,7 @@ func bindReady(fs *flag.FlagSet) *readyOpts {
 		project:     fs.String("project", "", "project `SLUG` (defaults to the server binding)"),
 		showBlocked: fs.Bool("blocked", false, "also list blocked tasks and their blockers, and the work waiting on people"),
 		plan:        fs.String("plan", "", "show the ready/blocked step tasks of plan `SLUG` instead of the default queue"),
-		who:         fs.String("who", "", "list only the gates and gated tasks waiting on `WHO` (owner, founder:<name>, ...)"),
+		who:         fs.String("who", "", "list only the gates and gated tasks waiting on `WHO` (owner, reviewer:<name>, ...)"),
 		agent:       fs.Bool("agent", false, "list only the tasks an agent can work now"),
 		asJSON:      jsonFlag(fs, jsonUsage),
 	}

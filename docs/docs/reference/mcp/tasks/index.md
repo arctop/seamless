@@ -79,7 +79,7 @@ A task that waits on a person, or on an event outside Seamless, carries a gate
   each lists its unfinished blockers; a blocker that is a gate carries its
   `kind` and `gate`. `agent=true` answers `ready` alone with `omitted: {blocked,
   gated, gates}` counts; `who=<who>` answers only the `gates` and `gated` tasks
-  waiting on that person (case-insensitive; `founder` matches `founder:dana`).
+  waiting on that person (case-insensitive; `reviewer` matches `reviewer:dana`).
   The two filters cannot be combined, and a blank `who` is refused.
 - The `task.transition` record of a call that set, cleared or removed a gate
   carries `gate: set|cleared|removed`, and of one that changed the kind,
@@ -182,7 +182,7 @@ Add a task to the dependency-aware ready queue. depends_on lists task ids that m
 | `gate_decision` | string | no | optional: the open question the person answers, one line |
 | `gate_ready_when` | string | no | optional: when the task is ready, one line |
 | `gate_what` | string | no | what must happen, one line (with gate_who) |
-| `gate_who` | string | no | who must act before this task can go ahead: owner, founder:&lt;name&gt;, sitting:&lt;name&gt;, hardware, sealed:&lt;project&gt;, or free text (one line). With gate_what it gives the task a gate: a step whose gate is open is not ready, and tasks_ready lists it under gated |
+| `gate_who` | string | no | who must act before this task can go ahead: owner, reviewer:&lt;name&gt;, sitting:&lt;name&gt;, hardware, sealed:&lt;project&gt;, or free text (one line). With gate_what it gives the task a gate: a step whose gate is open is not ready, and tasks_ready lists it under gated |
 | `kind` | string | no | step (the default: work an agent claims and finishes) or gate (a person's action, or an event outside Seamless, that the tasks depending on it wait for: never ready and never claimed; gate_who and gate_what describe it, and clearing it closes it and unblocks its dependents). One of: `step`, `gate`. |
 | `plan` | string | no | optional plan slug (plan:&lt;slug&gt; convention) that composes this task as a step of a plan. Plan steps are excluded from the default ready-queue and surfaced under the plan filter. |
 | `project` | string | no | project slug; defaults to the bound/ambient session's project. An unknown slug CREATES that project -- naming a new one is normal and never an error. Pass project=global ONLY for knowledge that belongs in EVERY project's briefing; it is not a neutral default. With no session and no explicit project the call is rejected as ambiguous. A session bound to a confidential or sealed project can write ONLY into that project. |
@@ -204,7 +204,7 @@ Update a task: change status (open|in_progress|done|dropped), edit title/body, a
 | `gate_note` | string | no | optional, with gate_clear: what the person decided or did, kept with the cleared gate |
 | `gate_ready_when` | string | no | optional: when the task is ready, one line |
 | `gate_what` | string | no | what must happen, one line (with gate_who) |
-| `gate_who` | string | no | who must act before this task can go ahead: owner, founder:&lt;name&gt;, sitting:&lt;name&gt;, hardware, sealed:&lt;project&gt;, or free text (one line). With gate_what it gives the task a gate: a step whose gate is open is not ready, and tasks_ready lists it under gated |
+| `gate_who` | string | no | who must act before this task can go ahead: owner, reviewer:&lt;name&gt;, sitting:&lt;name&gt;, hardware, sealed:&lt;project&gt;, or free text (one line). With gate_what it gives the task a gate: a step whose gate is open is not ready, and tasks_ready lists it under gated |
 | `kind` | string | no | step (the default: work an agent claims and finishes) or gate (a person's action, or an event outside Seamless, that the tasks depending on it wait for: never ready and never claimed; gate_who and gate_what describe it, and clearing it closes it and unblocks its dependents). One of: `step`, `gate`. |
 | `project` | string | no | reassign the task to another project slug (used when a split moves a project's open work to a child) |
 | `reference` | string | no | A receipt's one reference, to an item in this conversation's home, written &lt;project&gt;:&lt;id&gt; -- the home's slug and the id of a memory, note, task, trial or session there. Once the owner has moved this conversation into another project, it closes a task it claimed before the move with a receipt: tasks_update with status done or dropped and nothing else, plus, optionally, this reference, which the task's history records. A receipt carries no title, body, project, dependencies or commits, and a conversation whose home is sealed sends none. Offered only while isolation.requests is on |
@@ -224,7 +224,7 @@ List the actionable (ready) tasks for a project -- open tasks with no unfinished
 | `plan` | string | no | optional plan slug: return that plan's ready/blocked step tasks instead of the default (non-plan) queue |
 | `project` | string | no | project slug; defaults to the bound session's project |
 | `session` | string | no | the session to act as: the name session_start returned, the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, or a session ULID. It scopes and credits this call. Defaults to this connection's session; pass it on every call when session_start reports the connection as stateless |
-| `who` | string | no | optional: only the gates and gated tasks waiting on this person, e.g. owner; a class before a colon matches every name in it (founder matches founder:dana) |
+| `who` | string | no | optional: only the gates and gated tasks waiting on this person, e.g. owner; a class before a colon matches every name in it (reviewer matches reviewer:dana) |
 
 ## tasks_list {#tasks_list}
 

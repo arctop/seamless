@@ -1025,7 +1025,7 @@
             "type": "string"
           },
           "gate_who": {
-            "description": "who must act before this task can go ahead: owner, founder:<name>, sitting:<name>, hardware, sealed:<project>, or free text (one line). With gate_what it gives the task a gate: a step whose gate is open is not ready, and tasks_ready lists it under gated",
+            "description": "who must act before this task can go ahead: owner, reviewer:<name>, sitting:<name>, hardware, sealed:<project>, or free text (one line). With gate_what it gives the task a gate: a step whose gate is open is not ready, and tasks_ready lists it under gated",
             "type": "string"
           },
           "kind": {
@@ -1167,7 +1167,7 @@
             "type": "string"
           },
           "who": {
-            "description": "optional: only the gates and gated tasks waiting on this person, e.g. owner; a class before a colon matches every name in it (founder matches founder:dana)",
+            "description": "optional: only the gates and gated tasks waiting on this person, e.g. owner; a class before a colon matches every name in it (reviewer matches reviewer:dana)",
             "type": "string"
           }
         },
@@ -1252,7 +1252,7 @@
             "type": "string"
           },
           "gate_who": {
-            "description": "who must act before this task can go ahead: owner, founder:<name>, sitting:<name>, hardware, sealed:<project>, or free text (one line). With gate_what it gives the task a gate: a step whose gate is open is not ready, and tasks_ready lists it under gated",
+            "description": "who must act before this task can go ahead: owner, reviewer:<name>, sitting:<name>, hardware, sealed:<project>, or free text (one line). With gate_what it gives the task a gate: a step whose gate is open is not ready, and tasks_ready lists it under gated",
             "type": "string"
           },
           "id": {

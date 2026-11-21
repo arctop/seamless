@@ -267,7 +267,7 @@ in the ready list. Without `--blocked`, one line counts it (`waiting on people:
 2 gated, 1 gates`); `--blocked` lists the gated steps and the gates, each with
 what it waits on (`waits on owner: sign the release`, or `blocked by gate ...`
 for a step behind a gate task). `--who owner` lists only the gates and gated
-steps waiting on the owner (`--who founder` matches every `founder:<name>`),
+steps waiting on the owner (`--who reviewer` matches every `reviewer:<name>`),
 and `--agent` only the tasks an agent can work now; neither combines with
 `--blocked` or the other.
 

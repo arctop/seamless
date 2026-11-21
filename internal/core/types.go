@@ -577,7 +577,7 @@ var TaskKinds = []TaskKind{TaskKindStep, TaskKindGate}
 func (k TaskKind) Valid() bool { return slices.Contains(TaskKinds, k) }
 
 // TaskGate is what a task waits on outside Seamless: who must act (the owner,
-// founder:<name>, sitting:<name>, hardware, sealed:<project>, or free text)
+// reviewer:<name>, sitting:<name>, hardware, sealed:<project>, or free text)
 // and what must happen, optionally the open question the person answers and
 // when the task is ready. A task carries one gate at most. The gate is open
 // while Who is set and ClearedAt is nil; clearing it records when, by whom and
@@ -599,8 +599,8 @@ func (g TaskGate) Set() bool { return g.Who != "" }
 func (g TaskGate) Open() bool { return g.Who != "" && g.ClearedAt == nil }
 
 // GateWhoMatches reports whether a gate's who answers a who filter: equal
-// ignoring case, or the filter names the class before a colon ("founder"
-// matches "founder:dana"). An empty filter matches nothing.
+// ignoring case, or the filter names the class before a colon ("reviewer"
+// matches "reviewer:dana"). An empty filter matches nothing.
 func GateWhoMatches(who, filter string) bool {
 	who, filter = strings.TrimSpace(who), strings.TrimSpace(filter)
 	if filter == "" || who == "" {

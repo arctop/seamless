@@ -352,7 +352,7 @@ func tasksReadyTool() mcp.Tool {
 		mcp.WithDescription("List the actionable (ready) tasks for a project -- open tasks with no unfinished blocker and no open gate -- oldest first, plus the blocked tasks with their still-open blockers. Work that waits on people is listed apart, without bodies (tasks_list id=<id> loads one), and only when there is some: gated holds the steps whose own gate is open or that an open gate blocks, and gates the tasks of kind gate, ordered by who must act -- the people's queue. agent=true answers ready alone, with the other groups' sizes under omitted; who=<who> answers only the gates and gated tasks waiting on that person. By default plan-step tasks are excluded; pass plan=<slug> to list that plan's steps instead."),
 		mcp.WithString("project", mcp.Description("project slug; defaults to the bound session's project")),
 		mcp.WithString("plan", mcp.Description("optional plan slug: return that plan's ready/blocked step tasks instead of the default (non-plan) queue")),
-		mcp.WithString(readyWhoParam, mcp.Description("optional: only the gates and gated tasks waiting on this person, e.g. owner; a class before a colon matches every name in it (founder matches founder:dana)")),
+		mcp.WithString(readyWhoParam, mcp.Description("optional: only the gates and gated tasks waiting on this person, e.g. owner; a class before a colon matches every name in it (reviewer matches reviewer:dana)")),
 		mcp.WithBoolean(readyAgentParam, mcp.Description("optional: true answers only the tasks an agent can work now (ready), with the sizes of the groups left out")),
 	)
 }

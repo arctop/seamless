@@ -135,7 +135,7 @@ func TestTasksGates_UpdateArguments(t *testing.T) {
 	url, db := newServer(t)
 	cli := dialClient(t, ctx, url, testKey)
 	callJSON(t, ctx, cli, "session_start", map[string]any{"cwd": "/work/demo"})
-	step := callJSON(t, ctx, cli, "tasks_add", map[string]any{"title": "GATE (founder): pick a name"})["id"].(string)
+	step := callJSON(t, ctx, cli, "tasks_add", map[string]any{"title": "GATE (reviewer): pick a name"})["id"].(string)
 
 	for _, tc := range []struct {
 		name string
@@ -159,7 +159,7 @@ func TestTasksGates_UpdateArguments(t *testing.T) {
 
 	// The GATE-task workaround converts in one call.
 	out := callJSON(t, ctx, cli, "tasks_update", map[string]any{
-		"id": step, "kind": "gate", "gate_who": "founder:dana", "gate_what": "pick the name",
+		"id": step, "kind": "gate", "gate_who": "reviewer:dana", "gate_what": "pick the name",
 	})
 	require.Equal(t, "gate", out["kind"])
 	hist := transitions(t, db, step)
@@ -190,24 +190,24 @@ func TestTasksGates_ConfidentialClaimRefusalNamesNoOne(t *testing.T) {
 	isolate(t, ctx, db, "client-work", core.IsolationConfidential)
 	inside := bindClient(t, ctx, db, url, "client-work")
 	taskID := callJSON(t, ctx, inside, "tasks_add", map[string]any{
-		"title": "rotate the keys", "gate_who": "founder:dana", "gate_what": "approve the rotation window",
+		"title": "rotate the keys", "gate_who": "reviewer:dana", "gate_what": "approve the rotation window",
 	})["id"].(string)
 
 	isErr, txt := callErr(t, ctx, inside, "tasks_claim", map[string]any{"id": taskID})
 	require.True(t, isErr)
-	require.Contains(t, txt, "founder:dana", "inside, the refusal says who")
+	require.Contains(t, txt, "reviewer:dana", "inside, the refusal says who")
 
 	outside := bindClient(t, ctx, db, url, "demo")
 	isErr, txt = callErr(t, ctx, outside, "tasks_claim", map[string]any{"id": taskID})
 	require.True(t, isErr)
 	require.Contains(t, txt, "task gated")
-	require.NotContains(t, txt, "founder")
+	require.NotContains(t, txt, "reviewer")
 	require.NotContains(t, txt, "rotation")
 
 	out := callJSON(t, ctx, outside, "tasks_update", map[string]any{"id": taskID, "gate_clear": true})
 	raw, err := json.Marshal(out)
 	require.NoError(t, err)
-	require.NotContains(t, string(raw), "founder", "a withheld answer carries no gate")
+	require.NotContains(t, string(raw), "reviewer", "a withheld answer carries no gate")
 	require.NotContains(t, out, "kind")
 }
 

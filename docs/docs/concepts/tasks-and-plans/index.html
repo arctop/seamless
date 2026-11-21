@@ -275,12 +275,12 @@ queue forever. Cycles are rejected at creation, not discovered at scheduling
 time.</p>
 <h2 id="gates">Gates: work that waits on people</h2>
 <p>Some steps cannot go ahead until a person acts, or something happens outside
-Seamless: the owner signs off, a founder picks a name, a security sitting runs
+Seamless: the owner signs off, a reviewer approves a design, a security sitting runs
 a drill, hardware arrives. Agents cannot clear those, so a step that waits on
 one should not read as ready. A <strong>gate</strong> says so, in two forms:</p>
 <ul>
 <li><strong>A step's own gate.</strong> <code>gate_who</code> names who must act (<code>owner</code>,
-<code>founder:&lt;name&gt;</code>, <code>sitting:&lt;name&gt;</code>, <code>hardware</code>, <code>sealed:&lt;project&gt;</code>, or free
+<code>reviewer:&lt;name&gt;</code>, <code>sitting:&lt;name&gt;</code>, <code>hardware</code>, <code>sealed:&lt;project&gt;</code>, or free
 text) and <code>gate_what</code> what must happen, each one line; <code>gate_decision</code> (the
 open question the person answers) and <code>gate_ready_when</code> are optional. While the
 gate is open the step is not ready and cannot be claimed.</li>
@@ -314,7 +314,7 @@ answer:</p>
 </tr>
 <tr>
 <td><code>tasks_ready who=owner</code></td>
-<td>Only the <code>gates</code> and <code>gated</code> tasks waiting on the owner; <code>who=founder</code> matches every <code>founder:&lt;name&gt;</code></td>
+<td>Only the <code>gates</code> and <code>gated</code> tasks waiting on the owner; <code>who=reviewer</code> matches every <code>reviewer:&lt;name&gt;</code></td>
 </tr>
 </tbody>
 </table>

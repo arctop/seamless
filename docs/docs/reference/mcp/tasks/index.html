@@ -317,7 +317,7 @@ gate blocks) and <code>gates</code> (gate tasks open or in progress, ordered by 
 its answer when either holds anything. Their entries come without <code>body</code>, and
 each lists its unfinished blockers; a blocker that is a gate carries its
 <code>kind</code> and <code>gate</code>. <code>agent=true</code> answers <code>ready</code> alone with <code>omitted: {blocked, gated, gates}</code> counts; <code>who=&lt;who&gt;</code> answers only the <code>gates</code> and <code>gated</code> tasks
-waiting on that person (case-insensitive; <code>founder</code> matches <code>founder:dana</code>).
+waiting on that person (case-insensitive; <code>reviewer</code> matches <code>reviewer:dana</code>).
 The two filters cannot be combined, and a blank <code>who</code> is refused.</li>
 <li>The <code>task.transition</code> record of a call that set, cleared or removed a gate
 carries <code>gate: set|cleared|removed</code>, and of one that changed the kind,
@@ -467,7 +467,7 @@ sealed sends none. Off, the argument does not exist. See
 <td><code>gate_who</code></td>
 <td>string</td>
 <td>no</td>
-<td>who must act before this task can go ahead: owner, founder:&lt;name&gt;, sitting:&lt;name&gt;, hardware, sealed:&lt;project&gt;, or free text (one line). With gate_what it gives the task a gate: a step whose gate is open is not ready, and tasks_ready lists it under gated</td>
+<td>who must act before this task can go ahead: owner, reviewer:&lt;name&gt;, sitting:&lt;name&gt;, hardware, sealed:&lt;project&gt;, or free text (one line). With gate_what it gives the task a gate: a step whose gate is open is not ready, and tasks_ready lists it under gated</td>
 </tr>
 <tr>
 <td><code>kind</code></td>
@@ -573,7 +573,7 @@ sealed sends none. Off, the argument does not exist. See
 <td><code>gate_who</code></td>
 <td>string</td>
 <td>no</td>
-<td>who must act before this task can go ahead: owner, founder:&lt;name&gt;, sitting:&lt;name&gt;, hardware, sealed:&lt;project&gt;, or free text (one line). With gate_what it gives the task a gate: a step whose gate is open is not ready, and tasks_ready lists it under gated</td>
+<td>who must act before this task can go ahead: owner, reviewer:&lt;name&gt;, sitting:&lt;name&gt;, hardware, sealed:&lt;project&gt;, or free text (one line). With gate_what it gives the task a gate: a step whose gate is open is not ready, and tasks_ready lists it under gated</td>
 </tr>
 <tr>
 <td><code>kind</code></td>
@@ -667,7 +667,7 @@ sealed sends none. Off, the argument does not exist. See
 <td><code>who</code></td>
 <td>string</td>
 <td>no</td>
-<td>optional: only the gates and gated tasks waiting on this person, e.g. owner; a class before a colon matches every name in it (founder matches founder:dana)</td>
+<td>optional: only the gates and gated tasks waiting on this person, e.g. owner; a class before a colon matches every name in it (reviewer matches reviewer:dana)</td>
 </tr>
 </tbody>
 </table>

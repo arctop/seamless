@@ -146,10 +146,10 @@ func TestGatePatch_SetEditReopen(t *testing.T) {
 	db := newTaskDB(t)
 	id := addTask(t, db, "demo", "step", 1)
 	now := time.Now().UTC()
-	who, what, decision := " founder:dana ", "pick the name", "which of the three?"
+	who, what, decision := " reviewer:dana ", "pick the name", "which of the three?"
 	got, err := UpdateTask(ctx, db, id, TaskPatch{Gate: &TaskGatePatch{Who: &who, What: &what, Decision: &decision}}, "", now)
 	require.NoError(t, err)
-	require.Equal(t, "founder:dana", got.Gate.Who, "gate text is trimmed")
+	require.Equal(t, "reviewer:dana", got.Gate.Who, "gate text is trimmed")
 	require.True(t, got.Gate.Open())
 	require.Empty(t, readyTitles(t, db, "demo"))
 
