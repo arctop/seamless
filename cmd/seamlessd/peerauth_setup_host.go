@@ -84,6 +84,16 @@ func pasPreflight(ctx context.Context, h *pasHost, o pasOptions) (pasPlan, []str
 			p.OldSeam = s
 		}
 	}
+	// Which clients the hooks step re-points: the ones wired now, never the
+	// ones merely installed here.
+	var clientNotes []string
+	if h.wiredClients != nil {
+		seamDir := filepath.Dir(h.exe)
+		if p.OldSeam != "" {
+			seamDir = filepath.Dir(p.OldSeam)
+		}
+		p.Clients, p.SkipSkills, clientNotes = h.wiredClients(cfg, absConfigPath(path), seamDir)
+	}
 
 	// The data directory: the owner's, a real directory, not under the layout.
 	if f, err := w.inspect(p.OldDataDir); err != nil || !f.isDir || f.symlink {
@@ -241,6 +251,11 @@ func pasPreflight(ctx context.Context, h *pasHost, o pasOptions) (pasPlan, []str
 	if len(p.Services) == 0 {
 		warnings = append(warnings, "no per-user service was found: stop a daemon you run by hand before the data moves")
 	}
+	if len(p.Clients) == 0 {
+		warnings = append(warnings, "no agent client is wired to Seamless here, so the move re-points none: "+
+			"run seamlessd install-hooks after it to wire one")
+	}
+	warnings = append(warnings, clientNotes...)
 	if !pasSelfUpdating(p) && p.Source == "" {
 		warnings = append(warnings, "the binaries stay root's: the daemon only tells you about a new release, and you replace them with sudo")
 	}
@@ -299,6 +314,18 @@ func pasSystemServiceFiles(goos string) []string {
 
 // pasHookSeam is the seam the owner's Claude Code hooks run
 // (~/.claude/settings.json), "" when there are none.
+// pasWiredClients is pasHost.wiredClients on this machine: the agent clients
+// an update would observe as wired (observeClients) in the owner's home and
+// environment, and the skills they lack (skillOptOuts).
+func pasWiredClients(home string, environ []string) func(config.Config, string, string) ([]string, []string, []string) {
+	return func(cfg config.Config, configPath, seamDir string) (clients, skip, notes []string) {
+		env := shapeEnv{goos: runtime.GOOS, home: home, environ: environ, claudeManagedDir: claudeManagedSettingsDir()}
+		clients, notes = observeClients(env, cfg, seamDir, configPath)
+		skip, more := skillOptOuts(env, clients)
+		return clients, skip, append(notes, more...)
+	}
+}
+
 func pasHookSeam() string {
 	path, err := expandHome("~/.claude/settings.json")
 	if err != nil {
@@ -332,6 +359,7 @@ func realPasHost() *pasHost {
 			h.owner.group = g.Name
 		}
 	}
+	h.wiredClients = pasWiredClients(h.owner.home, h.environ)
 	if exe, err := os.Executable(); err == nil {
 		if real, err := filepath.EvalSymlinks(exe); err == nil {
 			exe = real

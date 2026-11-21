@@ -1771,7 +1771,7 @@ it needs root:</p>
 <li><code>health</code>: the daemon answers on the socket. On macOS this can take up to a minute: the address stays your account's while the connections your per-user daemon had finish closing, so the daemon's first starts cannot bind it and its service tries again every ten seconds.</li>
 <li><code>doctor</code>: <code>seamlessd doctor</code>, as the daemon's account, against its config.</li>
 <li><code>client</code>: your config set aside as <code>seamless.yaml.pre-peer-auth</code>, never edited, and a client's config on the socket written in its place, with <code>console.yaml</code> (<code>0600</code>) beside it keeping the key for the console.</li>
-<li><code>hooks</code>: <code>seamlessd install-hooks --client detect --seam /opt/seamless/bin/seam</code> (the agent clients this computer has, never a question).</li>
+<li><code>hooks</code>: <code>seamlessd install-hooks --client &lt;clients&gt; --seam /opt/seamless/bin/seam</code>, for exactly the agent clients wired to Seamless when the move was planned (as an <a href="../../updating/">update</a> sees them), never a client you did not choose and never a question; a skill you removed stays removed. With no client wired it reinstalls nothing. Undo points the same clients back at the seam they ran before.</li>
 </ol>
 <p>It ends with what comes next: enroll an approver, then lock a project from the
 console. It locks nothing itself.</p>

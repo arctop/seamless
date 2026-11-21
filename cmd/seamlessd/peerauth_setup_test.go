@@ -28,15 +28,17 @@ import (
 // run runs, but every block is kept, the state file's appends land in
 // memory, and the world it reports is the test's to change.
 type pasFake struct {
-	t        *testing.T
-	h        *pasHost
-	scripts  []string
-	state    []string
-	files    map[string]fileFacts
-	users    map[string][2]int
-	groups   map[string]int
-	loaded   map[string]bool
-	owner    [][]string
+	t       *testing.T
+	h       *pasHost
+	scripts []string
+	state   []string
+	files   map[string]fileFacts
+	users   map[string][2]int
+	groups  map[string]int
+	loaded  map[string]bool
+	owner   [][]string
+	// ownerEnv is the environment each runOwner call added.
+	ownerEnv [][]string
 	failOn   string
 	pin      access.DaemonPin
 	pinned   bool
@@ -165,9 +167,14 @@ func newPasFake(t *testing.T, goos string) *pasFake {
 	}
 	h.team = func(context.Context, string) string { return f.team }
 	h.health = func(context.Context) error { return nil }
-	h.runOwner = func(_ context.Context, argv []string, _ []string) error {
+	h.runOwner = func(_ context.Context, argv []string, env []string) error {
 		f.owner = append(f.owner, argv)
+		f.ownerEnv = append(f.ownerEnv, env)
 		return nil
+	}
+	// The owner's Claude Code is wired; nothing else is.
+	h.wiredClients = func(config.Config, string, string) ([]string, []string, []string) {
+		return []string{shapeClaude}, nil, nil
 	}
 	f.h = h
 	return f
@@ -279,7 +286,7 @@ func TestPeerAuthSetup_RunsEveryStepInOrder(t *testing.T) {
 			info, err := os.Stat(filepath.Join(filepath.Dir(f.cfgPath), "console.yaml"))
 			require.NoError(t, err)
 			require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
-			require.Equal(t, [][]string{{f.h.exe, "install-hooks", "--config", f.cfgPath, "--client", "detect", "--seam", pasBin + "/seam"}}, f.owner)
+			require.Equal(t, [][]string{{f.h.exe, "install-hooks", "--config", f.cfgPath, "--client", "claude", "--seam", pasBin + "/seam"}}, f.owner)
 
 			// A run again has nothing left to do.
 			n := len(f.scripts)
@@ -387,13 +394,68 @@ func TestPeerAuthUndo_HooksGoBackToTheirOldSeam(t *testing.T) {
 	f.h.health = func(context.Context) error { return errors.New("connection refused") }
 	f.owner = nil
 	require.NoError(t, pasUndo(context.Background(), f.h, true, false))
-	require.Equal(t, [][]string{{f.h.exe, "install-hooks", "--config", f.cfgPath, "--client", "detect", "--seam", old}}, f.owner)
+	require.Equal(t, [][]string{{f.h.exe, "install-hooks", "--config", f.cfgPath, "--client", "claude", "--seam", old}}, f.owner)
 
 	// A seam under the layout already (a move made by hand) is not recorded.
 	g := newPasFake(t, "linux")
 	g.h.hookSeam = func() string { return pasBin + "/seam" }
 	require.NoError(t, pasSetup(context.Background(), g.h, pasOptions{yes: true}))
 	require.Empty(t, g.st().plan.OldSeam)
+}
+
+// The hooks step re-points the clients wired before the move and no other,
+// keeps out the skills they lacked, and undo does the same; with no client
+// wired it reinstalls nothing.
+func TestPeerAuthSetup_HooksKeepTheWiredClients(t *testing.T) {
+	f := newPasFake(t, "linux")
+	var gotSeamDir, gotConfig string
+	f.h.wiredClients = func(_ config.Config, configPath, seamDir string) ([]string, []string, []string) {
+		gotConfig, gotSeamDir = configPath, seamDir
+		return []string{shapeClaude, shapeCodex}, []string{"seam-research"}, []string{"Claude app left out: a note"}
+	}
+	require.NoError(t, pasSetup(context.Background(), f.h, pasOptions{yes: true}))
+	require.Equal(t, f.cfgPath, gotConfig)
+	require.Equal(t, filepath.Dir(f.h.exe), gotSeamDir, "with no recorded seam, the one beside this seamlessd")
+	plan := f.st().plan
+	require.Equal(t, []string{shapeClaude, shapeCodex}, plan.Clients)
+	require.Equal(t, []string{"seam-research"}, plan.SkipSkills)
+	require.Contains(t, f.out(), "Claude app left out: a note")
+	want := []string{f.h.exe, "install-hooks", "--config", f.cfgPath, "--client", "claude,codex", "--seam", pasBin + "/seam"}
+	require.Equal(t, [][]string{want}, f.owner)
+	require.Equal(t, [][]string{{"SEAMLESS_NO_RESEARCH_SKILL=1"}}, f.ownerEnv)
+
+	f.moved()
+	f.h.health = func(context.Context) error { return errors.New("connection refused") }
+	f.owner, f.ownerEnv = nil, nil
+	require.NoError(t, pasUndo(context.Background(), f.h, true, false))
+	require.Equal(t, [][]string{{f.h.exe, "install-hooks", "--config", f.cfgPath, "--client", "claude,codex"}}, f.owner)
+	require.Equal(t, [][]string{{"SEAMLESS_NO_RESEARCH_SKILL=1"}}, f.ownerEnv)
+
+	g := newPasFake(t, "darwin")
+	g.h.wiredClients = func(config.Config, string, string) ([]string, []string, []string) { return nil, nil, nil }
+	require.NoError(t, pasSetup(context.Background(), g.h, pasOptions{dryRun: true}))
+	require.Contains(t, g.out(), "no agent client is wired to Seamless here, so the move re-points none")
+	require.Contains(t, g.out(), "# then, in this process: nothing: no agent client was wired to Seamless before the move")
+	require.NoError(t, pasSetup(context.Background(), g.h, pasOptions{yes: true}))
+	require.Empty(t, g.owner, "no client was wired, so none is")
+	require.Contains(t, g.out(), "nothing to reinstall")
+}
+
+// A plan naming a client install-hooks does not wire, or a skill it cannot
+// leave out, is refused.
+func TestPasPlanProblem_ClientsAndSkills(t *testing.T) {
+	f := newPasFake(t, "linux")
+	require.NoError(t, pasSetup(context.Background(), f.h, pasOptions{dryRun: true}))
+	plan, _, err := pasPreflight(context.Background(), f.h, pasOptions{})
+	require.NoError(t, err)
+	plan.Release = "0.10.4"
+	require.Empty(t, plan.problem())
+	bad := plan
+	bad.Clients = []string{"claude", "detect"}
+	require.Contains(t, bad.problem(), `"detect" is not an agent client install-hooks wires`)
+	bad = plan
+	bad.SkipSkills = []string{"seam-nonesuch"}
+	require.Contains(t, bad.problem(), "seam-nonesuch")
 }
 
 // The per-user install's own update is waited out before its service stops:
@@ -565,7 +627,7 @@ func TestPeerAuthUndo_ReversesInTheGuidesOrder(t *testing.T) {
 			cfg, err := config.LoadFrom(f.cfgPath)
 			require.NoError(t, err)
 			require.False(t, cfg.IsClient())
-			require.Equal(t, [][]string{{f.h.exe, "install-hooks", "--config", f.cfgPath, "--client", "detect"}}, f.owner)
+			require.Equal(t, [][]string{{f.h.exe, "install-hooks", "--config", f.cfgPath, "--client", "claude"}}, f.owner)
 			st := f.st()
 			require.Equal(t, pasRolledBack, st.phase())
 			require.Contains(t, pasStatusLine(st), "rolled back")
@@ -707,7 +769,7 @@ func TestPeerAuthSetup_DryRunChangesNothing(t *testing.T) {
 	out := f.out()
 	require.Contains(t, out, "passkeys  approvers enroll under rp_id localhost, on http://localhost:8081")
 	for _, want := range []string{"# start the state file", "# 1. export everything", "export -o -", "sha256 of v0.10.4",
-		"# 11. reinstall the hooks", "# then, in this process: seamlessd install-hooks --client detect --seam /opt/seamless/bin/seam"} {
+		"# 11. reinstall the hooks", "# then, in this process: seamlessd install-hooks --config " + f.cfgPath + " --client claude --seam /opt/seamless/bin/seam"} {
 		require.Contains(t, out, want)
 	}
 	_, err := os.Stat(f.cfgPath + pasKeptSuffix)

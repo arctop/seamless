@@ -157,6 +157,9 @@ const (
 	shapeCodex         = "codex"
 )
 
+// shapeClients are those targets, in install order.
+var shapeClients = []string{shapeClaude, shapeClaudeDesktop, shapeCodex}
+
 // observeClients lists the agent clients this install already wires, as
 // SEAMLESS_CLIENT targets: Claude Code when ~/.claude/settings.json holds
 // Seamless-owned hooks (hooks.InstalledStatus: current or stale), or when

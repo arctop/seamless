@@ -120,16 +120,17 @@ func TestPeerAuthSetup_ReleaseSignersRefuseAReleaseTheKeysDoNotVouchFor(t *testi
 		sig  func(owner *sshsigtest.Key) []byte
 		want string
 		is   error
-		// rerun: whether the advice is to run setup again (a signature
-		// still to come), not to undo and plan afresh (a pin that refuses).
-		rerun bool
+		// advice: what to do next. No rerun gets past any of them: the plan
+		// installs the same release against the same pin.
+		advice string
 	}{
 		{"a key the pin does not list", func(*sshsigtest.Key) []byte { return signChecksums(t, stranger, pasTestChecksums) },
-			"checksums.txt.sshsig of v0.10.4, against update.release_signers", sshsig.ErrUnlisted, false},
+			"checksums.txt.sshsig of v0.10.4, against update.release_signers", sshsig.ErrUnlisted, "run seamlessd peer-auth undo, set the pin right"},
 		{"another checksums.txt", func(owner *sshsigtest.Key) []byte { return signChecksums(t, owner, "ffff  other.tar.gz\n") },
-			"checksums.txt.sshsig of v0.10.4, against update.release_signers", nil, false},
+			"checksums.txt.sshsig of v0.10.4, against update.release_signers", nil, "run seamlessd peer-auth undo, set the pin right"},
 		{"no signature at all", func(*sshsigtest.Key) []byte { return nil },
-			"v0.10.4 has no checksums.txt.sshsig, and update.release_signers", errOwnerSignatureMissing, true},
+			"v0.10.4 has no checksums.txt.sshsig, and update.release_signers", errOwnerSignatureMissing,
+			"Run seamlessd peer-auth undo, then seamlessd peer-auth setup --release X.Y.Z naming a release the owner signed"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newPasFake(t, "darwin")
@@ -143,12 +144,8 @@ func TestPeerAuthSetup_ReleaseSignersRefuseAReleaseTheKeysDoNotVouchFor(t *testi
 			}
 			var refusal *ownerSignatureError
 			require.True(t, errors.As(err, &refusal), "the updater's own refusal: %v", err)
-			if tc.rerun {
-				require.ErrorContains(t, err, "it continues from this step")
-			} else {
-				require.ErrorContains(t, err, "run seamlessd peer-auth undo, set the pin right")
-				require.NotContains(t, err.Error(), "it continues from this step")
-			}
+			require.ErrorContains(t, err, tc.advice)
+			require.NotContains(t, err.Error(), "it continues from this step")
 			require.NotContains(t, f.all(), pasStage+"/seamlessd", "nothing was staged")
 			require.NotEqual(t, pasLineDone, f.st().status["binaries"])
 		})

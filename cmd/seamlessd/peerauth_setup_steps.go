@@ -16,6 +16,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -78,7 +79,7 @@ var pasSteps = []pasStepDef{
 			return "your config becomes a client's, on the socket; " + filepath.Base(pasConsoleConfig(p)) + " keeps the key for the console"
 		}},
 	{id: "hooks", after: pasReinstallHooks,
-		afterWords: func(p pasPlan) string { return "seamlessd install-hooks --client detect --seam " + pasBin + "/seam" },
+		afterWords: func(p pasPlan) string { return pasHooksWords(p, "seamlessd", pasBin+"/seam") },
 		title:      func(pasPlan) string { return "reinstall the hooks and the MCP bridge to run " + pasBin + "/seam" }},
 }
 
@@ -720,13 +721,63 @@ func pasWriteOwnerConfig(path, content string, same func(config.Config) bool) er
 
 // pasReinstallHooks points the hooks and the MCP bridge at the daemon's own
 // seam, which no process of the owner's can replace and which moves with
-// the daemon when it updates itself. --client detect, as install-hooks takes
-// it with no terminal: on one it would otherwise stop the move to ask which
-// clients, a question a --yes run must not ask (a live run on macOS waited
-// there).
+// the daemon when it updates itself.
 func pasReinstallHooks(x *pasRun) error {
-	return x.h.runOwner(x.ctx, []string{x.h.exe, "install-hooks", "--config", x.plan.OldConfig, "--client", "detect",
-		"--seam", pasBin + "/seam"}, nil)
+	return pasRunHooks(x, pasBin+"/seam")
+}
+
+// pasHooksCommand is install-hooks for the plan's clients with the seam at
+// seam ("" for the one beside exe), and the environment that keeps out the
+// skills they lacked; ok is false when the plan wired no client. --client is
+// always named: with none, install-hooks at a terminal would stop the move
+// to ask which clients (a live run on macOS waited there), and without one,
+// detect wires every client installed here, chosen or not.
+func pasHooksCommand(p pasPlan, exe, seam string) (argv, env []string, ok bool, err error) {
+	if len(p.Clients) == 0 {
+		return nil, nil, false, nil
+	}
+	argv = []string{exe, "install-hooks", "--config", p.OldConfig, "--client", strings.Join(p.Clients, ",")}
+	if seam != "" {
+		argv = append(argv, "--seam", seam)
+	}
+	for _, name := range p.SkipSkills {
+		knob, err := skillOptOutKnob(name)
+		if err != nil {
+			return nil, nil, false, err
+		}
+		env = append(env, knob+"=1")
+	}
+	return argv, env, true, nil
+}
+
+// pasHooksWords is what the hooks step runs, as the dry run shows it.
+func pasHooksWords(p pasPlan, exe, seam string) string {
+	argv, env, ok, err := pasHooksCommand(p, exe, seam)
+	switch {
+	case err != nil:
+		return err.Error()
+	case !ok:
+		return "nothing: no agent client was wired to Seamless before the move"
+	}
+	words := slices.Clone(env)
+	for _, a := range argv {
+		words = append(words, shellcmd.PosixArg(a))
+	}
+	return strings.Join(words, " ")
+}
+
+// pasRunHooks runs the plan's install-hooks with the seam at seam, or says
+// there is none to run.
+func pasRunHooks(x *pasRun, seam string) error {
+	argv, env, ok, err := pasHooksCommand(x.plan, x.h.exe, seam)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		fmt.Fprintln(x.h.out, "    no agent client was wired to Seamless before the move: nothing to reinstall")
+		return nil
+	}
+	return x.h.runOwner(x.ctx, argv, env)
 }
 
 // pasUndoServiceCommands stop the system service and remove it.
@@ -833,9 +884,5 @@ func pasUndoClientConfig(x *pasRun) error {
 // beside this seamlessd: undo run from /opt/seamless/bin or a download would
 // otherwise point them at a seam the per-user install does not keep.
 func pasUndoHooks(x *pasRun) error {
-	argv := []string{x.h.exe, "install-hooks", "--config", x.plan.OldConfig, "--client", "detect"}
-	if x.plan.OldSeam != "" {
-		argv = append(argv, "--seam", x.plan.OldSeam)
-	}
-	return x.h.runOwner(x.ctx, argv, nil)
+	return pasRunHooks(x, x.plan.OldSeam)
 }

@@ -37,6 +37,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/relay"
 	"github.com/arctop/seamless/internal/shellcmd"
 	"github.com/arctop/seamless/internal/update"
@@ -124,6 +125,14 @@ type pasPlan struct {
 	// OldSeam is the seam the owner's Claude Code hooks ran before the move,
 	// which undo puts them back on; "" when none was recorded.
 	OldSeam string `json:"old_seam,omitempty"`
+	// Clients are the agent clients (install-hooks --client targets) wired
+	// to Seamless before the move, as an update observes them
+	// (observeClients): the hooks step re-points exactly these and undo
+	// points them back, so neither wires a client the owner never chose; none
+	// leaves the hooks alone. SkipSkills are the skills those clients lacked
+	// (skillOptOuts), kept out by install-hooks' opt-out knobs.
+	Clients    []string `json:"clients,omitempty"`
+	SkipSkills []string `json:"skip_skills,omitempty"`
 	// ReleaseSigners is the owner's update.release_signers, the file the
 	// daemon's pin (pasReleaseSigners) is copied from, and SignersSHA256 the
 	// hash of what it held when the move was planned: the release is held to
@@ -191,6 +200,16 @@ func (p pasPlan) problem() string {
 		return "the hooks' seam before the move is not an absolute path outside " + pasRoot
 	case p.Team != "" && (p.GOOS != "darwin" || p.Release == "" || !pasTeam.MatchString(p.Team)):
 		return fmt.Sprintf("%q is not a Developer ID team", p.Team)
+	}
+	for _, c := range p.Clients {
+		if !slices.Contains(shapeClients, c) {
+			return fmt.Sprintf("%q is not an agent client install-hooks wires (%s)", c, strings.Join(shapeClients, ", "))
+		}
+	}
+	for _, name := range p.SkipSkills {
+		if _, err := skillOptOutKnob(name); err != nil {
+			return err.Error()
+		}
 	}
 	if p.Release != "" {
 		if _, ok := update.Parse(p.Release); !ok {
@@ -415,7 +434,14 @@ func pasSetupCmd(h *pasHost, args []string) error {
 // (undo first), and a release a right pin refuses is not one to install.
 func pasStopAdvice(err error) string {
 	var sig *ownerSignatureError
-	if errors.As(err, &sig) && sig.word != update.SignatureMissing {
+	switch {
+	case errors.As(err, &sig) && sig.word == update.SignatureMissing:
+		// One still uploading is errReleaseInFlight, which a rerun outlasts;
+		// a published release that lists none never gains one.
+		return "A rerun installs the same release, which carries no owner's signature, so the pin refuses it again. " +
+			"Run seamlessd peer-auth undo, then seamlessd peer-auth setup --release X.Y.Z naming a release the owner signed, " +
+			"to plan the move afresh"
+	case errors.As(err, &sig):
 		return "The move holds this release to the release signers pin as the plan read it, so a rerun refuses it again. " +
 			"If the pin is wrong, run seamlessd peer-auth undo, set the pin right, and run seamlessd peer-auth setup to plan " +
 			"the move afresh; if the pin is right, this release is not one it vouches for, so do not install it"
@@ -1058,6 +1084,11 @@ type pasHost struct {
 	// hookSeam is the seam the owner's Claude Code hooks run now, "" when
 	// there are none (nil in tests that do not set it).
 	hookSeam func() string
+	// wiredClients lists the agent clients wired to Seamless now and the
+	// skills they lack, for configPath and the seam in seamDir
+	// (pasWiredClients), with notes on any it could not judge; nil in tests
+	// that do not set it, which then plan no client.
+	wiredClients func(cfg config.Config, configPath, seamDir string) (clients, skipSkills, notes []string)
 	// updaterBusy reports whether an updater holds the per-user install's
 	// update lock (updaterLockHeld; nil in tests that do not set it).
 	updaterBusy func(dataDir string) (bool, error)
