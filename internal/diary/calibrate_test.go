@@ -113,7 +113,7 @@ func TestCalibration_ABusyPlanDay(t *testing.T) {
 	require.Equal(t, 5, e.Short.Count)
 	require.Equal(t, &Progress{Start: Count{10, 14}, End: Count{13, 14}}, e.Spotlight[0].Progress)
 	require.True(t, strings.HasPrefix(e.Headline, "Led by rollout in example-ops"), e.Headline)
-	require.Contains(t, e.Headline, "3 steps closed, the plan is now 13/14")
+	require.Contains(t, e.Headline, "3 steps closed, the plan is now at 13 of 14")
 	dmNoZeroMinuteInSpotlight(t, e)
 }
 

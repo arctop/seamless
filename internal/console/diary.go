@@ -183,8 +183,22 @@ func dyEmptyEntry(day time.Time) diary.Entry {
 // withoutTrials takes every trial out of an entry while the research feature
 // is off: off means no trace, so the kept counts lose them, each thread's
 // kept list and its "why this is here" too, and the headline and character
-// are composed again from the counts that remain.
+// are composed again from the counts that remain. An entry with no trial is
+// left as it is: composing a day still to come again would call it Quiet.
 func withoutTrials(e *diary.Entry) {
+	removed := len(e.Kept.Trials)
+	for _, threads := range [][]diary.Thread{e.Spotlight, e.Also} {
+		for _, t := range threads {
+			for _, ref := range t.Kept {
+				if ref.Kind == diary.RefTrial {
+					removed++
+				}
+			}
+		}
+	}
+	if removed == 0 {
+		return
+	}
 	for _, it := range e.Kept.Trials {
 		if it.New {
 			e.Kept.New--
@@ -880,7 +894,7 @@ func buildThread(t diary.Thread, hours []time.Time, projects map[string]diary.Re
 		out.Kept = append(out.Kept, refLink(ref, ""))
 	}
 	for _, c := range t.Commits {
-		out.Commits = append(out.Commits, buildCommit(c))
+		out.Commits = append(out.Commits, buildCommit(c, nil))
 	}
 	spans := make([]presenceSpan, 0, len(t.Hours))
 	for i, m := range t.Hours {
@@ -1046,8 +1060,9 @@ func buildSession(sd diary.SessionDay) dySession {
 }
 
 // buildCommit lays one commit recorded out: its short id, the full id to
-// copy, and the task or session that recorded it.
-func buildCommit(c diary.Ref) dyCommit {
+// copy, and the task or session that recorded it (a session by what it was
+// about, from abouts, when the day has that).
+func buildCommit(c diary.Ref, abouts map[string]string) dyCommit {
 	out := dyCommit{Full: c.ID}
 	short := `<code>` + template.HTMLEscapeString(c.Title) + `</code>`
 	out.Link = template.HTML(short)
@@ -1058,8 +1073,40 @@ func buildCommit(c diary.Ref) dyCommit {
 		out.Link = template.HTML(`<a class="dy-commit" href="` + href + `" data-peek title="Recorded by this ` +
 			template.HTMLEscapeString(string(c.Owner.Kind)) + `">` + short + `</a>`)
 	}
-	out.Owner = refLink(*c.Owner, "")
+	out.Owner = sessionLink(*c.Owner, abouts)
 	return out
+}
+
+// sessionAbouts maps each session of the day to what it was about, so the
+// lists that name a session (the commits it recorded, its flag, a mishap it
+// reported) say that rather than its generated name.
+func sessionAbouts(e diary.Entry) map[string]string {
+	out := map[string]string{}
+	add := func(sd diary.SessionDay) {
+		if sd.About != "" && sd.AboutFrom != diary.AboutDefault {
+			out[sd.Session.ID] = sd.About
+		}
+	}
+	for _, threads := range [][]diary.Thread{e.Spotlight, e.Also} {
+		for _, t := range threads {
+			for _, sd := range t.Sessions {
+				add(sd)
+			}
+		}
+	}
+	for _, sd := range e.Short.Sessions {
+		add(sd)
+	}
+	return out
+}
+
+// sessionLink is refLink for a Ref that may be a session: a session the day
+// knows reads as what it was about, titled with its name.
+func sessionLink(ref diary.Ref, abouts map[string]string) template.HTML {
+	if about, ok := abouts[ref.ID]; ok && ref.Kind == diary.RefSession {
+		return refLinkAs(ref, "", about, refName(ref))
+	}
+	return refLink(ref, "")
 }
 
 // usagePanel fills the usage panel: the agents ring, the token mix, the
@@ -1138,18 +1185,20 @@ func usagePanel(v *diaryView, e diary.Entry, rhythm rhythmSpec, slots map[string
 		}
 	}
 	slices.SortStableFunc(v.Closed, func(a, b dyItem) int { return a.At.Compare(b.At) })
+	abouts := sessionAbouts(e)
 	for _, p := range e.Moments.Shipped {
 		v.Shipped = append(v.Shipped, dyItem{Icon: "flag", Link: refLink(p, ""), Sub: "shipped"})
 	}
 	for _, c := range e.Moments.Commits {
-		v.Commits = append(v.Commits, buildCommit(c))
+		v.Commits = append(v.Commits, buildCommit(c, abouts))
 	}
 	for _, f := range e.Moments.Flags {
-		v.Flags = append(v.Flags, dyItem{Icon: "flag", Link: refLink(f.Session, ""), Mark: f.Verdict,
+		v.Flags = append(v.Flags, dyItem{Icon: "flag", Link: sessionLink(f.Session, abouts), Mark: f.Verdict,
 			Tone: verdictTone(core.SessionVerdict(f.Verdict)), Sub: f.Reason, At: f.At})
 	}
 	for _, m := range e.Moments.Mishaps {
-		v.Mishaps = append(v.Mishaps, dyItem{Icon: "triangle-alert", Link: refLink(m.Event, ""), Sub: refName(m.Session), At: m.At})
+		v.Mishaps = append(v.Mishaps, dyItem{Icon: "triangle-alert", Link: refLink(m.Event, ""),
+			Sub: cmp.Or(abouts[m.Session.ID], refName(m.Session)), At: m.At})
 	}
 	v.Moments = len(v.Shipped)+len(v.Commits)+len(v.Flags)+len(v.Mishaps) > 0
 }
@@ -1248,9 +1297,14 @@ func buildRail(m diary.MonthView, c dyViewContext) dyRail {
 			Today: md.Day == todayKey, Quiet: quiet}
 		if quiet {
 			// A run of quiet days is one thin row: a pause, never a warning.
+			// It names its oldest and its newest day; the rows come newest
+			// first, so the newest is the one the run started with.
 			if n := len(rail.Rows); n > 0 && rail.Rows[n-1].Quiet && !rail.Rows[n-1].Today && !row.Today {
 				last := &rail.Rows[n-1]
-				newest, _, _ := strings.Cut(last.Label, " – ")
+				newest := last.Label
+				if _, after, ok := strings.Cut(last.Label, " – "); ok {
+					newest = after
+				}
 				last.Label = d.Format("Mon 2") + " – " + newest
 				last.Selected = last.Selected || row.Selected
 				continue
@@ -1261,6 +1315,12 @@ func buildRail(m diary.MonthView, c dyViewContext) dyRail {
 		rail.Empty = false
 		row.Title = railNote(md)
 		row.Minutes = diary.Duration(md.Facts.Minutes)
+		if md.Facts.Minutes == 0 && md.Facts.Approximate {
+			// From before the usage ledger: its agent time was never recorded,
+			// which is not the same as none.
+			row.Minutes = "—"
+			row.Title += " · agent time not recorded before the usage ledger"
+		}
 		row.Word, row.Rule = md.Character.Word, md.Character.Rule
 		row.Sessions = md.Facts.Sessions
 		if maxMin > 0 {

@@ -122,7 +122,7 @@ var diaryWantDays = []string{
 	"2026-11-20 today 4 sessions 18 rows",
 	"2026-11-19 workday 3 sessions 33 rows",
 	"2026-11-18 workday 3 sessions 18 rows",
-	"2026-11-17 workday 3 sessions 25 rows",
+	"2026-11-17 seven-agents 6 sessions 39 rows",
 	"2026-11-16 workday 3 sessions 18 rows",
 	"2026-11-15 quiet-weekend 0 sessions 0 rows",
 	"2026-11-14 quiet-weekend 0 sessions 0 rows",
@@ -174,8 +174,8 @@ func diaryCheckDays(t *testing.T, s *Seeder, fx DiaryFixture) {
 		require.ElementsMatch(t, diaryStarted(t, s, day.Date), day.Sessions, "sessions of %s", day.Date)
 		require.Len(t, diaryDayRows(t, s, day.Date), day.LedgerRows, "ledger rows of %s", day.Date)
 	}
-	require.Equal(t, 55, diaryCount(t, s, `SELECT COUNT(*) FROM sessions`))
-	require.Len(t, fx.Sessions, 55)
+	require.Equal(t, 58, diaryCount(t, s, `SELECT COUNT(*) FROM sessions`))
+	require.Len(t, fx.Sessions, 58)
 }
 
 func diaryCheckLinks(t *testing.T, s *Seeder, fx DiaryFixture) {
@@ -352,6 +352,26 @@ func diaryCheckSpecialDays(t *testing.T, s *Seeder, fx DiaryFixture) {
 		}
 	})
 
+	t.Run("a day of seven agents", func(t *testing.T) {
+		many := diaryRole(fx, DiaryManyAgents)
+		require.Len(t, many, 1)
+		lo, hi := diaryBounds(many[0].Date)
+		agents := `SELECT DISTINCT s.external_client || '/' || u.model FROM session_usage u
+			JOIN sessions s ON s.id = u.session_id WHERE u.bucket >= ? AND u.bucket < ? ORDER BY 1`
+		require.Equal(t, []string{
+			clientClaude + "/" + modelFable, clientClaude + "/" + modelHaiku, clientClaude + "/" + modelOpus,
+			clientClaude + "/" + modelSonnet, clientCodex + "/" + modelGPT, clientCodex + "/" + modelGPTMini,
+			clientCodex + "/" + modelGPTNext,
+		}, diaryStrings(t, s, agents, lo, hi), "seven agents, each a harness and a model")
+		for _, day := range fx.Days {
+			if day.Role == DiaryManyAgents {
+				continue
+			}
+			lo, hi := diaryBounds(day.Date)
+			require.LessOrEqual(t, len(diaryStrings(t, s, agents, lo, hi)), 3, "only the one day has more than three agents: %s", day.Date)
+		}
+	})
+
 	t.Run("a session spanning midnight", func(t *testing.T) {
 		sess := diarySession(t, s, fx.Links.MidnightSession)
 		start, end := sess.CreatedAt.In(diaryTestZone), sess.UpdatedAt.In(diaryTestZone)
@@ -385,10 +405,12 @@ func diaryCheckSpecialDays(t *testing.T, s *Seeder, fx DiaryFixture) {
 func diaryCheckUsageMix(t *testing.T, s *Seeder, fx DiaryFixture) {
 	require.Equal(t, []string{
 		clientClaude + " " + modelFable + " main", clientClaude + " " + modelFable + " subagent",
-		clientClaude + " " + modelOpus + " main", clientCodex + " " + modelGPT + " main",
+		clientClaude + " " + modelHaiku + " subagent", clientClaude + " " + modelOpus + " main",
+		clientClaude + " " + modelSonnet + " main", clientCodex + " " + modelGPT + " main",
+		clientCodex + " " + modelGPTMini + " main", clientCodex + " " + modelGPTNext + " main",
 	}, diaryStrings(t, s, `SELECT DISTINCT s.external_client || ' ' || u.model || ' ' || u.thread
 		FROM session_usage u JOIN sessions s ON s.id = u.session_id ORDER BY 1`),
-		"two harnesses, three models, a subagent share")
+		"two harnesses, three models every day and four more on the day of seven agents, a subagent share")
 
 	// Every plan the agents moved has its sessions' tokens (store.PlanTokenRollups,
 	// which the plan pages read).
@@ -478,7 +500,7 @@ func diaryCheckOtherAnchors(t *testing.T, base *Seeder, baseFx DiaryFixture) {
 			for _, day := range fx.Days {
 				roles[day.Role]++
 				switch day.Role {
-				case DiaryWorkday, DiaryShortDay, DiaryPreLedger:
+				case DiaryWorkday, DiaryShortDay, DiaryManyAgents, DiaryPreLedger:
 					require.False(t, weekend(day.Date), "%s on %s", day.Role, day.Date.Weekday())
 				case DiaryQuietWeekend, DiaryWeekend, DiaryLightWeekend:
 					require.True(t, weekend(day.Date), "%s on %s", day.Role, day.Date.Weekday())
@@ -489,7 +511,7 @@ func diaryCheckOtherAnchors(t *testing.T, base *Seeder, baseFx DiaryFixture) {
 				}
 			}
 			for role, n := range map[DiaryRole]int{DiaryToday: 1, DiaryQuietWeekend: 2, DiaryShortDay: 1,
-				DiaryLightWeekend: 1, DiaryPreLedger: 1} {
+				DiaryManyAgents: 1, DiaryLightWeekend: 1, DiaryPreLedger: 1} {
 				require.Equal(t, n, roles[role], "days of role %s", role)
 			}
 			var live int
@@ -575,6 +597,9 @@ func TestDiaryCalendar_EveryDay(t *testing.T) {
 			require.True(t, c.workdays[j-1].Equal(c.midnight.AddDate(0, 0, 1)), "%s: the night ends on a weekday", anchor)
 			short := c.workdays[len(diaryWorkdays)-1-diaryShortDay]
 			require.Equal(t, DiaryShortDay, c.role(short), anchor)
+			many := c.workdays[len(diaryWorkdays)-1-diaryAgentsDay]
+			require.Equal(t, DiaryManyAgents, c.role(many), anchor)
+			require.False(t, weekend(many), anchor)
 			require.False(t, short.Equal(c.midnight) || short.Equal(c.workdays[j-1]), "%s: the short day stays short", anchor)
 
 			require.False(t, weekend(c.preLedger), anchor)

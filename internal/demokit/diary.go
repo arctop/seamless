@@ -70,6 +70,7 @@ const (
 	DiaryToday        DiaryRole = "today"          // the anchor's day: finished work and two live agents
 	DiaryWorkday      DiaryRole = "workday"        // a weekday of plan steps, loose tasks and questions
 	DiaryShortDay     DiaryRole = "short-sessions" // a weekday of short questions only
+	DiaryManyAgents   DiaryRole = "seven-agents"   // a weekday of seven agents: two fold into Other
 	DiaryQuietWeekend DiaryRole = "quiet-weekend"  // the newest whole weekend: no session at all
 	DiaryWeekend      DiaryRole = "weekend"        // another weekend day, quiet too
 	DiaryLightWeekend DiaryRole = "light-weekend"  // the one weekend day with a short question
@@ -317,8 +318,14 @@ func (c diaryCalendar) role(day time.Time) DiaryRole {
 		return DiaryWeekend
 	}
 	for k, wd := range c.workdays {
-		if wd.Equal(day) && c.script(k) == diaryShortDay {
+		if !wd.Equal(day) {
+			continue
+		}
+		switch c.script(k) {
+		case diaryShortDay:
 			return DiaryShortDay
+		case diaryAgentsDay:
+			return DiaryManyAgents
 		}
 	}
 	return DiaryWorkday

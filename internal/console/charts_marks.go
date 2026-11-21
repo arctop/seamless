@@ -373,7 +373,9 @@ func sweepTiming(a, b, total float64) (delay, dur int) {
 // at twelve o'clock, a 2px surface gap between them, the total in the center,
 // and a legend row per segment (swatch, name, share, figure). One segment is no
 // split, so it draws no ring, only its legend line; nothing to share renders
-// nothing. The segments sweep in once on arrival (static/console.css).
+// nothing. On arrival the ring turns into place about its center while its
+// segments light in clockwise, once (static/console.css): transform and
+// opacity only.
 func ringChart(r ringSpec) template.HTML {
 	parts, total := r.parts()
 	if total <= 0 {
@@ -397,8 +399,8 @@ func ringChart(r ringSpec) template.HTML {
 		arc := (b - a) * c
 		g := min(ringGap, arc/2) // a sliver keeps half its length
 		delay, dur := sweepTiming(a, b, ringSweepT)
-		fmt.Fprintf(&segs, `<circle class="chart-ring-seg %s" data-i="%d" cx="%g" cy="%g" r="%g" fill="none" stroke-dasharray="%.2f %.2f" transform="rotate(%.2f %g %g)" style="--c:%.2f;--d:%dms;--t:%dms"></circle>`,
-			p.tone, i, mid, mid, ringR, arc-g, c, a*360-90+g/2/c*360, mid, mid, c, delay, dur)
+		fmt.Fprintf(&segs, `<circle class="chart-ring-seg %s" data-i="%d" cx="%g" cy="%g" r="%g" fill="none" stroke-dasharray="%.2f %.2f" transform="rotate(%.2f %g %g)" style="--d:%dms;--t:%dms"></circle>`,
+			p.tone, i, mid, mid, ringR, arc-g, c, a*360-90+g/2/c*360, mid, mid, delay, dur)
 		// The hit arc spans the whole share and is twice the ring's width, so
 		// the pointer finds a segment without aiming at its painted pixels.
 		fmt.Fprintf(&hits, `<circle class="chart-hit" data-i="%d" cx="%g" cy="%g" r="%g" fill="none" stroke-dasharray="%.2f %.2f" transform="rotate(%.2f %g %g)"></circle>`,
@@ -423,10 +425,10 @@ func ringChart(r ringSpec) template.HTML {
 	}
 	return template.HTML(fmt.Sprintf(`<div class="chart chart-ring"%s><div class="chart-ring-dial">`+
 		`<svg class="chart-svg chart-ring-svg chart-walk" viewBox="0 0 %g %g" width="%g" height="%g" role="img" aria-label="%s" tabindex="0">`+
-		`<g class="chart-ring-segs">%s</g><g class="chart-ring-hits">%s</g></svg>`+
+		`<g class="chart-ring-segs" style="transform-origin:%gpx %gpx">%s</g><g class="chart-ring-hits">%s</g></svg>`+
 		`<div class="chart-ring-core" aria-hidden="true">%s</div></div><ul class="chart-legend">%s</ul></div>`,
 		markAttr(markData{W: ringBox, H: ringBox, Marks: marks}), ringBox, ringBox, ringBox, ringBox,
-		template.HTMLEscapeString(summary), segs.String(), hits.String(), core, legend.String()))
+		template.HTMLEscapeString(summary), mid, mid, segs.String(), hits.String(), core, legend.String()))
 }
 
 // ringSummary is the ring's aria-label: the whole, then every part's share.
@@ -595,7 +597,10 @@ func rhythmChart(r rhythmSpec) template.HTML {
 			stack = append(stack, seg{p.tone, y0, rhythmBase - float64(cum)/scale*ph})
 		}
 		if len(stack) > 0 {
-			fmt.Fprintf(&cols, `<g class="chart-col" data-i="%d" style="--d:%dms">`, h, h*rhythmRise)
+			// The column rises from its own foot on the baseline: the origin is
+			// in the svg's user units, so it holds in every engine without
+			// leaning on transform-box for a <g>.
+			fmt.Fprintf(&cols, `<g class="chart-col" data-i="%d" style="--d:%dms;transform-origin:%.2fpx %gpx">`, h, h*rhythmRise, cx, rhythmBase)
 			for k, s := range stack {
 				last := k == len(stack)-1
 				top := s.y1

@@ -7334,17 +7334,24 @@ a.pv-fnode:focus-visible { outline: none; }
 .chart-legend-fig { min-width: 4ch; text-align: right; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 .chart-lit .chart-legend-row:not(.chart-on) { opacity: .45; }
 
-/* Ring */
-.chart-ring { display: flex; align-items: center; flex-wrap: wrap; gap: 14px 22px; }
+/* Ring. Where the legend cannot sit beside the dial with its names whole, it
+   wraps under it and the dial centers above it. */
+.chart-ring { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 14px 22px; }
+.chart-ring > .chart-legend { flex-basis: 220px; }
 .chart-ring.single .chart-legend-row { grid-template-columns: 10px minmax(0, 1fr) auto; }
 .chart-ring-dial { position: relative; flex: none; width: 136px; height: 136px; }
 .chart-ring-svg { display: block; overflow: visible; }
+/* The draw-on: the ring turns into place about its center (the group's
+   transform-origin, set where it is drawn) while its segments light in, each
+   in its stretch of one ease-out sweep. Transform and opacity only. */
+.chart-ring-segs { animation: chart-ring-turn .72s var(--ease-out) backwards; }
 .chart-ring-seg {
   stroke: var(--chart-c); stroke-width: 12;
   transition: opacity var(--dur-fast) var(--ease-out);
-  animation: chart-sweep var(--t, 1ms) linear var(--d, 0ms) backwards;
+  animation: chart-ring-in var(--t, 1ms) var(--ease-out) var(--d, 0ms) backwards;
 }
-@keyframes chart-sweep { from { stroke-dasharray: 0 var(--c); } }
+@keyframes chart-ring-turn { from { transform: rotate(-28deg); } }
+@keyframes chart-ring-in { from { opacity: 0; } }
 .chart-ring-hits .chart-hit { stroke: transparent; stroke-width: 28; }
 .chart-ring.chart-lit .chart-ring-seg:not(.chart-on) { opacity: .28; }
 .chart-ring-core {
@@ -7363,8 +7370,10 @@ a.pv-fnode:focus-visible { outline: none; }
 .chart-rhythm-svg { display: block; width: 100%; height: auto; overflow: visible; }
 .chart-base { stroke: var(--border-strong); stroke-width: 1; }
 .chart-seg { fill: var(--chart-c); }
+/* Each column rises from its foot: its transform-origin is set where it is
+   drawn, in the svg's user units. */
 .chart-col {
-  transform-box: fill-box; transform-origin: 50% 100%;
+  transform-box: view-box;
   transition: opacity var(--dur-fast) var(--ease-out);
   animation: chart-rise .55s var(--ease-out) var(--d, 0ms) backwards;
 }
@@ -7418,7 +7427,10 @@ a.chart-rank-name:hover { color: var(--brand); text-decoration: underline; text-
 .chart-mix-seg::after { content: ""; position: absolute; inset: -8px -1px; } /* the hit area, taller than the mark */
 .chart-mix.chart-lit .chart-mix-seg:not(.chart-on) { opacity: .35; }
 .chart-mix-bar.chart-walk:focus-visible { outline-offset: 6px; }
-.chart-mix-legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 7px 18px; margin-top: 14px; }
+/* Columns wide enough that no part's name is cut ("Cache write" and "Cache
+   read" must never both read "Cache..."): one column in the narrow panel, two
+   where the panel spans the entry. */
+.chart-mix-legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 7px 18px; margin-top: 14px; }
 
 /* Month heat grid: one hue in five steps; the day's number in ink. */
 .chart-month { display: flex; flex-direction: column; gap: 5px; }
@@ -7476,7 +7488,7 @@ a.chart-tile:hover .ov2-vital-label .ico-arrow-down { transform: translateY(2px)
 .chart-table tfoot th, .chart-table tfoot td { font-weight: 600; color: var(--text-primary); border-bottom: 0; }
 
 @media (prefers-reduced-motion: reduce) {
-  .chart-ring-seg, .chart-col, .chart-cap { animation: none; }
+  .chart-ring-seg, .chart-ring-segs, .chart-col, .chart-cap { animation: none; }
   .chart-ring-seg, .chart-col, .chart-legend-row, .chart-mix-seg, .chart-presence-seg { transition: none; }
 }
 
@@ -7493,6 +7505,10 @@ a.chart-tile:hover .ov2-vital-label .ico-arrow-down { transform: translateY(2px)
    and no theme-scoped rule: each theme's tokens carry it.
    =========================================================================== */
 .dy-page { display: grid; grid-template-columns: 252px minmax(0, 1fr); gap: 22px; align-items: start; }
+/* The entry comes first in the document and the rail after it; the rail is
+   drawn in the left column. */
+.dy-rail { grid-column: 1; grid-row: 1; }
+.dy-entry { grid-column: 2; grid-row: 1; }
 
 /* The rail */
 .dy-rail {
@@ -7589,7 +7605,10 @@ a.chart-tile:hover .ov2-vital-label .ico-arrow-down { transform: translateY(2px)
   display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px; cursor: help;
   border: 1px solid color-mix(in oklab, var(--dy-c) 32%, transparent); border-radius: var(--radius-pill);
   background: color-mix(in oklab, var(--dy-c) 11%, var(--surface-solid));
-  font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--dy-c);
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+  /* A step toward ink: every character's hue clears 4.5:1 on its own tint in
+     both themes (the light violet alone was 4.45:1). */
+  color: color-mix(in oklab, var(--dy-c) 80%, var(--ink));
 }
 .dy-tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .dy-headline {
@@ -7602,7 +7621,17 @@ a.chart-tile:hover .ov2-vital-label .ico-arrow-down { transform: translateY(2px)
 .dy-started { font-weight: 600; color: var(--brand); }
 .dy-started .ico, .dy-locked .ico { width: 13px; height: 13px; flex: none; }
 
-.dy-tiles { margin: 0; }
+.dy-tiles { margin: 0; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* The tiles size by the entry, which the rail and an open peek narrow, not by
+   the window: a figure and its change chip stay on their lines. */
+.dy-reader { container: dy-entry / inline-size; }
+@container dy-entry (max-width: 820px) {
+  .dy-tiles .ov2-vital-num { flex-direction: column; align-items: flex-start; gap: 5px; }
+  .dy-tiles .ov2-vital-num strong { font-size: var(--text-2xl); }
+}
+@container dy-entry (max-width: 600px) {
+  .dy-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .dy-notes { display: flex; flex-direction: column; gap: 6px; }
 .dy-note {
   display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 8px 12px;
@@ -7624,7 +7653,11 @@ a.chart-tile:hover .ov2-vital-label .ico-arrow-down { transform: translateY(2px)
 .dy-none { margin: 0; font-size: var(--text-xs); color: var(--text-muted); }
 
 .dy-cols { display: grid; grid-template-columns: minmax(0, 1fr) 332px; gap: 18px; align-items: start; }
-.dy-spot, .dy-usage { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.dy-spot { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+/* The usage panel is one column beside the work, and a grid of its panels
+   where it spans the entry under the work (laptop widths, an open peek). */
+.dy-usage { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; align-items: start; min-width: 0; }
+.dy-usage > .dy-tables { grid-column: 1 / -1; margin-top: 0; }
 .dy-section-h {
   margin: 2px 0 -2px; font-family: var(--font-serif); font-size: var(--text-lg); font-weight: 560;
   font-variation-settings: "SOFT" 30, "opsz" 36; color: var(--text-primary);
@@ -7671,12 +7704,14 @@ a.dy-proj:hover { border-color: color-mix(in oklab, var(--brand) 40%, var(--bord
 .dy-progress-line { flex: none; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
 
 .dy-moves { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.dy-move { display: grid; grid-template-columns: 9px minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: var(--text-sm); }
-.dy-move-mark { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--border-strong); }
+/* A task's title wraps rather than losing its end; the mark and the state
+   keep to its first line. */
+.dy-move { display: grid; grid-template-columns: 9px minmax(0, 1fr) auto; align-items: start; gap: 10px; font-size: var(--text-sm); line-height: 1.45; }
+.dy-move-mark { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; border: 1.5px solid var(--border-strong); }
 .dy-move-mark.is-closed { border-color: var(--ok); background: var(--ok); }
 .dy-move-mark.is-created { border-color: var(--brand); }
 .dy-move-mark.is-claimed { border-color: var(--brand); background: var(--brand-soft); }
-.dy-move-name, .dy-move .dy-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
+.dy-move-name, .dy-move .dy-text { min-width: 0; overflow-wrap: anywhere; color: var(--text-primary); }
 .dy-move-state { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-2xs); color: var(--faint); white-space: nowrap; }
 .dy-move-state .ico { width: 11px; height: 11px; }
 
@@ -7736,13 +7771,19 @@ a.dy-commit:hover code { color: var(--brand); }
 .dy-sessions-short { margin-top: 10px; }
 
 /* The usage panel's lists */
-.dy-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.dy-items li { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 8px; min-width: 0; font-size: var(--text-sm); }
-.dy-items li > .ico { flex: none; width: 13px; height: 13px; color: var(--faint); }
-.dy-items li > a, .dy-items li > .dy-text { flex: 0 1 auto; min-width: 0; max-width: calc(100% - 22px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* An item: its icon beside a line that wraps (the name whole, its mark
+   inline at the end), and under it a quieter line of at most two lines. */
+.dy-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.dy-items li { display: grid; grid-template-columns: 13px minmax(0, 1fr); gap: 2px 8px; min-width: 0; font-size: var(--text-sm); line-height: 1.45; }
+.dy-items li > .ico { grid-column: 1; width: 13px; height: 13px; margin-top: 3px; color: var(--faint); }
+.dy-item-main { grid-column: 2; min-width: 0; overflow-wrap: anywhere; }
+.dy-item-main > .badge { margin-left: 7px; }
 .dy-items li.is-shipped > .ico { color: var(--ok); }
 .dy-items li.is-mishap > .ico { color: var(--danger); }
-.dy-item-sub { flex-basis: 100%; padding-left: 21px; font-size: var(--text-2xs); line-height: 1.45; color: var(--text-muted); }
+.dy-item-sub {
+  grid-column: 2; min-width: 0; font-size: var(--text-2xs); line-height: 1.45; color: var(--text-muted);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
 
 /* An item that no longer resolves is its name as text. */
 .dy-gone { cursor: help; color: var(--faint); text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--faint) 55%, transparent); }
@@ -7789,7 +7830,8 @@ a.dy-commit:hover code { color: var(--brand); }
    month after the entry. */
 @media (max-width: 900px) {
   .dy-page { grid-template-columns: minmax(0, 1fr); }
-  .dy-rail { position: static; order: 2; max-height: none; }
+  .dy-rail, .dy-entry { grid-column: auto; grid-row: auto; }
+  .dy-rail { position: static; max-height: none; }
   .dy-keys { display: none; }
 }
 @media (max-width: 720px) {

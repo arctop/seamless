@@ -69,8 +69,13 @@ func TestCharacter_Thresholds(t *testing.T) {
 			require.NotEmpty(t, tag.Rule)
 		})
 	}
-	require.Equal(t, "3h or more of agent time, 60% or more of it in one project",
+	require.Equal(t, "2h or more of agent time, 60% or more of it in one project",
 		Character(Facts{Sessions: 1, Minutes: 200, TopShare: 70}).Rule, "the rule prints the thresholds verbatim")
+	// A working day reads as one: two hours in one project is deep work, and
+	// three hours spread over projects is busy, not light.
+	require.Equal(t, WordDeep, Character(Facts{Sessions: 2, Minutes: 145, TopShare: 91, WorkProjects: 3}).Word)
+	require.Equal(t, WordBusy, Character(Facts{Sessions: 4, Minutes: 211, TopShare: 51, WorkProjects: 2}).Word)
+	require.Equal(t, WordLight, Character(Facts{Sessions: 1, Minutes: 25, TopShare: 100, WorkProjects: 1}).Word)
 }
 
 // The headline is composed from the facts, deterministically.
@@ -87,17 +92,30 @@ func TestHeadline(t *testing.T) {
 		{"quiet", Entry{}, "Nothing recorded."},
 		{"quiet today", Entry{Today: true}, "Nothing recorded so far."},
 		{"mostly one plan", Entry{Facts: Facts{Sessions: 14, Projects: 6, Minutes: 400}, Spotlight: []Thread{plan, side}},
-			"Mostly rollout in example-ops: 2 steps closed, the plan is now 12/14. 14 sessions across 6 projects."},
-		{"led, not mostly", Entry{Facts: Facts{Sessions: 3, Projects: 2, Minutes: 900}, Spotlight: []Thread{plan, side}},
-			"Led by rollout in example-ops, with 1 more thread: 2 steps closed, the plan is now 12/14. 3 sessions across 2 projects."},
-		{"shipped today", Entry{Today: true, Facts: Facts{Sessions: 1, Projects: 1, Minutes: 300},
+			"Mostly rollout in example-ops: 2 steps closed, the plan is now at 12 of 14. 14 sessions across 6 projects."},
+		{"led, not mostly: it counts the things worked on", Entry{Facts: Facts{Sessions: 3, Projects: 2, Minutes: 900},
+			Spotlight: []Thread{plan, side}},
+			"Led by rollout in example-ops: 2 steps closed, the plan is now at 12 of 14. 3 sessions across 2 projects worked on 2 things."},
+		{"led today", Entry{Today: true, Facts: Facts{Sessions: 4, Projects: 2, Minutes: 900},
+			Spotlight: []Thread{plan}, Also: []Thread{side, {Kind: ThreadProject, Label: "example-api", Project: "example-api"}}},
+			"Led by rollout in example-ops: 2 steps closed, the plan is now at 12 of 14. 4 sessions across 2 projects worked on 3 things so far."},
+		{"shipped today, its project named once", Entry{Today: true, Facts: Facts{Sessions: 1, Projects: 1, Minutes: 300},
 			Usage: Usage{Projects: []ProjectUsage{{Project: "example-ops"}}},
 			Spotlight: []Thread{{Kind: ThreadPlan, Label: "rollout", Project: "example-ops", Minutes: 300, Shipped: true,
 				Moved: []Move{{Closed: true}}, Progress: &Progress{End: Count{14, 14}}}}},
-			"Mostly rollout in example-ops: 1 step closed, the plan shipped at 14/14. 1 session in example-ops so far."},
-		{"a project thread with items", Entry{Facts: Facts{Sessions: 2, Projects: 1, Minutes: 40},
-			Also: []Thread{{Kind: ThreadProject, Label: "example-ops", Project: "example-ops", Minutes: 40, Kept: []Ref{{}, {}}}}},
-			"Mostly example-ops: 2 items kept. 2 sessions in example-ops."},
+			"Mostly rollout in example-ops: 1 step closed and the plan shipped (14 of 14). 1 session so far."},
+		{"a plan at rest", Entry{Facts: Facts{Sessions: 2, Projects: 2, Minutes: 120},
+			Spotlight: []Thread{{Kind: ThreadPlan, Label: "rollout", Project: "example-ops", Minutes: 120,
+				Moved: []Move{{From: "in_progress", To: "in_progress"}}, Progress: &Progress{Start: Count{4, 7}, End: Count{4, 7}}}}},
+			"Mostly rollout in example-ops: the plan is at 4 of 7. 2 sessions across 2 projects."},
+		{"a project thread with items, named once", Entry{Facts: Facts{Sessions: 2, Projects: 1, Minutes: 40},
+			Usage: Usage{Projects: []ProjectUsage{{Project: "example-ops"}}},
+			Also:  []Thread{{Kind: ThreadProject, Label: "example-ops", Project: "example-ops", Minutes: 40, Kept: []Ref{{}, {}}}}},
+			"Mostly example-ops: 2 items kept. 2 sessions."},
+		{"one project the lead does not name", Entry{Facts: Facts{Sessions: 1, Projects: 1, Minutes: 40},
+			Usage:     Usage{Projects: []ProjectUsage{{Project: "example-web"}}},
+			Spotlight: []Thread{{Kind: ThreadProject, Label: "scratch", Minutes: 40}}},
+			"Mostly scratch: 40m of agent time. 1 session in example-web."},
 		{"only effort", Entry{Facts: Facts{Sessions: 1, Minutes: 95}, Spotlight: []Thread{{Kind: ThreadProject, Label: "scratch", Minutes: 95}}},
 			"Mostly scratch: 1h 35m of agent time. 1 session."},
 		{"only short sessions", Entry{Facts: Facts{Sessions: 4, Projects: 2, Minutes: 12}},

@@ -730,6 +730,9 @@ func TestDiary_HandlerAnswers(t *testing.T) {
 	future := dyMidnight(time.Now()).AddDate(0, 0, 3)
 	page := dyPage(t, mux, dyDayPath(future))
 	require.Contains(t, page, "This day has not begun.")
+	require.Contains(t, page, "<strong>Still to come.</strong>", "the card does not repeat the headline")
+	require.Contains(t, page, `<p class="dy-headline">This day has not begun.</p>`, "with research off too")
+	require.NotContains(t, page, `class="dy-tag"`, "a day still to come has no character yet")
 	require.NotContains(t, page, `class="ov2-vitals dy-tiles"`)
 	raw, d := dyAnswer(t, mux, dyDayPath(future))
 	require.True(t, d.Future)
@@ -759,7 +762,8 @@ func TestDiary_HandlerAnswers(t *testing.T) {
 func TestDiary_EmptyStates(t *testing.T) {
 	_, mux := newConsoleFeatures(t, config.Features{Diary: true})
 	page := dyMain(t, dyPage(t, mux, "/console/diary"))
-	require.Contains(t, page, "Nothing recorded yet.", "a first run says what will appear here")
+	require.Contains(t, page, "This is the Diary's first page.", "a first run says what will appear here")
+	require.NotContains(t, page, `class="dy-tag"`, "a first run is not a quiet day: no character stamp")
 	require.NotContains(t, page, `class="ov2-vitals dy-tiles"`)
 
 	_, mux, fx := dySeeded(t, config.Features{Diary: true})
@@ -770,7 +774,7 @@ func TestDiary_EmptyStates(t *testing.T) {
 		page := dyMain(t, dyPage(t, mux, dyDayPath(d.Date)))
 		require.Contains(t, page, "A quiet day.")
 		require.Contains(t, page, `title="No session, task or item recorded">Quiet</span>`)
-		require.NotContains(t, page, "Nothing recorded yet.", "a quiet day in a history is not a first run")
+		require.NotContains(t, page, "first page", "a quiet day in a history is not a first run")
 	}
 	for _, d := range fx.Days {
 		if d.Role != demokit.DiaryPreLedger {
@@ -894,6 +898,11 @@ func TestDiaryJS_StaysOnTheSharedPaths(t *testing.T) {
 		"document.addEventListener('seam:content-updated'",
 		"document.querySelector('.chord-hint')", // a g-chord's next key is shell.js's
 		"follow('[data-diary-prev]')", "follow('[data-diary-next]')", "follow('[data-diary-today]')",
+		// A peek keeps the clicked link in place: noted in the capture phase,
+		// put back when the split opens.
+		"closest('.main .dy-page [data-peek]')", "}, true);",
+		"observer.observe(split, { attributes: true, attributeFilter: ['class'] });",
+		"lp.scrollTop += r.top - Math.max(lo, Math.min(k.top, hi));",
 	} {
 		require.Contains(t, js, need)
 	}
@@ -909,4 +918,89 @@ func TestDiaryJS_StaysOnTheSharedPaths(t *testing.T) {
 	require.Regexp(t, `<nav class="dy-nav" aria-label="Days" data-seam-query>\s*<a class="dy-nav-step" href="[^"]+" data-diary-prev`, page)
 	require.Contains(t, page, `data-diary-today>Today</a>`)
 	require.Contains(t, page, ` data-diary-next aria-label=`)
+}
+
+// The rail names a run of quiet days by its oldest and its newest day, however
+// long the run, and a day from before the usage ledger shows its agent time
+// as not recorded, never as 0m.
+func TestDiaryRail_QuietRunsAndDaysBeforeTheLedger(t *testing.T) {
+	start := time.Date(2026, 10, 1, 0, 0, 0, 0, time.Local)
+	var days []diary.MonthDay
+	for d := start; d.Month() == start.Month(); d = d.AddDate(0, 0, 1) {
+		md := diary.MonthDay{Day: d.Format("2006-01-02"), Character: diary.Tag{Word: diary.WordQuiet},
+			Projects: []diary.ProjectUsage{}}
+		if d.Day() == 30 {
+			md.Facts = diary.Facts{Sessions: 3, Tokens: 8_900_000, Approximate: true}
+			md.Character = diary.Tag{Word: diary.WordLight}
+		}
+		days = append(days, md)
+	}
+	month := diary.MonthView{Month: "2026-10", Start: start, End: start.AddDate(0, 1, 0), Days: days, Agents: []diary.AgentUsage{}}
+	today := time.Date(2026, 11, 21, 0, 0, 0, 0, time.Local)
+	day := time.Date(2026, 10, 30, 0, 0, 0, 0, time.Local)
+	rail := buildRail(month, dyViewContext{now: today, today: today, day: day, railMonth: start})
+	var labels []string
+	for _, r := range rail.Rows {
+		labels = append(labels, r.Label)
+	}
+	require.Equal(t, []string{"Sat 31", "Fri 30", "Thu 1 – Thu 29"}, labels,
+		"a quiet run of 29 days reads as its oldest and its newest day")
+	require.True(t, rail.Rows[2].Quiet)
+	require.Equal(t, "—", rail.Rows[1].Minutes, "agent time before the ledger is not recorded, which is not 0m")
+	require.Contains(t, rail.Rows[1].Title, "agent time not recorded before the usage ledger")
+	require.True(t, rail.Rows[1].Selected)
+}
+
+// The moments name a session by what it was about, as its card does, not by
+// its generated name: the commits it recorded, its flag, a mishap it reported.
+func TestDiary_MomentsNameSessionsByWhatTheyWereAbout(t *testing.T) {
+	_, mux, fx := dySeeded(t, config.Features{Diary: true, Research: true})
+	var commits, flags int
+	for _, d := range dyAllDays(t, mux, fx) {
+		abouts := sessionAbouts(d.data.Entry)
+		main := dyMain(t, d.page)
+		at := strings.Index(main, `class="dy-panel dy-moments"`)
+		if at < 0 {
+			continue
+		}
+		moments := main[at:]
+		for _, c := range d.data.Moments.Commits {
+			if c.Owner == nil || c.Owner.Kind != diary.RefSession {
+				continue
+			}
+			about := abouts[c.Owner.ID]
+			require.NotEmpty(t, about, "%s: the session that recorded the commit is on the day", d.data.Day)
+			require.Contains(t, moments, `recorded by <a href="`+c.Owner.Href+`" data-peek title="`+
+				html.EscapeString(c.Owner.Title)+`">`+html.EscapeString(about)+`</a>`)
+			commits++
+		}
+		for _, f := range d.data.Moments.Flags {
+			about := abouts[f.Session.ID]
+			require.NotEmpty(t, about)
+			// The flag's own line: its main line, the session then its verdict
+			// (the same session's commit line names it too, as its recorder).
+			require.Contains(t, moments, `<span class="dy-item-main"><a href="`+f.Session.Href+`" data-peek title="`+
+				html.EscapeString(f.Session.Title)+`">`+html.EscapeString(about)+`</a><span class="badge `)
+			flags++
+		}
+	}
+	require.Positive(t, commits, "the fixture has a commit a session recorded")
+	require.Positive(t, flags, "the fixture has a flagged session")
+}
+
+// The day comes before its month in the document: the keyboard and a screen
+// reader reach the entry (its h1 first) before the rail's month and its days,
+// and a phone, which shows the rail after the entry, tabs in the order it
+// shows. The stylesheet draws the rail in the left column on wider screens.
+func TestDiary_TheDayComesBeforeItsMonth(t *testing.T) {
+	_, mux := newConsoleFeatures(t, config.Features{Diary: true})
+	main := dyMain(t, dyPage(t, mux, dyDayPath(dyMidnight(time.Now()).AddDate(0, 0, -1))))
+	entry, h1, rail := strings.Index(main, `<section class="dy-entry`), strings.Index(main, `<h1 class="dy-date">`),
+		strings.Index(main, `<aside class="dy-rail"`)
+	require.Positive(t, entry)
+	require.Greater(t, h1, entry)
+	require.Greater(t, rail, h1, "the rail follows the entry")
+	css := string(consoleCSS)
+	require.Contains(t, css, ".dy-rail { grid-column: 1; grid-row: 1; }\n.dy-entry { grid-column: 2; grid-row: 1; }")
+	require.NotContains(t, css, "order: 2; max-height: none;", "no visual reordering that the tab order does not follow")
 }

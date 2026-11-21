@@ -237,11 +237,18 @@ const (
 	clientNoHooks = ""
 )
 
-// The fixture's three models, verbatim as their providers name them.
+// The fixture's models, verbatim as their providers name them: the three
+// every working day uses, and four more that work only on the day of seven
+// agents (diaryAgentsDay).
 const (
 	modelOpus  = "claude-opus-5-5"
 	modelFable = "claude-fable-5"
 	modelGPT   = "gpt-5.5"
+
+	modelHaiku   = "claude-haiku-5"
+	modelSonnet  = "claude-sonnet-5"
+	modelGPTNext = "gpt-5.6"
+	modelGPTMini = "gpt-5.5-mini"
 )
 
 // dEnd is how a session ended.
@@ -533,19 +540,32 @@ var diaryWorkdays = [15][]dSession{
 			prompts:  []dPrompt{{at: 0, text: "check how old the newest snapshot is on each host"}},
 			findings: "Every host's newest snapshot is under 20 hours old."},
 	},
-	// 12
+	// 12: seven agents. The usual three, a subagent on a fourth model and
+	// three sessions on three more: the month's colors hold five of them and
+	// the other two fold into Other.
 	{
 		{key: "w12-api", client: clientClaude, model: modelOpus, project: "example-api", at: "09:10", mins: 140, end: endExplicit,
+			subs: []dSpan{{at: 50, mins: 22, model: modelHaiku}},
 			acts: []dAct{{at: 3, do: doClaim, key: "sv3"}, {at: 125, do: doDone, key: "sv3", n: 2},
 				{at: 130, do: doMemory, key: "search-backfill-batch-commits"}},
 			findings: "Search v2 step 3 is done: BM25 ranking with field boosts, relevance tests green. The backfill must commit in batches of 500 (search-backfill-batch-commits)."},
+		{key: "w12-docs", client: clientClaude, model: modelSonnet, project: "example-web", at: "11:20", mins: 35, end: endHook,
+			prompts:  []dPrompt{{at: 0, text: "write the changelog entry for the dark-mode contrast fix"}},
+			findings: "Wrote the changelog entry for the dark-mode contrast fix, with before and after screenshots of the data tables."},
 		{key: "w12-web", client: clientClaude, model: modelOpus, project: "example-web", at: "13:30", mins: 130, end: endExplicit,
+			subs:     []dSpan{{at: 30, mins: 16}},
 			prompts:  []dPrompt{{at: 0, text: "the billing visual test still flakes", recall: []string{"visual-tests-wait-for-fonts"}}},
 			acts:     []dAct{{at: 4, do: doClaim, key: "web-flaky"}, {at: 100, do: doDrop, key: "web-flaky"}},
 			findings: "Dropped the flaky billing test task: the test is quarantined with an owner instead, and the root cause is the font CDN."},
 		{key: "w12-api-cx", client: clientCodex, model: modelGPT, project: "example-api", at: "13:45", mins: 85, end: endReaped,
 			acts:     []dAct{{at: 4, do: doClaim, key: "sv4"}},
 			findings: "Cursor pagination encodes the last score and id; half of the handler tests pass."},
+		{key: "w12-ops-cx", client: clientCodex, model: modelGPTNext, project: "example-ops", at: "14:20", mins: 45, end: endReaped,
+			prompts:  []dPrompt{{at: 0, text: "sketch a metrics endpoint for the backup job: the newest snapshot's age and the last prune"}},
+			findings: "Sketched the backup job's metrics endpoint: the newest snapshot's age and the last prune's time, in the Prometheus text format."},
+		{key: "w12-web-cx", client: clientCodex, model: modelGPTMini, project: "example-web", at: "15:05", mins: 30, end: endReaped,
+			prompts:  []dPrompt{{at: 0, text: "regenerate the visual baselines for the settings page"}},
+			findings: "Regenerated the settings page's visual baselines on the new runner image; the 12 screenshots that changed differ only in the font update."},
 	},
 	// 13
 	{
@@ -574,6 +594,9 @@ var diaryWorkdays = [15][]dSession{
 // diaryShortDay is the index in diaryWorkdays of the day of only short
 // sessions.
 const diaryShortDay = 9
+
+// diaryAgentsDay is the index in diaryWorkdays of the day of seven agents.
+const diaryAgentsDay = 12
 
 // diaryMidnight is the session that starts late on a weekday and ends after
 // midnight: an incident, flagged by its agent.

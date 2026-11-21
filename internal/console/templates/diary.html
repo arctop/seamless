@@ -1,32 +1,6 @@
 {{define "content"}}
 {{with .Data.View}}{{$v := .}}
 <div class="dy-page{{if .Today}} is-today{{end}}" data-diary="{{.Day}}">
-  {{/* The rail: the month as a heat grid, then its days newest first. Every
-       link changes the day in place (data-seam-query); a day still to come
-       is never a link. */}}
-  <aside class="dy-rail" aria-label="{{.Rail.Label}}">
-    <header class="dy-rail-head" data-seam-query>
-      <a class="dy-rail-step" href="{{.Rail.PrevHref}}" aria-label="Previous month, {{.Rail.PrevLabel}}" title="{{.Rail.PrevLabel}}">{{icon "chevron-left"}}</a>
-      <h2 class="dy-rail-month">{{.Rail.Label}}</h2>
-      {{if .Rail.NextHref}}<a class="dy-rail-step" href="{{.Rail.NextHref}}" aria-label="Next month, {{.Rail.NextLabel}}" title="{{.Rail.NextLabel}}">{{icon "chevron-right"}}</a>{{else}}<span class="dy-rail-step is-off" aria-hidden="true">{{icon "chevron-right"}}</span>{{end}}
-    </header>
-    {{if .Rail.Future}}<p class="dy-rail-note">This month has not begun.</p>
-    {{else}}
-    <div class="dy-rail-grid" data-seam-query>{{.Rail.Grid}}</div>
-    {{if .Rail.Empty}}<p class="dy-rail-note">Nothing recorded this month yet.</p>{{end}}
-    <ol class="dy-days" data-seam-query>
-      {{- range .Rail.Rows}}
-      <li class="dy-day{{if .Quiet}} is-quiet{{end}}{{if .Selected}} is-sel{{end}}{{if .Today}} is-today{{end}}">
-        <a href="{{.Href}}"{{if .Selected}} aria-current="date"{{end}}{{with .Title}} title="{{.}}"{{end}}>
-          <span class="dy-day-date">{{.Label}}</span>
-          {{- if .Quiet}}<span class="dy-day-quiet">quiet</span>
-          {{- else}}<span class="dy-day-bar" aria-hidden="true"><i style="width:{{.Bar}}%"></i></span><span class="dy-day-min">{{.Minutes}}</span><span class="dy-day-dots">{{range .Dots}}<i title="{{.}}" aria-hidden="true"></i>{{end}}</span>{{end}}
-        </a>
-      </li>
-      {{- end}}
-    </ol>
-    {{end}}
-  </aside>
 
   <section class="dy-entry list-detail-split dy-split" aria-label="{{.Weekday}}, {{.Date}}, {{.Year}}"{{if .Today}} data-diary-live="{{.LiveGap}}"{{end}}>
     <div class="list-pane dy-reader">
@@ -43,7 +17,8 @@
           </nav>
         </div>
         <h1 class="dy-date">{{.Date}} <span class="dy-year">{{.Year}}</span></h1>
-        {{with .Character.Word}}<p class="dy-tag-row"><span class="dy-tag" title="{{$v.Character.Rule}}">{{.}}</span></p>{{end}}
+        {{- /* A first run has no day to characterize yet: no stamp. */}}
+        {{if not .FirstRun}}{{with .Character.Word}}<p class="dy-tag-row"><span class="dy-tag" title="{{$v.Character.Rule}}">{{.}}</span></p>{{end}}{{end}}
         <p class="dy-headline">{{.Headline}}</p>
         {{if or .StartedHref .Locked}}<p class="dy-meta">
           {{- with .StartedHref}}<a class="dy-started" href="{{.}}">{{icon "terminal"}}Sessions started this day ({{$v.Started}})</a>{{end}}
@@ -54,12 +29,12 @@
       {{if .Future}}
       <div class="dy-empty">
         <span class="dy-empty-ico">{{icon "calendar-days"}}</span>
-        <div><strong>This day has not begun.</strong><p>Its page fills in as your agents work on it.</p><p data-seam-query><a class="btn small" href="{{.TodayHref}}" data-diary-today>Back to today</a></p></div>
+        <div><strong>Still to come.</strong><p>Its page fills in as your agents work on it.</p><p data-seam-query><a class="btn small" href="{{.TodayHref}}" data-diary-today>Back to today</a></p></div>
       </div>
       {{else if .FirstRun}}
       <div class="dy-empty dy-empty-first">
         <span class="dy-empty-ico">{{icon "book-open"}}</span>
-        <div><strong>Nothing recorded yet.</strong><p>As your agents work, each day gets its page here: what was worked on, which agents did it, and what it took in agent time and model tokens.</p></div>
+        <div><strong>This is the Diary's first page.</strong><p>As your agents work, each day gets its page here: what was worked on, which agents did it, and what it took in agent time and model tokens.</p></div>
       </div>
       {{else if .Quiet}}
       <div class="dy-empty">
@@ -83,7 +58,7 @@
       <div class="dy-cols">
         <div class="dy-spot">
           <h2 class="dy-section-h">What was worked on</h2>
-          {{range .Spotlight}}{{template "dy-card" .}}{{else}}<p class="dy-none">Nothing stood out: the day's work is listed below.</p>{{end}}
+          {{range .Spotlight}}{{template "dy-card" .}}{{else}}<p class="dy-none">{{if .Also}}Nothing stood out: the day's work is listed below.{{else if .Short.Count}}Only short sessions: they are folded below.{{else}}Nothing stood out.{{end}}</p>{{end}}
 
           {{with .Also}}<section class="dy-also" aria-labelledby="dy-also-h">
             <h3 id="dy-also-h">Also that day</h3>
@@ -118,19 +93,19 @@
           </section>
           <section class="dy-panel" id="diary-closed" aria-labelledby="dy-closed-h">
             <header class="dy-panel-head"><h2 id="dy-closed-h">Tasks closed</h2></header>
-            {{if .Closed}}<ul class="dy-items">{{range .Closed}}<li>{{icon .Icon}}{{.Link}}</li>{{end}}</ul>{{else}}<p class="dy-none">No task was closed as done.</p>{{end}}
+            {{if .Closed}}<ul class="dy-items">{{range .Closed}}<li>{{icon .Icon}}<span class="dy-item-main">{{.Link}}</span></li>{{end}}</ul>{{else}}<p class="dy-none">No task was closed as done.</p>{{end}}
           </section>
           <section class="dy-panel" id="diary-kept" aria-labelledby="dy-kept-h">
             <header class="dy-panel-head"><h2 id="dy-kept-h">Kept</h2>{{with .KeptSummary}}<span class="dy-panel-note">{{.}}</span>{{end}}</header>
-            {{if .Kept}}<ul class="dy-items">{{range .Kept}}{{$it := .}}<li>{{icon .Icon}}{{.Link}}{{with .Mark}}<span class="badge {{$it.Tone}}">{{.}}</span>{{end}}{{with .Sub}}<span class="dy-item-sub">{{.}}</span>{{end}}</li>{{end}}</ul>{{else}}<p class="dy-none">Nothing was written down.</p>{{end}}
+            {{if .Kept}}<ul class="dy-items">{{range .Kept}}{{$it := .}}<li>{{icon .Icon}}<span class="dy-item-main">{{.Link}}{{with .Mark}}<span class="badge {{$it.Tone}}">{{.}}</span>{{end}}</span>{{with .Sub}}<span class="dy-item-sub">{{.}}</span>{{end}}</li>{{end}}</ul>{{else}}<p class="dy-none">Nothing was written down.</p>{{end}}
           </section>
           {{if .Moments}}<section class="dy-panel dy-moments" aria-labelledby="dy-moments-h">
             <header class="dy-panel-head"><h2 id="dy-moments-h">Moments</h2></header>
             <ul class="dy-items">
-              {{- range .Shipped}}<li class="is-shipped">{{icon .Icon}}{{.Link}}<span class="badge ok">shipped</span></li>{{end}}
-              {{- range .Commits}}<li>{{icon "git-commit-horizontal"}}{{.Link}}{{copyBtn .Full}}{{with .Owner}}<span class="dy-item-sub">recorded by {{.}}</span>{{end}}</li>{{end}}
-              {{- range .Flags}}<li>{{icon .Icon}}{{.Link}}<span class="badge {{.Tone}}">{{.Mark}}</span>{{with .Sub}}<span class="dy-item-sub">{{.}}</span>{{end}}</li>{{end}}
-              {{- range .Mishaps}}<li class="is-mishap">{{icon .Icon}}{{.Link}}{{with .Sub}}<span class="dy-item-sub">reported by {{.}}</span>{{end}}</li>{{end}}
+              {{- range .Shipped}}<li class="is-shipped">{{icon .Icon}}<span class="dy-item-main">{{.Link}}<span class="badge ok">shipped</span></span></li>{{end}}
+              {{- range .Commits}}<li>{{icon "git-commit-horizontal"}}<span class="dy-item-main dy-commit-id">{{.Link}}{{copyBtn .Full}}</span>{{with .Owner}}<span class="dy-item-sub">recorded by {{.}}</span>{{end}}</li>{{end}}
+              {{- range .Flags}}<li>{{icon .Icon}}<span class="dy-item-main">{{.Link}}<span class="badge {{.Tone}}">{{.Mark}}</span></span>{{with .Sub}}<span class="dy-item-sub">{{.}}</span>{{end}}</li>{{end}}
+              {{- range .Mishaps}}<li class="is-mishap">{{icon .Icon}}<span class="dy-item-main">{{.Link}}</span>{{with .Sub}}<span class="dy-item-sub">reported by {{.}}</span>{{end}}</li>{{end}}
             </ul>
           </section>{{end}}
           {{with .Tables}}<details class="chart-tables dy-tables"><summary>{{icon "table-2"}}Show as table</summary>{{.}}</details>{{end}}
@@ -146,6 +121,35 @@
       <div class="detail-pane-body"></div>
     </section>
   </section>
+
+  {{/* The rail: the month as a heat grid, then its days newest first. Every
+       link changes the day in place (data-seam-query); a day still to come
+       is never a link. It follows the entry in the document, so the keyboard
+       and a screen reader reach the day before its month; the stylesheet
+       draws it in the left column. */}}
+  <aside class="dy-rail" aria-label="{{.Rail.Label}}">
+    <header class="dy-rail-head" data-seam-query>
+      <a class="dy-rail-step" href="{{.Rail.PrevHref}}" aria-label="Previous month, {{.Rail.PrevLabel}}" title="{{.Rail.PrevLabel}}">{{icon "chevron-left"}}</a>
+      <h2 class="dy-rail-month">{{.Rail.Label}}</h2>
+      {{if .Rail.NextHref}}<a class="dy-rail-step" href="{{.Rail.NextHref}}" aria-label="Next month, {{.Rail.NextLabel}}" title="{{.Rail.NextLabel}}">{{icon "chevron-right"}}</a>{{else}}<span class="dy-rail-step is-off" aria-hidden="true">{{icon "chevron-right"}}</span>{{end}}
+    </header>
+    {{if .Rail.Future}}<p class="dy-rail-note">This month has not begun.</p>
+    {{else}}
+    <div class="dy-rail-grid" data-seam-query>{{.Rail.Grid}}</div>
+    {{if .Rail.Empty}}<p class="dy-rail-note">Nothing recorded this month yet.</p>{{end}}
+    <ol class="dy-days" data-seam-query>
+      {{- range .Rail.Rows}}
+      <li class="dy-day{{if .Quiet}} is-quiet{{end}}{{if .Selected}} is-sel{{end}}{{if .Today}} is-today{{end}}">
+        <a href="{{.Href}}"{{if .Selected}} aria-current="date"{{end}}{{with .Title}} title="{{.}}"{{end}}>
+          <span class="dy-day-date">{{.Label}}</span>
+          {{- if .Quiet}}<span class="dy-day-quiet">quiet</span>
+          {{- else}}<span class="dy-day-bar" aria-hidden="true"><i style="width:{{.Bar}}%"></i></span><span class="dy-day-min">{{.Minutes}}</span><span class="dy-day-dots">{{range .Dots}}<i title="{{.}}" aria-hidden="true"></i>{{end}}</span>{{end}}
+        </a>
+      </li>
+      {{- end}}
+    </ol>
+    {{end}}
+  </aside>
 </div>
 {{end}}
 {{end}}

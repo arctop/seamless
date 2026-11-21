@@ -86,10 +86,13 @@ const RepoLocks Key = "repo_locks"
 
 // Diary covers the Diary console screen -- one entry per local day saying
 // what was worked on, which agents did it, and what it took in agent time and
-// model tokens -- and the in-page link into it from a Sessions day view. Like
-// Momentum and Gamification it is presentation only: it owns no MCP tools,
-// and the usage ledger and the event log it reads are recorded whether it is
-// on or off, so turning it on shows the history at once.
+// model tokens -- and the in-page link into it from a Sessions day view. It
+// owns no MCP tools, and the usage ledger and the event log it reads are
+// recorded whether it is on or off, so turning it on shows the history at
+// once. The one thing it changes beyond what the owner sees: while it is on,
+// a Claude Code prompt keeps its session's usage ledger current, read after
+// the prompt is answered, at most once every three minutes a conversation
+// (internal/hooks usage_live.go).
 const Diary Key = "diary"
 
 // Feature describes one optional feature and every surface it owns.
@@ -226,7 +229,7 @@ var registry = []Feature{
 	{
 		Key:           Diary,
 		Label:         "Diary",
-		Blurb:         "A page for each day of work: what was worked on, which agents did it, and what it took in agent time and model tokens, with the meaningful work in the spotlight and short question-and-answer sessions folded away.",
+		Blurb:         "A page for each day of work: what was worked on, which agents did it, and what it took in agent time and model tokens, with the meaningful work in the spotlight and short question-and-answer sessions folded away. While it is on, a Claude Code session's token usage is kept current as the session runs, read after a prompt is answered, at most once every three minutes.",
 		NavIDs:        []string{"diary"},
 		RoutePrefixes: []string{"/console/diary"},
 		Surfaces: []string{

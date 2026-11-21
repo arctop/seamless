@@ -16,7 +16,10 @@
    many events a second. An open peek stays open across the refresh: the pane
    is held out of the morph (data-live-skip) and the split's open state is put
    back after it (seam:content-updated). A refresh that fails leaves the page
-   as it is, and the next event tries again. */
+   as it is, and the next event tries again.
+
+   A peek keeps the day in place: the link clicked stays where it was on
+   screen when the pane opens and the entry becomes a box of its own. */
 (function () {
   'use strict';
 
@@ -117,5 +120,44 @@
     var pane = document.getElementById('detail-pane');
     var split = document.querySelector('.main .dy-split');
     if (pane && split && !pane.hidden) split.classList.add('detail-open');
+    watch();
   });
+
+  // Opening a peek caps the day's entry into a box of its own that starts
+  // scrolled to its top, so the link just clicked, far down the day, would
+  // jump out of sight. Its place on screen is noted as it is clicked (in the
+  // capture phase, before the layout's pane loader runs), and once the pane
+  // has opened the box is scrolled to put it back there, or as near as the
+  // box allows. A modified click opens a tab instead and is left alone.
+  var kept = null;
+  document.addEventListener('click', function (e) {
+    var a = e.target && e.target.closest ? e.target.closest('.main .dy-page [data-peek]') : null;
+    var pane = document.getElementById('detail-pane');
+    if (!a || !pane || !pane.hidden || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    kept = { el: a, top: a.getBoundingClientRect().top, at: Date.now() };
+  }, true);
+  function restore() {
+    var k = kept;
+    kept = null;
+    if (!k || !k.el.isConnected || Date.now() - k.at > 10000) return;
+    var lp = k.el.closest('.list-pane');
+    if (!lp || lp.scrollHeight <= lp.clientHeight) return;
+    var box = lp.getBoundingClientRect(), r = k.el.getBoundingClientRect();
+    var lo = Math.max(box.top, 0) + 8, hi = Math.min(box.bottom, window.innerHeight) - r.height - 8;
+    lp.scrollTop += r.top - Math.max(lo, Math.min(k.top, hi));
+  }
+  // The pane's opening is the split gaining detail-open; the morph keeps the
+  // split's node, and a page drawn anew is watched again on content-updated.
+  var watched = null;
+  var observer = window.MutationObserver ? new MutationObserver(function () {
+    if (kept && watched && watched.classList.contains('detail-open')) restore();
+  }) : null;
+  function watch() {
+    var split = document.querySelector('.main .dy-split');
+    if (!observer || !split || split === watched) return;
+    observer.disconnect();
+    watched = split;
+    observer.observe(split, { attributes: true, attributeFilter: ['class'] });
+  }
+  watch();
 })();

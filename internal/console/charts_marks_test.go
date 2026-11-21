@@ -2,6 +2,7 @@ package console
 
 import (
 	"encoding/json"
+	"fmt"
 	"html"
 	"math"
 	"regexp"
@@ -326,7 +327,11 @@ func TestRhythmChart(t *testing.T) {
 		got := string(rhythmChart(two))
 		col := got[strings.Index(got, `<g class="chart-col" data-i="14"`):]
 		col = col[:strings.Index(col, "</g>")]
-		require.Contains(t, col, `style="--d:196ms"`, "the columns rise once, staggered by the hour")
+		// The columns rise once, staggered by the hour, each from its own foot
+		// on the baseline: its slot's center, in the svg's user units.
+		n := float64(len(two.Hours))
+		foot := fmt.Sprintf(`style="--d:196ms;transform-origin:%.2fpx %gpx"`, rhythmPadX+14.5*(rhythmW-2*rhythmPadX)/n, rhythmBase)
+		require.Contains(t, col, foot)
 		rect := chartsTags(col, `<rect class="chart-seg`)
 		path := chartsTags(col, `<path class="chart-seg`)
 		require.Len(t, rect, 1)
@@ -698,12 +703,24 @@ func TestSeriesTokens_EveryThemeCarriesThem(t *testing.T) {
 }
 
 // The ring and the columns draw on once and hold still under reduced motion;
-// hover motion is opacity alone, so it stays on the compositor.
+// hover motion is opacity alone, so it stays on the compositor. The entry
+// motion is transform and opacity only too: the ring once swept its
+// stroke-dasharray, which repaints every frame of the sweep.
 func TestChartMarks_MotionIsEntryOnly(t *testing.T) {
 	css := string(consoleCSS)
-	require.Contains(t, css, "animation: chart-sweep var(--t, 1ms) linear var(--d, 0ms) backwards;")
+	require.Contains(t, css, "animation: chart-ring-in var(--t, 1ms) var(--ease-out) var(--d, 0ms) backwards;")
+	require.Contains(t, css, ".chart-ring-segs { animation: chart-ring-turn .72s var(--ease-out) backwards; }")
 	require.Contains(t, css, "animation: chart-rise .55s var(--ease-out) var(--d, 0ms) backwards;")
-	require.Contains(t, css, ".chart-ring-seg, .chart-col, .chart-cap { animation: none; }")
+	require.Contains(t, css, ".chart-ring-seg, .chart-ring-segs, .chart-col, .chart-cap { animation: none; }")
+	require.Contains(t, string(ringChart(ringSpec{Unit: unitTokens, Slices: []ringSlice{{Name: "a", Slot: 1, Value: 3}, {Name: "b", Slot: 2, Value: 1}}})),
+		fmt.Sprintf(`<g class="chart-ring-segs" style="transform-origin:%gpx %gpx">`, ringBox/2, ringBox/2), "the ring turns about its center")
+	names := regexp.MustCompile(`@keyframes (chart-[\w-]+)`).FindAllStringSubmatch(css, -1)
+	require.NotEmpty(t, names)
+	for _, m := range names {
+		for _, p := range regexp.MustCompile(`([\w-]+)\s*:`).FindAllStringSubmatch(keyframesBody(t, m[1]), -1) {
+			require.Contains(t, []string{"transform", "opacity"}, p[1], "@keyframes %s animates %s: use transform or opacity", m[1], p[1])
+		}
+	}
 	for _, r := range cssRules(t) {
 		if !strings.Contains(r.selector, "chart-") {
 			continue

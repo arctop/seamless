@@ -29,13 +29,15 @@ const (
 	PlanningDayTasks     = 6
 	PlanningDayMaxClosed = 2
 	// DeepWorkMinutes of agent time with DeepWorkShare percent of it in one
-	// project make Deep work.
-	DeepWorkMinutes = 180
+	// project make Deep work. Two hours: a working day of one agent reaches
+	// it, and under it a day reads as light beside its tiles.
+	DeepWorkMinutes = 120
 	DeepWorkShare   = 60
 	// BusyDayMinutes of agent time, BusyDaySessions sessions beyond the short
 	// ones, or work (beyond short sessions) in BusyDayProjects projects make
-	// a Busy day: a day of zero-minute starts is not busy.
-	BusyDayMinutes  = 240
+	// a Busy day: a day of zero-minute starts is not busy. Three hours of
+	// agent time spread over projects is a full day, not a light one.
+	BusyDayMinutes  = 180
 	BusyDaySessions = 12
 	BusyDayProjects = 4
 )
@@ -75,8 +77,11 @@ func quiet(f Facts) bool {
 const HeadlineMostlyShare = 50
 
 // Headline is the day's sentence, composed from its facts: the leading
-// thread and what it did, then how many sessions across how many projects;
-// "so far" while the day is under way.
+// thread and what it did, then how many sessions across how many projects
+// (and, when no one thread was most of the day, how many things were worked
+// on, the cards and lines the page lists); "so far" while the day is under
+// way. It reads as a sentence, not a log line: "4 of 7", never "4/7", and a
+// project the first half named is not named again.
 func Headline(e Entry) string {
 	soFar := ""
 	if e.Today {
@@ -94,25 +99,21 @@ func Headline(e Entry) string {
 		lead = &e.Also[0]
 	}
 	var b strings.Builder
+	things := 0
 	if lead == nil {
 		fmt.Fprintf(&b, "Only short sessions: %s of agent time.", Duration(f.Minutes))
 	} else {
-		others := len(e.Spotlight) + len(e.Also) - 1
-		mostly := others == 0 || mostlyLead(e, *lead)
+		threads := len(e.Spotlight) + len(e.Also)
 		name := threadName(*lead)
-		switch {
-		case mostly:
+		if threads == 1 || mostlyLead(e, *lead) {
 			fmt.Fprintf(&b, "Mostly %s: %s.", name, threadClause(*lead))
-		default:
-			noun := "threads"
-			if others == 1 {
-				noun = "thread"
-			}
-			fmt.Fprintf(&b, "Led by %s, with %d more %s: %s.", name, others, noun, threadClause(*lead))
+		} else {
+			fmt.Fprintf(&b, "Led by %s: %s.", name, threadClause(*lead))
+			things = threads
 		}
 	}
 	b.WriteString(" ")
-	b.WriteString(sessionsClause(e, soFar))
+	b.WriteString(sessionsClause(e, lead, things, soFar))
 	return b.String()
 }
 
@@ -172,12 +173,16 @@ func threadClause(t Thread) string {
 	}
 	if p := t.Progress; p != nil && p.End.Total > 0 {
 		switch {
+		case t.Shipped && len(parts) > 0:
+			// "1 step closed and the plan shipped (5 of 5)": one clause, so the
+			// closing reads as what shipped it.
+			parts[len(parts)-1] += fmt.Sprintf(" and the plan shipped (%d of %d)", p.End.Closed, p.End.Total)
 		case t.Shipped:
-			parts = append(parts, fmt.Sprintf("the plan shipped at %d/%d", p.End.Closed, p.End.Total))
+			parts = append(parts, fmt.Sprintf("the plan shipped (%d of %d)", p.End.Closed, p.End.Total))
 		case closedN > 0:
-			parts = append(parts, fmt.Sprintf("the plan is now %d/%d", p.End.Closed, p.End.Total))
+			parts = append(parts, fmt.Sprintf("the plan is now at %d of %d", p.End.Closed, p.End.Total))
 		default:
-			parts = append(parts, fmt.Sprintf("the plan is at %d/%d", p.End.Closed, p.End.Total))
+			parts = append(parts, fmt.Sprintf("the plan is at %d of %d", p.End.Closed, p.End.Total))
 		}
 	}
 	if len(parts) == 0 && len(t.Kept) > 0 {
@@ -189,23 +194,34 @@ func threadClause(t Thread) string {
 	return strings.Join(parts, ", ")
 }
 
-// sessionsClause is the headline's second sentence.
-func sessionsClause(e Entry, soFar string) string {
+// sessionsClause is the headline's second sentence: the sessions and where
+// they were, and how many things they worked on when there were several
+// (things > 1); it leads with the sessions, so no figure follows the first
+// sentence's last one across the full stop. A day in one project names it,
+// unless the leading thread already did.
+func sessionsClause(e Entry, lead *Thread, things int, soFar string) string {
 	f := e.Facts
 	if f.Sessions == 0 {
 		return "No sessions" + soFar + "."
 	}
-	sessions := plural(f.Sessions, "session")
+	where := ""
 	switch f.Projects {
 	case 0:
-		return sessions + soFar + "."
 	case 1:
-		if p := oneProject(e); p != "" {
-			return fmt.Sprintf("%s in %s%s.", sessions, p, soFar)
+		switch p := oneProject(e); {
+		case p == "":
+			where = " in one project"
+		case lead == nil || lead.Project != p:
+			where = " in " + p
 		}
-		return fmt.Sprintf("%s in one project%s.", sessions, soFar)
+	default:
+		where = fmt.Sprintf(" across %d projects", f.Projects)
 	}
-	return fmt.Sprintf("%s across %d projects%s.", sessions, f.Projects, soFar)
+	sessions := plural(f.Sessions, "session")
+	if things > 1 {
+		return fmt.Sprintf("%s%s worked on %d things%s.", sessions, where, things, soFar)
+	}
+	return sessions + where + soFar + "."
 }
 
 // oneProject is the project of a day with one: the first its usage or its
