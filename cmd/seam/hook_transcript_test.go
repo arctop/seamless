@@ -525,7 +525,7 @@ func TestKeepTranscript_BothModes(t *testing.T) {
 		_, err = d.svc.Flag(ctx, outSess, core.VerdictGood, "", "owner", false)
 		require.NoError(t, err)
 		err = keepTranscript(ctx, io.Discard, d.cfg, outSess.ID, nil)
-		require.ErrorContains(t, err, "is not a regular *.jsonl file inside claude-code's own transcript folder")
+		require.ErrorContains(t, err, "is not a regular *.jsonl file inside "+filepath.Join(f.home, ".claude", "projects")+" (claude-code's own transcript folder for this account)")
 		require.False(t, d.svc.Kept(outSess.ID))
 
 		// An unflagged session keeps nothing.

@@ -520,7 +520,8 @@ func (s *Service) Uploading(sessions []core.Session) bool {
 // claimed the size its sender read. The body is checked as it is written --
 // it must decode whole, and to no more than the cap -- and the copy then goes
 // to every session in sessions that is still flagged. It returns what became
-// of it.
+// of it: copied when a session kept it, failed when none did and one failed,
+// and "" when every flag went before the copy was kept.
 func (s *Service) Receive(ctx context.Context, sessions []core.Session, body io.Reader, claimed int64, via string) core.TranscriptCopy {
 	if len(sessions) == 0 {
 		return ""
@@ -541,6 +542,7 @@ func (s *Service) Receive(ctx context.Context, sessions []core.Session, body io.
 		}
 		return state
 	}
+	var result core.TranscriptCopy
 	for i, sess := range sessions {
 		src := tmp
 		if i < len(sessions)-1 {
@@ -549,21 +551,27 @@ func (s *Service) Receive(ctx context.Context, sessions []core.Session, body io.
 			if src, err = s.duplicate(tmp); err != nil {
 				s.logger.Warn("transcripts: duplicate copy", "session", sess.ID, "error", err)
 				s.NotMade(ctx, sess, core.TranscriptFailed, via)
+				if result == "" {
+					result = core.TranscriptFailed
+				}
 				continue
 			}
 		}
-		func() {
+		got := func() core.TranscriptCopy {
 			unlock := s.locks.lock(sess.ID)
 			defer unlock()
 			cur, found, err := store.SessionByID(ctx, s.db, sess.ID)
 			if err != nil || !found || !cur.Flagged() {
 				_ = os.Remove(src)
-				return
+				return ""
 			}
-			s.commit(ctx, cur, src, raw, via)
+			return s.commit(ctx, cur, src, raw, via)
 		}()
+		if got == core.TranscriptCopied || (got != "" && result == "") {
+			result = got
+		}
 	}
-	return core.TranscriptCopied
+	return result
 }
 
 // receiveCompressed writes r -- gzip -- to a new temporary file as it arrives,
@@ -612,10 +620,15 @@ func (s *Service) commit(ctx context.Context, sess core.Session, tmp string, raw
 	}
 	syncDir(s.dir)
 	recorded, err := store.SetTranscriptCopy(ctx, s.db, sess.ID, core.TranscriptCopied, raw, s.now())
-	if err != nil {
+	switch {
+	case err != nil:
+		// A copy the record does not hold is not reported kept: it goes, and
+		// the failure is recorded where it can be.
 		s.logger.Warn("transcripts: record copy", "session", sess.ID, "error", err)
-	}
-	if err == nil && !recorded {
+		_ = os.Remove(path)
+		s.notMade(ctx, sess, core.TranscriptFailed, via)
+		return core.TranscriptFailed
+	case !recorded:
 		// The flag went between the check and the record: so does the copy.
 		_ = os.Remove(path)
 		return ""

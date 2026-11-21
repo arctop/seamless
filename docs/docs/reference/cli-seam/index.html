@@ -990,7 +990,8 @@ it, only when it is a regular <code>*.jsonl</code> file inside the agent client'
 transcript folder, and sends it over the socket. It prints where to read the
 copy, and fails with the reason when none was kept. Like <code>--transcript</code> it is
 the owner's alone: a restricted account, a relay's caller and a paired device
-are refused.</p>
+are refused. A session a restricted account ran is that account's to send,
+from its own home, which its next hook does when asked.</p>
 <p><code>--status</code> is <code>active</code>, <code>completed</code>, or <code>expired</code>; anything else is a parse
 error. The console rejects an unrecognized <code>?status=</code> too, so a direct URL cannot
 silently list everything either.</p>

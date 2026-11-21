@@ -134,6 +134,13 @@ func TestTranscript_PendingOfARestrictedAccount(t *testing.T) {
 		"the owner is not asked for an account's session")
 	resp := ae.startPlain(t, "", localHostName, "cc-acct-2")
 	require.Equal(t, map[string]string{"cc-acct": "/home/a/.claude/projects/p/x.jsonl"}, pendingOf(t, resp))
+
+	// The owner's keep cannot read that account's home: it says whose the
+	// session is, and names no path to send.
+	status, out := e.keep(t, sess.ID, false, nil)
+	require.Equal(t, http.StatusConflict, status, "%v", out)
+	require.Contains(t, out["error"], "ran as the restricted account _example_agent")
+	require.NotContains(t, out, "send")
 }
 
 // An answer asks for at most a few pending sessions, oldest flag first.

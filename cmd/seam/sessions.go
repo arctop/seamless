@@ -356,15 +356,19 @@ func keepTranscript(ctx context.Context, out io.Writer, cfg config.Config, id st
 		return errors.New(cmp.Or(answer.Error, "the daemon named no transcript to send"))
 	}
 	send := answer.Send
-	if host := strings.ToLower(strings.TrimSpace(send.Host)); host != "" && host != config.Hostname() {
+	// An unknown hostname here proves nothing either way; the path check
+	// below still holds the file to this account's own transcript folder.
+	if host, here := strings.ToLower(strings.TrimSpace(send.Host)), config.Hostname(); host != "" && here != "" && host != here {
 		return fmt.Errorf("session %s ran on %s: its transcript is there, not on this computer", id, host)
 	}
-	f, size, refusal := openNamedTranscript(send.Path, transcriptRoots(send.Client))
+	roots := transcriptRoots(send.Client)
+	f, size, refusal := openNamedTranscript(send.Path, roots)
 	switch refusal {
 	case harvest.TranscriptRefusedMissing:
 		return fmt.Errorf("not sent: %s is not there, or not readable from this account", send.Path)
 	case harvest.TranscriptRefusedPath:
-		return fmt.Errorf("not sent: %s is not a regular *.jsonl file inside %s's own transcript folder", send.Path, send.Client)
+		return fmt.Errorf("not sent: %s is not a regular *.jsonl file inside %s (%s's own transcript folder for this account)",
+			send.Path, cmp.Or(strings.Join(roots, ", "), "no folder"), cmp.Or(send.Client, "its agent client"))
 	}
 	defer func() { _ = f.Close() }()
 	status, answer, err = postTranscript(ctx, client, cfg, path, f, size)

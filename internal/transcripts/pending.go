@@ -216,7 +216,9 @@ func (s *Service) KeepEnded(ctx context.Context, cutoff time.Time) {
 		return
 	}
 	for _, sess := range ended {
-		if s.Kept(sess.ID) {
+		// One whose upload is still arriving (it may take up to
+		// harvest.TranscriptUploadTimeout) is the upload's to settle.
+		if s.Kept(sess.ID) || s.Uploading([]core.Session{sess}) {
 			continue
 		}
 		ok, why := s.Readable(ctx, sess.Host)

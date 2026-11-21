@@ -212,17 +212,21 @@ func TestKeepEnded(t *testing.T) {
 		want    core.TranscriptCopy
 		kept    bool
 		atLater bool // updated after the cutoff
+		// uploading: an upload of the session is still arriving.
+		uploading bool
 	}{
-		{"reaped, readable: copied", false, core.SessionExpired, testHost, true, "", core.TranscriptCopied, true, false},
-		{"completed without its end signal: copied", false, core.SessionCompleted, "", true, "", core.TranscriptCopied, true, false},
-		{"pending from peer_auth days: copied", false, core.SessionExpired, testHost, true, core.TranscriptPending, core.TranscriptCopied, true, false},
-		{"a failed daemon copy is not retried", false, core.SessionExpired, testHost, true, core.TranscriptFailed, core.TranscriptFailed, false, false},
-		{"another computer", false, core.SessionExpired, "beta", true, "", core.TranscriptRemote, false, false},
-		{"no transcript", false, core.SessionExpired, testHost, false, "", core.TranscriptNoPath, false, false},
-		{"still active", false, core.SessionActive, testHost, true, "", "", false, false},
-		{"ended after the cutoff", false, core.SessionCompleted, testHost, true, "", "", false, true},
-		{"peer_auth: pending", true, core.SessionExpired, testHost, true, "", core.TranscriptPending, false, false},
-		{"peer_auth: a failed upload stays asked for", true, core.SessionExpired, testHost, true, core.TranscriptFailed, core.TranscriptFailed, false, false},
+		{"reaped, readable: copied", false, core.SessionExpired, testHost, true, "", core.TranscriptCopied, true, false, false},
+		{"completed without its end signal: copied", false, core.SessionCompleted, "", true, "", core.TranscriptCopied, true, false, false},
+		{"pending from peer_auth days: copied", false, core.SessionExpired, testHost, true, core.TranscriptPending, core.TranscriptCopied, true, false, false},
+		{"a failed daemon copy is not retried", false, core.SessionExpired, testHost, true, core.TranscriptFailed, core.TranscriptFailed, false, false, false},
+		{"another computer", false, core.SessionExpired, "beta", true, "", core.TranscriptRemote, false, false, false},
+		{"no transcript", false, core.SessionExpired, testHost, false, "", core.TranscriptNoPath, false, false, false},
+		{"still active", false, core.SessionActive, testHost, true, "", "", false, false, false},
+		{"ended after the cutoff", false, core.SessionCompleted, testHost, true, "", "", false, true, false},
+		{"peer_auth: pending", true, core.SessionExpired, testHost, true, "", core.TranscriptPending, false, false, false},
+		{"peer_auth: a failed upload stays asked for", true, core.SessionExpired, testHost, true, core.TranscriptFailed, core.TranscriptFailed, false, false, false},
+		{"peer_auth: an upload still arriving is left to it", true, core.SessionExpired, testHost, true, "", "", false, false, true},
+		{"an upload still arriving is not copied over", false, core.SessionExpired, testHost, true, "", "", false, false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFixtureWith(t, Config{PeerAuth: tc.peer})
@@ -238,6 +242,11 @@ func TestKeepEnded(t *testing.T) {
 			at := cutoff
 			if tc.atLater {
 				at = cutoff.Add(-2 * time.Minute)
+			}
+			if tc.uploading {
+				end, ok := f.svc.BeginUpload([]core.Session{sess})
+				require.True(t, ok)
+				defer end()
 			}
 			f.svc.KeepEnded(ctx, at)
 			f.svc.Wait()

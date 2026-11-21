@@ -325,6 +325,8 @@ func (h *Handler) receiveUpload(ctx context.Context, w http.ResponseWriter, r *h
 	switch state {
 	case core.TranscriptCopied:
 		writeUploadAnswer(w, http.StatusOK, state, "")
+	case "":
+		writeUploadAnswer(w, http.StatusNotFound, "", "the session was unflagged while its transcript was sent: no copy was kept")
 	case core.TranscriptTooLarge:
 		writeUploadAnswer(w, http.StatusRequestEntityTooLarge, state, state.Explain())
 	default:
@@ -420,6 +422,12 @@ func (h *Handler) transcriptKeep(w http.ResponseWriter, r *http.Request) {
 	case !sess.Flagged():
 		writeKeepAnswer(w, http.StatusConflict, keepAnswer{Error: "session " + id +
 			" is not flagged: only a flagged session's transcript is kept"})
+		return
+	case sess.Account != "":
+		// Its transcript is in that account's home, which the owner's account
+		// cannot read; that account's own hooks are asked for it.
+		writeKeepAnswer(w, http.StatusConflict, keepAnswer{Error: "session " + id + " ran as the restricted account " +
+			sess.Account + ": its transcript is in that account's home, and that account's own next hook sends it"})
 		return
 	}
 	_, peerAuth := access.FromContext(ctx)

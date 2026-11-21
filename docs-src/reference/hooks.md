@@ -299,7 +299,9 @@ sends no body, only `POST /api/hooks/transcript?session_id=<id>&refused=path`
 **Keeping one by hand.** `POST /api/hooks/transcript/<session ULID>` is the
 owner's route behind `seam sessions <id> --keep-transcript`: never a
 restricted account, a relay's caller or a paired device, and a session in a
-project locked to the caller answers as locked. With `from_daemon=1` the
+project locked to the caller answers as locked. A session a restricted account
+ran answers `409`: its transcript is in that account's home, and that
+account's own next hook is asked for it. With `from_daemon=1` the
 daemon copies the recorded path itself, where it may (peer_auth off, its own
 computer), while the request waits. Under peer_auth, on the socket, a request
 without a body is answered with the path, computer and agent client to send

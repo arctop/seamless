@@ -979,7 +979,8 @@ it, only when it is a regular `*.jsonl` file inside the agent client's own
 transcript folder, and sends it over the socket. It prints where to read the
 copy, and fails with the reason when none was kept. Like `--transcript` it is
 the owner's alone: a restricted account, a relay's caller and a paired device
-are refused.
+are refused. A session a restricted account ran is that account's to send,
+from its own home, which its next hook does when asked.
 
 `--status` is `active`, `completed`, or `expired`; anything else is a parse
 error. The console rejects an unrecognized `?status=` too, so a direct URL cannot

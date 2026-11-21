@@ -287,6 +287,30 @@ func TestReceive(t *testing.T) {
 	}
 }
 
+// An upload is reported kept only when a session kept it: every flag gone
+// before the copy is kept answers "", and one gone leaves the others theirs.
+func TestReceive_FlagsGoneMeanwhile(t *testing.T) {
+	ctx := context.Background()
+	f := newFixture(t, 128)
+	a := f.flag(t, f.session(t, "01MRECVGAAAAAAAAAAAAAAAAAA", core.SessionActive, "beta", "/remote/a.jsonl"))
+	b := f.flag(t, f.session(t, "01MRECVGBBBBBBBBBBBBBBBBBB", core.SessionActive, "beta", "/remote/a.jsonl"))
+	for _, s := range []core.Session{a, b} {
+		_, _, err := f.svc.Unflag(ctx, s.ID, "owner")
+		require.NoError(t, err)
+	}
+	got := f.svc.Receive(ctx, []core.Session{a, b}, bytes.NewReader(gz(t, line1)), int64(len(line1)), ViaOwner)
+	require.Equal(t, core.TranscriptCopy(""), got, "no session kept it")
+	require.False(t, f.svc.Kept(a.ID))
+	require.False(t, f.svc.Kept(b.ID))
+	require.Empty(t, f.events(t, a.ID, core.EventSessionTranscript))
+
+	c := f.flag(t, f.session(t, "01MRECVGCCCCCCCCCCCCCCCCCC", core.SessionActive, "beta", "/remote/c.jsonl"))
+	got = f.svc.Receive(ctx, []core.Session{a, c}, bytes.NewReader(gz(t, line1)), int64(len(line1)), ViaClient)
+	require.Equal(t, core.TranscriptCopied, got)
+	require.False(t, f.svc.Kept(a.ID))
+	require.True(t, f.svc.Kept(c.ID))
+}
+
 // A session flagged after it ended is copied at once where the daemon may
 // read its transcript; under peer_auth -- a View on the request, or the
 // daemon's own -- it is pending, for the agent's later hooks to send;
