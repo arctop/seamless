@@ -438,6 +438,7 @@ func captureDaemon(t *testing.T, f captureFixture) captureDB {
 	require.NoError(t, store.AddRepoMapping(ctx, db, f.cwd, "example-ops"))
 	mgr, err := files.NewManager(filepath.Join(dir, "data"), db, nil)
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = mgr.Close() }) // its watcher holds an inotify instance on Linux
 	h := hooks.NewHandler(hooks.Config{
 		DB: db, Retrieve: retrieve.New(db, nil, config.Budgets{MaxBriefingTokens: 1500, RecallBudgetTokens: 1000}, nil),
 		Events: events.NewRecorder(db), Files: mgr, APIKey: "k",

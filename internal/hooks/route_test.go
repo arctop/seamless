@@ -79,6 +79,7 @@ func newRouteEnvWith(t *testing.T, change func(*Config)) *routeEnv {
 	}
 	mgr, err := files.NewManager(filepath.Join(dir, "data"), db, nil)
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = mgr.Close() }) // its watcher holds an inotify instance on Linux
 	plansDir := filepath.Join(dir, "plans")
 	require.NoError(t, os.MkdirAll(plansDir, 0o755))
 	rec := events.NewRecorder(db)

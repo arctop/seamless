@@ -40,6 +40,7 @@ func homeNewPushHooks(t *testing.T, on bool) *pushHooks {
 	e.lockHooks = newLockHooksWith(t, true, func(db *sql.DB, cfg *Config) {
 		mgr, err := files.NewManager(filepath.Join(t.TempDir(), "data"), db, nil)
 		require.NoError(t, err)
+		t.Cleanup(func() { _ = mgr.Close() }) // its watcher holds an inotify instance on Linux
 		e.mgr = mgr
 		cfg.Files = mgr
 		cfg.PlanCapture = config.PlanCapture{Enabled: true}
