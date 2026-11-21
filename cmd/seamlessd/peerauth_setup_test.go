@@ -279,7 +279,7 @@ func TestPeerAuthSetup_RunsEveryStepInOrder(t *testing.T) {
 			info, err := os.Stat(filepath.Join(filepath.Dir(f.cfgPath), "console.yaml"))
 			require.NoError(t, err)
 			require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
-			require.Equal(t, [][]string{{f.h.exe, "install-hooks", "--config", f.cfgPath, "--seam", pasBin + "/seam"}}, f.owner)
+			require.Equal(t, [][]string{{f.h.exe, "install-hooks", "--config", f.cfgPath, "--client", "detect", "--seam", pasBin + "/seam"}}, f.owner)
 
 			// A run again has nothing left to do.
 			n := len(f.scripts)
@@ -387,7 +387,7 @@ func TestPeerAuthUndo_HooksGoBackToTheirOldSeam(t *testing.T) {
 	f.h.health = func(context.Context) error { return errors.New("connection refused") }
 	f.owner = nil
 	require.NoError(t, pasUndo(context.Background(), f.h, true, false))
-	require.Equal(t, [][]string{{f.h.exe, "install-hooks", "--config", f.cfgPath, "--seam", old}}, f.owner)
+	require.Equal(t, [][]string{{f.h.exe, "install-hooks", "--config", f.cfgPath, "--client", "detect", "--seam", old}}, f.owner)
 
 	// A seam under the layout already (a move made by hand) is not recorded.
 	g := newPasFake(t, "linux")
@@ -565,7 +565,7 @@ func TestPeerAuthUndo_ReversesInTheGuidesOrder(t *testing.T) {
 			cfg, err := config.LoadFrom(f.cfgPath)
 			require.NoError(t, err)
 			require.False(t, cfg.IsClient())
-			require.Equal(t, [][]string{{f.h.exe, "install-hooks", "--config", f.cfgPath}}, f.owner)
+			require.Equal(t, [][]string{{f.h.exe, "install-hooks", "--config", f.cfgPath, "--client", "detect"}}, f.owner)
 			st := f.st()
 			require.Equal(t, pasRolledBack, st.phase())
 			require.Contains(t, pasStatusLine(st), "rolled back")
@@ -707,7 +707,7 @@ func TestPeerAuthSetup_DryRunChangesNothing(t *testing.T) {
 	out := f.out()
 	require.Contains(t, out, "passkeys  approvers enroll under rp_id localhost, on http://localhost:8081")
 	for _, want := range []string{"# start the state file", "# 1. export everything", "export -o -", "sha256 of v0.10.4",
-		"# 11. reinstall the hooks", "# then, in this process: seamlessd install-hooks --seam /opt/seamless/bin/seam"} {
+		"# 11. reinstall the hooks", "# then, in this process: seamlessd install-hooks --client detect --seam /opt/seamless/bin/seam"} {
 		require.Contains(t, out, want)
 	}
 	_, err := os.Stat(f.cfgPath + pasKeptSuffix)

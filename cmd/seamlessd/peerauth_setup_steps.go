@@ -78,7 +78,7 @@ var pasSteps = []pasStepDef{
 			return "your config becomes a client's, on the socket; " + filepath.Base(pasConsoleConfig(p)) + " keeps the key for the console"
 		}},
 	{id: "hooks", after: pasReinstallHooks,
-		afterWords: func(p pasPlan) string { return "seamlessd install-hooks --seam " + pasBin + "/seam" },
+		afterWords: func(p pasPlan) string { return "seamlessd install-hooks --client detect --seam " + pasBin + "/seam" },
 		title:      func(pasPlan) string { return "reinstall the hooks and the MCP bridge to run " + pasBin + "/seam" }},
 }
 
@@ -720,9 +720,13 @@ func pasWriteOwnerConfig(path, content string, same func(config.Config) bool) er
 
 // pasReinstallHooks points the hooks and the MCP bridge at the daemon's own
 // seam, which no process of the owner's can replace and which moves with
-// the daemon when it updates itself.
+// the daemon when it updates itself. --client detect, as install-hooks takes
+// it with no terminal: on one it would otherwise stop the move to ask which
+// clients, a question a --yes run must not ask (a live run on macOS waited
+// there).
 func pasReinstallHooks(x *pasRun) error {
-	return x.h.runOwner(x.ctx, []string{x.h.exe, "install-hooks", "--config", x.plan.OldConfig, "--seam", pasBin + "/seam"}, nil)
+	return x.h.runOwner(x.ctx, []string{x.h.exe, "install-hooks", "--config", x.plan.OldConfig, "--client", "detect",
+		"--seam", pasBin + "/seam"}, nil)
 }
 
 // pasUndoServiceCommands stop the system service and remove it.
@@ -829,7 +833,7 @@ func pasUndoClientConfig(x *pasRun) error {
 // beside this seamlessd: undo run from /opt/seamless/bin or a download would
 // otherwise point them at a seam the per-user install does not keep.
 func pasUndoHooks(x *pasRun) error {
-	argv := []string{x.h.exe, "install-hooks", "--config", x.plan.OldConfig}
+	argv := []string{x.h.exe, "install-hooks", "--config", x.plan.OldConfig, "--client", "detect"}
 	if x.plan.OldSeam != "" {
 		argv = append(argv, "--seam", x.plan.OldSeam)
 	}
