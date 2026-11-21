@@ -114,7 +114,10 @@ func DiaryEvents(ctx context.Context, db *sql.DB, from, to time.Time, kinds []co
 // status, findings and flag, when it began and was last updated (where an
 // ended session ended), its stored token totals, and whether the usage ledger
 // holds any row of it at all. A session with totals and no ledger row
-// predates the ledger.
+// predates the ledger. Name, Client and Model say which agent it was: its
+// name (an ambient one is cc/... or cx/...), its recorded client
+// discriminator and its model, so a month can be told by agent without
+// reading each session again.
 type DiarySession struct {
 	ID       string
 	Project  string
@@ -126,12 +129,16 @@ type DiarySession struct {
 	Updated  time.Time
 	Totals   core.TokenUsage
 	Ledger   bool
+	Name     string
+	Client   string
+	Model    string
 }
 
 // diarySessionCols is the column list scanDiarySessions reads, in order.
 const diarySessionCols = `id, project_slug, cwd, status, findings, COALESCE(verdict, ''), created_at, updated_at,
 	input_tokens, cached_input_tokens, cache_creation_tokens, output_tokens, total_tokens,
-	EXISTS (SELECT 1 FROM session_usage u WHERE u.session_id = sessions.id)`
+	EXISTS (SELECT 1 FROM session_usage u WHERE u.session_id = sessions.id),
+	name, external_client, model`
 
 // DiarySessionsBetween returns the sessions created, or last updated, in
 // [from, to): the sessions that began or ended (or were last seen) in the
@@ -187,7 +194,7 @@ func scanDiarySessions(rows *sql.Rows) ([]DiarySession, error) {
 		)
 		if err := rows.Scan(&s.ID, &s.Project, &s.CWD, &status, &s.Findings, &verdict, &created, &updated,
 			&s.Totals.Input, &s.Totals.Cached, &s.Totals.CacheCreation, &s.Totals.Output, &s.Totals.Total,
-			&s.Ledger); err != nil {
+			&s.Ledger, &s.Name, &s.Client, &s.Model); err != nil {
 			return nil, fmt.Errorf("scan: %w", err)
 		}
 		var err error

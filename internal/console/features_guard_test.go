@@ -49,6 +49,10 @@ const probeChild = "registry-guard-probe"
 func TestFeatureRoutePrefixes_AreRegisteredAndGated(t *testing.T) {
 	_, muxOn := newConsoleFeatures(t, featuresAll(true))
 	_, muxOff := newConsoleFeatures(t, featuresAll(false))
+	// The styled-404 catch-all answers every /console/ path no route claims:
+	// a probe child that reaches it means the prefix has no detail route.
+	_, catchAll := muxOn.Handler(httptest.NewRequest(http.MethodGet, "/console/"+probeChild, nil))
+	require.NotEmpty(t, catchAll)
 
 	for _, f := range features.Registry() {
 		for _, prefix := range f.RoutePrefixes {
@@ -58,9 +62,11 @@ func TestFeatureRoutePrefixes_AreRegisteredAndGated(t *testing.T) {
 
 			for _, path := range []string{prefix, prefix + "/" + probeChild} {
 				_, pattern := muxOn.Handler(httptest.NewRequest(http.MethodGet, path, nil))
-				if pattern == "" && path != prefix {
+				if path != prefix && (pattern == "" || pattern == catchAll) {
 					continue // this prefix simply has no detail route; nothing to gate
 				}
+				require.NotEqual(t, catchAll, pattern,
+					"feature %q lists route prefix %q, but only the styled-404 catch-all answers it", f.Key, prefix)
 				require.NotEmpty(t, pattern,
 					"feature %q lists route prefix %q, but Register mounts no handler there: "+
 						"either the screen was renamed or removed (drop the prefix from the registry "+

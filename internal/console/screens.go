@@ -91,6 +91,11 @@ var screens = []screen{
 	{ID: "held", Label: "Held", Icon: "lock", Href: "/console/held", Group: groupKnowledge, Key: "h",
 		Min: levelBasic, Feature: features.Screening, NavRow: true, Badge: "held",
 		BadgeTitle: "Writes held for your review", BadgeZero: true},
+	// The Diary (diary.go): one entry per day of work. Basic, and the Work
+	// group's first row, because "what happened today" is the first question
+	// an owner who turns it on asks.
+	{ID: "diary", Label: "Diary", Icon: "book-open", Href: "/console/diary", Group: groupWork, Key: "d",
+		Min: levelBasic, Feature: features.Diary, NavRow: true},
 	{ID: "projects", Label: "Projects", Icon: "table-2", Href: "/console/projects", Group: groupWork, Key: "w",
 		Min: levelStandard, NavRow: true, Badge: "projects", Scope: "projects"},
 	{ID: "plans", Label: "Plans", Icon: "map", Href: "/console/plans", Group: groupWork, Key: "p",

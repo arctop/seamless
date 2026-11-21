@@ -6,6 +6,9 @@ import (
 	"database/sql"
 	"slices"
 	"time"
+
+	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/store"
 )
 
 // MonthProjects is how many projects a month's day names: its top ones by
@@ -36,16 +39,19 @@ func monthAt(ctx context.Context, db *sql.DB, month, now time.Time, loc *time.Lo
 	if err != nil {
 		return MonthView{}, err
 	}
+	agents := newAgentTotals()
 	for _, d := range s.split() {
-		view.Days = append(view.Days, monthDay(s, d))
+		t := s.count(d)
+		view.Days = append(view.Days, monthDay(s, d, t))
+		agents.add(s, d, t)
 	}
+	view.Agents = agents.list()
 	return view, nil
 }
 
-// monthDay is one day's row: its Facts as Day counts them, its top projects
-// and its character.
-func monthDay(s *span, d dayRows) MonthDay {
-	t := s.count(d)
+// monthDay is one day's row, from its tally t: its Facts as Day counts them,
+// its top projects and its character.
+func monthDay(s *span, d dayRows, t *tally) MonthDay {
 	f := t.facts()
 	places := t.places()
 	projects := slices.Clone(places[:min(len(places), MonthProjects)])
@@ -53,6 +59,79 @@ func monthDay(s *span, d dayRows) MonthDay {
 		projects = []ProjectUsage{}
 	}
 	return MonthDay{Day: dayKey(d.lo, s.loc), Facts: f, Projects: projects, Character: Character(f)}
+}
+
+// agentTotals sums a month's days by agent the way Day's usage sums one day:
+// the ledger rows by the session's harness and the row's model, split by
+// thread, and the stored total of a session from before the ledger on the
+// day it ended. Its sessions are counted once over the whole month.
+type agentTotals struct {
+	by       map[string]*AgentUsage
+	sessions map[string]map[string]bool
+}
+
+func newAgentTotals() *agentTotals {
+	return &agentTotals{by: map[string]*AgentUsage{}, sessions: map[string]map[string]bool{}}
+}
+
+// agent is the running total of one harness and model.
+func (a *agentTotals) agent(harness, model string) *AgentUsage {
+	key := harness + "/" + model
+	u, ok := a.by[key]
+	if !ok {
+		u = &AgentUsage{Key: key, Harness: harness, Model: model}
+		a.by[key] = u
+		a.sessions[key] = map[string]bool{}
+	}
+	return u
+}
+
+// add counts day d of span s, its tally t.
+func (a *agentTotals) add(s *span, d dayRows, t *tally) {
+	for _, r := range d.usage {
+		u := a.agent(harnessOfSpan(s.sessions[r.SessionID]), r.Model)
+		m, tok := minutesOf(r), r.Tokens()
+		u.Minutes += m
+		u.Tokens = addTokens(u.Tokens, tok)
+		part := &u.Main
+		if r.Thread == core.UsageThreadSubagent {
+			part = &u.Subagent
+		}
+		part.Minutes += m
+		part.Tokens += tok.Total
+		a.sessions[u.Key][r.SessionID] = true
+	}
+	for _, id := range t.sessions {
+		su := t.use[id]
+		if su.unreported || !su.approximate || !su.counted {
+			continue
+		}
+		ss := s.sessions[id]
+		u := a.agent(harnessOfSpan(ss), ss.Model)
+		u.Tokens = addTokens(u.Tokens, ss.Totals)
+		u.Approximate.Tokens += ss.Totals.Total
+		a.sessions[u.Key][id] = true
+	}
+}
+
+// list is the totals, most agent time first, as Usage.Agents orders a day.
+func (a *agentTotals) list() []AgentUsage {
+	out := make([]AgentUsage, 0, len(a.by))
+	for key, u := range a.by {
+		u.Sessions = len(a.sessions[key])
+		out = append(out, *u)
+	}
+	slices.SortFunc(out, func(x, y AgentUsage) int {
+		return cmp.Or(cmp.Compare(y.Minutes, x.Minutes), cmp.Compare(y.Tokens.Total, x.Tokens.Total), cmp.Compare(x.Key, y.Key))
+	})
+	return out
+}
+
+// harnessOfSpan is harnessOf for a session as a span holds it: its recorded
+// client, else its ambient name's prefix; "" for a session the handle does
+// not hold, as Day's agents read it.
+func harnessOfSpan(s store.DiarySession) string {
+	return harnessOf(core.Session{ExternalClient: s.Client, Name: s.Name})
 }
 
 // The usual day: the median of the trailing active days before a day.

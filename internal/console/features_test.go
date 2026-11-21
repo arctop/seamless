@@ -653,6 +653,66 @@ func TestPlansShipped_FollowsTheMomentumFeature(t *testing.T) {
 		"off = byte-identical Plans page")
 }
 
+// The Diary is an optional feature with a screen of its own and one in-page
+// surface (the Open in Diary link on a Sessions day view). Off (the shipped
+// default) leaves no trace: no nav row, no palette entry, the route answers
+// as every switched-off screen does, and the Sessions day view is byte for
+// byte the page it was. On, all of it is there; the stored override flips
+// both directions live, with no restart.
+func TestDiary_FollowsTheDiaryFeature(t *testing.T) {
+	db, mux, _ := newGatedConsole(t)
+	ctx := context.Background()
+	at := time.Now().Add(-150 * time.Minute) // "2h" in both renders
+	require.NoError(t, store.CreateSession(ctx, db, core.Session{
+		ID: mustID(t), Name: "cc/day-view", ProjectSlug: "demo", Status: core.SessionCompleted,
+		Findings: "tidied the build", CreatedAt: at, UpdatedAt: at,
+	}))
+	day := at.Local().Format("2006-01-02")
+	dayView := "/console/sessions?day=" + day
+
+	offDay := getPeek(t, mux, dayView).Body.String()
+	for _, path := range []string{"/console/", "/console/sessions", dayView, "/console/settings", "/console/memories"} {
+		page := getPeek(t, mux, path).Body.String()
+		for _, trace := range []string{"/console/diary", "Open in Diary", "diary.js", "dy-open-chip", `data-key="d"`} {
+			require.NotContains(t, page, trace, "%s carries %q while the Diary is off", path, trace)
+		}
+	}
+	rr := getPeek(t, mux, "/console/diary")
+	require.Equal(t, http.StatusOK, rr.Code)
+	require.Contains(t, rr.Body.String(), `data-feature-off="diary"`)
+	require.Contains(t, rr.Body.String(), "Diary is switched off")
+	require.NotContains(t, rr.Body.String(), "dy-page")
+	req := httptest.NewRequest(http.MethodGet, "/console/diary?format=json", nil)
+	req.Header.Set("Authorization", "Bearer "+testKey)
+	rr = do(mux, req)
+	require.Equal(t, http.StatusForbidden, rr.Code)
+	require.JSONEq(t, `{"error": "the diary feature is disabled"}`, rr.Body.String())
+	require.Contains(t, getPeek(t, mux, "/console/diary?peek=1").Body.String(), `class="peek-entity"`)
+	require.NotContains(t, getJSON2(t, mux, dayView+"&format=json"), "diary", "the Sessions JSON never names it")
+
+	// On, live from the stored override.
+	require.NoError(t, store.SetFeaturesConfig(ctx, db, config.Features{Diary: true}))
+	home := getPeek(t, mux, "/console/").Body.String()
+	require.Contains(t, home, `<a href="/console/diary" data-key="d" data-tip="Diary" class="">`, "the Work group's first row")
+	page := getPeek(t, mux, "/console/diary").Body.String()
+	require.Contains(t, page, `class="dy-page`)
+	require.Contains(t, page, `<script src="/console/static/diary.js"></script>`)
+	onDay := getPeek(t, mux, dayView).Body.String()
+	require.Contains(t, onDay, `<a class="dy-open-chip" href="/console/diary?day=`+day+`"`)
+	require.Contains(t, onDay, "Open in Diary")
+	require.NotContains(t, getPeek(t, mux, "/console/sessions").Body.String(), "Open in Diary",
+		"the link belongs to a day view only")
+	require.NotContains(t, getJSON2(t, mux, dayView+"&format=json"), "diary", "the Sessions JSON never names it")
+	// A calendar click still focuses the Sessions list: the chip is a link
+	// beside it, and the list answers for the day as before.
+	require.Contains(t, onDay, "run on "+at.Local().Format("Mon, Jan 02"))
+
+	// Off again: the Sessions day view is byte for byte what it was.
+	require.NoError(t, store.SetFeaturesConfig(ctx, db, config.Features{}))
+	require.Equal(t, offDay, getPeek(t, mux, dayView).Body.String(), "off = byte-identical Sessions day view")
+	require.NotContains(t, getPeek(t, mux, "/console/").Body.String(), `href="/console/diary"`)
+}
+
 // getJSON2 fetches a path and returns the raw JSON body as a string.
 func getJSON2(t *testing.T, mux *http.ServeMux, path string) string {
 	t.Helper()
@@ -981,7 +1041,7 @@ func TestSettingsFeaturesSave_RecordsAnEvent(t *testing.T) {
 	}
 	require.NotNil(t, found, "the toggle must be visible in Activity")
 	require.Equal(t, "console", found.Payload["by"])
-	require.Equal(t, "optional features changed (research on, momentum off, gamification off, screening off, repo_locks off)", eventSummary(*found))
+	require.Equal(t, "optional features changed (research on, momentum off, gamification off, screening off, repo_locks off, diary off)", eventSummary(*found))
 
 	rr = postForm(mux, "/console/settings/features/reset", "")
 	require.Equal(t, http.StatusSeeOther, rr.Code)
@@ -1024,7 +1084,7 @@ func TestSettingsJSON_ExposesTheFeatureContract(t *testing.T) {
 	require.Equal(t, "feature_research", cards[0].Field)
 	require.NotEmpty(t, cards[0].WhenOff)
 
-	require.JSONEq(t, `{"research": false, "momentum": false, "gamification": false, "screening": false, "repo_locks": false}`, string(raw["featuresConfig"]))
+	require.JSONEq(t, `{"research": false, "momentum": false, "gamification": false, "screening": false, "repo_locks": false, "diary": false}`, string(raw["featuresConfig"]))
 	require.Equal(t, "false", string(raw["featuresOverridden"]))
 }
 

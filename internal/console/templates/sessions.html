@@ -88,7 +88,7 @@
   <header class="ops-stage-head">
     <div class="ops-stage-title">
       <span class="ops-stage-eyebrow">Session map</span>
-      <strong>{{len .Sessions}} run{{if ne (len .Sessions) 1}}s{{end}} {{if .Day}}on {{.DayLabel}}{{else}}in this view{{end}}</strong>
+      <strong>{{len .Sessions}} run{{if ne (len .Sessions) 1}}s{{end}} {{if .Day}}on {{.DayLabel}}{{else}}in this view{{end}}</strong>{{with .DiaryHref}}<a class="dy-open-chip" href="{{.}}" title="This day's page in the Diary">{{icon "book-open"}}Open in Diary</a>{{end}}
     </div>
     <div class="ops-stage-meta"><span class="status-key live"><span class="live-dot"></span>{{.Active}} live</span>{{if .Idle}}<span class="status-key idle">{{.Idle}} idle</span>{{end}}<span class="status-key done">{{.Completed}} completed</span><span class="status-key expired">{{.Expired}} expired</span></div>
   </header>

@@ -1124,7 +1124,7 @@ exist. The computers paired with this server, and how to pair another
 - **Revoked and expired** - what ended, when, and from where.
 
 It shows at every [level](#choose-how-much-you-see), in the sidebar's Server
-group; `g` then `d` opens it.
+group; `g` then `c` opens it.
 
 ## Settings
 

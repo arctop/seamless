@@ -84,6 +84,14 @@ const Screening Key = "screening"
 // with no tools to fill it would stay empty. Turning it off deletes no lock.
 const RepoLocks Key = "repo_locks"
 
+// Diary covers the Diary console screen -- one entry per local day saying
+// what was worked on, which agents did it, and what it took in agent time and
+// model tokens -- and the in-page link into it from a Sessions day view. Like
+// Momentum and Gamification it is presentation only: it owns no MCP tools,
+// and the usage ledger and the event log it reads are recorded whether it is
+// on or off, so turning it on shows the history at once.
+const Diary Key = "diary"
+
 // Feature describes one optional feature and every surface it owns.
 type Feature struct {
 	// Key is the stable identifier (also the settings anchor and form field).
@@ -214,6 +222,19 @@ var registry = []Feature{
 		Default: false,
 		get:     func(c config.Features) bool { return c.RepoLocks },
 		set:     func(c *config.Features, on bool) { c.RepoLocks = on },
+	},
+	{
+		Key:           Diary,
+		Label:         "Diary",
+		Blurb:         "A page for each day of work: what was worked on, which agents did it, and what it took in agent time and model tokens, with the meaningful work in the spotlight and short question-and-answer sessions folded away.",
+		NavIDs:        []string{"diary"},
+		RoutePrefixes: []string{"/console/diary"},
+		Surfaces: []string{
+			"the Open in Diary link on a Sessions day view",
+		},
+		Default: false,
+		get:     func(c config.Features) bool { return c.Diary },
+		set:     func(c *config.Features, on bool) { c.Diary = on },
 	},
 }
 

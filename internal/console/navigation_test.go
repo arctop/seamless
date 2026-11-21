@@ -61,6 +61,21 @@ func TestNav_LinkSetChangesWithFeatureState(t *testing.T) {
 		require.NotContains(t, off, href, "a disabled feature must not be offered in the sidebar")
 		require.Contains(t, on, href, "an enabled feature must be offered in the sidebar")
 	}
+
+	// The Diary's row: the Work group's first, before Projects.
+	diary := linkSet(config.Features{Diary: true})
+	require.Len(t, diary, len(off)+1)
+	require.NotContains(t, off, "/console/diary")
+	require.Contains(t, diary, "/console/diary")
+	at := func(href string) int {
+		for i, h := range diary {
+			if h == href {
+				return i
+			}
+		}
+		return -1
+	}
+	require.Equal(t, at("/console/projects")-1, at("/console/diary"), "the Diary leads the Work group")
 }
 
 func TestNavigationJS_MorphsTheNavWhenItsLinkSetChanges(t *testing.T) {
@@ -133,6 +148,7 @@ func TestQueryControls_AreWiredAcrossConsole(t *testing.T) {
 		"trials":    2,
 		"gardener":  2,
 		"settings":  1,
+		"diary":     5,
 	}
 	for name, want := range wantMarkers {
 		source, err := templateFS.ReadFile("templates/" + name + ".html")
@@ -310,6 +326,9 @@ func TestDataRefreshClients_NeverReloadDocument(t *testing.T) {
 		// The shell hides the level and update banners in place; a "Got it"
 		// never reloads to make one go away.
 		"shell": string(shellJS),
+		// The Diary walks days through its in-place links and refreshes today
+		// in place.
+		"diary": string(diaryJS),
 	} {
 		require.NotContains(t, source, "location.reload(", "%s must keep data refreshes inside the current document", name)
 	}

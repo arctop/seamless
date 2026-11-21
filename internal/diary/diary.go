@@ -100,6 +100,11 @@ type Ref struct {
 	// Owner is a commit Ref's owner: the task or session that recorded it (a
 	// commit has no page of its own).
 	Owner *Ref `json:"owner,omitempty"`
+	// Href is the item's link on the screen that shows the day. The day
+	// model knows no URLs and leaves it empty; the console fills it when it
+	// renders a day, and leaves it empty for an item with no page to offer
+	// (one that no longer resolves, or whose feature is off).
+	Href string `json:"href"`
 }
 
 // Entry is one local day.
@@ -491,6 +496,11 @@ type MonthView struct {
 	Start time.Time  `json:"start"`
 	End   time.Time  `json:"end"`
 	Days  []MonthDay `json:"days"`
+	// Agents is the month's usage by agent, keyed and ordered as each day's
+	// Usage.Agents: every day of it summed, an agent's sessions counted once
+	// over the month. The screen picks each agent's color from it, so an
+	// agent wears one color on every day of the month.
+	Agents []AgentUsage `json:"agents"`
 }
 
 // MonthDay is one day of a month: its Facts, its top projects by agent time

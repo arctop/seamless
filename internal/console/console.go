@@ -301,6 +301,7 @@ func (s *Service) Register(mux *http.ServeMux) {
 	handle("GET /console/static/browserkey.js", s.serveBrowserKeyJS)
 	handle("GET /console/static/passkey.js", s.servePasskeyJS)
 	handle("GET /console/static/backups.js", s.serveBackupsJS)
+	handle("GET /console/static/diary.js", s.serveDiaryJS)
 	handle("GET /console/sw.js", s.serveServiceWorker)
 	handle("GET /console/login", s.loginForm)
 	handle("POST /console/login", s.parseForm(formBodySmall, s.loginSubmit))
@@ -329,6 +330,8 @@ func (s *Service) Register(mux *http.ServeMux) {
 	handle("GET /console/interactions", s.auth(s.interactions))
 	handle("GET /console/system", s.auth(s.systemPage))
 	handle("GET /console/privacy", s.auth(s.privacyPage))
+	// The Diary (diary.go), behind its optional feature: one entry per day.
+	handle("GET /console/diary", s.auth(gated(features.Diary, s.diaryPage)))
 	handle("GET /console/sessions", s.auth(s.sessionsList))
 	handle("GET /console/sessions/{id}", s.auth(s.sessionDetail))
 	handle("GET /console/sessions/{id}/transcript", s.auth(s.sessionTranscript))
@@ -905,6 +908,14 @@ func (s *Service) serveBackupsJS(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=300")
 	_, _ = w.Write(backupsJS)
+}
+
+// serveDiaryJS serves the Diary's page script: walking the days from the
+// keyboard and today's throttled live refresh. Only the Diary loads it.
+func (s *Service) serveDiaryJS(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	_, _ = w.Write(diaryJS)
 }
 
 // serveServiceWorker serves the console's service worker. It sits at

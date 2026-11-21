@@ -72,8 +72,26 @@ func TestFeaturesConfigStoredShapeMatchesMigration(t *testing.T) {
 	raw, found, err := GetSetting(ctx, db, SettingFeaturesConfig)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, `{"research":true,"momentum":false,"gamification":false,"screening":false,"repo_locks":false}`, raw,
+	require.Equal(t, `{"research":true,"momentum":false,"gamification":false,"screening":false,"repo_locks":false,"diary":false}`, raw,
 		"the migration's seeded {\"research\":true} decodes over this shape: absent keys stay at the base value")
+}
+
+// TestFeaturesConfig_RowFromBeforeTheDiaryKeepsItsBase reads an override a
+// release without the Diary stored: the row has no diary key, so the Diary
+// follows the file/env base rather than reading as switched off.
+func TestFeaturesConfig_RowFromBeforeTheDiaryKeepsItsBase(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	require.NoError(t, SetSetting(ctx, db, SettingFeaturesConfig,
+		`{"research":true,"momentum":false,"gamification":false,"screening":false,"repo_locks":false}`))
+
+	for _, base := range []bool{false, true} {
+		got, overridden, err := FeaturesConfig(ctx, db, config.Features{Diary: base})
+		require.NoError(t, err)
+		require.True(t, overridden)
+		require.Equal(t, base, got.Diary, "an older row leaves the Diary at its base (%v)", base)
+		require.True(t, got.Research, "the row's own keys still apply")
+	}
 }
 
 // TestMigration022_GrandfathersExistingResearchData upgrades a database that

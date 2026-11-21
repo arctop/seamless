@@ -114,7 +114,7 @@ func (d *cmDaemon) postTargets(t *testing.T, pendingID string) []struct {
 				"/console/settings/briefing/preview":   {"project": {p}},
 				"/console/gardener/group/dismiss":      {"kind": {"archive"}},
 				"/console/settings/level":              {"level": {"advanced"}},
-				"/console/settings/features":           {"feature_research": {"1"}, "feature_momentum": {"1"}, "feature_gamification": {"1"}, "feature_screening": {"1"}},
+				"/console/settings/features":           {"feature_research": {"1"}, "feature_momentum": {"1"}, "feature_gamification": {"1"}, "feature_screening": {"1"}, "feature_diary": {"1"}},
 				"/console/settings/embeddings/mode":    {"mode": {"auto"}},
 				"/console/settings/embeddings/reembed": {},
 				"/console/held/lockdown":               {"on": {"0"}},
@@ -329,6 +329,52 @@ func TestPeerAuthMatrix_Console(t *testing.T) {
 			require.False(t, page.Unlocked)
 			require.False(t, page.Leased)
 			require.Equal(t, p, page.Project.Slug, "the unlock page names the project")
+		}
+	})
+
+	// The Diary reads today through each caller's handle: the owner's locked
+	// browser sees today's work in the open project and none in the locked
+	// ones (the crawl above holds every page to that); the leased tree reads
+	// both locked projects' work on the same day.
+	t.Run("the Diary: today's work in a locked project is absent", func(t *testing.T) {
+		kept := func(c cmCaller) []string {
+			t.Helper()
+			status, body, _ := c.do(t, http.MethodGet, "/console/diary?format=json", nil, true)
+			require.Equal(t, http.StatusOK, status, body)
+			var day struct {
+				Today bool `json:"today"`
+				Kept  struct {
+					Memories []struct {
+						Item struct {
+							Title string `json:"title"`
+							Href  string `json:"href"`
+						} `json:"item"`
+					} `json:"memories"`
+				} `json:"kept"`
+			}
+			require.NoError(t, json.Unmarshal([]byte(body), &day))
+			require.True(t, day.Today)
+			var names []string
+			for _, m := range day.Kept.Memories {
+				names = append(names, m.Item.Title)
+				require.True(t, strings.HasPrefix(m.Item.Href, "/console/memories/"), "%s links to its page", m.Item.Title)
+			}
+			return names
+		}
+		owner := kept(browserA)
+		require.Contains(t, owner, "open-runbook", "the owner's own work today is there")
+		for _, it := range d.secrets() {
+			require.NotContains(t, owner, it.memName, "%s's work is absent while it is locked", it.project)
+		}
+		_, page, _ := browserA.do(t, http.MethodGet, "/console/diary", nil, false)
+		require.Contains(t, page, "open-runbook")
+		d.noLockedContent(t, page, "", "the owner's Diary")
+		// The page says what it leaves out, by name only: every day, whatever
+		// the locked projects did on it.
+		require.Contains(t, page, "Work in locked projects is not shown: "+cmFinance+" and "+cmLegal)
+		agent := kept(leased)
+		for _, it := range d.secrets() {
+			require.Contains(t, agent, it.memName, "the leased tree reads %s's work today", it.project)
 		}
 	})
 

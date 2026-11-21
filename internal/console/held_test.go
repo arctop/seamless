@@ -240,7 +240,7 @@ func TestWelcomeCard_TickedOptInTurnsScreeningOn(t *testing.T) {
 	evs := featureEvents(t, f.db)
 	require.Len(t, evs, 1)
 	require.Equal(t, "console", evs[0].Payload["by"])
-	require.Equal(t, map[string]any{"research": true, "momentum": false, "gamification": false, "screening": true, "repo_locks": false},
+	require.Equal(t, map[string]any{"research": true, "momentum": false, "gamification": false, "screening": true, "repo_locks": false, "diary": false},
 		evs[0].Payload["features"])
 	level, _, _, _, err := store.ConsoleLevel(context.Background(), f.db, "basic")
 	require.NoError(t, err)

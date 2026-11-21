@@ -73,13 +73,18 @@ var passkeyJS []byte
 //go:embed static/backups.js
 var backupsJS []byte
 
+// diaryJS is the Diary's page script (diary.go).
+//
+//go:embed static/diary.js
+var diaryJS []byte
+
 // pageNames are the page templates; each is parsed together with the shared
 // layout so it can supply the "content" (and optional "scripts") blocks. Pages
 // are added here as their handlers land, phase by phase.
 var pageNames = []string{
 	"login", "overview", "now", "search", "interactions", "projects", "projectdetail", "context", "sessions", "session",
 	"memories", "notes", "retrieval", "tasks", "plans", "labs", "trials", "gardener", "settings", "event", "error",
-	"feature_off", "held", "approvers", "access", "access_one", "unlock", "lock", "system", "privacy",
+	"feature_off", "held", "approvers", "access", "access_one", "unlock", "lock", "system", "privacy", "diary",
 }
 
 // peekNames are the entity detail templates. Each templates/peek_<name>.html

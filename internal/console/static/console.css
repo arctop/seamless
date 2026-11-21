@@ -7479,3 +7479,325 @@ a.chart-tile:hover .ov2-vital-label .ico-arrow-down { transform: translateY(2px)
   .chart-ring-seg, .chart-col, .chart-cap { animation: none; }
   .chart-ring-seg, .chart-col, .chart-legend-row, .chart-mix-seg, .chart-presence-seg { transition: none; }
 }
+
+/* ===========================================================================
+   DIARY (templates/diary.html, diary.go, static/diary.js)
+
+   One day of work as a page of a journal, beside its month. The date block
+   reads as the head of a diary page: the weekday as a small eyebrow, the date
+   set large in Fraunces, a margin rule down its left in the hue of the day's
+   character, the character as a stamp, and the headline as the entry's lede.
+   Under it the four tiles, the day's rhythm, then the work (the spotlight
+   cards) beside what it took (the usage panel). The rail is the month: its
+   heat grid, then its days, a run of quiet days one thin row. Tokens only,
+   and no theme-scoped rule: each theme's tokens carry it.
+   =========================================================================== */
+.dy-page { display: grid; grid-template-columns: 252px minmax(0, 1fr); gap: 22px; align-items: start; }
+
+/* The rail */
+.dy-rail {
+  position: sticky; top: 18px; display: flex; flex-direction: column; gap: 14px; min-width: 0;
+  max-height: calc(100vh - 36px); overflow: auto; overscroll-behavior: contain; padding: 14px 12px 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: inset 0 1px 0 var(--sheen), var(--shadow-xs);
+}
+.dy-rail-head { display: flex; align-items: center; gap: 6px; }
+.dy-rail-month {
+  flex: 1; margin: 0; text-align: center; font-family: var(--font-serif); font-size: var(--text-md); font-weight: 560;
+  letter-spacing: -0.01em; font-variation-settings: "SOFT" 40, "opsz" 36; color: var(--text-primary);
+}
+.dy-rail-step {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; width: 26px; height: 26px;
+  border-radius: var(--radius-sm); color: var(--text-muted);
+}
+.dy-rail-step:hover { background: var(--surface-2); color: var(--brand); text-decoration: none; }
+.dy-rail-step.is-off { opacity: .3; }
+.dy-rail-step .ico { width: 15px; height: 15px; }
+.dy-rail-note { margin: 0; padding: 0 4px; font-size: var(--text-xs); color: var(--text-muted); }
+.dy-rail-grid .chart-month { gap: 4px; }
+.dy-rail-grid .chart-month-grid, .dy-rail-grid .chart-month-wd { gap: 3px; }
+.dy-days { list-style: none; margin: 0; padding: 8px 0 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 1px; }
+.dy-day a {
+  display: grid; grid-template-columns: 50px minmax(0, 1fr) 46px 22px; align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: var(--radius-sm); color: var(--text-secondary); text-decoration: none;
+  font-variant-numeric: tabular-nums; transition: background var(--dur-fast) var(--ease-out);
+}
+.dy-day a:hover { background: var(--surface-2); text-decoration: none; }
+.dy-day-date { font-family: var(--font-mono); font-size: var(--text-xs); font-weight: 500; white-space: nowrap; }
+.dy-day-bar { display: block; height: 6px; border-radius: 3px; overflow: hidden; background: color-mix(in oklab, var(--ink) 6%, transparent); }
+.dy-day-bar i { display: block; height: 100%; border-radius: 3px; background: color-mix(in oklab, var(--brand) 72%, transparent); }
+.dy-day-min { text-align: right; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); white-space: nowrap; }
+.dy-day-dots { display: inline-flex; justify-content: flex-end; gap: 3px; }
+.dy-day-dots i { width: 5px; height: 5px; border-radius: 50%; background: color-mix(in oklab, var(--ink) 32%, transparent); }
+.dy-day-dots i:first-child { background: var(--brand); }
+.dy-day.is-sel a { background: var(--brand-soft); color: var(--text-primary); box-shadow: inset 2px 0 0 var(--brand); }
+.dy-day.is-today .dy-day-date::after {
+  content: ""; display: inline-block; width: 5px; height: 5px; margin-left: 5px; border-radius: 50%;
+  vertical-align: middle; background: var(--pop);
+}
+/* A run of quiet days: a pause, never a warning. */
+.dy-day.is-quiet a { grid-template-columns: minmax(0, 1fr) auto; padding: 3px 8px 3px 10px; color: var(--faint); }
+.dy-day.is-quiet .dy-day-date { font-size: var(--text-2xs); font-weight: 400; }
+.dy-day-quiet { font-family: var(--font-mono); font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
+
+/* The entry */
+.dy-entry { min-width: 0; }
+.dy-reader { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+/* The date block. Each character lends the margin rule and the stamp its hue. */
+.dy-head { --dy-c: var(--muted); position: relative; padding: 2px 0 18px 22px; border-bottom: 1px solid var(--border); }
+.dy-head::before {
+  content: ""; position: absolute; left: 0; top: 4px; bottom: 18px; width: 2px; border-radius: 1px;
+  background: linear-gradient(to bottom, var(--dy-c), color-mix(in oklab, var(--dy-c) 12%, transparent));
+}
+.dy-char-shipped { --dy-c: var(--ok); }
+.dy-char-closing { --dy-c: var(--brand); }
+.dy-char-planning { --dy-c: var(--violet); }
+.dy-char-deep { --dy-c: var(--flow); }
+.dy-char-busy { --dy-c: var(--pop-strong); }
+.dy-head-top { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; }
+.dy-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px; margin: 0; font-family: var(--font-mono); font-size: 11px;
+  font-weight: 500; letter-spacing: .16em; text-transform: uppercase; color: var(--text-muted);
+}
+.dy-eyebrow > .ico { width: 13px; height: 13px; color: var(--dy-c); }
+.dy-live {
+  display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: var(--radius-pill);
+  background: var(--ok-soft); color: var(--ok); letter-spacing: .08em;
+}
+.dy-live .live-dot { margin: 0; }
+.dy-nav { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.dy-nav-step, .dy-nav-today {
+  display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--surface);
+  font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-secondary); white-space: nowrap;
+}
+.dy-nav-step:hover, .dy-nav-today:hover {
+  border-color: color-mix(in oklab, var(--brand) 40%, var(--border)); color: var(--brand); text-decoration: none;
+}
+.dy-nav-step .ico { width: 14px; height: 14px; }
+.dy-nav-today { font-weight: 600; color: var(--brand); }
+.dy-keys { margin-left: 4px; font-size: var(--text-2xs); color: var(--faint); white-space: nowrap; }
+.dy-keys kbd { font-size: 10px; padding: 0 4px; margin-right: 2px; }
+.dy-date {
+  margin: 10px 0 0; font-family: var(--font-serif); font-size: clamp(34px, 3.8vw, 50px); font-weight: 520;
+  line-height: 1.04; letter-spacing: -0.025em; font-variation-settings: "SOFT" 40, "opsz" 120; color: var(--text-primary);
+}
+.dy-year { font-weight: 340; color: var(--faint); font-variation-settings: "SOFT" 100, "opsz" 120; }
+.dy-tag-row { margin: 12px 0 0; }
+.dy-tag {
+  display: inline-flex; align-items: center; gap: 7px; padding: 4px 11px; cursor: help;
+  border: 1px solid color-mix(in oklab, var(--dy-c) 32%, transparent); border-radius: var(--radius-pill);
+  background: color-mix(in oklab, var(--dy-c) 11%, var(--surface-solid));
+  font-family: var(--font-mono); font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--dy-c);
+}
+.dy-tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.dy-headline {
+  margin: 14px 0 0; max-width: 64ch; font-family: var(--font-serif); font-size: var(--text-xl); font-style: italic;
+  font-weight: 380; line-height: 1.45; font-variation-settings: "SOFT" 60, "opsz" 24; color: var(--text-secondary);
+  text-wrap: pretty;
+}
+.dy-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin: 14px 0 0; font-size: var(--text-xs); color: var(--text-muted); }
+.dy-started, .dy-locked { display: inline-flex; align-items: center; gap: 6px; }
+.dy-started { font-weight: 600; color: var(--brand); }
+.dy-started .ico, .dy-locked .ico { width: 13px; height: 13px; flex: none; }
+
+.dy-tiles { margin: 0; }
+.dy-notes { display: flex; flex-direction: column; gap: 6px; }
+.dy-note {
+  display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 8px 12px;
+  border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-2);
+  font-size: var(--text-xs); line-height: 1.5; color: var(--text-secondary);
+}
+.dy-note > .ico { flex: none; width: 14px; height: 14px; margin-top: 1px; color: var(--muted); }
+
+.dy-panel {
+  min-width: 0; padding: 14px 16px 16px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); box-shadow: inset 0 1px 0 var(--sheen), var(--shadow-xs);
+}
+.dy-panel-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+.dy-panel-head h2, .dy-also h3 {
+  margin: 0; font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.dy-panel-note { margin-left: auto; text-align: right; font-size: var(--text-2xs); color: var(--faint); }
+.dy-none { margin: 0; font-size: var(--text-xs); color: var(--text-muted); }
+
+.dy-cols { display: grid; grid-template-columns: minmax(0, 1fr) 332px; gap: 18px; align-items: start; }
+.dy-spot, .dy-usage { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.dy-section-h {
+  margin: 2px 0 -2px; font-family: var(--font-serif); font-size: var(--text-lg); font-weight: 560;
+  font-variation-settings: "SOFT" 30, "opsz" 36; color: var(--text-primary);
+}
+
+/* A thread card */
+.dy-card {
+  position: relative; display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 16px 18px 14px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: inset 0 1px 0 var(--sheen), var(--shadow-xs);
+}
+.dy-card.is-shipped { border-color: color-mix(in oklab, var(--ok) 38%, var(--border)); }
+.dy-card.is-shipped::before {
+  content: ""; position: absolute; top: 14px; bottom: 14px; left: -1px; width: 3px; border-radius: 0 2px 2px 0; background: var(--ok);
+}
+.dy-card.is-pinned { border-color: color-mix(in oklab, var(--pop) 34%, var(--border)); }
+.dy-card-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; min-width: 0; }
+.dy-kind {
+  display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px 2px 6px; border-radius: var(--radius-pill);
+  background: var(--surface-2); font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--text-muted);
+}
+.dy-kind .ico { width: 12px; height: 12px; }
+.dy-kind-plan { background: var(--brand-soft); color: var(--brand); }
+.dy-card-title { margin: 0; min-width: 0; font-family: var(--font-display); font-size: var(--text-lg); font-weight: 650; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.dy-card-name { color: var(--text-primary); }
+a.dy-card-name:hover { color: var(--brand); }
+.dy-proj {
+  display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border: 1px solid var(--border);
+  border-radius: var(--radius-pill); font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-secondary);
+}
+a.dy-proj:hover { border-color: color-mix(in oklab, var(--brand) 40%, var(--border)); color: var(--brand); text-decoration: none; }
+.dy-proj .ico { width: 11px; height: 11px; flex: none; }
+.dy-proj-none { border-style: dashed; color: var(--text-muted); }
+.dy-badge { display: inline-flex; align-items: center; gap: 4px; }
+.dy-badge .ico { width: 11px; height: 11px; }
+
+/* A plan's steps closed before the day, and during it: one bar, two tones. */
+.dy-progress { display: flex; align-items: center; gap: 12px; }
+.dy-progress-track { display: flex; flex: 1; height: 8px; overflow: hidden; border-radius: 4px; background: color-mix(in oklab, var(--ink) 7%, transparent); }
+.dy-progress-before { background: color-mix(in oklab, var(--brand) 36%, transparent); }
+.dy-progress-day { background: var(--brand); box-shadow: 0 0 10px color-mix(in oklab, var(--brand) 45%, transparent); }
+.dy-card.is-shipped .dy-progress-day { background: var(--ok); box-shadow: 0 0 10px color-mix(in oklab, var(--ok) 40%, transparent); }
+.dy-progress-line { flex: none; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+.dy-moves { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.dy-move { display: grid; grid-template-columns: 9px minmax(0, 1fr) auto; align-items: center; gap: 10px; font-size: var(--text-sm); }
+.dy-move-mark { width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--border-strong); }
+.dy-move-mark.is-closed { border-color: var(--ok); background: var(--ok); }
+.dy-move-mark.is-created { border-color: var(--brand); }
+.dy-move-mark.is-claimed { border-color: var(--brand); background: var(--brand-soft); }
+.dy-move-name, .dy-move .dy-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
+.dy-move-state { display: inline-flex; align-items: center; gap: 5px; font-size: var(--text-2xs); color: var(--faint); white-space: nowrap; }
+.dy-move-state .ico { width: 11px; height: 11px; }
+
+/* A session's part of the day: what it was about, then who and how much. */
+.dy-sessions { list-style: none; margin: 0; padding: 10px 0 0; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+.dy-sess { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.dy-sess-line { margin: 0; font-size: var(--text-sm); line-height: 1.45; overflow-wrap: anywhere; }
+.dy-sess-about { color: var(--text-secondary); }
+a.dy-sess-about:hover { color: var(--brand); }
+.dy-sess-about.is-prompt { font-style: italic; }
+.dy-sess-about.is-prompt::before { content: "\201C"; }
+.dy-sess-about.is-prompt::after { content: "\201D"; }
+.dy-sess-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 8px; font-size: var(--text-2xs); color: var(--text-muted); }
+.dy-sess-fig { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.dy-unrep { color: var(--warn); font-style: normal; }
+.dy-flag:hover { text-decoration: none; }
+
+.dy-card-foot { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.dy-card-figs { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 0; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.dy-card-figs > span + span::before { content: "\00b7"; margin-right: 10px; color: var(--faint); }
+.dy-shared { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
+.dy-card-kept, .dy-card-commits { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 0; font-size: var(--text-xs); color: var(--text-muted); }
+.dy-card-kept .ico, .dy-card-commits .ico { flex: none; width: 13px; height: 13px; }
+.dy-commit-id { display: inline-flex; align-items: center; gap: 2px; }
+.dy-commit-id code, .dy-items code {
+  padding: 1px 5px; border-radius: var(--radius-xs); background: var(--surface-2);
+  font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-secondary);
+}
+a.dy-commit:hover { text-decoration: none; }
+a.dy-commit:hover code { color: var(--brand); }
+.dy-why > summary {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer; list-style: none;
+  font-size: var(--text-2xs); color: var(--faint);
+}
+.dy-why > summary::-webkit-details-marker { display: none; }
+.dy-why > summary .ico { width: 12px; height: 12px; }
+.dy-why > summary:hover, .dy-why[open] > summary { color: var(--text-secondary); }
+.dy-why ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.dy-why li { display: flex; justify-content: space-between; gap: 12px; font-size: var(--text-xs); color: var(--text-secondary); }
+.dy-why b { font-family: var(--font-mono); font-weight: 500; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* Also that day, and the folded short sessions */
+.dy-also { padding: 2px 2px 0; }
+.dy-also h3 { margin-bottom: 6px; }
+.dy-also-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.dy-also-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: var(--text-sm); }
+.dy-also-row:last-child { border-bottom: 0; }
+.dy-also-ico .ico { width: 13px; height: 13px; color: var(--faint); }
+.dy-also-row .dy-card-name { font-weight: 600; }
+.dy-also-clause { margin-left: auto; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); }
+.dy-short { padding: 10px 14px; border: 1px dashed var(--border-strong); border-radius: var(--radius-md); }
+.dy-short > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; font-size: var(--text-sm); color: var(--text-secondary); }
+.dy-short > summary::-webkit-details-marker { display: none; }
+.dy-short > summary .ico { width: 14px; height: 14px; color: var(--faint); transform: rotate(-90deg); transition: transform var(--dur-fast) var(--ease-out); }
+.dy-short[open] > summary .ico { transform: none; }
+.dy-short > summary span { margin-left: auto; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--faint); }
+.dy-sessions-short { margin-top: 10px; }
+
+/* The usage panel's lists */
+.dy-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.dy-items li { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 8px; min-width: 0; font-size: var(--text-sm); }
+.dy-items li > .ico { flex: none; width: 13px; height: 13px; color: var(--faint); }
+.dy-items li > a, .dy-items li > .dy-text { flex: 0 1 auto; min-width: 0; max-width: calc(100% - 22px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dy-items li.is-shipped > .ico { color: var(--ok); }
+.dy-items li.is-mishap > .ico { color: var(--danger); }
+.dy-item-sub { flex-basis: 100%; padding-left: 21px; font-size: var(--text-2xs); line-height: 1.45; color: var(--text-muted); }
+
+/* An item that no longer resolves is its name as text. */
+.dy-gone { cursor: help; color: var(--faint); text-decoration: line-through; text-decoration-color: color-mix(in oklab, var(--faint) 55%, transparent); }
+
+/* Honest empty states: a quiet day, a first run, a day still to come. */
+.dy-empty {
+  display: flex; align-items: flex-start; gap: 16px; padding: 26px 24px; background: var(--surface);
+  border: 1px dashed var(--border-strong); border-radius: var(--radius-lg);
+}
+.dy-empty-ico {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; width: 44px; height: 44px;
+  border-radius: 14px; background: var(--brand-soft); color: var(--brand);
+}
+.dy-empty-ico .ico { width: 20px; height: 20px; }
+.dy-empty strong { font-family: var(--font-serif); font-size: var(--text-lg); font-weight: 560; color: var(--text-primary); }
+.dy-empty p { margin: 6px 0 0; max-width: 56ch; font-size: var(--text-sm); line-height: 1.55; color: var(--text-muted); }
+
+/* Sessions: a focused day's link to its page in the Diary. */
+.dy-open-chip {
+  display: inline-flex; align-items: center; gap: 5px; margin-left: 10px; padding: 2px 9px; vertical-align: middle;
+  border: 1px solid color-mix(in oklab, var(--brand) 30%, var(--border)); border-radius: var(--radius-pill);
+  font-size: var(--text-2xs); font-weight: 600; color: var(--brand); white-space: nowrap;
+}
+.dy-open-chip:hover { background: var(--brand-soft); text-decoration: none; }
+.dy-open-chip .ico { width: 12px; height: 12px; }
+
+/* A peek opens beside the entry on a wide screen; the entry narrows to one
+   column while it is open. */
+@media (min-width: 1380px) {
+  .dy-split.detail-open { display: grid; grid-template-columns: minmax(0, 1fr) minmax(400px, .8fr); gap: 18px; align-items: start; }
+  .dy-split.detail-open .list-pane { max-height: calc(100vh - 36px); overflow: auto; overscroll-behavior: contain; }
+  .dy-split.detail-open .detail-pane { position: sticky; top: 18px; max-height: calc(100vh - 36px); overflow: auto; }
+  .dy-split.detail-open .dy-cols { grid-template-columns: minmax(0, 1fr); }
+  .dy-split.detail-open .dy-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* Two columns only when the work keeps room to read (about 460px). */
+@media (max-width: 1360px) {
+  .dy-cols { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 1100px) {
+  .dy-page { grid-template-columns: 224px minmax(0, 1fr); gap: 16px; }
+}
+/* One column on phones: the entry first, the usage panel after the work, the
+   month after the entry. */
+@media (max-width: 900px) {
+  .dy-page { grid-template-columns: minmax(0, 1fr); }
+  .dy-rail { position: static; order: 2; max-height: none; }
+  .dy-keys { display: none; }
+}
+@media (max-width: 720px) {
+  .dy-head { padding-left: 16px; }
+  .dy-nav { margin-left: 0; }
+  .dy-headline { font-size: var(--text-lg); }
+  .dy-card { padding: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dy-day a, .dy-short > summary .ico { transition: none; }
+}

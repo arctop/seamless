@@ -93,6 +93,10 @@ type sessionsData struct {
 	// when the list answers about a window instead.
 	Day      string `json:"day,omitempty"`
 	DayLabel string `json:"-"`
+	// DiaryHref is the focused day's page in the Diary, set only while the
+	// diary feature is on and a day is focused (HTML only): off, the page
+	// carries no trace of the Diary.
+	DiaryHref string `json:"-"`
 	// Retained carries the ?retained drill-down: "yes" keeps only sessions
 	// that left a durable artifact behind (GetSessionCoverage's covered-ness
 	// test), "no" only those that retained nothing, "" applies no filter. The
@@ -314,6 +318,12 @@ func (s *Service) sessionsList(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	calendar, streak := s.captureCalendar(ctx, now, dayParam)
+	// A focused day links to its page in the Diary, while that feature is
+	// on. The link is all it adds: a calendar click still focuses this list.
+	diaryHref := ""
+	if dayParam != "" && features.Enabled(s.effectiveFeatures(ctx), features.Diary) {
+		diaryHref = diaryPath + "?day=" + dayStart.Format("2006-01-02")
+	}
 	s.render(w, r, "sessions", pageData{
 		Title:  "Sessions",
 		Active: "sessions",
@@ -323,7 +333,7 @@ func (s *Service) sessionsList(w http.ResponseWriter, r *http.Request) {
 			Total:  counts.Sessions,
 			Window: win.Key, WindowLabel: win.Label, Windows: windowOptions(win.Key),
 			WindowParam: chosen,
-			Day:         dayParam, DayLabel: dayLabel, Retained: retained,
+			Day:         dayParam, DayLabel: dayLabel, Retained: retained, DiaryHref: diaryHref,
 			Sessions: rows,
 			Calendar: calendar, Streak: streak,
 			Locked:  lockedProjects(ctx),

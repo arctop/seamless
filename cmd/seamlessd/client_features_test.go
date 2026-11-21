@@ -43,6 +43,20 @@ func TestClientFeatures_ReadsTheServersEffectiveState(t *testing.T) {
 	require.Equal(t, "Bearer server-key", (*seen)[0].Header.Get("Authorization"))
 }
 
+// The Diary's key reads like every other: a server with it on says so, and
+// an answer from a release before the key reads it as off, its shipped
+// default.
+func TestClientFeatures_ReadsTheDiaryKey(t *testing.T) {
+	srv, _ := settingsServer(t, http.StatusOK, `{"featuresConfig":{"research":false,"diary":true}}`)
+	got := clientFeatures(config.Defaults(), srv.URL)
+	require.True(t, got.Diary, "the server's state decides")
+	require.False(t, got.Research)
+
+	older, _ := settingsServer(t, http.StatusOK, `{"featuresConfig":{"research":true}}`)
+	got = clientFeatures(config.Defaults(), older.URL)
+	require.False(t, got.Diary, "an answer with no diary key reads as off, the shipped default")
+}
+
 // A daemon that predates the features contract answers without featuresConfig.
 // Decoding that absence into a value would read as "every optional feature off"
 // -- which would delete an installed skill on a server that has the feature on.

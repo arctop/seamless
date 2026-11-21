@@ -1,0 +1,193 @@
+{{define "content"}}
+{{with .Data.View}}{{$v := .}}
+<div class="dy-page{{if .Today}} is-today{{end}}" data-diary="{{.Day}}">
+  {{/* The rail: the month as a heat grid, then its days newest first. Every
+       link changes the day in place (data-seam-query); a day still to come
+       is never a link. */}}
+  <aside class="dy-rail" aria-label="{{.Rail.Label}}">
+    <header class="dy-rail-head" data-seam-query>
+      <a class="dy-rail-step" href="{{.Rail.PrevHref}}" aria-label="Previous month, {{.Rail.PrevLabel}}" title="{{.Rail.PrevLabel}}">{{icon "chevron-left"}}</a>
+      <h2 class="dy-rail-month">{{.Rail.Label}}</h2>
+      {{if .Rail.NextHref}}<a class="dy-rail-step" href="{{.Rail.NextHref}}" aria-label="Next month, {{.Rail.NextLabel}}" title="{{.Rail.NextLabel}}">{{icon "chevron-right"}}</a>{{else}}<span class="dy-rail-step is-off" aria-hidden="true">{{icon "chevron-right"}}</span>{{end}}
+    </header>
+    {{if .Rail.Future}}<p class="dy-rail-note">This month has not begun.</p>
+    {{else}}
+    <div class="dy-rail-grid" data-seam-query>{{.Rail.Grid}}</div>
+    {{if .Rail.Empty}}<p class="dy-rail-note">Nothing recorded this month yet.</p>{{end}}
+    <ol class="dy-days" data-seam-query>
+      {{- range .Rail.Rows}}
+      <li class="dy-day{{if .Quiet}} is-quiet{{end}}{{if .Selected}} is-sel{{end}}{{if .Today}} is-today{{end}}">
+        <a href="{{.Href}}"{{if .Selected}} aria-current="date"{{end}}{{with .Title}} title="{{.}}"{{end}}>
+          <span class="dy-day-date">{{.Label}}</span>
+          {{- if .Quiet}}<span class="dy-day-quiet">quiet</span>
+          {{- else}}<span class="dy-day-bar" aria-hidden="true"><i style="width:{{.Bar}}%"></i></span><span class="dy-day-min">{{.Minutes}}</span><span class="dy-day-dots">{{range .Dots}}<i title="{{.}}" aria-hidden="true"></i>{{end}}</span>{{end}}
+        </a>
+      </li>
+      {{- end}}
+    </ol>
+    {{end}}
+  </aside>
+
+  <section class="dy-entry list-detail-split dy-split" aria-label="{{.Weekday}}, {{.Date}}, {{.Year}}"{{if .Today}} data-diary-live="{{.LiveGap}}"{{end}}>
+    <div class="list-pane dy-reader">
+      {{/* The date block: the day, its character and the sentence that says
+           what it was. A person should have the day from this and the tiles. */}}
+      <header class="dy-head dy-char-{{.CharTone}}">
+        <div class="dy-head-top">
+          <p class="dy-eyebrow">{{icon "book-open"}}<span>{{.Weekday}}</span>{{if .Today}}<span class="dy-live"><span class="live-dot"></span>today, so far</span>{{end}}</p>{{about "A page for each day of work: what was worked on, which agents did it, and what it took. Short question-and-answer sessions are folded away; everything named opens beside the page."}}
+          <nav class="dy-nav" aria-label="Days" data-seam-query>
+            <a class="dy-nav-step" href="{{.PrevHref}}" data-diary-prev aria-label="Previous day, {{.PrevLabel}}">{{icon "chevron-left"}}<span>{{.PrevLabel}}</span></a>
+            {{- if not .TodayIsShown}}<a class="dy-nav-today" href="{{.TodayHref}}" data-diary-today>Today</a>{{end}}
+            {{- if .NextHref}}<a class="dy-nav-step" href="{{.NextHref}}" data-diary-next aria-label="Next day, {{.NextLabel}}"><span>{{.NextLabel}}</span>{{icon "chevron-right"}}</a>{{end}}
+            <span class="dy-keys" aria-hidden="true"><kbd>&larr;</kbd><kbd>&rarr;</kbd> days{{if not .TodayIsShown}} &middot; <kbd>t</kbd> today{{end}}</span>
+          </nav>
+        </div>
+        <h1 class="dy-date">{{.Date}} <span class="dy-year">{{.Year}}</span></h1>
+        {{with .Character.Word}}<p class="dy-tag-row"><span class="dy-tag" title="{{$v.Character.Rule}}">{{.}}</span></p>{{end}}
+        <p class="dy-headline">{{.Headline}}</p>
+        {{if or .StartedHref .Locked}}<p class="dy-meta">
+          {{- with .StartedHref}}<a class="dy-started" href="{{.}}">{{icon "terminal"}}Sessions started this day ({{$v.Started}})</a>{{end}}
+          {{- with .Locked}}<span class="dy-locked">{{icon "lock"}}Work in locked projects is not shown: {{joinAnd .}}</span>{{end}}
+        </p>{{end}}
+      </header>
+
+      {{if .Future}}
+      <div class="dy-empty">
+        <span class="dy-empty-ico">{{icon "calendar-days"}}</span>
+        <div><strong>This day has not begun.</strong><p>Its page fills in as your agents work on it.</p><p data-seam-query><a class="btn small" href="{{.TodayHref}}" data-diary-today>Back to today</a></p></div>
+      </div>
+      {{else if .FirstRun}}
+      <div class="dy-empty dy-empty-first">
+        <span class="dy-empty-ico">{{icon "book-open"}}</span>
+        <div><strong>Nothing recorded yet.</strong><p>As your agents work, each day gets its page here: what was worked on, which agents did it, and what it took in agent time and model tokens.</p></div>
+      </div>
+      {{else if .Quiet}}
+      <div class="dy-empty">
+        <span class="dy-empty-ico">{{icon "leaf"}}</span>
+        <div><strong>A quiet day.</strong><p>No session, task or item was recorded{{if .Today}} yet{{end}}.</p></div>
+      </div>
+      {{else}}
+      <div class="ov2-vitals dy-tiles">{{range .Tiles}}{{.}}{{end}}</div>
+      {{- if or .ApproxNote .Unreported}}
+      <div class="dy-notes">
+        {{- with .ApproxNote}}<p class="dy-note">{{icon "info"}}<span>{{.}}</span></p>{{end}}
+        {{- with .Unreported}}<p class="dy-note">{{icon "clock"}}<span>{{len .}} {{if eq (len .) 1}}session has{{else}}sessions have{{end}} no token record yet: {{range $i, $s := .}}{{if $i}}, {{end}}{{$s}}{{end}}. A live session reports when it ends.</span></p>{{end}}
+      </div>
+      {{- end}}
+
+      {{with .Rhythm}}<section class="dy-panel dy-rhythm" id="diary-rhythm" aria-labelledby="dy-rhythm-h">
+        <header class="dy-panel-head"><h2 id="dy-rhythm-h">Day rhythm</h2><span class="dy-panel-note">agent time by hour, by agent</span></header>
+        {{.}}
+      </section>{{end}}
+
+      <div class="dy-cols">
+        <div class="dy-spot">
+          <h2 class="dy-section-h">What was worked on</h2>
+          {{range .Spotlight}}{{template "dy-card" .}}{{else}}<p class="dy-none">Nothing stood out: the day's work is listed below.</p>{{end}}
+
+          {{with .Also}}<section class="dy-also" aria-labelledby="dy-also-h">
+            <h3 id="dy-also-h">Also that day</h3>
+            <ul class="dy-also-list">
+              {{- range .}}
+              <li class="dy-also-row" id="{{.ID}}"><span class="dy-also-ico">{{icon .Icon}}</span>{{.Title}}{{.Project}}<span class="dy-also-clause">{{.Clause}}</span></li>
+              {{- end}}
+            </ul>
+          </section>{{end}}
+
+          {{if .Short.Count}}<details class="dy-short" id="dy-short">
+            <summary>{{icon "chevron-down"}}<strong>{{.Short.Count}} short {{if eq .Short.Count 1}}session{{else}}sessions{{end}}</strong><span>{{.Short.Minutes}} of agent time</span></summary>
+            <ul class="dy-sessions dy-sessions-short">{{range .Short.Sessions}}{{template "dy-sess" .}}{{end}}</ul>
+          </details>{{end}}
+        </div>
+
+        {{/* The usage panel: who did the work and what it took, then what the
+             day kept. The agents legend, the rhythm and the token mix are not
+             links: no page lists "this agent's sessions that day". */}}
+        <aside class="dy-usage" id="diary-usage" aria-label="Usage">
+          <section class="dy-panel">
+            <header class="dy-panel-head"><h2>Agents</h2><span class="dy-panel-note">model tokens</span></header>
+            {{if .Ring}}{{.Ring}}{{else}}<p class="dy-none">No model tokens recorded for this day.</p>{{end}}
+          </section>
+          {{with .Mix}}<section class="dy-panel">
+            <header class="dy-panel-head"><h2>Token mix</h2><span class="dy-panel-note">cache reads count as model tokens</span></header>
+            {{.}}
+          </section>{{end}}
+          <section class="dy-panel">
+            <header class="dy-panel-head"><h2>Projects</h2><span class="dy-panel-note">by {{.RankedBy}}</span></header>
+            {{if .Ranked}}{{.Ranked}}{{else}}<p class="dy-none">No agent time or tokens recorded yet.</p>{{end}}
+          </section>
+          <section class="dy-panel" id="diary-closed" aria-labelledby="dy-closed-h">
+            <header class="dy-panel-head"><h2 id="dy-closed-h">Tasks closed</h2></header>
+            {{if .Closed}}<ul class="dy-items">{{range .Closed}}<li>{{icon .Icon}}{{.Link}}</li>{{end}}</ul>{{else}}<p class="dy-none">No task was closed as done.</p>{{end}}
+          </section>
+          <section class="dy-panel" id="diary-kept" aria-labelledby="dy-kept-h">
+            <header class="dy-panel-head"><h2 id="dy-kept-h">Kept</h2>{{with .KeptSummary}}<span class="dy-panel-note">{{.}}</span>{{end}}</header>
+            {{if .Kept}}<ul class="dy-items">{{range .Kept}}{{$it := .}}<li>{{icon .Icon}}{{.Link}}{{with .Mark}}<span class="badge {{$it.Tone}}">{{.}}</span>{{end}}{{with .Sub}}<span class="dy-item-sub">{{.}}</span>{{end}}</li>{{end}}</ul>{{else}}<p class="dy-none">Nothing was written down.</p>{{end}}
+          </section>
+          {{if .Moments}}<section class="dy-panel dy-moments" aria-labelledby="dy-moments-h">
+            <header class="dy-panel-head"><h2 id="dy-moments-h">Moments</h2></header>
+            <ul class="dy-items">
+              {{- range .Shipped}}<li class="is-shipped">{{icon .Icon}}{{.Link}}<span class="badge ok">shipped</span></li>{{end}}
+              {{- range .Commits}}<li>{{icon "git-commit-horizontal"}}{{.Link}}{{copyBtn .Full}}{{with .Owner}}<span class="dy-item-sub">recorded by {{.}}</span>{{end}}</li>{{end}}
+              {{- range .Flags}}<li>{{icon .Icon}}{{.Link}}<span class="badge {{.Tone}}">{{.Mark}}</span>{{with .Sub}}<span class="dy-item-sub">{{.}}</span>{{end}}</li>{{end}}
+              {{- range .Mishaps}}<li class="is-mishap">{{icon .Icon}}{{.Link}}{{with .Sub}}<span class="dy-item-sub">reported by {{.}}</span>{{end}}</li>{{end}}
+            </ul>
+          </section>{{end}}
+          {{with .Tables}}<details class="chart-tables dy-tables"><summary>{{icon "table-2"}}Show as table</summary>{{.}}</details>{{end}}
+        </aside>
+      </div>
+      {{end}}
+    </div><!-- .list-pane -->
+    <section id="detail-pane" class="detail-pane" hidden aria-live="polite" aria-label="Detail">
+      <div class="detail-pane-chrome">
+        <a class="detail-open btn small" href="#">open full &nearr;</a>
+        <button class="detail-close btn small" type="button" aria-label="Close detail">&times;</button>
+      </div>
+      <div class="detail-pane-body"></div>
+    </section>
+  </section>
+</div>
+{{end}}
+{{end}}
+
+{{/* One thread: a plan, or a project's loose work. */}}
+{{define "dy-card"}}
+<article class="dy-card{{if .Shipped}} is-shipped{{end}}{{if .Pinned}} is-pinned{{end}}" id="{{.ID}}">
+  <header class="dy-card-head">
+    <span class="dy-kind dy-kind-{{.Kind}}">{{icon .Icon}}{{if eq .Kind "plan"}}plan{{else}}project{{end}}</span>
+    <h3 class="dy-card-title">{{.Title}}</h3>
+    {{- .Project}}
+    {{- if .Shipped}}<span class="badge ok dy-badge">{{icon "flag"}}shipped</span>{{end}}
+    {{- if .Pinned}}<span class="badge dy-badge" title="A flagged session keeps this in the spotlight">{{icon "flag"}}flagged</span>{{end}}
+  </header>
+  {{with .Progress}}<div class="dy-progress" role="img" aria-label="{{.Line}}">
+    <span class="dy-progress-track" aria-hidden="true"><i class="dy-progress-before" style="width:{{.BeforePct}}%"></i><i class="dy-progress-day" style="width:{{.DayPct}}%"></i></span>
+    <span class="dy-progress-line">{{.Line}}</span>
+  </div>{{end}}
+  {{with .Moves}}<ul class="dy-moves">
+    {{- range .}}
+    <li class="dy-move"><span class="dy-move-mark{{with .What}} is-{{.}}{{end}}" aria-hidden="true"></span>{{.Task}}<span class="dy-move-state">{{if .Changed}}<span class="dy-from">{{.From}}</span>{{icon "arrow-right"}}{{end}}<span class="badge {{.Tone}}">{{.To}}</span></span></li>
+    {{- end}}
+  </ul>{{end}}
+  {{with .Sessions}}<ul class="dy-sessions">{{range .}}{{template "dy-sess" .}}{{end}}</ul>{{end}}
+  <footer class="dy-card-foot">
+    {{.Presence}}
+    <p class="dy-card-figs"><span>{{.Counted}}</span><span>{{.Minutes}} of agent time</span><span>{{.Tokens}} model tokens{{if .Unreport}} <em class="dy-unrep">({{.Unreport}} unreported)</em>{{end}}</span>{{if .Shared}}<span class="dy-shared" title="A session working on more than one thing counts in full toward each, so these figures do not add up to the day's">{{.Shared}} shared</span>{{end}}</p>
+    {{with .Kept}}<p class="dy-card-kept">{{icon "pencil"}}<span>Kept {{range $i, $k := .}}{{if $i}}, {{end}}{{$k}}{{end}}</span></p>{{end}}
+    {{with .Commits}}<p class="dy-card-commits">{{icon "git-commit-horizontal"}}{{range .}}<span class="dy-commit-id">{{.Link}}{{copyBtn .Full}}</span>{{end}}</p>{{end}}
+    {{with .Reasons}}<details class="dy-why">
+      <summary>{{icon "info"}}Why this is here</summary>
+      <ul>{{range .}}<li><span>{{.Text}}</span>{{with .Points}}<b>{{.}}</b>{{end}}</li>{{end}}</ul>
+    </details>{{end}}
+  </footer>
+</article>
+{{end}}
+
+{{/* One session's part of the day: who it was, what it was about, what it took. */}}
+{{define "dy-sess"}}<li class="dy-sess">
+  <p class="dy-sess-line">{{.Link}}</p>
+  <div class="dy-sess-meta">{{.Pill}}<span class="dy-sess-fig">{{with .Minutes}}{{.}}{{else}}no agent time recorded{{end}}{{if .Unreported}} &middot; <span class="dy-unrep" title="No token record: a live session reports when it ends">no token record</span>{{else if .Approximate}} &middot; &asymp;{{.Tokens}} tok <span class="faint">{{.Approximate}}</span>{{else}} &middot; {{.Tokens}} tok{{end}}</span>{{.Flag}}{{if .Shared}}<span class="kind faint" title="This session is in more than one thread and counts in full in each">shared</span>{{end}}</div>
+</li>{{end}}
+
+{{define "scripts"}}<script src="/console/static/diary.js"></script>
+{{end}}

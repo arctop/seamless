@@ -351,6 +351,12 @@ type Features struct {
 	// Locks console screen, the locks_list, locks_declare, locks_acquire and
 	// locks_release MCP tools, and `seam lock`.
 	RepoLocks bool `yaml:"repo_locks" json:"repo_locks"`
+	// Diary enables the Diary console screen: one entry per local day saying
+	// what was worked on, which agents did it, and what it took in agent time
+	// and model tokens, with an Open in Diary link on a Sessions day view. It
+	// is presentation only: the usage ledger and the event log it reads are
+	// recorded whether it is on or off.
+	Diary bool `yaml:"diary" json:"diary"`
 }
 
 // Screening tunes the write screens behind the screening optional feature
@@ -610,7 +616,7 @@ func Defaults() Config {
 		// Optional features ship off: a fresh installation exposes none until the
 		// owner enables it. Existing installations holding research data are
 		// grandfathered on by a one-time store migration, not by this default.
-		Features:  Features{Research: false, Momentum: false, Gamification: false, Screening: false, RepoLocks: false},
+		Features:  Features{Research: false, Momentum: false, Gamification: false, Screening: false, RepoLocks: false, Diary: false},
 		Screening: Screening{BlobMinLength: DefaultScreeningBlobMinLength, DriftInterval: DefaultScreeningDriftInterval},
 		// Commit records ship off: nothing is recorded and no snapshot written.
 		Commits: Commits{SnapshotInterval: DefaultCommitsSnapshotInterval, SnapshotWindow: DefaultCommitsSnapshotWindow},
@@ -1035,6 +1041,9 @@ func (c *Config) applyEnv() error {
 		return err
 	}
 	if err := envBool("SEAMLESS_FEATURES_REPO_LOCKS", &c.Features.RepoLocks); err != nil {
+		return err
+	}
+	if err := envBool("SEAMLESS_FEATURES_DIARY", &c.Features.Diary); err != nil {
 		return err
 	}
 	envStrSlice("SEAMLESS_SCREENING_URL_ALLOWLIST", &c.Screening.URLAllowlist)

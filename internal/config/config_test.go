@@ -490,6 +490,37 @@ console:
 	require.ErrorContains(t, err, "valid values are key, passkey")
 }
 
+// The Diary is an optional feature like the others: off by default, on from
+// the file, and the environment wins over the file in both directions.
+func TestLoadFrom_FeaturesDiaryFileAndEnv(t *testing.T) {
+	cfg, err := LoadFrom("")
+	require.NoError(t, err)
+	require.False(t, cfg.Features.Diary, "the Diary ships off")
+
+	path := writeConfig(t, `
+features:
+  diary: true
+`)
+	cfg, err = LoadFrom(path)
+	require.NoError(t, err)
+	require.True(t, cfg.Features.Diary)
+	require.False(t, cfg.Features.Research, "the diary key turns on nothing else")
+
+	t.Setenv("SEAMLESS_FEATURES_DIARY", "false")
+	cfg, err = LoadFrom(path)
+	require.NoError(t, err)
+	require.False(t, cfg.Features.Diary, "env wins over file")
+
+	t.Setenv("SEAMLESS_FEATURES_DIARY", "1")
+	cfg, err = LoadFrom("")
+	require.NoError(t, err)
+	require.True(t, cfg.Features.Diary, "env alone enables the feature")
+
+	t.Setenv("SEAMLESS_FEATURES_DIARY", "sometimes")
+	_, err = LoadFrom("")
+	require.Error(t, err, "present but uninterpretable is an error, never a silent default")
+}
+
 func TestLoadFrom_FeaturesStrictYAML(t *testing.T) {
 	path := writeConfig(t, `
 features:

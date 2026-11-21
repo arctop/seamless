@@ -212,7 +212,8 @@ func TestLocksPage_ReadsThroughTheFilteredHandle(t *testing.T) {
 }
 
 // The Locks screen is a Standard screen of the Work group, after Sessions,
-// whose badge counts the declarations waiting for the owner.
+// whose badge counts the declarations waiting for the owner. (The Diary leads
+// the group, behind its own feature.)
 func TestLocksScreen_InTheSidebarWithItsBadge(t *testing.T) {
 	sc, ok := screenByID("locks")
 	require.True(t, ok)
@@ -224,7 +225,7 @@ func TestLocksScreen_InTheSidebarWithItsBadge(t *testing.T) {
 			ids = append(ids, s.ID)
 		}
 	}
-	require.Equal(t, []string{"projects", "plans", "tasks", "sessions", "locks"}, ids)
+	require.Equal(t, []string{"diary", "projects", "plans", "tasks", "sessions", "locks"}, ids)
 	n, found := navCounts{Locks: 2}.count("locks")
 	require.True(t, found)
 	require.Equal(t, 2, n)

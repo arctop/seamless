@@ -203,7 +203,9 @@ func cmNewDaemon(t *testing.T, owner access.Account, restricted *access.Account,
 	ret.SetBodyReader(mgr.Store())
 	rec := events.NewRecorder(db)
 	garden := gardener.New(db, mgr, nil, nil, rec, gardener.Config{}, nil)
-	feats := config.Features{Research: true, Momentum: true, Gamification: true, Screening: true}
+	// The Diary is on, so the crawl sweeps its days under every principal: a
+	// day of work in a locked project must show none of it.
+	feats := config.Features{Research: true, Momentum: true, Gamification: true, Screening: true, Diary: true}
 	ret.SetFeaturesConfig(feats)
 	screen := screening.New(screening.Config{DB: db, Files: mgr, Events: rec, Gardener: garden,
 		Enabled: func(context.Context) bool { return true }})
@@ -700,6 +702,10 @@ func (d *cmDaemon) getTargets(t *testing.T, pendingID string) []string {
 	add("/console/gardener?kind=archive")
 	add("/console/unlock/" + cmFinance + "/terminal?id=" + q(cmNoSuch))
 	add("/console/settings?s=backups")
+	// The Diary: today, its month, and today by its own date and month.
+	today := time.Now().Local()
+	add("/console/diary?day=" + today.Format("2006-01-02"))
+	add("/console/diary?day=" + today.Format("2006-01-02") + "&m=" + today.Format("2006-01"))
 	add("/console/settings/backups/folder?dir=" + q(d.backupDir))
 	add("/console/settings/backups/folder?dir=" + q(d.dir))
 	if d.backupRef != "" {

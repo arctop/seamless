@@ -75,14 +75,30 @@ func TestRegistry_RepoLocksEntry(t *testing.T) {
 	require.False(t, f.Default, "optional features ship off")
 }
 
-func TestRegistry_OrderIsResearchThenMomentumThenGamificationThenScreeningThenRepoLocks(t *testing.T) {
+func TestRegistry_DiaryEntry(t *testing.T) {
+	f, ok := Get(Diary)
+	require.True(t, ok)
+	require.Equal(t, Key("diary"), f.Key)
+	require.Equal(t, "Diary", f.Label)
+	require.NotEmpty(t, f.Blurb)
+	require.Empty(t, f.Tools, "the Diary owns no MCP tools -- it is presentation only")
+	require.Equal(t, []string{"diary"}, f.NavIDs)
+	require.Equal(t, []string{"/console/diary"}, f.RoutePrefixes)
+	require.Equal(t, []string{"the Open in Diary link on a Sessions day view"}, f.Surfaces,
+		"each in-page surface registers its owner-facing phrase")
+	require.Empty(t, f.Skill)
+	require.False(t, f.Default, "optional features ship off")
+}
+
+func TestRegistry_OrderIsResearchThenMomentumThenGamificationThenScreeningThenRepoLocksThenDiary(t *testing.T) {
 	reg := Registry()
-	require.Len(t, reg, 5)
+	require.Len(t, reg, 6)
 	require.Equal(t, Research, reg[0].Key, "registry order is the Settings card order")
 	require.Equal(t, Momentum, reg[1].Key)
 	require.Equal(t, Gamification, reg[2].Key)
 	require.Equal(t, Screening, reg[3].Key)
 	require.Equal(t, RepoLocks, reg[4].Key)
+	require.Equal(t, Diary, reg[5].Key)
 }
 
 func TestRegistry_WellFormed(t *testing.T) {
@@ -136,6 +152,8 @@ func TestHiddenTools(t *testing.T) {
 
 	require.Empty(t, HiddenTools(config.Features{Research: true, RepoLocks: true}),
 		"with every feature on, nothing is hidden")
+	require.Equal(t, HiddenTools(config.Features{}), HiddenTools(config.Features{Diary: true}),
+		"the Diary hides and shows no agent tool")
 }
 
 func TestToolOwners(t *testing.T) {

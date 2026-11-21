@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -104,7 +105,26 @@ func TestScreenRegistry_WellFormed(t *testing.T) {
 	}
 	// The existing chords survive the move to the registry.
 	require.Equal(t, map[string]bool{"o": true, "n": true, "i": true, "m": true, "e": true, "r": true, "g": true,
-		"w": true, "p": true, "t": true, "s": true, "b": true, "l": true, "x": true, ",": true, "h": true, "y": true, "v": true}, keys)
+		"w": true, "p": true, "t": true, "s": true, "b": true, "l": true, "x": true, ",": true, "h": true, "y": true, "v": true,
+		"d": true}, keys)
+}
+
+// Every screen the console can show -- the registry's, the lock-only ones and
+// Devices -- has a g-chord of its own: shell.js follows the first link that
+// carries the key, so two screens sharing one would leave the second without
+// it (the Diary took d, and Devices moved to c).
+func TestScreenChords_AreUniqueAcrossEveryScreen(t *testing.T) {
+	owner := map[string]string{}
+	for _, sc := range slices.Concat(screenRegistry(), lockScreens, []screen{devicesScreen}) {
+		if !sc.NavRow {
+			continue
+		}
+		prev, dup := owner[sc.Key]
+		require.False(t, dup, "g-chord %q is bound to both %s and %s", sc.Key, prev, sc.ID)
+		owner[sc.Key] = sc.ID
+	}
+	require.Equal(t, "diary", owner["d"])
+	require.Equal(t, "devices", owner["c"])
 }
 
 // Monotonic: each level shows everything the previous one does, with every
@@ -125,8 +145,9 @@ func TestScreenRegistry_VisibleSetsNest(t *testing.T) {
 	for _, sc := range visibleScreens(featuresAll(true), levelBasic) {
 		basic = append(basic, sc.ID)
 	}
-	require.Equal(t, []string{"overview", "memories", "notes", "gardener", "held", "sessions", "settings", "search"}, basic,
-		"held is a basic screen while write screening is on: whoever turns it on must reach what it holds")
+	require.Equal(t, []string{"overview", "memories", "notes", "gardener", "held", "diary", "sessions", "settings", "search"}, basic,
+		"held is a basic screen while write screening is on: whoever turns it on must reach what it holds; "+
+			"the Diary is a basic screen while its feature is on")
 	require.Len(t, visibleScreens(featuresAll(true), levelAdvanced), len(screenRegistry()))
 }
 
@@ -252,7 +273,7 @@ func rawJSON(t *testing.T, mux *http.ServeMux, path string) map[string]any {
 // must never change what they get -- including the search groups for work only
 // Standard's screens list.
 func TestLevels_JSONAnswersAreIdenticalAcrossLevels(t *testing.T) {
-	db, mux := newConsoleLevel(t, config.Features{Research: true}, "basic")
+	db, mux := newConsoleLevel(t, config.Features{Research: true, Diary: true}, "basic")
 	seedLevelFleet(t, db)
 
 	for _, path := range []string{
@@ -266,6 +287,7 @@ func TestLevels_JSONAnswersAreIdenticalAcrossLevels(t *testing.T) {
 		"/console/notes?format=json",
 		"/console/gardener?format=json",
 		"/console/search?q=xylophone&w=7d&sort=newest&format=json",
+		"/console/diary?format=json",
 	} {
 		var answers []map[string]any
 		for _, lvl := range config.ConsoleLevels {

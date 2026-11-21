@@ -383,6 +383,7 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `features.gamification` | bool | - |
 | `features.screening` | bool | - |
 | `features.repo_locks` | bool | - |
+| `features.diary` | bool | - |
 | `screening.url_allowlist` | []string | - |
 | `screening.blob_min_length` | int | `200` |
 | `screening.drift_interval` | duration | `5m` |
@@ -672,6 +673,13 @@ features:
   # and seam lock. Off, no lock is deleted.
   # env: SEAMLESS_FEATURES_REPO_LOCKS
   repo_locks: false
+  # The Diary: a console screen with one entry per day -- what was worked on,
+  # which agents did it, and what it took in agent time and model tokens, with
+  # short question-and-answer sessions folded away -- and an Open in Diary link
+  # on a Sessions day view. Presentation only: the usage ledger and the event
+  # log it reads are recorded whether it is on or off.
+  # env: SEAMLESS_FEATURES_DIARY
+  diary: false
 
 # The write screens behind features.screening (inert while it is off).
 screening:

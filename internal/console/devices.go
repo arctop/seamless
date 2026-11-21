@@ -48,7 +48,8 @@ type DevicesView interface {
 // devicesScreen is the Devices page's registry entry. Like the lock screens
 // it is not in screens: a console that pairs nothing has no such page, so its
 // sidebar, palette and docs matrix never name it. withDevicesScreen places it.
-var devicesScreen = screen{ID: "devices", Label: "Devices", Icon: "link", Href: "/console/devices", Group: groupServer, Key: "d",
+// Its chord is c (the computers it pairs): d is the Diary's.
+var devicesScreen = screen{ID: "devices", Label: "Devices", Icon: "link", Href: "/console/devices", Group: groupServer, Key: "c",
 	Min: levelBasic, NavRow: true}
 
 // withDevicesScreen returns visible with the Devices screen inserted ahead of

@@ -1303,6 +1303,19 @@ URLs and no feature state.
   momentum `plan.shipped` event, which exists only while momentum is on.
 - **The significance consts are calibrated.** Change a weight, the floor, the
   cap or the minor test only together with the `TestCalibration_*` tests.
+- **`Ref.Href` is the console's slot.** The day model leaves it empty; the
+  console fills every Ref's href from what the day resolved
+  (`internal/console/diary.go`, `linkEntry`): empty for an item that no longer
+  resolves or whose feature is off, so the page and `?format=json` carry one
+  href per item. `MonthView.Agents` totals the month by agent, held to its
+  days by `TestMonth_AgentsAgreeWithEveryDay`; the screen picks each agent's
+  color from it, so an agent keeps one color for the month.
+- **The Diary screen (the `diary` optional feature).** No link may answer 404:
+  `TestDiary_LinkIntegrity` GETs every href a seeded day renders, page and
+  JSON. With research off a trial appears nowhere (`withoutTrials`). The page
+  owns its liveness: only today refreshes, throttled, from the one SSE stream
+  (`static/diary.js`), and an open peek survives the morph. Its g-chord is
+  `d`; Devices moved to `c` (`TestScreenChords_AreUniqueAcrossEveryScreen`).
 
 ### FTS5 and LIKE escaping (`internal/store`)
 
