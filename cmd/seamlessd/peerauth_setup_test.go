@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -60,6 +61,11 @@ var pasAppendRe = regexp.MustCompile(`^printf '%s\\n' (.*) \| /usr/bin/sudo /usr
 
 func newPasFake(t *testing.T, goos string) *pasFake {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		// The fake is a darwin or linux host: its /opt/seamless paths and
+		// unix:// socket are not absolute to the config's checks on Windows.
+		t.Skip("peer_auth is a POSIX deployment: the fake host's /opt/seamless paths do not validate on Windows")
+	}
 	home := t.TempDir()
 	cfgDir := filepath.Join(home, ".config", "seamless")
 	require.NoError(t, os.MkdirAll(cfgDir, 0o700))

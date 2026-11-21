@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -207,12 +208,16 @@ func TestPasReadSigners_TheUpdatersRules(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, data, got)
 
-	require.NoError(t, os.Chmod(path, 0o666))
-	_, err = pasReadSigners(path)
-	require.ErrorIs(t, err, errReleaseSigners)
-	require.ErrorContains(t, err, "group- or world-writable")
+	// The mode check is darwin's and linux's (hostSignersFS): Windows has no
+	// group or world write bits to refuse.
+	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
+		require.NoError(t, os.Chmod(path, 0o666))
+		_, err = pasReadSigners(path)
+		require.ErrorIs(t, err, errReleaseSigners)
+		require.ErrorContains(t, err, "group- or world-writable")
+		require.NoError(t, os.Chmod(path, 0o644))
+	}
 
-	require.NoError(t, os.Chmod(path, 0o644))
 	require.NoError(t, os.WriteFile(path, []byte(key.SignersLine("owner", "file")+"\n"), 0o644))
 	_, err = pasReadSigners(path)
 	require.ErrorIs(t, err, releasesig.ErrNoOwnerKeys)
