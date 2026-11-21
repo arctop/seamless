@@ -347,8 +347,10 @@ tasks, trials, session findings),
 notes (`notes_create/read/update/append/delete`), projects (`project_list/create`),
 tasks (`tasks_add/update/ready/list` -- `tasks_list id=<id>` loads a single task
 by its globally-unique id, and `tasks_update` adds and removes blockers with
-`add_depends_on`/`remove_depends_on` -- plus `tasks_claim`/`tasks_release` for
-atomic lease-based claiming), research lab (`lab_open`, `trial_record`,
+`add_depends_on`/`remove_depends_on`, appends a line to a task's body with
+`body_append`, and keeps every body it replaces, read back with
+`tasks_list id=<id> body_revisions=true` -- plus `tasks_claim`/`tasks_release`
+for atomic lease-based claiming), research lab (`lab_open`, `trial_record`,
 `trial_query`), repo locks (`locks_list/declare/acquire/release` -- an optional
 feature, off by default: a lock on a repository's refs, keyed by its origin URL,
 held with a lease as a claim is), gardener (`gardener_proposals`, `gardener_apply`, plus the

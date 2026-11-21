@@ -60,10 +60,19 @@ type rowQuerier interface {
 // Kind turns a step into a gate or back. Gate edits the task's gate and
 // ClearGate clears it (TaskGatePatch, TaskGateClear: one patch may not carry
 // both); the task must satisfy the gate rules afterwards (ErrTaskGate).
+//
+// Body replaces the whole body. AppendBody adds a line to it instead, read and
+// written inside the update's transaction (appendTaskBody: a blank line, the
+// UTC minute, " -- " and the text), so two appends cannot lose one; it may not
+// be blank, nor ride beside Body (ErrTaskBodyAppendBlank, ErrTaskBodyConflict).
+// Whichever changes the stored body keeps the body it replaced as the task's
+// newest revision, in the same transaction (keepBodyRevisionTx); a patch that
+// leaves the body as it was, or replaces an empty one, keeps none.
 type TaskPatch struct {
 	Status          *core.TaskStatus
 	Title           *string
 	Body            *string
+	AppendBody      *string
 	ProjectSlug     *string
 	AddDependsOn    []string
 	RemoveDependsOn []string
@@ -78,7 +87,7 @@ type TaskPatch struct {
 // removals, so a patch whose every removal names a non-blocker changes nothing.
 func (p TaskPatch) onlyRemovals() bool {
 	return len(p.RemoveDependsOn) > 0 && p.Status == nil && p.Title == nil && p.Body == nil &&
-		p.ProjectSlug == nil && len(p.AddDependsOn) == 0 && len(p.AddCommits) == 0 &&
+		p.AppendBody == nil && p.ProjectSlug == nil && len(p.AddDependsOn) == 0 && len(p.AddCommits) == 0 &&
 		p.Kind == nil && p.Gate == nil && p.ClearGate == nil
 }
 
@@ -185,7 +194,13 @@ func CreateTask(ctx context.Context, db *sql.DB, t core.Task) error {
 //
 // updated_account moves only when the title, the body or the gate's words
 // actually change (taskTextAccount, gateTextAccount); a status, project,
-// dependency or commit change keeps it.
+// dependency or commit change keeps it. A restricted account's append stamps
+// it; the owner's append never clears it.
+//
+// A body the patch replaces or appends to is kept as the task's newest
+// revision (TaskBodyRevisions), in the same transaction, with now and actor as
+// its when and by whom; a status, title, gate, dependency, commit or project
+// change keeps none, and the revisions follow the task through a move.
 //
 // A task moved to another project takes its provenance stamps along
 // (item_provenance, ProvenanceRelocate) once the move commits, whichever
@@ -215,6 +230,9 @@ func UpdateTaskDetailed(ctx context.Context, db *sql.DB, id string, patch TaskPa
 		}
 	}
 	if err := patch.checkGate(); err != nil {
+		return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: %w", err)
+	}
+	if err := patch.checkBody(); err != nil {
 		return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: %w", err)
 	}
 	tx, err := db.BeginTx(ctx, nil)
@@ -257,12 +275,19 @@ func UpdateTaskDetailed(ctx context.Context, db *sql.DB, id string, patch TaskPa
 		return res, nil
 	}
 
-	prevTitle, prevBody, prevGate := t.Title, t.Body, t.Gate
+	prevTitle, prevBody, prevGate, prevAccount := t.Title, t.Body, t.Gate, t.UpdatedAccount
 	if patch.Title != nil {
 		t.Title = *patch.Title
 	}
-	if patch.Body != nil {
+	// The append reads the body this transaction holds, so a concurrent
+	// append lands before or after it and never in its place.
+	change := core.TaskBodyReplaced
+	switch {
+	case patch.Body != nil:
 		t.Body = *patch.Body
+	case patch.AppendBody != nil:
+		t.Body = appendTaskBody(t.Body, *patch.AppendBody, now)
+		change = core.TaskBodyAppended
 	}
 	if patch.ProjectSlug != nil {
 		t.ProjectSlug = *patch.ProjectSlug
@@ -271,9 +296,16 @@ func UpdateTaskDetailed(ctx context.Context, db *sql.DB, id string, patch TaskPa
 	if err != nil {
 		return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: task %q: %w", id, err)
 	}
+	writer := access.AccountOf(ctx)
+	bodyChanged := t.Body != prevBody
+	// An append keeps every word the body had. A restricted account's append
+	// puts its words in the body like any change, so it stamps the label; the
+	// owner's leaves words it did not write, so it never clears one (a note's
+	// append keeps its label the same way, mcp's accountAfter).
+	bodyLabeled := bodyChanged && (patch.AppendBody == nil || writer != "")
 	t.UpdatedAccount = gateTextAccount(t.UpdatedAccount,
-		taskTextAccount(t.UpdatedAccount, access.AccountOf(ctx), t.Title != prevTitle, t.Body != prevBody, t.Body),
-		access.AccountOf(ctx), prevGate, t.Gate)
+		taskTextAccount(t.UpdatedAccount, writer, t.Title != prevTitle, bodyLabeled, t.Body),
+		writer, prevGate, t.Gate)
 	if status != nil && *status != t.Status {
 		t.Status = *status
 		if t.Status.Closed() {
@@ -321,6 +353,15 @@ func UpdateTaskDetailed(ctx context.Context, db *sql.DB, id string, patch TaskPa
 		string(t.Kind), t.Gate.Who, t.Gate.What, t.Gate.Decision, t.Gate.ReadyWhen,
 		gateAt, t.Gate.ClearedBy, t.Gate.Note, t.ID); err != nil {
 		return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: update: %w", err)
+	}
+	// The body this change replaced is kept, in this transaction: a revision
+	// lands with its change or not at all. A body left as it was, or an empty
+	// one replaced, keeps nothing.
+	if bodyChanged && prevBody != "" {
+		if err := keepBodyRevisionTx(ctx, tx, core.TaskBodyRevision{TaskID: t.ID, Body: prevBody, Change: change,
+			ReplacedAt: now.UTC(), ReplacedBy: actor, UpdatedAccount: prevAccount}); err != nil {
+			return TaskUpdateResult{}, fmt.Errorf("store.UpdateTask: %w", err)
+		}
 	}
 	if err := addDeps(ctx, tx, t.ID, patch.AddDependsOn); err != nil {
 		return TaskUpdateResult{}, err

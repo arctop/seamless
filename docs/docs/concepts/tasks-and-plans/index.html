@@ -246,7 +246,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#the-ready-queue">The ready queue</a></li><li class="lvl-2"><a href="#gates">Gates: work that waits on people</a></li><li class="lvl-2"><a href="#claiming-the-part-that-makes-parallelism-safe">Claiming: the part that makes parallelism safe</a></li><li class="lvl-3"><a href="#the-two-clocks">The two clocks</a></li><li class="lvl-2"><a href="#plans-are-a-composition-not-a-primitive">Plans are a composition, not a primitive</a></li><li class="lvl-2"><a href="#claude-code-plan-mode-feeds-this-automatically">Claude Code plan mode feeds this automatically</a></li>
+      <li class="lvl-2"><a href="#the-ready-queue">The ready queue</a></li><li class="lvl-2"><a href="#gates">Gates: work that waits on people</a></li><li class="lvl-2"><a href="#body-history">A task&#39;s body keeps its history</a></li><li class="lvl-2"><a href="#claiming-the-part-that-makes-parallelism-safe">Claiming: the part that makes parallelism safe</a></li><li class="lvl-3"><a href="#the-two-clocks">The two clocks</a></li><li class="lvl-2"><a href="#plans-are-a-composition-not-a-primitive">Plans are a composition, not a primitive</a></li><li class="lvl-2"><a href="#claude-code-plan-mode-feeds-this-automatically">Claude Code plan mode feeds this automatically</a></li>
     </ul>
   </details>
   <p>Seamless gives coding agents a shared task queue that is dependency-aware and
@@ -320,6 +320,50 @@ answer:</p>
 </table>
 </div>
 <p>A task without a gate reads and behaves exactly as before.</p>
+<h2 id="body-history">A task's body keeps its history</h2>
+<p>A task's body holds what the work is: its acceptance criteria, then the notes
+and findings agents add as they go. <code>tasks_update</code> changes it in one of two
+ways:</p>
+<ul>
+<li><strong><code>body</code> replaces the whole body.</strong> Use it to rewrite the text.</li>
+<li><strong><code>body_append</code> adds a line at the end</strong> and keeps everything already
+there: a blank line, the UTC minute, <code>--</code> and the text, the same line
+<code>notes_append</code> adds to a note. Two agents that append at once both land,
+because each line is added inside the update's own transaction.</li>
+</ul>
+<p>One call takes one or the other: <code>body</code> and <code>body_append</code> together are
+refused.</p>
+<p>The body a change replaces is kept as a revision: when, by which session, and
+whether the change was a replacement or an append. So a body wiped by mistake
+can be read back and restored:</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Call</th>
+<th>Answers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tasks_list id=&lt;id&gt;</code></td>
+<td>The task, exactly as before</td>
+</tr>
+<tr>
+<td><code>tasks_list id=&lt;id&gt; body_revisions=true</code></td>
+<td>The task, plus <code>body_revisions</code>: its earlier bodies, newest first</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>A status, title, gate, dependency or project change keeps no revision, and
+neither does replacing an empty body. A task keeps its newest 20 revisions.
+Past that, the oldest revision an append made goes first, since the body
+after it still holds its text, then the oldest replaced one; the newest is
+always kept.</p>
+<p>A revision is as visible as its task, and no more. It is read only where the
+task's own body is read, behind the same isolation fences and locks, and it
+moves with its task to another project.</p>
 <h2 id="claiming-the-part-that-makes-parallelism-safe">Claiming: the part that makes parallelism safe</h2>
 <p>Two agents that both call <code>tasks_ready</code> see the same task. Both will try to take
 it. Exactly one wins:</p>
@@ -496,7 +540,7 @@ visible rather than lost.</li>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#the-ready-queue">The ready queue</a></li><li class="lvl-2"><a href="#gates">Gates: work that waits on people</a></li><li class="lvl-2"><a href="#claiming-the-part-that-makes-parallelism-safe">Claiming: the part that makes parallelism safe</a></li><li class="lvl-3"><a href="#the-two-clocks">The two clocks</a></li><li class="lvl-2"><a href="#plans-are-a-composition-not-a-primitive">Plans are a composition, not a primitive</a></li><li class="lvl-2"><a href="#claude-code-plan-mode-feeds-this-automatically">Claude Code plan mode feeds this automatically</a></li>
+      <li class="lvl-2"><a href="#the-ready-queue">The ready queue</a></li><li class="lvl-2"><a href="#gates">Gates: work that waits on people</a></li><li class="lvl-2"><a href="#body-history">A task&#39;s body keeps its history</a></li><li class="lvl-2"><a href="#claiming-the-part-that-makes-parallelism-safe">Claiming: the part that makes parallelism safe</a></li><li class="lvl-3"><a href="#the-two-clocks">The two clocks</a></li><li class="lvl-2"><a href="#plans-are-a-composition-not-a-primitive">Plans are a composition, not a primitive</a></li><li class="lvl-2"><a href="#claude-code-plan-mode-feeds-this-automatically">Claude Code plan mode feeds this automatically</a></li>
     </ul>
   </aside>
   

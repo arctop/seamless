@@ -70,6 +70,9 @@ func seedViewFixture(t *testing.T, db *sql.DB) (hiddenMem, shownMem, hiddenTask,
 	ins(`INSERT INTO tasks (id, project_slug, title, created_at, updated_at)
 		VALUES ('t-hidden','example-finance','fin task',?,?), ('t-shown','example-ops','ops task',?,?)`, ts, ts, ts, ts)
 	ins(`INSERT INTO task_deps (task_id, depends_on) VALUES ('t-shown','t-hidden')`)
+	// A task's earlier bodies are its content (migration 054).
+	ins(`INSERT INTO task_body_revisions (task_id, revision, body, change, replaced_at)
+		VALUES ('t-hidden',1,'the finance plan','replace',?), ('t-shown',1,'the ops plan','append',?)`, ts, ts)
 	ins(`INSERT INTO trials (id, lab, project_slug, session_id, created_at)
 		VALUES ('tr-hidden','lab','example-finance','s-hidden',?), ('tr-by-hidden-session','lab','','s-hidden',?), ('tr-shown','lab','example-ops','',?)`, ts, ts, ts)
 	ins(`INSERT INTO events (id, ts, kind, session_id, project_slug, item_id, payload) VALUES
@@ -147,9 +150,18 @@ func TestOpenView_HidesTheSealedProjectEverywhere(t *testing.T) {
 		{`SELECT COUNT(*) FROM repo_lock_waiters`, 2}, // the queue is no project's
 		{`SELECT COUNT(*) FROM session_usage`, 1},     // hidden with its session
 		{`SELECT COUNT(*) FROM session_usage WHERE session_id = 's-hidden'`, 0},
+		{`SELECT COUNT(*) FROM task_body_revisions`, 1}, // hidden with its task
+		{`SELECT COUNT(*) FROM task_body_revisions WHERE task_id = 't-hidden'`, 0},
 	} {
 		require.Equal(t, c.want, count(c.q), c.q)
 	}
+	revs, err := TaskBodyRevisions(ctx, view, "t-hidden")
+	require.NoError(t, err)
+	require.Empty(t, revs, "a hidden task's earlier bodies are hidden with it")
+	revs, err = TaskBodyRevisions(ctx, view, "t-shown")
+	require.NoError(t, err)
+	require.Len(t, revs, 1)
+	require.Equal(t, "the ops plan", revs[0].Body)
 
 	// Through the store functions the console uses, not just raw SQL.
 	_, found, err := MemoryByID(ctx, view, "m-hidden")
@@ -173,6 +185,42 @@ func TestOpenView_HidesTheSealedProjectEverywhere(t *testing.T) {
 	_, err = db.ExecContext(ctx, `INSERT INTO tasks (id, project_slug, title, created_at, updated_at) VALUES ('t-late','example-finance','late','x','x')`)
 	require.NoError(t, err)
 	require.Equal(t, 1, count(`SELECT COUNT(*) FROM tasks`))
+	_, err = db.ExecContext(ctx, `INSERT INTO task_body_revisions (task_id, revision, body, change, replaced_at)
+		VALUES ('t-late',1,'late plan','replace','x')`)
+	require.NoError(t, err)
+	require.Equal(t, 1, count(`SELECT COUNT(*) FROM task_body_revisions`))
+}
+
+// A task's revisions are hidden by the project the task is in now: a move
+// into a hidden project takes them out of the view with the task, and a move
+// back brings them back.
+func TestOpenView_TaskRevisionsFollowTheirTask(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "seam.db")
+	db, err := Open(path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	seedViewFixture(t, db)
+	ctx := context.Background()
+	id := hrTask(t, db, "example-ops", "the ops plan, first draft")
+	_, err = UpdateTask(ctx, db, id, TaskPatch{Body: hrStr("the ops plan")}, "", hrAt)
+	require.NoError(t, err)
+
+	view, err := OpenView(path, []string{"example-finance"})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = view.Close() })
+	visible := func() []string {
+		t.Helper()
+		revs, err := TaskBodyRevisions(ctx, view, id)
+		require.NoError(t, err)
+		return hrBodies(revs)
+	}
+	require.Equal(t, []string{"the ops plan, first draft"}, visible())
+	_, err = UpdateTask(ctx, db, id, TaskPatch{ProjectSlug: hrStr("example-finance")}, "", hrAt)
+	require.NoError(t, err)
+	require.Empty(t, visible(), "moved into the hidden project, the revisions went with the task")
+	_, err = UpdateTask(ctx, db, id, TaskPatch{ProjectSlug: hrStr("example-ops")}, "", hrAt)
+	require.NoError(t, err)
+	require.Equal(t, []string{"the ops plan, first draft"}, visible())
 }
 
 func TestAccessFilter_FTSAndCosine(t *testing.T) {

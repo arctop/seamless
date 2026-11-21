@@ -58,6 +58,9 @@ var viewTables = []struct {
 	{"tasks", "project_slug NOT IN %[1]s"},
 	{"trials", "project_slug NOT IN %[1]s AND session_id NOT IN %[2]s"},
 	{"task_deps", "task_id NOT IN %[3]s AND depends_on NOT IN %[3]s"},
+	// A task's earlier bodies are its content (migration 054): hidden with the
+	// task, by the project it is in now, so they follow it through a move.
+	{"task_body_revisions", "task_id NOT IN %[3]s"},
 	// An event is hidden by its project, by the session it ran in, or by the item
 	// it is about -- an event recorded under the global scope about a sealed
 	// memory is still about that memory, and the gardener's own events (recorded

@@ -109,13 +109,32 @@ func (s *Server) handleTasksAdd(ctx context.Context, req mcp.CallToolRequest) (*
 	return jsonResult(out)
 }
 
+// bodyAppendParam is tasks_update's append: text added to the end of the body
+// inside the store's transaction (store.TaskPatch.AppendBody), never with body.
+const bodyAppendParam = "body_append"
+
+// bodyRevisionsParam is tasks_list's switch for a task's earlier bodies, and
+// the key they are answered under (taskRevisionJSON).
+const bodyRevisionsParam = "body_revisions"
+
+// tasksUpdateDescription is tasks_update's description: what the call can do,
+// and that a replaced body is kept (store.TaskBodyRevisionsKept per task).
+func tasksUpdateDescription() string {
+	return "Update a task: change status (open|in_progress|done|dropped), edit title/body, add or remove dependencies, or set, edit or clear its gate. " +
+		"body replaces the WHOLE body; to add to it -- a finding, a note, progress -- pass " + bodyAppendParam + " instead, which adds a UTC-timestamped line and keeps everything already there. " +
+		fmt.Sprintf("The body a change replaces or appends to is kept, with when and by which session (the newest %d per task): ", store.TaskBodyRevisionsKept) +
+		"tasks_list id=<id> " + bodyRevisionsParam + "=true reads them back. " +
+		"Moving to done/dropped closes it and unblocks its dependents; removing its last unfinished blocker makes it ready. Removing an id that is not one of its blockers changes nothing and is named back in not_depends_on; the ids removed are in removed_depends_on. Setting any gate_* field (re)opens the gate as it then reads; gate_clear=true clears an open gate once the person has acted, recording when, by this session, and gate_note: a step keeps its status and becomes ready once nothing else holds it, and a task of kind gate closes as done, which unblocks every task that depends on it. A task another session holds via a live claim is locked to its holder: updating it fails with 'already claimed' until the lease lapses or the holder releases it."
+}
+
 func tasksUpdateTool() mcp.Tool {
 	opts := []mcp.ToolOption{hintSet(),
-		mcp.WithDescription("Update a task: change status (open|in_progress|done|dropped), edit title/body, add or remove dependencies, or set, edit or clear its gate. Moving to done/dropped closes it and unblocks its dependents; removing its last unfinished blocker makes it ready. Removing an id that is not one of its blockers changes nothing and is named back in not_depends_on; the ids removed are in removed_depends_on. Setting any gate_* field (re)opens the gate as it then reads; gate_clear=true clears an open gate once the person has acted, recording when, by this session, and gate_note: a step keeps its status and becomes ready once nothing else holds it, and a task of kind gate closes as done, which unblocks every task that depends on it. A task another session holds via a live claim is locked to its holder: updating it fails with 'already claimed' until the lease lapses or the holder releases it."),
+		mcp.WithDescription(tasksUpdateDescription()),
 		mcp.WithString("id", mcp.Required(), mcp.Description("task id")),
 		mcp.WithString("status", enumOf(core.TaskStatuses), mcp.Description("new status")),
 		mcp.WithString("title", mcp.Description("new title")),
-		mcp.WithString("body", mcp.Description("new body (aliases: content, text)")),
+		mcp.WithString("body", mcp.Description("new body, replacing the WHOLE body (aliases: content, text); the body it replaces is kept as a revision. To add to the body instead, use "+bodyAppendParam)),
+		mcp.WithString(bodyAppendParam, mcp.Description("text to add to the end of the body as a UTC-timestamped line, the line notes_append adds to a note; everything already in the body stays, and the body before it is kept as a revision. Not with body")),
 		mcp.WithString("project", mcp.Description("reassign the task to another project slug (used when a split moves a project's open work to a child)")),
 		mcp.WithArray("add_depends_on", mcp.WithStringItems(), mcp.Description("task ids to add as blockers (a comma-separated string is also accepted)")),
 		mcp.WithArray(removeDependsOnParam, mcp.WithStringItems(), mcp.Description("task ids to remove as blockers (a comma-separated string is also accepted); an id that is not a blocker of this task is a no-op, named back in not_depends_on")),
@@ -156,6 +175,20 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 		body := argRaw(req, "body")
 		patch.Body = &body
 	}
+	// The append rides in the patch: the store reads the body inside the
+	// update's transaction and adds the line there, so two appends cannot lose
+	// one, and keeps the body it extended as a revision.
+	if argPresent(req, bodyAppendParam) {
+		if patch.Body != nil {
+			return errResult("tasks_update", errors.New("body (or content, text) and "+bodyAppendParam+
+				" in one call: body replaces the whole body and "+bodyAppendParam+" adds a line to it; pass one of them"))
+		}
+		text := argRaw(req, bodyAppendParam)
+		if strings.TrimSpace(text) == "" {
+			return errResult("tasks_update", errors.New(bodyAppendParam+" must not be blank: pass the text to add to the body"))
+		}
+		patch.AppendBody = &text
+	}
 	if argPresent(req, "project") {
 		project, perr := validateProjectArg(argString(req, "project"))
 		if perr != nil {
@@ -186,7 +219,7 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 		return errResult("tasks_update", err)
 	}
 
-	if patch.Status == nil && patch.Title == nil && patch.Body == nil && patch.ProjectSlug == nil &&
+	if patch.Status == nil && patch.Title == nil && patch.Body == nil && patch.AppendBody == nil && patch.ProjectSlug == nil &&
 		len(patch.AddDependsOn) == 0 && len(patch.RemoveDependsOn) == 0 && len(patch.AddCommits) == 0 &&
 		patch.Kind == nil && patch.Gate == nil && patch.ClearGate == nil && ref.IsZero() {
 		return errResult("tasks_update", nothingToUpdate(s.cfg.RecordCommits))
@@ -289,14 +322,14 @@ func (s *Server) handleTasksUpdate(ctx context.Context, req mcp.CallToolRequest)
 	return jsonResult(out)
 }
 
-// stampTaskUpdate adds the call's stamps to a task: new text or a move
-// carries the conversation's stamps for the project the task is in now. The
-// stamps it had already moved with it, inside the update
-// (store.UpdateTaskDetailed relocates them on every move). A status,
-// dependency or commit change writes nothing the conversation holds and adds
-// none.
+// stampTaskUpdate adds the call's stamps to a task: new text (a title, a body,
+// an appended line) or a move carries the conversation's stamps for the
+// project the task is in now. The stamps it had already moved with it, inside
+// the update (store.UpdateTaskDetailed relocates them on every move). A
+// status, dependency or commit change writes nothing the conversation holds and
+// adds none.
 func (s *Server) stampTaskUpdate(ctx context.Context, before, after core.Task, patch store.TaskPatch) error {
-	if after.ProjectSlug != before.ProjectSlug || patch.Title != nil || patch.Body != nil {
+	if after.ProjectSlug != before.ProjectSlug || patch.Title != nil || patch.Body != nil || patch.AppendBody != nil {
 		return s.stampWorkItem(ctx, core.ItemKindTask, after.ID, after.ProjectSlug)
 	}
 	return nil
@@ -346,15 +379,20 @@ func (s *Server) handleTasksReady(ctx context.Context, req mcp.CallToolRequest) 
 
 func tasksListTool() mcp.Tool {
 	return mcp.NewTool("tasks_list", hintRead(),
-		mcp.WithDescription("List a project's tasks, optionally filtered by status, newest first. A task that waits on people carries its gate (who, what, and whether it is still open), and a task of kind gate says so. By default plan-step tasks are excluded; pass plan=<slug> to list that plan's steps instead. Pass id=<task id> to load a single task by its globally-unique id (a direct lookup that ignores project/status/plan and needs no session scope)."),
+		mcp.WithDescription("List a project's tasks, optionally filtered by status, newest first. A task that waits on people carries its gate (who, what, and whether it is still open), and a task of kind gate says so. By default plan-step tasks are excluded; pass plan=<slug> to list that plan's steps instead. Pass id=<task id> to load a single task by its globally-unique id (a direct lookup that ignores project/status/plan and needs no session scope). "+
+			"With id, "+bodyRevisionsParam+"=true also answers the task's earlier bodies under "+bodyRevisionsParam+", newest first: each body a tasks_update replaced or appended to, with when and by which session."),
 		mcp.WithString("id", mcp.Description("load exactly one task by its globally-unique id; when set, project/status/plan are ignored and the response's tasks array holds just that task")),
 		mcp.WithString("project", mcp.Description("project slug; defaults to the bound session's project")),
 		mcp.WithString("status", enumOf(core.TaskStatuses), mcp.Description("optional status filter")),
 		mcp.WithString("plan", mcp.Description("optional plan slug: list that plan's step tasks instead of the default (non-plan) tasks")),
+		mcp.WithBoolean(bodyRevisionsParam, mcp.Description(fmt.Sprintf("optional, with id: true adds %s to the task, its earlier bodies newest first, "+
+			"each with revision, body, change (replace or append), replaced_at and replaced_by (the session's id); a task keeps its newest %d",
+			bodyRevisionsParam, store.TaskBodyRevisionsKept))),
 	)
 }
 
 func (s *Server) handleTasksList(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	revisions := argBool(req, bodyRevisionsParam, false)
 	// id is a globally-unique ULID, so a by-id load is a direct lookup that needs
 	// no project scope -- an agent can load a task it only knows the id of.
 	if id := argString(req, "id"); id != "" {
@@ -371,7 +409,24 @@ func (s *Server) handleTasksList(ctx context.Context, req mcp.CallToolRequest) (
 		if err != nil {
 			return errResult("tasks_list", err)
 		}
+		// The earlier bodies are the task's content, read only past the task's
+		// own lookup and fence above: they come back exactly where its body
+		// does, and an answer that did not ask reads as it always did.
+		if revisions {
+			revs, err := store.TaskBodyRevisions(ctx, s.cfg.DB, task.ID)
+			if err != nil {
+				return errResult("tasks_list", err)
+			}
+			list := make([]map[string]any, len(revs))
+			for i, r := range revs {
+				list[i] = taskRevisionJSON(r)
+			}
+			out[0][bodyRevisionsParam] = list
+		}
 		return jsonResult(map[string]any{"project": task.ProjectSlug, "tasks": out})
+	}
+	if revisions {
+		return errResult("tasks_list", errors.New(bodyRevisionsParam+" reads one task's earlier bodies: pass it with id=<task id>"))
 	}
 	project, err := s.resolveReadScope(ctx, argString(req, "project"))
 	if err != nil {
@@ -556,6 +611,25 @@ func taskJSON(t core.Task) map[string]any {
 		j["updated_account"] = t.UpdatedAccount
 	}
 	putGate(j, t)
+	return j
+}
+
+// taskRevisionJSON renders one of a task's earlier bodies for tasks_list:
+// its number, the body, the change that replaced it (replace or append), when,
+// and the session whose call made the change when there was one. updated_account
+// (peer_auth.restricted) is the restricted account whose words the body may
+// carry, as on the task; the owner's carry none.
+func taskRevisionJSON(r core.TaskBodyRevision) map[string]any {
+	j := map[string]any{
+		"revision": r.Revision, "body": r.Body, "change": string(r.Change),
+		"replaced_at": core.FormatTime(r.ReplacedAt),
+	}
+	if r.ReplacedBy != "" {
+		j["replaced_by"] = r.ReplacedBy
+	}
+	if r.UpdatedAccount != "" {
+		j["updated_account"] = r.UpdatedAccount
+	}
 	return j
 }
 

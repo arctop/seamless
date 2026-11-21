@@ -21,10 +21,11 @@ import (
 // mergeTables is the order the row pass copies tables in, and the whole
 // contract for which tables a merge touches at all.
 //
-// It is foreign-key safe front to back. task_deps carries the only real foreign
-// keys in the schema (both into tasks), and INSERT OR IGNORE does NOT swallow a
-// foreign key violation the way it swallows a uniqueness one -- a dep inserted
-// ahead of its task is an error that aborts the transaction, not a skip.
+// It is foreign-key safe front to back. task_deps and task_body_revisions
+// carry the only real foreign keys in the schema (all into tasks), and INSERT
+// OR IGNORE does NOT swallow a foreign key violation the way it swallows a
+// uniqueness one -- a dep inserted ahead of its task is an error that aborts
+// the transaction, not a skip.
 //
 // What is deliberately absent, and why each one stays absent:
 //
@@ -121,26 +122,47 @@ import (
 // removes a copy file.
 //
 // session_usage, the usage ledger (migration 053), rides with the sessions it
-// counts, and only with the ones the row pass inserts itself
-// (ledgerInsertSelect): ids, model ids, counts and times, no path. A session's
+// counts, and only with the ones the row pass inserts itself (a rider,
+// riderInsertSelect): ids, model ids, counts and times, no path. A session's
 // token totals are the sum of its ledger rows, so a session this instance
 // already had keeps its own rows and totals, and an archive's rows for it are
 // left out: added beside them they would no longer sum to its totals. A
 // session the pass skips (its name taken here) takes none either.
+//
+// task_body_revisions, a task's earlier bodies (migration 054), rides the same
+// way with the tasks the row pass inserts itself: the bodies, ids, times and a
+// session id. A task this instance already had keeps its own body (first
+// writer wins) and its own history; the archive's revisions of it describe a
+// body the row kept here never had, and numbered beside its own they would
+// interleave two histories.
 var mergeTables = []string{
-	"projects", "sessions", ledgerTable, "tasks", "task_deps", "trials", "events", "gardener_proposals",
-	"commit_records", "item_provenance",
+	"projects", "sessions", ledgerTable, "tasks", "task_deps", revisionsTable, "trials", "events",
+	"gardener_proposals", "commit_records", "item_provenance",
 }
 
-// ledgerTable is the usage ledger, the one table the row pass copies with a
-// condition of its own (ledgerInsertSelect, predictLedgerInserts).
-const ledgerTable = "session_usage"
+// ledgerTable is the usage ledger, and revisionsTable the tasks' earlier
+// bodies: the tables the row pass copies only with the parent rows it inserts
+// itself (riders).
+const (
+	ledgerTable    = "session_usage"
+	revisionsTable = "task_body_revisions"
+)
 
-// newSessions is the temporary table the real row pass fills, just before it
-// copies sessions, with the archive's sessions this instance does not have:
-// the ones the ledger may ride with (ledgerInsertSelect). It lives on the
-// pass's pinned connection and is dropped when the pass ends.
-const newSessions = "archive_merge_new_sessions"
+// rider is a table whose rows ride only with the parent rows the row pass
+// inserts itself: column names the parent's id, and newIDs is the temporary
+// table the real pass fills, just before it copies the parent, with the
+// archive's parent ids this instance does not have. It lives on the pass's
+// pinned connection and is dropped when the pass ends.
+type rider struct {
+	parent, column, newIDs string
+}
+
+// riders are the tables mergeTables copies with a condition of their own
+// (riderInsertSelect, predictRiderInserts), each listed after its parent.
+var riders = map[string]rider{
+	ledgerTable:    {parent: "sessions", column: "session_id", newIDs: "archive_merge_new_sessions"},
+	revisionsTable: {parent: "tasks", column: "task_id", newIDs: "archive_merge_new_tasks"},
+}
 
 // uniqueNameColumns are the UNIQUE columns whose collisions are worth naming in
 // the report. INSERT OR IGNORE skips such a row silently, and "one fewer
@@ -619,15 +641,16 @@ func mergeRows(ctx context.Context, db *sql.DB, srcPath string, dry bool, rep *I
 	}
 
 	if dry {
-		var sessionKeys [][]string
+		// Each table's key sets, kept for the riders listed after it.
+		tableKeys := make(map[string][][]string, len(mergeTables))
 		for _, table := range mergeTables {
 			keys, err := uniqueKeySets(ctx, conn, table)
 			if err != nil {
 				return pass, err
 			}
 			var n int
-			if table == ledgerTable {
-				n, err = predictLedgerInserts(ctx, conn, sessionKeys, keys)
+			if r, ok := riders[table]; ok {
+				n, err = predictRiderInserts(ctx, conn, table, r, tableKeys[r.parent], keys)
 			} else {
 				n, err = predictInserts(ctx, conn, table, keys)
 			}
@@ -635,8 +658,8 @@ func mergeRows(ctx context.Context, db *sql.DB, srcPath string, dry bool, rep *I
 				return pass, err
 			}
 			rep.Rows[table] = n
+			tableKeys[table] = keys
 			if table == "sessions" {
-				sessionKeys = keys
 				if pass.copies, err = mergeableCopies(ctx, conn, keys); err != nil {
 					return pass, err
 				}
@@ -657,20 +680,26 @@ func mergeRows(ctx context.Context, db *sql.DB, srcPath string, dry bool, rep *I
 		cols[table] = c
 	}
 
-	// The sessions the pass inserts are known only by comparing the two sides
-	// before the sessions copy, so the comparison is kept in a table on this
-	// connection, which goes back to the pool afterwards: dropped first, in case
-	// an earlier pass left one, and again when this one ends.
+	// The parent rows the pass inserts (riders) are known only by comparing the
+	// two sides before the parent's copy, so each comparison is kept in a table
+	// on this connection, which goes back to the pool afterwards: dropped first,
+	// in case an earlier pass left one, and again when this one ends.
 	dropNew := func() error {
-		_, err := conn.ExecContext(ctx, `DROP TABLE IF EXISTS temp.`+newSessions)
-		return err
+		for _, table := range mergeTables {
+			if r, ok := riders[table]; ok {
+				if _, err := conn.ExecContext(ctx, `DROP TABLE IF EXISTS temp.`+r.newIDs); err != nil {
+					return fmt.Errorf("%s: %w", r.newIDs, err)
+				}
+			}
+		}
+		return nil
 	}
 	if err := dropNew(); err != nil {
-		return pass, fmt.Errorf("archive.Import: clear %s: %w", newSessions, err)
+		return pass, fmt.Errorf("archive.Import: clear %w", err)
 	}
 	defer func() {
 		if err := dropNew(); err != nil && retErr == nil {
-			retErr = fmt.Errorf("archive.Import: drop %s: %w", newSessions, err)
+			retErr = fmt.Errorf("archive.Import: drop %w", err)
 		}
 	}()
 
@@ -682,14 +711,17 @@ func mergeRows(ctx context.Context, db *sql.DB, srcPath string, dry bool, rep *I
 
 	for _, table := range mergeTables {
 		stmt := insertSelect(table, cols[table])
-		switch table {
-		case "sessions":
-			if _, err := tx.ExecContext(ctx, `CREATE TEMP TABLE `+newSessions+` AS
-				SELECT id FROM src.sessions WHERE id NOT IN (SELECT id FROM main.sessions)`); err != nil {
-				return pass, fmt.Errorf("archive.Import: the archive's new sessions: %w", err)
+		for _, rt := range mergeTables {
+			if r, ok := riders[rt]; ok && r.parent == table {
+				if _, err := tx.ExecContext(ctx, fmt.Sprintf(`CREATE TEMP TABLE %[1]s AS
+					SELECT id FROM src.%[2]s WHERE id NOT IN (SELECT id FROM main.%[2]s)`,
+					r.newIDs, quoteIdent(r.parent))); err != nil {
+					return pass, fmt.Errorf("archive.Import: the archive's new %s: %w", r.parent, err)
+				}
 			}
-		case ledgerTable:
-			stmt = ledgerInsertSelect(cols[table])
+		}
+		if r, ok := riders[table]; ok {
+			stmt = riderInsertSelect(table, r, cols[table])
 		}
 		res, err := tx.ExecContext(ctx, stmt)
 		if err != nil {
@@ -781,37 +813,37 @@ func insertSelect(table string, cols []string) string {
 		quoteIdent(table), list)
 }
 
-// ledgerInsertSelect is the usage ledger's copy statement: insertSelect's,
-// kept to the archive's sessions this instance did not have before the
-// sessions copy (newSessions) and has now, so only a session the pass
-// inserted itself takes its rows (see mergeTables).
-func ledgerInsertSelect(cols []string) string {
+// riderInsertSelect is a rider's copy statement: insertSelect's, kept to the
+// archive's parent rows this instance did not have before the parent's copy
+// (r.newIDs) and has now, so only a parent the pass inserted itself takes its
+// rows (see mergeTables).
+func riderInsertSelect(table string, r rider, cols []string) string {
 	quoted := make([]string, len(cols))
 	for i, c := range cols {
 		quoted[i] = quoteIdent(c)
 	}
 	list := strings.Join(quoted, ", ")
 	return fmt.Sprintf(`INSERT OR IGNORE INTO main.%[1]s (%[2]s) SELECT %[2]s FROM src.%[1]s
-		 WHERE session_id IN (SELECT id FROM temp.%[3]s) AND session_id IN (SELECT id FROM main.sessions)`,
-		quoteIdent(ledgerTable), list, newSessions)
+		 WHERE %[3]s IN (SELECT id FROM temp.%[4]s) AND %[3]s IN (SELECT id FROM main.%[5]s)`,
+		quoteIdent(table), list, quoteIdent(r.column), r.newIDs, quoteIdent(r.parent))
 }
 
-// predictLedgerInserts is predictInserts for the usage ledger: the archive's
-// rows of the sessions INSERT OR IGNORE would keep (sessionKeys), that collide
-// with no destination row (keys).
-func predictLedgerInserts(ctx context.Context, conn *sql.Conn, sessionKeys, keys [][]string) (int, error) {
-	q := fmt.Sprintf(`SELECT COUNT(*) FROM src.%s s WHERE s.session_id IN (SELECT s.id FROM src.sessions s`,
-		quoteIdent(ledgerTable))
-	if cond := insertableCond("sessions", sessionKeys); cond != "" {
+// predictRiderInserts is predictInserts for a rider: the archive's rows of the
+// parent rows INSERT OR IGNORE would keep (parentKeys), that collide with no
+// destination row (keys).
+func predictRiderInserts(ctx context.Context, conn *sql.Conn, table string, r rider, parentKeys, keys [][]string) (int, error) {
+	q := fmt.Sprintf(`SELECT COUNT(*) FROM src.%s s WHERE s.%s IN (SELECT s.id FROM src.%s s`,
+		quoteIdent(table), quoteIdent(r.column), quoteIdent(r.parent))
+	if cond := insertableCond(r.parent, parentKeys); cond != "" {
 		q += " WHERE " + cond
 	}
 	q += ")"
-	if cond := insertableCond(ledgerTable, keys); cond != "" {
+	if cond := insertableCond(table, keys); cond != "" {
 		q += " AND " + cond
 	}
 	var n int
 	if err := conn.QueryRowContext(ctx, q).Scan(&n); err != nil {
-		return 0, fmt.Errorf("archive.Import: predict %s: %w", ledgerTable, err)
+		return 0, fmt.Errorf("archive.Import: predict %s: %w", table, err)
 	}
 	return n, nil
 }

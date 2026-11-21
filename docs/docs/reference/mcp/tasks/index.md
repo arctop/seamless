@@ -190,13 +190,14 @@ Add a task to the dependency-aware ready queue. depends_on lists task ids that m
 
 ## tasks_update {#tasks_update}
 
-Update a task: change status (open|in_progress|done|dropped), edit title/body, add or remove dependencies, or set, edit or clear its gate. Moving to done/dropped closes it and unblocks its dependents; removing its last unfinished blocker makes it ready. Removing an id that is not one of its blockers changes nothing and is named back in not_depends_on; the ids removed are in removed_depends_on. Setting any gate_* field (re)opens the gate as it then reads; gate_clear=true clears an open gate once the person has acted, recording when, by this session, and gate_note: a step keeps its status and becomes ready once nothing else holds it, and a task of kind gate closes as done, which unblocks every task that depends on it. A task another session holds via a live claim is locked to its holder: updating it fails with 'already claimed' until the lease lapses or the holder releases it.
+Update a task: change status (open|in_progress|done|dropped), edit title/body, add or remove dependencies, or set, edit or clear its gate. body replaces the WHOLE body; to add to it -- a finding, a note, progress -- pass body_append instead, which adds a UTC-timestamped line and keeps everything already there. The body a change replaces or appends to is kept, with when and by which session (the newest 20 per task): tasks_list id=&lt;id&gt; body_revisions=true reads them back. Moving to done/dropped closes it and unblocks its dependents; removing its last unfinished blocker makes it ready. Removing an id that is not one of its blockers changes nothing and is named back in not_depends_on; the ids removed are in removed_depends_on. Setting any gate_* field (re)opens the gate as it then reads; gate_clear=true clears an open gate once the person has acted, recording when, by this session, and gate_note: a step keeps its status and becomes ready once nothing else holds it, and a task of kind gate closes as done, which unblocks every task that depends on it. A task another session holds via a live claim is locked to its holder: updating it fails with 'already claimed' until the lease lapses or the holder releases it.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `id` | string | **yes** | task id |
 | `add_depends_on` | array | no | task ids to add as blockers (a comma-separated string is also accepted) |
-| `body` | string | no | new body (aliases: content, text) |
+| `body` | string | no | new body, replacing the WHOLE body (aliases: content, text); the body it replaces is kept as a revision. To add to the body instead, use body_append |
+| `body_append` | string | no | text to add to the end of the body as a UTC-timestamped line, the line notes_append adds to a note; everything already in the body stays, and the body before it is kept as a revision. Not with body |
 | `commits` | array | no | Full ids of the commits that did this task's work, recorded on the task for an integrity monitor that matches a branch's commits to the work that made them: the 40- or 64-character hex id git prints, never an abbreviation (git rev-parse &lt;short id&gt; expands one); a short id here refuses the whole call. Recording them is an update like any other: a task another session holds refuses it. At most 256 per call; repeats are ignored. Offered only while this server records commits (commits.record) |
 | `gate_clear` | boolean | no | true: clear the task's open gate now that the person has acted (not with the gate_* edits) |
 | `gate_decision` | string | no | optional: the open question the person answers, one line |
@@ -227,10 +228,11 @@ List the actionable (ready) tasks for a project -- open tasks with no unfinished
 
 ## tasks_list {#tasks_list}
 
-List a project's tasks, optionally filtered by status, newest first. A task that waits on people carries its gate (who, what, and whether it is still open), and a task of kind gate says so. By default plan-step tasks are excluded; pass plan=&lt;slug&gt; to list that plan's steps instead. Pass id=&lt;task id&gt; to load a single task by its globally-unique id (a direct lookup that ignores project/status/plan and needs no session scope).
+List a project's tasks, optionally filtered by status, newest first. A task that waits on people carries its gate (who, what, and whether it is still open), and a task of kind gate says so. By default plan-step tasks are excluded; pass plan=&lt;slug&gt; to list that plan's steps instead. Pass id=&lt;task id&gt; to load a single task by its globally-unique id (a direct lookup that ignores project/status/plan and needs no session scope). With id, body_revisions=true also answers the task's earlier bodies under body_revisions, newest first: each body a tasks_update replaced or appended to, with when and by which session.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
+| `body_revisions` | boolean | no | optional, with id: true adds body_revisions to the task, its earlier bodies newest first, each with revision, body, change (replace or append), replaced_at and replaced_by (the session's id); a task keeps its newest 20 |
 | `id` | string | no | load exactly one task by its globally-unique id; when set, project/status/plan are ignored and the response's tasks array holds just that task |
 | `plan` | string | no | optional plan slug: list that plan's step tasks instead of the default (non-plan) tasks |
 | `project` | string | no | project slug; defaults to the bound session's project |

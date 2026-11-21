@@ -146,9 +146,13 @@ func seedIndexedInto(t *testing.T, dir string, s instanceSpec) {
 		core.UsageBucket{Bucket: now.Add(-15 * time.Minute), Model: "claude-x", Thread: core.UsageThreadSubagent,
 			Input: 3, Output: 1, Messages: 1, MinuteMask: 1})
 	require.NoError(t, store.CreateTask(ctx, db, core.Task{
-		ID: s.taskA, ProjectSlug: s.project, Title: "extract first",
+		ID: s.taskA, ProjectSlug: s.project, Title: "extract first", Body: "extract the snapshot",
 		Status: core.TaskOpen, CreatedAt: now, UpdatedAt: now,
 	}))
+	// Its body replaced once, so the task keeps one earlier body (migration 054).
+	replaced := "extract the snapshot, then merge"
+	_, err = store.UpdateTask(ctx, db, s.taskA, store.TaskPatch{Body: &replaced}, s.sessionID, now)
+	require.NoError(t, err)
 	require.NoError(t, store.CreateTask(ctx, db, core.Task{
 		ID: s.taskB, ProjectSlug: s.project, Title: "merge second",
 		Status: core.TaskOpen, DependsOn: []string{s.taskA},
@@ -453,6 +457,7 @@ func TestImport_FreshRoundTrip(t *testing.T) {
 	require.Equal(t, 1, dstCounts["embeddings"])
 	require.Equal(t, 1, dstCounts["settings"])
 	require.Equal(t, 2, dstCounts["session_usage"], "the usage ledger travels in the snapshot")
+	require.Equal(t, 1, dstCounts["task_body_revisions"], "so do the tasks' earlier bodies")
 	require.Equal(t, specA.settingVal, settingOf(t, dst, "repo_project_map"))
 
 	// Reconcile ran during the import and found nothing to do: the snapshot's
@@ -524,7 +529,7 @@ func TestImport_Merge(t *testing.T) {
 	require.Empty(t, rep.NameCollisions)
 	require.Equal(t, map[string]int{
 		"projects": 1, "sessions": 1, "session_usage": 2, "tasks": 2, "task_deps": 1,
-		"trials": 1, "events": 1, "gardener_proposals": 0, "commit_records": 1,
+		"task_body_revisions": 1, "trials": 1, "events": 1, "gardener_proposals": 0, "commit_records": 1,
 		"item_provenance": 0,
 	}, rep.Rows)
 	require.Zero(t, rep.Projects, "the archive's own projects row carried the slug")
@@ -675,6 +680,74 @@ func TestImport_MergeCarriesTheLedgerOnlyWithTheSessionsItInserts(t *testing.T) 
 	requireLedgerSums(t, dst)
 }
 
+// A task's earlier bodies ride only with the tasks the row pass inserts itself
+// (riders). A task this instance already had keeps its own body and its own
+// history, however the archive's differ; a dry run predicts as much, and the
+// same archive merged again adds nothing.
+func TestImport_MergeCarriesTaskRevisionsOnlyWithTheTasksItInserts(t *testing.T) {
+	ctx := context.Background()
+	at := time.Date(2026, 11, 21, 9, 0, 0, 0, time.UTC)
+	str := func(s string) *string { return &s }
+	const newTask = "01TASKALPHANEW"
+	src := seedIndexed(t, specA)
+	srcDB, err := store.Open(filepath.Join(src, DBName))
+	require.NoError(t, err)
+	require.NoError(t, store.CreateTask(ctx, srcDB, core.Task{ID: newTask, ProjectSlug: specA.project,
+		Title: "new on alpha", Body: "the first plan", Status: core.TaskOpen, CreatedAt: at, UpdatedAt: at}))
+	for _, p := range []store.TaskPatch{{Body: str("the second plan")}, {AppendBody: str("a finding")}} {
+		_, err := store.UpdateTask(ctx, srcDB, newTask, p, specA.sessionID, at)
+		require.NoError(t, err)
+	}
+	require.NoError(t, srcDB.Close())
+	data := exportOf(t, src)
+
+	// The destination has specA's first task already, with a body and a
+	// revision of its own.
+	seedDst := func(t *testing.T) string {
+		t.Helper()
+		dir := seedIndexed(t, specB)
+		db, err := store.Open(filepath.Join(dir, DBName))
+		require.NoError(t, err)
+		defer func() { require.NoError(t, db.Close()) }()
+		require.NoError(t, store.CreateTask(ctx, db, core.Task{ID: specA.taskA, ProjectSlug: specA.project,
+			Title: "extract first", Body: "this machine's plan", Status: core.TaskOpen, CreatedAt: at, UpdatedAt: at}))
+		_, err = store.UpdateTask(ctx, db, specA.taskA, store.TaskPatch{Body: str("this machine's rewrite")}, "", at)
+		require.NoError(t, err)
+		return dir
+	}
+	dry, err := Import(ctx, ImportOptions{DataDir: seedDst(t), Src: bytes.NewReader(data), DryRun: true})
+	require.NoError(t, err)
+	dst := seedDst(t)
+	live, err := Import(ctx, ImportOptions{DataDir: dst, Src: bytes.NewReader(data)})
+	require.NoError(t, err)
+	require.Equal(t, 2, live.Rows["tasks"], "specA's second task and the new one; its first was here")
+	require.Equal(t, 2, live.Rows["task_body_revisions"], "the new task's two revisions alone")
+	require.Equal(t, live.Rows, dry.Rows, "the dry run predicts the revisions too")
+
+	db, err := store.OpenExisting(filepath.Join(dst, DBName))
+	require.NoError(t, err)
+	kept, err := store.TaskBodyRevisions(ctx, db, specA.taskA)
+	require.NoError(t, err)
+	require.Len(t, kept, 1)
+	require.Equal(t, "this machine's plan", kept[0].Body, "the task the destination had keeps its own history")
+	task, err := store.TaskByID(ctx, db, specA.taskA)
+	require.NoError(t, err)
+	require.Equal(t, "this machine's rewrite", task.Body, "and its own body")
+	carried, err := store.TaskBodyRevisions(ctx, db, newTask)
+	require.NoError(t, err)
+	require.Len(t, carried, 2)
+	require.Equal(t, core.TaskBodyRevision{TaskID: newTask, Revision: 2, Body: "the second plan",
+		Change: core.TaskBodyAppended, ReplacedAt: at, ReplacedBy: specA.sessionID}, carried[0])
+	require.Equal(t, "the first plan", carried[1].Body)
+	require.NoError(t, db.Close())
+
+	again, err := Import(ctx, ImportOptions{DataDir: dst, Src: bytes.NewReader(data)})
+	require.NoError(t, err)
+	require.Zero(t, again.Rows["task_body_revisions"], "the same archive again adds no revision")
+	require.Equal(t, 4, countsOf(t, dst)["task_body_revisions"],
+		"specB's own, the destination's own of specA's first task, and the new task's two")
+}
+
 func TestImport_MergeDryRunPredictsTheRealRun(t *testing.T) {
 	ctx := context.Background()
 	src := seedIndexed(t, specA)
@@ -786,6 +859,8 @@ func TestImport_MergeAnArchiveFromBefore039(t *testing.T) {
 		`DROP TABLE repo_lock_waiters`,
 		// What 053 added (the usage ledger).
 		`DROP TABLE session_usage`,
+		// What 054 added (the tasks' earlier bodies).
+		`DROP TABLE task_body_revisions`,
 	} {
 		_, err := db.ExecContext(ctx, q)
 		require.NoError(t, err, q)
@@ -809,6 +884,8 @@ func TestImport_MergeAnArchiveFromBefore039(t *testing.T) {
 	require.Equal(t, 1, rep.Rows["sessions"])
 	require.Zero(t, rep.Rows["item_provenance"])
 	require.Zero(t, rep.Rows["session_usage"], "an archive from before the ledger carries none")
+	require.Zero(t, rep.Rows["task_body_revisions"], "nor one from before the task revisions any")
+	require.Equal(t, 2, rep.Rows["tasks"], "its tasks arrive all the same")
 
 	out, err := store.OpenExisting(filepath.Join(dst, DBName))
 	require.NoError(t, err)

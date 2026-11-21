@@ -54,9 +54,13 @@ func seedInstance(t *testing.T) string {
 		CreatedAt: now, UpdatedAt: now,
 	}))
 	require.NoError(t, store.CreateTask(ctx, db, core.Task{
-		ID: "01TASKEXPORTA", ProjectSlug: "seam", Title: "snapshot first",
+		ID: "01TASKEXPORTA", ProjectSlug: "seam", Title: "snapshot first", Body: "snapshot before the walk",
 		Status: core.TaskOpen, CreatedAt: now, UpdatedAt: now,
 	}))
+	// Its body replaced once: the earlier body is a revision (migration 054).
+	replaced := "VACUUM INTO, then the walk"
+	_, err = store.UpdateTask(ctx, db, "01TASKEXPORTA", store.TaskPatch{Body: &replaced}, "01SESSEXPORT", now)
+	require.NoError(t, err)
 	require.NoError(t, store.CreateTask(ctx, db, core.Task{
 		ID: "01TASKEXPORTB", ProjectSlug: "seam", Title: "walk second",
 		Status: core.TaskOpen, DependsOn: []string{"01TASKEXPORTA"},
@@ -236,6 +240,7 @@ func TestExport_LayoutManifestFirstPermissionsAndCounts(t *testing.T) {
 	require.Equal(t, 1, got.Counts.NoteFiles)
 	require.Equal(t, 2, got.Counts.Tables["tasks"])
 	require.Equal(t, 1, got.Counts.Tables["task_deps"])
+	require.Equal(t, 1, got.Counts.Tables["task_body_revisions"], "a task's earlier body travels in the snapshot")
 	require.Equal(t, 1, got.Counts.Tables["sessions"])
 	require.Equal(t, 1, got.Counts.Tables["trials"])
 	require.Equal(t, 1, got.Counts.Tables["events"])

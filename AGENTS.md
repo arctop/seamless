@@ -870,6 +870,24 @@ any of it.
   `removed_depends_on` nor `not_depends_on`. Every `tasks_update` transition
   records `from` (the status before the call), so readers tell an edit from a
   status move; events without `from` read as before.
+- **A task's body keeps its history** (migration 054,
+  `store/task_revisions.go`). `store.UpdateTaskDetailed` keeps the body a
+  patch replaces (`TaskPatch.Body`) or appends to (`TaskPatch.AppendBody`,
+  tasks_update `body_append`) as the task's newest revision, in the update's
+  own transaction, with when and the acting session; nothing else keeps one (a
+  status, title, gate, dependency, commit or project change, a receipt), nor
+  does replacing an empty body. An append is read and written inside that
+  transaction: never read a task's body in a surface and send it back as
+  `body` to add a line, which is the lost update. A task keeps
+  `store.TaskBodyRevisionsKept` (20); past it the oldest revision an append
+  made goes first (the body after it still holds its text), then the oldest
+  replaced one, never the newest. A revision is as visible as its task and no
+  more: the console's view hides it with its task (`viewTables`), MCP answers
+  it only in `tasks_list id=<id> body_revisions=true` after the task's own
+  lookup and fence, and a merge carries it only with the tasks the row pass
+  inserts itself (the archive's riders). A restricted account's append stamps
+  `updated_account`; the owner's append never clears it, and each revision
+  keeps the label its text had.
 - **The console reads through `store.OpenView`**: TEMP VIEWs that shadow every
   project-scoped table on a read-only handle. While a project is locked it
   reads through a `store.Views` pool instead (one handle per hidden set),

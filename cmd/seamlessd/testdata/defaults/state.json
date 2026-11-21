@@ -206,6 +206,7 @@
     "session_taints": 0,
     "sessions": 6,
     "settings": 2,
+    "task_body_revisions": 1,
     "task_deps": 2,
     "tasks": 7,
     "trials": 1

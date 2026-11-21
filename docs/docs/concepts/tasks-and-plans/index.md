@@ -69,6 +69,40 @@ answer:
 
 A task without a gate reads and behaves exactly as before.
 
+## A task's body keeps its history {#body-history}
+
+A task's body holds what the work is: its acceptance criteria, then the notes
+and findings agents add as they go. `tasks_update` changes it in one of two
+ways:
+
+- **`body` replaces the whole body.** Use it to rewrite the text.
+- **`body_append` adds a line at the end** and keeps everything already
+  there: a blank line, the UTC minute, ` -- ` and the text, the same line
+  `notes_append` adds to a note. Two agents that append at once both land,
+  because each line is added inside the update's own transaction.
+
+One call takes one or the other: `body` and `body_append` together are
+refused.
+
+The body a change replaces is kept as a revision: when, by which session, and
+whether the change was a replacement or an append. So a body wiped by mistake
+can be read back and restored:
+
+| Call | Answers |
+|---|---|
+| `tasks_list id=<id>` | The task, exactly as before |
+| `tasks_list id=<id> body_revisions=true` | The task, plus `body_revisions`: its earlier bodies, newest first |
+
+A status, title, gate, dependency or project change keeps no revision, and
+neither does replacing an empty body. A task keeps its newest 20 revisions.
+Past that, the oldest revision an append made goes first, since the body
+after it still holds its text, then the oldest replaced one; the newest is
+always kept.
+
+A revision is as visible as its task, and no more. It is read only where the
+task's own body is read, behind the same isolation fences and locks, and it
+moves with its task to another project.
+
 ## Claiming: the part that makes parallelism safe
 
 Two agents that both call `tasks_ready` see the same task. Both will try to take

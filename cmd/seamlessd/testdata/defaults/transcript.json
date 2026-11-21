@@ -2536,7 +2536,7 @@
     },
     "result": [
       {
-        "text": "tasks_update: unknown parameter \"commits\": valid parameters are: add_depends_on, body, content, gate_clear, gate_decision, gate_note, gate_ready_when, gate_what, gate_who, id, kind, project, remove_depends_on, session, session_id, status, text, title"
+        "text": "tasks_update: unknown parameter \"commits\": valid parameters are: add_depends_on, body, body_append, content, gate_clear, gate_decision, gate_note, gate_ready_when, gate_what, gate_who, id, kind, project, remove_depends_on, session, session_id, status, text, title"
       }
     ],
     "step": "098-refuse-commits-argument",

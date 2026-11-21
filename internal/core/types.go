@@ -677,6 +677,35 @@ func (t Task) ClaimLive(now time.Time) bool {
 // bounds how long the session of a holder that crashed outlives its last claim.
 const MaxClaimLease = 4 * time.Hour
 
+// TaskBodyChange is how a tasks_update changed a task's body: replaced it
+// whole, or appended a line to it.
+type TaskBodyChange string
+
+const (
+	TaskBodyReplaced TaskBodyChange = "replace"
+	TaskBodyAppended TaskBodyChange = "append"
+)
+
+// TaskBodyChanges lists every valid body change (migration 054's CHECK).
+var TaskBodyChanges = []TaskBodyChange{TaskBodyReplaced, TaskBodyAppended}
+
+// TaskBodyRevision is a body a task had before a change replaced it: the text
+// as it was, the change (a replacement, or an append, after which the body
+// starts with this text), when it landed, and the session whose call made it
+// ("" when the call had none). Revision numbers a task's revisions in the order
+// the changes landed, from 1, and is never reused. UpdatedAccount is the task's
+// updated_account when the change landed: the restricted account whose words
+// Body may carry, "" for the owner.
+type TaskBodyRevision struct {
+	TaskID         string         `json:"taskId"`
+	Revision       int            `json:"revision"`
+	Body           string         `json:"body"`
+	Change         TaskBodyChange `json:"change"`
+	ReplacedAt     time.Time      `json:"replacedAt"`
+	ReplacedBy     string         `json:"replacedBy,omitempty"`
+	UpdatedAccount string         `json:"updatedAccount,omitempty"`
+}
+
 // ---------------------------------------------------------------------------
 // Trial (research lab)
 // ---------------------------------------------------------------------------

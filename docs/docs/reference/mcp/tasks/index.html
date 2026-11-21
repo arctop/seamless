@@ -497,7 +497,7 @@ sealed sends none. Off, the argument does not exist. See
 </table>
 </div>
 <h2 id="tasks_update">tasks_update</h2>
-<p>Update a task: change status (open|in_progress|done|dropped), edit title/body, add or remove dependencies, or set, edit or clear its gate. Moving to done/dropped closes it and unblocks its dependents; removing its last unfinished blocker makes it ready. Removing an id that is not one of its blockers changes nothing and is named back in not_depends_on; the ids removed are in removed_depends_on. Setting any gate_* field (re)opens the gate as it then reads; gate_clear=true clears an open gate once the person has acted, recording when, by this session, and gate_note: a step keeps its status and becomes ready once nothing else holds it, and a task of kind gate closes as done, which unblocks every task that depends on it. A task another session holds via a live claim is locked to its holder: updating it fails with 'already claimed' until the lease lapses or the holder releases it.</p>
+<p>Update a task: change status (open|in_progress|done|dropped), edit title/body, add or remove dependencies, or set, edit or clear its gate. body replaces the WHOLE body; to add to it -- a finding, a note, progress -- pass body_append instead, which adds a UTC-timestamped line and keeps everything already there. The body a change replaces or appends to is kept, with when and by which session (the newest 20 per task): tasks_list id=&lt;id&gt; body_revisions=true reads them back. Moving to done/dropped closes it and unblocks its dependents; removing its last unfinished blocker makes it ready. Removing an id that is not one of its blockers changes nothing and is named back in not_depends_on; the ids removed are in removed_depends_on. Setting any gate_* field (re)opens the gate as it then reads; gate_clear=true clears an open gate once the person has acted, recording when, by this session, and gate_note: a step keeps its status and becomes ready once nothing else holds it, and a task of kind gate closes as done, which unblocks every task that depends on it. A task another session holds via a live claim is locked to its holder: updating it fails with 'already claimed' until the lease lapses or the holder releases it.</p>
 <div class="table-wrap">
 <table>
 <thead>
@@ -525,7 +525,13 @@ sealed sends none. Off, the argument does not exist. See
 <td><code>body</code></td>
 <td>string</td>
 <td>no</td>
-<td>new body (aliases: content, text)</td>
+<td>new body, replacing the WHOLE body (aliases: content, text); the body it replaces is kept as a revision. To add to the body instead, use body_append</td>
+</tr>
+<tr>
+<td><code>body_append</code></td>
+<td>string</td>
+<td>no</td>
+<td>text to add to the end of the body as a UTC-timestamped line, the line notes_append adds to a note; everything already in the body stays, and the body before it is kept as a revision. Not with body</td>
 </tr>
 <tr>
 <td><code>commits</code></td>
@@ -667,7 +673,7 @@ sealed sends none. Off, the argument does not exist. See
 </table>
 </div>
 <h2 id="tasks_list">tasks_list</h2>
-<p>List a project's tasks, optionally filtered by status, newest first. A task that waits on people carries its gate (who, what, and whether it is still open), and a task of kind gate says so. By default plan-step tasks are excluded; pass plan=&lt;slug&gt; to list that plan's steps instead. Pass id=&lt;task id&gt; to load a single task by its globally-unique id (a direct lookup that ignores project/status/plan and needs no session scope).</p>
+<p>List a project's tasks, optionally filtered by status, newest first. A task that waits on people carries its gate (who, what, and whether it is still open), and a task of kind gate says so. By default plan-step tasks are excluded; pass plan=&lt;slug&gt; to list that plan's steps instead. Pass id=&lt;task id&gt; to load a single task by its globally-unique id (a direct lookup that ignores project/status/plan and needs no session scope). With id, body_revisions=true also answers the task's earlier bodies under body_revisions, newest first: each body a tasks_update replaced or appended to, with when and by which session.</p>
 <div class="table-wrap">
 <table>
 <thead>
@@ -679,6 +685,12 @@ sealed sends none. Off, the argument does not exist. See
 </tr>
 </thead>
 <tbody>
+<tr>
+<td><code>body_revisions</code></td>
+<td>boolean</td>
+<td>no</td>
+<td>optional, with id: true adds body_revisions to the task, its earlier bodies newest first, each with revision, body, change (replace or append), replaced_at and replaced_by (the session's id); a task keeps its newest 20</td>
+</tr>
 <tr>
 <td><code>id</code></td>
 <td>string</td>

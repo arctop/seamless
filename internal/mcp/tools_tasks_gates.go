@@ -389,7 +389,7 @@ func (s *Server) readyAnswer(ctx context.Context, project string, q readyQueue, 
 // nothingToUpdate is tasks_update's refusal of a call that sets nothing,
 // naming every argument that would have.
 func nothingToUpdate(commits bool) error {
-	args := []string{"status", "title", "body", "project", "add_depends_on", removeDependsOnParam, taskKindParam}
+	args := []string{"status", "title", "body", bodyAppendParam, "project", "add_depends_on", removeDependsOnParam, taskKindParam}
 	args = append(args, gateTextParams...)
 	args = append(args, gateClearParam)
 	if commits {
