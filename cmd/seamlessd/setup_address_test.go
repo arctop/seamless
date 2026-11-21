@@ -162,7 +162,8 @@ func TestSetupAddress_TailnetName(t *testing.T) {
 		"  address      https://" + setupAddrTSName + ":8081\n",
 		"this computer's Tailscale name (MagicDNS)",
 		"from your tailnet (Let's Encrypt): renew it before then, and doctor warns 30 days ahead: tailscale cert --cert-file " +
-			filepath.Join(tls, setupAddrTSName+".crt") + " --key-file " + filepath.Join(tls, setupAddrTSName+".key") + " " + setupAddrTSName,
+			setupHomeArg(tildePath(filepath.Join(tls, setupAddrTSName+".crt"))) + " --key-file " +
+			setupHomeArg(tildePath(filepath.Join(tls, setupAddrTSName+".key"))) + " " + setupAddrTSName,
 		"  bind         " + setupAddrTailv4 + ":8081 (and [" + setupAddrTailv6 + "]:8081 beside it, on the same interface)\n",
 		"every address " + setupAddrTSName + " resolves to here (" + setupAddrTailv4 + ", " + setupAddrTailv6 + "), and no other interface",
 		"  passkeys     https://" + setupAddrTSName + ":8081\n",
@@ -583,9 +584,12 @@ func TestSetupAddress_AtTheTerminal(t *testing.T) {
 		require.Contains(t, said, "[2] LAN")
 		require.Contains(t, said, "Enter 1 or 2: ")
 		require.Contains(t, said, "Name (this computer's name on your LAN) [here.local]: ")
-		require.Contains(t, said, "mkcert -cert-file "+cert+" -key-file "+key+" here.local")
+		// Setup prints a path under the home as ~/... (tildePath), so the
+		// expectations go through the same helpers: a TMPDIR under $HOME
+		// (an agent's scratch) must pass as one outside it does.
+		require.Contains(t, said, "mkcert -cert-file "+setupHomeArg(tildePath(cert))+" -key-file "+setupHomeArg(tildePath(key))+" here.local")
 		require.Contains(t, said, `-subj "/CN=here.local"`)
-		require.Contains(t, said, "Certificate file ["+cert+"]: ")
+		require.Contains(t, said, "Certificate file ["+tildePath(cert)+"]: ")
 		require.Equal(t, []config.ServerAddress{{Addr: setupAddrLANv4 + ":8081", ServerURL: "https://here.local:8081",
 			CertFile: cert, KeyFile: key}}, w.wrote)
 	})
