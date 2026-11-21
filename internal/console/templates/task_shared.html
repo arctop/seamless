@@ -16,5 +16,23 @@
   </section>
 {{end}}{{end}}
 
+{{/* task-revisions renders a task's earlier bodies (its Revisions, newest
+     first; migration 054), folded: each body a tasks_update replaced or
+     appended to, the change, when, and the session whose call made it. It
+     renders nothing for a task whose body was never replaced. */}}
+{{define "task-revisions"}}{{with .}}
+  <section class="reader-links" data-revisions>
+    <details>
+      <summary>Earlier versions <span class="count">{{len .}}</span></summary>
+      <ol class="peek-refs">
+        {{range .}}<li data-revision="{{.Revision}}">
+          <div class="muted">{{if eq .Change "append"}}appended to{{else}}replaced{{end}} <span title="{{ts .ReplacedAt}}">{{ago .ReplacedAt}}</span>{{with .ReplacedBy}} by <a class="mono" href="/console/sessions/{{.}}">{{shortID .}}</a>{{end}}{{with .UpdatedAccount}} <span class="kind faint" data-updated-account="{{.}}" title="Text by a restricted local account (peer_auth.restricted)">text by account {{.}}</span>{{end}}</div>
+          <div class="prose">{{.Body}}</div>
+        </li>{{end}}
+      </ol>
+    </details>
+  </section>
+{{end}}{{end}}
+
 {{/* task-ref-gate follows a dependency that is a gate with what it waits on. */}}
 {{define "task-ref-gate"}}{{if and .Kind .Gate}}{{if .Gate.Open}} <span class="muted" data-gate-who="{{.Gate.Who}}">gate &middot; waits on {{.Gate.Who}}: {{.Gate.What}}</span>{{end}}{{end}}{{end}}

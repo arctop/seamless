@@ -59,6 +59,7 @@ func commands() []cmd {
 		taskReopenCmd,
 		taskBlockCmd,
 		taskUnblockCmd,
+		taskAppendCmd,
 		taskClaimCmd,
 		taskHeartbeatCmd,
 		taskReleaseCmd,

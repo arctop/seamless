@@ -273,13 +273,16 @@ and `--agent` only the tasks an agent can work now; neither combines with
 ### seam task list {#seam_task_list}
 
 ```bash
-seam task list [--id ID] [--project P] [--status S] [--plan S] [--json]
+seam task list [--id ID [--revisions]] [--project P] [--status S] [--plan S] [--json]
 ```
 
 Calls `tasks_list`. `--status` filters to `open`, `in_progress`, `done`, or
 `dropped`. `--id` loads a single task by its globally-unique id and ignores the
-project, status, and plan filters. `--plan` lists a plan's steps instead of the
-default non-plan tasks. Bare `seam task` is not an alias: it names the available
+project, status, and plan filters; with it, `--revisions` also prints the
+task's earlier bodies, newest first (`body_revisions`): each body a
+`tasks_update` replaced or appended to, with when and by which session.
+`--plan` lists a plan's steps instead of the default non-plan tasks.
+Bare `seam task` is not an alias: it names the available
 task subcommands and exits 2. Use `seam task list` when listing is what you mean.
 
 ### seam task add {#seam_task_add}
@@ -338,6 +341,18 @@ their first characters. The removal is recorded in the task's history under the
 acting session, and it is behind the same claim lock as any other update: a
 task another session holds refuses it until the lease lapses or the holder
 releases it.
+
+### seam task append {#seam_task_append}
+
+```bash
+seam task append [--session NAME] <id> <text>...
+```
+
+Calls `tasks_update` with `body_append`: the text (the words after the id,
+joined by spaces) is added to the end of the task's body as a UTC-timestamped
+line, the line `notes_append` adds to a note, and everything already in the
+body stays. The body before it is kept as a revision, which `seam task list
+--id <id> --revisions` prints.
 
 ### seam task claim {#seam_task_claim}
 

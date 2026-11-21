@@ -370,10 +370,28 @@ type taskDetail struct {
 	// task waits on outside Seamless, open or cleared, nil when nothing.
 	Kind string        `json:"kind,omitempty"`
 	Gate *taskGateView `json:"gate,omitempty"`
+	// Revisions are the task's earlier bodies, newest first (migration 054):
+	// each body a tasks_update replaced or appended to. Read through the
+	// request's handle (s.db), which hides them with their task; nil while
+	// the body was never replaced, so the page renders nothing for them.
+	Revisions []taskRevisionView `json:"revisions,omitempty"`
 	// Next is where this fragment's owner actions (star, release) return to,
 	// when the surface that fetched it asked for one. Empty leaves each action
 	// on its own default -- the task page or the tasks library.
 	Next string `json:"-"`
+}
+
+// taskRevisionView is one of a task's earlier bodies on the task page: the
+// body rendered like the task's own, the change that replaced it (replace or
+// append), when, and the session whose call made it.
+type taskRevisionView struct {
+	Revision       int           `json:"revision"`
+	Body           template.HTML `json:"-"`
+	BodyText       string        `json:"body"`
+	Change         string        `json:"change"`
+	ReplacedAt     time.Time     `json:"replacedAt"`
+	ReplacedBy     string        `json:"replacedBy,omitempty"`
+	UpdatedAccount string        `json:"updatedAccount,omitempty"`
 }
 
 // DependsOn counts every blocker the detail names: the readable ones and the
@@ -400,6 +418,15 @@ func (s *Service) taskDetailData(ctx context.Context, t core.Task) (taskDetail, 
 	// bodies, scoped to the task's project.
 	d.Body = s.renderBody(ctx, t.Body, t.ProjectSlug)
 	d.MayContain = s.itemStamps(ctx, core.ItemKindTask, t.ID, t.ProjectSlug)
+	revs, err := store.TaskBodyRevisions(ctx, s.db(ctx), t.ID)
+	if err != nil {
+		return taskDetail{}, err
+	}
+	for _, r := range revs {
+		d.Revisions = append(d.Revisions, taskRevisionView{Revision: r.Revision,
+			Body: s.renderBody(ctx, r.Body, t.ProjectSlug), BodyText: r.Body, Change: string(r.Change),
+			ReplacedAt: r.ReplacedAt, ReplacedBy: r.ReplacedBy, UpdatedAccount: r.UpdatedAccount})
+	}
 	for _, depID := range t.DependsOn {
 		dep, derr := store.TaskByID(ctx, s.db(ctx), depID)
 		if derr != nil {

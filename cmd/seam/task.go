@@ -6,6 +6,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -23,11 +24,12 @@ var taskListCmd = spec("task list", groupTasks, "list tasks, newest first",
 	bindTaskList, runTaskList)
 
 type taskListOpts struct {
-	id      *string
-	project *string
-	status  *string
-	plan    *string
-	asJSON  *bool
+	id        *string
+	project   *string
+	status    *string
+	plan      *string
+	revisions *bool
+	asJSON    *bool
 }
 
 func bindTaskList(fs *flag.FlagSet) *taskListOpts {
@@ -39,6 +41,8 @@ func bindTaskList(fs *flag.FlagSet) *taskListOpts {
 		// parse time instead of round-tripping to find out.
 		status: enumFlag(fs, "status", "", "filter by `STATUS`", enumOf(core.TaskStatuses)),
 		plan:   fs.String("plan", "", "list the step tasks of plan `SLUG` instead of the default (non-plan) tasks"),
+		revisions: fs.Bool("revisions", false,
+			"with --id: also print the task's earlier bodies, newest first (tasks_list body_revisions)"),
 		asJSON: jsonFlag(fs, jsonUsage),
 	}
 }
@@ -51,6 +55,12 @@ func runTaskList(ctx context.Context, e *env, o *taskListOpts, _ []string) error
 	defer func() { _ = cli.Close() }()
 	args := map[string]any{
 		"id": *o.id, "project": *o.project, "status": *o.status, "plan": *o.plan,
+	}
+	if *o.revisions {
+		if strings.TrimSpace(*o.id) == "" {
+			return fmt.Errorf("--revisions reads one task's earlier bodies: pass --id")
+		}
+		args["body_revisions"] = true
 	}
 	if *o.asJSON {
 		return printToolJSON(ctx, e, cli, "tasks_list", args)
@@ -77,7 +87,59 @@ func runTaskList(ctx context.Context, e *env, o *taskListOpts, _ []string) error
 			line += "  [" + mc + "]"
 		}
 		fmt.Fprintln(e.stdout, line)
+		printRevisions(e.stdout, m["body_revisions"])
 	}
+	return nil
+}
+
+// printRevisions prints a task's earlier bodies (tasks_list body_revisions),
+// newest first: a header line each, then the body indented.
+func printRevisions(w io.Writer, v any) {
+	revs, _ := v.([]any)
+	for _, r := range revs {
+		m, _ := r.(map[string]any)
+		how := "replaced"
+		if str(m["change"]) == "append" {
+			how = "appended to"
+		}
+		line := fmt.Sprintf("    revision %v, %s %s", m["revision"], how, str(m["replaced_at"]))
+		if by := str(m["replaced_by"]); by != "" {
+			line += " by " + by
+		}
+		if by := updatedBy(str(m["updated_account"])); by != "" {
+			line += "  [" + by + "]"
+		}
+		fmt.Fprintln(w, line)
+		for l := range strings.SplitSeq(strings.TrimRight(str(m["body"]), "\n"), "\n") {
+			fmt.Fprintln(w, "      "+l)
+		}
+	}
+}
+
+// --- task append ---
+
+var taskAppendCmd = spec("task append", groupTasks, "add a line to a task's body, keeping what is there",
+	atLeast(2, "id", "text"), bindTaskActor,
+	func(ctx context.Context, e *env, o *taskActorOpts, pos []string) error {
+		return runTaskAppend(ctx, e, o, pos[0], strings.Join(pos[1:], " "))
+	}).withLong(`Adds TEXT to the end of the task's body as a UTC-timestamped line
+(tasks_update body_append), the line notes_append adds to a note. Everything
+already in the body stays, and the body before it is kept as a revision
+(seam task list --id <id> --revisions reads them back).`)
+
+func runTaskAppend(ctx context.Context, e *env, o *taskActorOpts, id, text string) error {
+	if strings.TrimSpace(text) == "" {
+		return fmt.Errorf("seam task append: no text given")
+	}
+	cli, _, err := e.dial(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = cli.Close() }()
+	if _, err := callTool(ctx, cli, "tasks_update", map[string]any{"id": id, "body_append": text, "session": *o.session}); err != nil {
+		return err
+	}
+	fmt.Fprintf(e.stdout, "task %s: line added to the body\n", shortID(id))
 	return nil
 }
 
