@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sys/unix"
 )
 
 // The detached spawn is a session of its own, so the agent client killing
@@ -33,10 +34,10 @@ func TestSpawnDetached_StartsANewSession(t *testing.T) {
 		return err == nil && pid > 0
 	}, 10*time.Second, 10*time.Millisecond)
 	t.Cleanup(func() { _ = syscall.Kill(pid, syscall.SIGKILL) })
-	sid, err := syscall.Getsid(pid)
+	sid, err := unix.Getsid(pid) // syscall has no Getsid on linux
 	require.NoError(t, err)
 	require.Equal(t, pid, sid, "the child leads a session of its own")
-	own, err := syscall.Getsid(os.Getpid())
+	own, err := unix.Getsid(os.Getpid())
 	require.NoError(t, err)
 	require.NotEqual(t, own, sid)
 }

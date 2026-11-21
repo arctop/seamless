@@ -171,7 +171,7 @@ make install    # build + snapshot binaries/config to ~/.local/bin +
                 # file carries the installer's marker) unless FORCE=1
 make test       # unit tests
 make test-race  # unit tests with the race detector
-make check      # the full gate: build + vet + cross-check (darwin/windows
+make check      # the full gate: build + vet + cross-check (darwin/linux/windows
                 # vet) + fmt-check + docs-check + installer-check +
                 # site-check + lint + vulncheck + test-race
 make check-fast # the pre-commit subset (no build/vulncheck/test-race);

@@ -285,13 +285,16 @@ lint:
 vet:
 	$(GO) vet $(PKG)
 
-# Cross-OS vet. CI runs on ubuntu only, so a darwin- or windows-tagged file
-# (internal/agentproc/proc_{darwin,windows}.go, the service and update code
-# that branches per OS) would otherwise compile for the first time inside the
-# release workflow, after the tag is already pushed. vet type-checks test
-# files too, which a plain cross-build would not. CGO off matches the release
-# builds (.goreleaser.yaml) and keeps a missing cross C toolchain out of it.
-CROSS_TARGETS := darwin/arm64 windows/amd64
+# Cross-OS vet. CI's check runs on ubuntu only, so a darwin- or windows-tagged
+# file (internal/agentproc/proc_{darwin,windows}.go, the service and update
+# code that branches per OS) would otherwise compile for the first time inside
+# the release workflow, after the tag is already pushed. linux is here for the
+# other direction: the gate run on a Mac vets a !windows file only for darwin,
+# and a syscall darwin has but linux lacks (syscall.Getsid) then first fails
+# in CI. vet type-checks test files too, which a plain cross-build would not.
+# CGO off matches the release builds (.goreleaser.yaml) and keeps a missing
+# cross C toolchain out of it.
+CROSS_TARGETS := darwin/arm64 linux/amd64 windows/amd64
 
 cross-check:
 	@for t in $(CROSS_TARGETS); do \
