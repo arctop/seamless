@@ -215,35 +215,46 @@
   function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
   function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } 
 
-  var es = new EventSource('/console/events');
-  es.onopen = function () { connected = true; setOrb(true); setLive(true); };
-  es.onmessage = function (ev) {
-    
-    
-    
-    
-    try {
-      var d = JSON.parse(ev.data), k = d.kind;
+  
+  
+  
+  
+  
+  var es = null;
+  function connect() {
+    es = new EventSource('/console/events');
+    es.onopen = function () { connected = true; setOrb(true); setLive(true); };
+    es.onmessage = function (ev) {
       
       
       
-      document.dispatchEvent(new CustomEvent('seam:event', { detail: d }));
-      if ((k === 'tool.call' || k === 'hook.prompt') && !window.SEAM_LIVE_ALL_KINDS) return;
+      
+      try {
+        var d = JSON.parse(ev.data), k = d.kind;
+        
+        
+        
+        document.dispatchEvent(new CustomEvent('seam:event', { detail: d }));
+        if ((k === 'tool.call' || k === 'hook.prompt') && !window.SEAM_LIVE_ALL_KINDS) return;
+        
+        
+        if (k === 'memory.first_reuse' && d.summary) eventToast(d.summary);
+        
+        
+        
+        if (k === 'update.available' && d.summary) eventToast(d.summary);
+      } catch (e) {}
       
       
-      if (k === 'memory.first_reuse' && d.summary) eventToast(d.summary);
       
-      
-      
-      if (k === 'update.available' && d.summary) eventToast(d.summary);
-    } catch (e) {}
-    
-    
-    
-    if (window.SEAM_NO_LIVE_REFRESH) return;
-    n++; schedule();
-  };
-  es.onerror = function () { connected = false; setOrb(false); setLive(false); };
+      if (window.SEAM_NO_LIVE_REFRESH) return;
+      n++; schedule();
+    };
+    es.onerror = function () { connected = false; setOrb(false); setLive(false); };
+  }
+  connect();
+  window.addEventListener('pagehide', function () { if (es) { es.close(); es = null; connected = false; } });
+  window.addEventListener('pageshow', function (e) { if (e.persisted && !es) connect(); });
 
   
   
@@ -294,6 +305,22 @@
       if (r.getAttribute('data-href') === href) { r.classList.add('selected'); r.setAttribute('aria-current', 'true'); }
     });
   }
+  
+  
+  
+  
+  
+  function anchorOf(el) {
+    if (!el || !el.isConnected) return null;
+    var lp = el.closest('.list-pane');
+    return lp ? { el: el, lp: lp, top: el.getBoundingClientRect().top } : null;
+  }
+  function restore(k) {
+    if (!k || !k.el.isConnected || k.lp.scrollHeight <= k.lp.clientHeight) return;
+    var box = k.lp.getBoundingClientRect(), r = k.el.getBoundingClientRect();
+    var lo = Math.max(box.top, 0) + 8, hi = Math.min(box.bottom, window.innerHeight) - r.height - 8;
+    k.lp.scrollTop += r.top - Math.max(lo, Math.min(k.top, hi));
+  }
   function load(href) {
     return fetch(peekURL(href)).then(function (r) {
       if (!r.ok) throw new Error('http ' + r.status);
@@ -305,8 +332,10 @@
       if (window.IX) window.IX.enhance(b);
       var openLink = p.querySelector('.detail-open');
       if (openLink) openLink.setAttribute('href', href);
+      var keep = p.hidden ? anchorOf(lastTrigger) : null;
       p.hidden = false;
       s.classList.add('detail-open');
+      restore(keep);
       b.scrollTop = 0;
     }).catch(function () {
       if (window.SeamConsole) window.SeamConsole.flash('Could not update the detail view. The current data is unchanged.', 'error');
@@ -922,35 +951,46 @@
   function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
   function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } 
 
-  var es = new EventSource('/console/events');
-  es.onopen = function () { connected = true; setOrb(true); setLive(true); };
-  es.onmessage = function (ev) {
-    
-    
-    
-    
-    try {
-      var d = JSON.parse(ev.data), k = d.kind;
+  
+  
+  
+  
+  
+  var es = null;
+  function connect() {
+    es = new EventSource('/console/events');
+    es.onopen = function () { connected = true; setOrb(true); setLive(true); };
+    es.onmessage = function (ev) {
       
       
       
-      document.dispatchEvent(new CustomEvent('seam:event', { detail: d }));
-      if ((k === 'tool.call' || k === 'hook.prompt') && !window.SEAM_LIVE_ALL_KINDS) return;
+      
+      try {
+        var d = JSON.parse(ev.data), k = d.kind;
+        
+        
+        
+        document.dispatchEvent(new CustomEvent('seam:event', { detail: d }));
+        if ((k === 'tool.call' || k === 'hook.prompt') && !window.SEAM_LIVE_ALL_KINDS) return;
+        
+        
+        if (k === 'memory.first_reuse' && d.summary) eventToast(d.summary);
+        
+        
+        
+        if (k === 'update.available' && d.summary) eventToast(d.summary);
+      } catch (e) {}
       
       
-      if (k === 'memory.first_reuse' && d.summary) eventToast(d.summary);
       
-      
-      
-      if (k === 'update.available' && d.summary) eventToast(d.summary);
-    } catch (e) {}
-    
-    
-    
-    if (window.SEAM_NO_LIVE_REFRESH) return;
-    n++; schedule();
-  };
-  es.onerror = function () { connected = false; setOrb(false); setLive(false); };
+      if (window.SEAM_NO_LIVE_REFRESH) return;
+      n++; schedule();
+    };
+    es.onerror = function () { connected = false; setOrb(false); setLive(false); };
+  }
+  connect();
+  window.addEventListener('pagehide', function () { if (es) { es.close(); es = null; connected = false; } });
+  window.addEventListener('pageshow', function (e) { if (e.persisted && !es) connect(); });
 
   
   
@@ -1001,6 +1041,22 @@
       if (r.getAttribute('data-href') === href) { r.classList.add('selected'); r.setAttribute('aria-current', 'true'); }
     });
   }
+  
+  
+  
+  
+  
+  function anchorOf(el) {
+    if (!el || !el.isConnected) return null;
+    var lp = el.closest('.list-pane');
+    return lp ? { el: el, lp: lp, top: el.getBoundingClientRect().top } : null;
+  }
+  function restore(k) {
+    if (!k || !k.el.isConnected || k.lp.scrollHeight <= k.lp.clientHeight) return;
+    var box = k.lp.getBoundingClientRect(), r = k.el.getBoundingClientRect();
+    var lo = Math.max(box.top, 0) + 8, hi = Math.min(box.bottom, window.innerHeight) - r.height - 8;
+    k.lp.scrollTop += r.top - Math.max(lo, Math.min(k.top, hi));
+  }
   function load(href) {
     return fetch(peekURL(href)).then(function (r) {
       if (!r.ok) throw new Error('http ' + r.status);
@@ -1012,8 +1068,10 @@
       if (window.IX) window.IX.enhance(b);
       var openLink = p.querySelector('.detail-open');
       if (openLink) openLink.setAttribute('href', href);
+      var keep = p.hidden ? anchorOf(lastTrigger) : null;
       p.hidden = false;
       s.classList.add('detail-open');
+      restore(keep);
       b.scrollTop = 0;
     }).catch(function () {
       if (window.SeamConsole) window.SeamConsole.flash('Could not update the detail view. The current data is unchanged.', 'error');
@@ -2288,35 +2346,46 @@
   function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
   function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } 
 
-  var es = new EventSource('/console/events');
-  es.onopen = function () { connected = true; setOrb(true); setLive(true); };
-  es.onmessage = function (ev) {
-    
-    
-    
-    
-    try {
-      var d = JSON.parse(ev.data), k = d.kind;
+  
+  
+  
+  
+  
+  var es = null;
+  function connect() {
+    es = new EventSource('/console/events');
+    es.onopen = function () { connected = true; setOrb(true); setLive(true); };
+    es.onmessage = function (ev) {
       
       
       
-      document.dispatchEvent(new CustomEvent('seam:event', { detail: d }));
-      if ((k === 'tool.call' || k === 'hook.prompt') && !window.SEAM_LIVE_ALL_KINDS) return;
+      
+      try {
+        var d = JSON.parse(ev.data), k = d.kind;
+        
+        
+        
+        document.dispatchEvent(new CustomEvent('seam:event', { detail: d }));
+        if ((k === 'tool.call' || k === 'hook.prompt') && !window.SEAM_LIVE_ALL_KINDS) return;
+        
+        
+        if (k === 'memory.first_reuse' && d.summary) eventToast(d.summary);
+        
+        
+        
+        if (k === 'update.available' && d.summary) eventToast(d.summary);
+      } catch (e) {}
       
       
-      if (k === 'memory.first_reuse' && d.summary) eventToast(d.summary);
       
-      
-      
-      if (k === 'update.available' && d.summary) eventToast(d.summary);
-    } catch (e) {}
-    
-    
-    
-    if (window.SEAM_NO_LIVE_REFRESH) return;
-    n++; schedule();
-  };
-  es.onerror = function () { connected = false; setOrb(false); setLive(false); };
+      if (window.SEAM_NO_LIVE_REFRESH) return;
+      n++; schedule();
+    };
+    es.onerror = function () { connected = false; setOrb(false); setLive(false); };
+  }
+  connect();
+  window.addEventListener('pagehide', function () { if (es) { es.close(); es = null; connected = false; } });
+  window.addEventListener('pageshow', function (e) { if (e.persisted && !es) connect(); });
 
   
   
@@ -2367,6 +2436,22 @@
       if (r.getAttribute('data-href') === href) { r.classList.add('selected'); r.setAttribute('aria-current', 'true'); }
     });
   }
+  
+  
+  
+  
+  
+  function anchorOf(el) {
+    if (!el || !el.isConnected) return null;
+    var lp = el.closest('.list-pane');
+    return lp ? { el: el, lp: lp, top: el.getBoundingClientRect().top } : null;
+  }
+  function restore(k) {
+    if (!k || !k.el.isConnected || k.lp.scrollHeight <= k.lp.clientHeight) return;
+    var box = k.lp.getBoundingClientRect(), r = k.el.getBoundingClientRect();
+    var lo = Math.max(box.top, 0) + 8, hi = Math.min(box.bottom, window.innerHeight) - r.height - 8;
+    k.lp.scrollTop += r.top - Math.max(lo, Math.min(k.top, hi));
+  }
   function load(href) {
     return fetch(peekURL(href)).then(function (r) {
       if (!r.ok) throw new Error('http ' + r.status);
@@ -2378,8 +2463,10 @@
       if (window.IX) window.IX.enhance(b);
       var openLink = p.querySelector('.detail-open');
       if (openLink) openLink.setAttribute('href', href);
+      var keep = p.hidden ? anchorOf(lastTrigger) : null;
       p.hidden = false;
       s.classList.add('detail-open');
+      restore(keep);
       b.scrollTop = 0;
     }).catch(function () {
       if (window.SeamConsole) window.SeamConsole.flash('Could not update the detail view. The current data is unchanged.', 'error');
@@ -4347,35 +4434,46 @@
   function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
   function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } 
 
-  var es = new EventSource('/console/events');
-  es.onopen = function () { connected = true; setOrb(true); setLive(true); };
-  es.onmessage = function (ev) {
-    
-    
-    
-    
-    try {
-      var d = JSON.parse(ev.data), k = d.kind;
+  
+  
+  
+  
+  
+  var es = null;
+  function connect() {
+    es = new EventSource('/console/events');
+    es.onopen = function () { connected = true; setOrb(true); setLive(true); };
+    es.onmessage = function (ev) {
       
       
       
-      document.dispatchEvent(new CustomEvent('seam:event', { detail: d }));
-      if ((k === 'tool.call' || k === 'hook.prompt') && !window.SEAM_LIVE_ALL_KINDS) return;
+      
+      try {
+        var d = JSON.parse(ev.data), k = d.kind;
+        
+        
+        
+        document.dispatchEvent(new CustomEvent('seam:event', { detail: d }));
+        if ((k === 'tool.call' || k === 'hook.prompt') && !window.SEAM_LIVE_ALL_KINDS) return;
+        
+        
+        if (k === 'memory.first_reuse' && d.summary) eventToast(d.summary);
+        
+        
+        
+        if (k === 'update.available' && d.summary) eventToast(d.summary);
+      } catch (e) {}
       
       
-      if (k === 'memory.first_reuse' && d.summary) eventToast(d.summary);
       
-      
-      
-      if (k === 'update.available' && d.summary) eventToast(d.summary);
-    } catch (e) {}
-    
-    
-    
-    if (window.SEAM_NO_LIVE_REFRESH) return;
-    n++; schedule();
-  };
-  es.onerror = function () { connected = false; setOrb(false); setLive(false); };
+      if (window.SEAM_NO_LIVE_REFRESH) return;
+      n++; schedule();
+    };
+    es.onerror = function () { connected = false; setOrb(false); setLive(false); };
+  }
+  connect();
+  window.addEventListener('pagehide', function () { if (es) { es.close(); es = null; connected = false; } });
+  window.addEventListener('pageshow', function (e) { if (e.persisted && !es) connect(); });
 
   
   
@@ -4426,6 +4524,22 @@
       if (r.getAttribute('data-href') === href) { r.classList.add('selected'); r.setAttribute('aria-current', 'true'); }
     });
   }
+  
+  
+  
+  
+  
+  function anchorOf(el) {
+    if (!el || !el.isConnected) return null;
+    var lp = el.closest('.list-pane');
+    return lp ? { el: el, lp: lp, top: el.getBoundingClientRect().top } : null;
+  }
+  function restore(k) {
+    if (!k || !k.el.isConnected || k.lp.scrollHeight <= k.lp.clientHeight) return;
+    var box = k.lp.getBoundingClientRect(), r = k.el.getBoundingClientRect();
+    var lo = Math.max(box.top, 0) + 8, hi = Math.min(box.bottom, window.innerHeight) - r.height - 8;
+    k.lp.scrollTop += r.top - Math.max(lo, Math.min(k.top, hi));
+  }
   function load(href) {
     return fetch(peekURL(href)).then(function (r) {
       if (!r.ok) throw new Error('http ' + r.status);
@@ -4437,8 +4551,10 @@
       if (window.IX) window.IX.enhance(b);
       var openLink = p.querySelector('.detail-open');
       if (openLink) openLink.setAttribute('href', href);
+      var keep = p.hidden ? anchorOf(lastTrigger) : null;
       p.hidden = false;
       s.classList.add('detail-open');
+      restore(keep);
       b.scrollTop = 0;
     }).catch(function () {
       if (window.SeamConsole) window.SeamConsole.flash('Could not update the detail view. The current data is unchanged.', 'error');
@@ -5226,35 +5342,46 @@ window.SEAM_NO_LIVE_REFRESH = true;
   function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
   function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } 
 
-  var es = new EventSource('/console/events');
-  es.onopen = function () { connected = true; setOrb(true); setLive(true); };
-  es.onmessage = function (ev) {
-    
-    
-    
-    
-    try {
-      var d = JSON.parse(ev.data), k = d.kind;
+  
+  
+  
+  
+  
+  var es = null;
+  function connect() {
+    es = new EventSource('/console/events');
+    es.onopen = function () { connected = true; setOrb(true); setLive(true); };
+    es.onmessage = function (ev) {
       
       
       
-      document.dispatchEvent(new CustomEvent('seam:event', { detail: d }));
-      if ((k === 'tool.call' || k === 'hook.prompt') && !window.SEAM_LIVE_ALL_KINDS) return;
+      
+      try {
+        var d = JSON.parse(ev.data), k = d.kind;
+        
+        
+        
+        document.dispatchEvent(new CustomEvent('seam:event', { detail: d }));
+        if ((k === 'tool.call' || k === 'hook.prompt') && !window.SEAM_LIVE_ALL_KINDS) return;
+        
+        
+        if (k === 'memory.first_reuse' && d.summary) eventToast(d.summary);
+        
+        
+        
+        if (k === 'update.available' && d.summary) eventToast(d.summary);
+      } catch (e) {}
       
       
-      if (k === 'memory.first_reuse' && d.summary) eventToast(d.summary);
       
-      
-      
-      if (k === 'update.available' && d.summary) eventToast(d.summary);
-    } catch (e) {}
-    
-    
-    
-    if (window.SEAM_NO_LIVE_REFRESH) return;
-    n++; schedule();
-  };
-  es.onerror = function () { connected = false; setOrb(false); setLive(false); };
+      if (window.SEAM_NO_LIVE_REFRESH) return;
+      n++; schedule();
+    };
+    es.onerror = function () { connected = false; setOrb(false); setLive(false); };
+  }
+  connect();
+  window.addEventListener('pagehide', function () { if (es) { es.close(); es = null; connected = false; } });
+  window.addEventListener('pageshow', function (e) { if (e.persisted && !es) connect(); });
 
   
   
@@ -5305,6 +5432,22 @@ window.SEAM_NO_LIVE_REFRESH = true;
       if (r.getAttribute('data-href') === href) { r.classList.add('selected'); r.setAttribute('aria-current', 'true'); }
     });
   }
+  
+  
+  
+  
+  
+  function anchorOf(el) {
+    if (!el || !el.isConnected) return null;
+    var lp = el.closest('.list-pane');
+    return lp ? { el: el, lp: lp, top: el.getBoundingClientRect().top } : null;
+  }
+  function restore(k) {
+    if (!k || !k.el.isConnected || k.lp.scrollHeight <= k.lp.clientHeight) return;
+    var box = k.lp.getBoundingClientRect(), r = k.el.getBoundingClientRect();
+    var lo = Math.max(box.top, 0) + 8, hi = Math.min(box.bottom, window.innerHeight) - r.height - 8;
+    k.lp.scrollTop += r.top - Math.max(lo, Math.min(k.top, hi));
+  }
   function load(href) {
     return fetch(peekURL(href)).then(function (r) {
       if (!r.ok) throw new Error('http ' + r.status);
@@ -5316,8 +5459,10 @@ window.SEAM_NO_LIVE_REFRESH = true;
       if (window.IX) window.IX.enhance(b);
       var openLink = p.querySelector('.detail-open');
       if (openLink) openLink.setAttribute('href', href);
+      var keep = p.hidden ? anchorOf(lastTrigger) : null;
       p.hidden = false;
       s.classList.add('detail-open');
+      restore(keep);
       b.scrollTop = 0;
     }).catch(function () {
       if (window.SeamConsole) window.SeamConsole.flash('Could not update the detail view. The current data is unchanged.', 'error');

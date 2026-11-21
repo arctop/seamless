@@ -291,35 +291,46 @@
   function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
   function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } // coalesce write bursts
 
-  var es = new EventSource('/console/events');
-  es.onopen = function () { connected = true; setOrb(true); setLive(true); };
-  es.onmessage = function (ev) {
-    // Ignore transport-level rows (tool.call / hook.prompt): those live on the
-    // Interactions screen and would fire a refresh on every tool call. A page
-    // whose whole point is the transport pulse (Now) opts back in via
-    // window.SEAM_LIVE_ALL_KINDS; the debounce still coalesces the bursts.
-    try {
-      var d = JSON.parse(ev.data), k = d.kind;
-      // Every event, transport included, goes to the shell's ambient layer (the
-      // Seam, the sky's activity level) over this one stream -- never a second
-      // EventSource.
-      document.dispatchEvent(new CustomEvent('seam:event', { detail: d }));
-      if ((k === 'tool.call' || k === 'hook.prompt') && !window.SEAM_LIVE_ALL_KINDS) return;
-      // Momentum payoff moment: one quiet toast line, only while the console
-      // happens to be open. The event's summary already carries the copy.
-      if (k === 'memory.first_reuse' && d.summary) eventToast(d.summary);
-      // A newer release was seen ("Seamless v0.7.3 is available ..."): the
-      // summary is built server-side from the parsed version, never from the
-      // release's own text (eventSummary).
-      if (k === 'update.available' && d.summary) eventToast(d.summary);
-    } catch (e) {}
-    // Pages that own their liveness (live feeds, forms, JS-built islands) opt out
-    // via window.SEAM_NO_LIVE_REFRESH. Checked lazily so per-page scripts (which
-    // run after this one) have set the flag by the time the first event lands.
-    if (window.SEAM_NO_LIVE_REFRESH) return;
-    n++; schedule();
-  };
-  es.onerror = function () { connected = false; setOrb(false); setLive(false); };
+  // One stream per page, opened by connect. A page the browser keeps in its
+  // back/forward cache must not hold its stream: six held streams fill the
+  // browser's connections to the console, and the next page load then waits
+  // for one forever. So the stream closes when the page is hidden away, and
+  // opens again if the page comes back.
+  var es = null;
+  function connect() {
+    es = new EventSource('/console/events');
+    es.onopen = function () { connected = true; setOrb(true); setLive(true); };
+    es.onmessage = function (ev) {
+      // Ignore transport-level rows (tool.call / hook.prompt): those live on the
+      // Interactions screen and would fire a refresh on every tool call. A page
+      // whose whole point is the transport pulse (Now) opts back in via
+      // window.SEAM_LIVE_ALL_KINDS; the debounce still coalesces the bursts.
+      try {
+        var d = JSON.parse(ev.data), k = d.kind;
+        // Every event, transport included, goes to the shell's ambient layer (the
+        // Seam, the sky's activity level) over this one stream -- never a second
+        // EventSource.
+        document.dispatchEvent(new CustomEvent('seam:event', { detail: d }));
+        if ((k === 'tool.call' || k === 'hook.prompt') && !window.SEAM_LIVE_ALL_KINDS) return;
+        // Momentum payoff moment: one quiet toast line, only while the console
+        // happens to be open. The event's summary already carries the copy.
+        if (k === 'memory.first_reuse' && d.summary) eventToast(d.summary);
+        // A newer release was seen ("Seamless v0.7.3 is available ..."): the
+        // summary is built server-side from the parsed version, never from the
+        // release's own text (eventSummary).
+        if (k === 'update.available' && d.summary) eventToast(d.summary);
+      } catch (e) {}
+      // Pages that own their liveness (live feeds, forms, JS-built islands) opt out
+      // via window.SEAM_NO_LIVE_REFRESH. Checked lazily so per-page scripts (which
+      // run after this one) have set the flag by the time the first event lands.
+      if (window.SEAM_NO_LIVE_REFRESH) return;
+      n++; schedule();
+    };
+    es.onerror = function () { connected = false; setOrb(false); setLive(false); };
+  }
+  connect();
+  window.addEventListener('pagehide', function () { if (es) { es.close(); es = null; connected = false; } });
+  window.addEventListener('pageshow', function (e) { if (e.persisted && !es) connect(); });
 
   // Flush a deferred refresh once the moment turns safe again (tab refocus, pane
   // or palette close, selection cleared). Cheap poll, decoupled from those events.
@@ -378,6 +389,22 @@
       if (r.getAttribute('data-href') === href) { r.classList.add('selected'); r.setAttribute('aria-current', 'true'); }
     });
   }
+  // Opening the pane caps the list into a box of its own, which starts
+  // scrolled to its top: the item just clicked, far down a long list or a
+  // day's entry, would jump out of sight. anchorOf notes where it sits on
+  // screen before the pane opens, and restore scrolls the box to put it back
+  // there (or as near as the box allows).
+  function anchorOf(el) {
+    if (!el || !el.isConnected) return null;
+    var lp = el.closest('.list-pane');
+    return lp ? { el: el, lp: lp, top: el.getBoundingClientRect().top } : null;
+  }
+  function restore(k) {
+    if (!k || !k.el.isConnected || k.lp.scrollHeight <= k.lp.clientHeight) return;
+    var box = k.lp.getBoundingClientRect(), r = k.el.getBoundingClientRect();
+    var lo = Math.max(box.top, 0) + 8, hi = Math.min(box.bottom, window.innerHeight) - r.height - 8;
+    k.lp.scrollTop += r.top - Math.max(lo, Math.min(k.top, hi));
+  }
   function load(href) {
     return fetch(peekURL(href)).then(function (r) {
       if (!r.ok) throw new Error('http ' + r.status);
@@ -389,8 +416,10 @@
       if (window.IX) window.IX.enhance(b);
       var openLink = p.querySelector('.detail-open');
       if (openLink) openLink.setAttribute('href', href);
+      var keep = p.hidden ? anchorOf(lastTrigger) : null;
       p.hidden = false;
       s.classList.add('detail-open');
+      restore(keep);
       b.scrollTop = 0;
     }).catch(function () {
       if (window.SeamConsole) window.SeamConsole.flash('Could not update the detail view. The current data is unchanged.', 'error');

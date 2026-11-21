@@ -425,8 +425,11 @@ window.SEAM_NO_LIVE_REFRESH = true; // this screen is the live feed -- it owns i
 
   // Start with the live stream only. The page-load timestamp anchors gap-fill,
   // so reconnect recovery never pulls in events from before the user arrived.
-  var es;
-  if (window.EventSource) {
+  // As the layout's stream does, this one closes when the page goes into the
+  // back/forward cache (a held stream keeps one of the browser's few
+  // connections to the console) and opens again, gap-filled, if it comes back.
+  var es = null;
+  function connect() {
     es = new EventSource('/console/events?feed=interactions');
     es.onopen = function () {
       if (liveEl) liveEl.classList.remove('off');
@@ -437,6 +440,11 @@ window.SEAM_NO_LIVE_REFRESH = true; // this screen is the live feed -- it owns i
       handleLive(d);
     };
     es.onerror = function () { if (liveEl) liveEl.classList.add('off'); };
+  }
+  if (window.EventSource) {
+    connect();
+    window.addEventListener('pagehide', function () { if (es) { es.close(); es = null; } });
+    window.addEventListener('pageshow', function (e) { if (e.persisted && !es) connect(); });
   } else if (liveEl) {
     liveEl.classList.add('off');
   }
