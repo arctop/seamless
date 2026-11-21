@@ -15,8 +15,10 @@ import (
 // imports and the console serves with a lifetime would reach the new worker
 // an upgrade installs as the old daemon's copy for that long: the worker
 // would sign with the old browserkey.js. Every script sw.js imports is served
-// no-cache, as the worker itself is; the console's other static files keep
-// their five minutes.
+// no-cache, as the worker itself is. That holds because the worker imports
+// them by a URL with no version: a page links every static file by its
+// version (static.go), and that link is kept for good, while an unversioned
+// request for any static file is revalidated on every use.
 func TestSKStatic_WorkerImportsAreRevalidated(t *testing.T) {
 	_, mux := newConsole(t)
 	header := func(path string) string {
@@ -42,13 +44,15 @@ func TestSKStatic_WorkerImportsAreRevalidated(t *testing.T) {
 	}
 	statics := 0
 	for _, path := range consoleGETRoutes(t) {
-		if !strings.HasPrefix(path, "/console/static/") || imports[path] {
+		if !strings.HasPrefix(path, "/console/static/") {
 			continue
 		}
 		statics++
-		require.Equal(t, "public, max-age=300", header(path), path)
+		require.Equal(t, "no-cache", header(path), "%s: an unversioned request is revalidated", path)
+		require.Equal(t, "public, max-age=31536000, immutable", header(staticLink(t, strings.TrimPrefix(path, "/console/static/"))),
+			"%s: a page's versioned link is kept for good", path)
 	}
-	require.Greater(t, statics, 10, "the other static files were found")
+	require.Greater(t, statics, 10, "the static files were found")
 }
 
 // After an upgrade the worker still running is the old one. The page asks the

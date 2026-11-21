@@ -48,6 +48,26 @@
     document.querySelectorAll('.main [data-live-v]').forEach(function (el) { el.removeAttribute('data-live-v'); });
   }
 
+  /* The build. The daemon names its build -- one digest over its static
+     files (static.go) -- in each page's head (meta seamless-build) and on
+     each page and patch it draws (the X-Seam-Build header). An answer from
+     another build is applied as usual, but this document keeps the stylesheet
+     and scripts it loaded first, which may not match the markup the new build
+     draws. So the page reveals its build notice, once, and leaves the reload
+     to the owner: its Reload is a plain link (layout.html). Nothing here
+     reloads, navigates, or swaps a script. */
+  var BUILD_HEADER = 'X-Seam-Build';
+  function buildOf(doc) {
+    var meta = doc.querySelector('meta[name="seamless-build"]');
+    return meta ? meta.getAttribute('content') : '';
+  }
+  var pageBuild = buildOf(document);
+  function noticeBuild(answerBuild) {
+    if (!pageBuild || !answerBuild || answerBuild === pageBuild) return;
+    var card = document.querySelector('#build-notice .build-notice-card');
+    if (card && card.hidden) card.hidden = false;
+  }
+
   function imported(node) { return document.importNode(node, true); }
   function inserted(node) {
     // An answer drawn against a held view only ever refers to nodes the page
@@ -233,12 +253,17 @@
     }
   }
 
-  function patchPage(doc, source) {
+  // patchPage morphs a fetched console document into this one. build is the
+  // answer's X-Seam-Build header when the caller read one (load); a caller
+  // that hands over only the document (the live refresh in layout.html, a
+  // page script's own redraw) is compared by the patch's own head.
+  function patchPage(doc, source, build) {
     var freshMain = doc.querySelector('.main');
     var currentMain = document.querySelector('.main');
     var freshNav = doc.querySelector('nav.nav');
     var currentNav = document.querySelector('nav.nav');
     if (!freshMain || !currentMain || !freshNav || !currentNav) return false;
+    noticeBuild(build || buildOf(doc));
 
     try {
       morphNode(currentMain, freshMain);
@@ -365,10 +390,11 @@
         return null;
       }
       if (!response.ok) throw new Error('http ' + response.status);
+      var build = response.headers.get(BUILD_HEADER);
       return response.text().then(function (html) {
         if (seq !== requestSeq) return false;
         var doc = new DOMParser().parseFromString(html, 'text/html');
-        if (!doc.querySelector('.sidebar') || !patchPage(doc, options.source || 'query')) {
+        if (!doc.querySelector('.sidebar') || !patchPage(doc, options.source || 'query', build)) {
           throw new Error('invalid console document');
         }
         var nextURL = canonicalURL(doc, finalURL.href);

@@ -324,6 +324,10 @@ var funcs = template.FuncMap{
 	"about":         pageAbout,
 	"sameHost":      sameHost,
 	"sortLabel":     sortLabel,
+	// static is a static file's link, its version included, and build this
+	// build's id (static.go).
+	"static": staticFiles.url,
+	"build":  buildName,
 	// joinAnd lists names as a sentence does ("a, b and c"): the access
 	// pages' carry.
 	"joinAnd": approval.JoinAnd,
@@ -686,6 +690,7 @@ func (s *Service) render(w http.ResponseWriter, r *http.Request, page string, pd
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set(buildHeader, consoleBuild)
 	if layout == "patch" {
 		// A patch is not a page. It must never be stored: a back or forward
 		// navigation may reuse a stale cache entry for the same URL, and would

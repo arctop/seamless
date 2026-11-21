@@ -3,9 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="seamless-build" content="{{build}}">
 <title>{{.Title}} &middot; Seamless</title>
-<link rel="icon" type="image/svg+xml" href="/console/static/favicon.svg">
-<link rel="stylesheet" href="/console/static/console.css">
+<link rel="icon" type="image/svg+xml" href="{{static "favicon.svg"}}">
+<link rel="stylesheet" href="{{static "console.css"}}">
 <script>
 /* Apply a chosen theme and the sidebar state before first paint, so neither
    flashes. Only an explicit Light or Dark sets data-theme: with no choice
@@ -144,6 +145,18 @@
 <div class="nav-progress" aria-hidden="true"></div>
 <button id="live-pill" type="button" hidden>new activity &middot; refresh</button>
 <div id="live-toast" role="status" aria-live="polite" hidden></div>
+{{/* Revealed by navigation.js, once, when a page or patch it fetched was
+     drawn by another build: this tab still runs the stylesheet and scripts
+     it loaded first. Only the owner's click on Reload loads the page again,
+     a plain link to it: no data refresh ever reloads the document
+     (console-data-updates-never-reload-document). The live region is
+     always present, so revealing its card is announced. */}}
+<div class="build-notice" id="build-notice" role="status" aria-live="polite">
+  <div class="build-notice-card" hidden>
+    <p class="build-notice-copy">Seamless was updated. Reload this page to use the new version.</p>
+    <a class="btn small primary" id="build-reload" href="" data-no-prefetch>Reload</a>
+  </div>
+</div>
 <div id="cmdk" class="cmdk-overlay" hidden>
   <div class="cmdk" role="dialog" aria-modal="true" aria-label="Search or jump to">
     <div class="cmdk-input-row">
@@ -195,12 +208,12 @@
     </div>
   </div>
 </div>
-<script src="/console/static/interactions.js"></script>
-<script src="/console/static/search.js"></script>
-<script src="/console/static/library.js"></script>
-<script src="/console/static/charts.js"></script>
-<script src="/console/static/navigation.js"></script>
-<script src="/console/static/shell.js"></script>
+<script src="{{static "interactions.js"}}"></script>
+<script src="{{static "search.js"}}"></script>
+<script src="{{static "library.js"}}"></script>
+<script src="{{static "charts.js"}}"></script>
+<script src="{{static "navigation.js"}}"></script>
+<script src="{{static "shell.js"}}"></script>
 <script>
 (function () {
   // Static "live" pills (Overview, Projects topbar). #ix-live is excluded --
@@ -594,7 +607,7 @@
   });
 })();
 </script>
-{{if .BrowserKey}}<script src="/console/static/browserkey.js"></script>
+{{if .BrowserKey}}<script src="{{static "browserkey.js"}}"></script>
 {{end}}{{block "scripts" .}}{{end}}
 </body>
 </html>
@@ -610,6 +623,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="seamless-build" content="{{build}}">
 <title>{{.Title}} &middot; Seamless</title>
 </head>
 <body>

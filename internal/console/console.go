@@ -287,21 +287,21 @@ func (s *Service) Register(mux *http.ServeMux) {
 	// only ever add the feature check on top.
 	gated := func(key features.Key, h http.HandlerFunc) http.HandlerFunc { return s.gate(key, h) }
 
-	handle("GET /console/static/console.css", s.serveCSS)
-	handle("GET /console/static/interactions.js", s.serveJS)
-	handle("GET /console/static/search.js", s.serveSearchJS)
-	handle("GET /console/static/library.js", s.serveLibraryJS)
-	handle("GET /console/static/charts.js", s.serveChartsJS)
-	handle("GET /console/static/navigation.js", s.serveNavigationJS)
-	handle("GET /console/static/shell.js", s.serveShellJS)
-	handle("GET /console/static/sky.js", s.serveSkyJS)
-	handle("GET /console/static/orrery.js", s.serveOrreryJS)
-	handle("GET /console/static/privacy.js", s.servePrivacyJS)
-	handle("GET /console/static/favicon.svg", s.serveFavicon)
-	handle("GET /console/static/browserkey.js", s.serveBrowserKeyJS)
-	handle("GET /console/static/passkey.js", s.servePasskeyJS)
-	handle("GET /console/static/backups.js", s.serveBackupsJS)
-	handle("GET /console/static/diary.js", s.serveDiaryJS)
+	handle("GET /console/static/console.css", staticFiles.serve)
+	handle("GET /console/static/interactions.js", staticFiles.serve)
+	handle("GET /console/static/search.js", staticFiles.serve)
+	handle("GET /console/static/library.js", staticFiles.serve)
+	handle("GET /console/static/charts.js", staticFiles.serve)
+	handle("GET /console/static/navigation.js", staticFiles.serve)
+	handle("GET /console/static/shell.js", staticFiles.serve)
+	handle("GET /console/static/sky.js", staticFiles.serve)
+	handle("GET /console/static/orrery.js", staticFiles.serve)
+	handle("GET /console/static/privacy.js", staticFiles.serve)
+	handle("GET /console/static/favicon.svg", staticFiles.serve)
+	handle("GET /console/static/browserkey.js", staticFiles.serve)
+	handle("GET /console/static/passkey.js", staticFiles.serve)
+	handle("GET /console/static/backups.js", staticFiles.serve)
+	handle("GET /console/static/diary.js", staticFiles.serve)
 	handle("GET /console/sw.js", s.serveServiceWorker)
 	handle("GET /console/login", s.loginForm)
 	handle("POST /console/login", s.parseForm(formBodySmall, s.loginSubmit))
@@ -758,53 +758,6 @@ func (s *Service) renderSignIn(w http.ResponseWriter, r *http.Request, status in
 	_, _ = buf.WriteTo(w)
 }
 
-func (s *Service) serveCSS(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/css; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=300")
-	_, _ = w.Write(consoleCSS)
-}
-
-// serveJS serves the shared Interactions client module (value rendering + the
-// volume histogram), used by both the live feed and the project-detail tab.
-func (s *Service) serveJS(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=300")
-	_, _ = w.Write(interactionsJS)
-}
-
-// serveSearchJS serves the command-palette client, loaded on every page.
-func (s *Service) serveSearchJS(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=300")
-	_, _ = w.Write(searchJS)
-}
-
-// serveLibraryJS serves the library-style client (rail selection + in-place
-// reader swap on the library screens and Gardener), loaded on every page and
-// inert without a #lib-reader.
-func (s *Service) serveLibraryJS(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=300")
-	_, _ = w.Write(libraryJS)
-}
-
-// serveChartsJS serves the chart hover readout (see charts.go + static/charts.js),
-// loaded on every page: the charts are server-rendered into several of them.
-func (s *Service) serveChartsJS(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=300")
-	_, _ = w.Write(chartsJS)
-}
-
-// serveNavigationJS serves the shared partial-navigation client. Query controls
-// and owner mutations fetch their next server-rendered state and morph only
-// changed view nodes; the SSE refresher uses the same morph path.
-func (s *Service) serveNavigationJS(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=300")
-	_, _ = w.Write(navigationJS)
-}
-
 // sinceMaxAge bounds the check-in digest: past it, "since you were last here"
 // is no longer a useful frame and the client does not ask.
 const sinceMaxAge = 90 * 24 * time.Hour
@@ -844,88 +797,6 @@ func (s *Service) sinceDigest(w http.ResponseWriter, r *http.Request) {
 // stale URL never drops the owner on Go's bare "404 page not found".
 func (s *Service) unknownPage(w http.ResponseWriter, r *http.Request) {
 	s.notFound(w, r, "Nothing lives at "+r.URL.Path+". The link may be mistyped, or what it pointed at has moved.")
-}
-
-// serveShellJS serves the console chrome client: the collapsible sidebar, the
-// phone drawer, g-chord shortcuts and the ? sheet, flash-to-toast, and the
-// palette's recents. Loaded on every page; each piece is inert without its markup.
-func (s *Service) serveShellJS(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=300")
-	_, _ = w.Write(shellJS)
-}
-
-// serveSkyJS serves the knowledge sky's page script, loaded by the Overview
-// only: search, filters, and the live layer over the server-drawn chart.
-func (s *Service) serveSkyJS(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=300")
-	_, _ = w.Write(skyJS)
-}
-
-func (s *Service) serveOrreryJS(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=300")
-	_, _ = w.Write(orreryJS)
-}
-
-func (s *Service) servePrivacyJS(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=300")
-	_, _ = w.Write(privacyJS)
-}
-
-func (s *Service) serveFavicon(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "image/svg+xml")
-	w.Header().Set("Cache-Control", "public, max-age=300")
-	_, _ = w.Write(faviconSVG)
-}
-
-// serveBrowserKeyJS serves the browser key's script (browserproof), which the
-// page loads while a project is locked or a sign-in needs it, and the service
-// worker imports. It is revalidated on every use, as the worker is: a
-// worker's imports go through the browser's HTTP cache (the registration's
-// default updateViaCache, "imports"), so a copy kept for minutes would let the
-// new worker an upgrade installs run the old daemon's script.
-func (s *Service) serveBrowserKeyJS(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	_, _ = w.Write(browserKeyJS)
-}
-
-// servePasskeyJS serves the WebAuthn helpers the passkey ceremonies share
-// (window.SeamPasskey): the lock page's and the backups section's.
-func (s *Service) servePasskeyJS(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=300")
-	_, _ = w.Write(passkeyJS)
-}
-
-// serveBackupsJS serves Settings > Backups' script: the folder field's live
-// check and chips, the restore's passkey ceremony, and following a restore
-// through the restart. Loaded by the Settings page and inert elsewhere.
-func (s *Service) serveBackupsJS(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=300")
-	_, _ = w.Write(backupsJS)
-}
-
-// serveDiaryJS serves the Diary's page script: walking the days from the
-// keyboard and today's throttled live refresh. Only the Diary loads it.
-func (s *Service) serveDiaryJS(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	w.Header().Set("Cache-Control", "public, max-age=300")
-	_, _ = w.Write(diaryJS)
-}
-
-// serveServiceWorker serves the console's service worker. It sits at
-// /console/sw.js so its scope is /console/, and is revalidated on every
-// update check, so a fixed worker reaches browsers that already run one.
-// Every script it imports is served no-cache too (serveBrowserKeyJS).
-func (s *Service) serveServiceWorker(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-cache")
-	_, _ = w.Write(swJS)
 }
 
 // ---------------------------------------------------------------------------

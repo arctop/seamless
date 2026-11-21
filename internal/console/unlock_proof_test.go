@@ -29,7 +29,7 @@ func TestLockedConsole_CookieWithoutProofOpensNothing(t *testing.T) {
 
 	_, body := lc.get(t, "/console/memories/"+lc.memID, cookie)
 	require.Contains(t, body, lockedSecret, "the browser that holds the key reads the unlocked project")
-	require.Contains(t, body, `src="/console/static/browserkey.js"`, "a locked console's page loads the browser key")
+	require.Contains(t, body, `src="`+staticLink(t, "browserkey.js")+`"`, "a locked console's page loads the browser key")
 	require.NotContains(t, body, "data-browser-proof", "a proven page is not marked")
 
 	// The same cookie with no proof: everything stays locked.

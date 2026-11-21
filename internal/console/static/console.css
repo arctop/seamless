@@ -7843,3 +7843,44 @@ a.dy-commit:hover code { color: var(--brand); }
 @media (prefers-reduced-motion: reduce) {
   .dy-day a, .dy-short > summary .ico { transition: none; }
 }
+
+/* The build notice (layout.html, navigation.js): revealed once, when a page
+   or patch the tab fetched was drawn by another build, in the corner the live
+   pill and the toast use. It moves nothing the owner is reading: the pill and
+   the toast rise above it, and the end of the view gains room so its last
+   lines can scroll clear of the card. Solid surface and ink tokens, so both
+   themes hold. */
+.build-notice {
+  position: fixed;
+  right: 20px;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  z-index: 72; /* above #live-toast (71) and #live-pill (70) */
+  max-width: min(26rem, calc(100vw - 40px));
+  pointer-events: none; /* the empty live region never takes a click */
+}
+.build-notice-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 10px 10px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-solid);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  box-shadow: var(--shadow-lg);
+  pointer-events: auto;
+}
+.build-notice-card[hidden] { display: none; }
+.build-notice-copy { margin: 0; flex: 1 1 auto; min-width: 0; }
+.build-notice-card .btn { flex: none; }
+body:has(.build-notice-card:not([hidden])) #live-pill,
+body:has(.build-notice-card:not([hidden])) #live-toast { bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
+body:has(.build-notice-card:not([hidden])) .main { padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px)); }
+@media (max-width: 720px) {
+  .build-notice { left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); max-width: none; }
+  body:has(.build-notice-card:not([hidden])) #live-pill,
+  body:has(.build-notice-card:not([hidden])) #live-toast { bottom: calc(104px + env(safe-area-inset-bottom, 0px)); }
+  body:has(.build-notice-card:not([hidden])) .main { padding-bottom: calc(124px + env(safe-area-inset-bottom, 0px)); }
+}

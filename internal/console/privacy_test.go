@@ -50,7 +50,7 @@ func TestPrivacy_FourFencesAlwaysShow(t *testing.T) {
 		require.Contains(t, body, `data-fence-art="`+key+`"`, "the %s card renders, empty or not", key)
 	}
 	require.Contains(t, body, "Needs Seamless in its own account")
-	require.Contains(t, body, `<script src="/console/static/privacy.js"></script>`)
+	require.Contains(t, body, `<script src="`+staticLink(t, "privacy.js")+`"></script>`)
 }
 
 func TestPrivacy_PlacesEachProjectInItsFence(t *testing.T) {

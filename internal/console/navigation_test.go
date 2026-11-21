@@ -24,7 +24,7 @@ func TestLayout_LoadsSharedNavigationClient(t *testing.T) {
 	_, mux := newConsole(t)
 	page := getPeek(t, mux, "/console/")
 	require.Equal(t, http.StatusOK, page.Code)
-	require.Contains(t, page.Body.String(), `<script src="/console/static/navigation.js"></script>`)
+	require.Contains(t, page.Body.String(), `<script src="`+staticLink(t, "navigation.js")+`"></script>`)
 }
 
 // The sidebar is the one part of the morphed document whose SHAPE changes:

@@ -92,7 +92,7 @@ func TestSystem_PageOwnsItsLiveness(t *testing.T) {
 	body := rec.Body.String()
 	require.Contains(t, body, `id="sys-stage" data-live-skip`, "the morph never touches the canvas")
 	require.Contains(t, body, "window.SEAM_NO_LIVE_REFRESH = true", "the page refreshes its own numbers")
-	require.Contains(t, body, `<script src="/console/static/orrery.js"></script>`)
+	require.Contains(t, body, `<script src="`+staticLink(t, "orrery.js")+`"></script>`)
 	require.Contains(t, body, `<script type="application/json" id="sys-data">`)
 	require.Contains(t, body, `data-pick="database"`, "every part has a button, with or without WebGL")
 

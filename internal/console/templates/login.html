@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sign in &middot; Seamless</title>
-<link rel="icon" type="image/svg+xml" href="/console/static/favicon.svg">
-<link rel="stylesheet" href="/console/static/console.css">
+<link rel="icon" type="image/svg+xml" href="{{static "favicon.svg"}}">
+<link rel="stylesheet" href="{{static "console.css"}}">
 <script>
 /* The layout's rule: only an explicit Light or Dark sets data-theme; with no
    choice the stylesheet follows the OS. */
@@ -160,8 +160,8 @@
   });
 })();
 </script>
-{{if .SignIn}}<script src="/console/static/browserkey.js"></script>
-<script src="/console/static/passkey.js"></script>
+{{if .SignIn}}<script src="{{static "browserkey.js"}}"></script>
+<script src="{{static "passkey.js"}}"></script>
 <script>
 /* Passkey sign-in (internal/console/signin.go). The sign-in is bound to this
    browser's key, which the service worker proves on every request

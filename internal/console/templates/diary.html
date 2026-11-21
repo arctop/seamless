@@ -193,5 +193,5 @@
   <div class="dy-sess-meta">{{.Pill}}<span class="dy-sess-fig">{{with .Minutes}}{{.}}{{else}}no agent time recorded{{end}}{{if .Unreported}} &middot; <span class="dy-unrep" title="No token record: a live session reports as its prompts are answered, or when it ends">no token record</span>{{else if .Approximate}} &middot; &asymp;{{.Tokens}} tok <span class="faint">{{.Approximate}}</span>{{else}} &middot; {{.Tokens}} tok{{end}}</span>{{.Flag}}{{if .Shared}}<span class="kind faint" title="This session is in more than one thread and counts in full in each">shared</span>{{end}}</div>
 </li>{{end}}
 
-{{define "scripts"}}<script src="/console/static/diary.js"></script>
+{{define "scripts"}}<script src="{{static "diary.js"}}"></script>
 {{end}}

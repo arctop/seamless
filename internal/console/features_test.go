@@ -696,7 +696,7 @@ func TestDiary_FollowsTheDiaryFeature(t *testing.T) {
 	require.Contains(t, home, `<a href="/console/diary" data-key="d" data-tip="Diary" class="">`, "the Work group's first row")
 	page := getPeek(t, mux, "/console/diary").Body.String()
 	require.Contains(t, page, `class="dy-page`)
-	require.Contains(t, page, `<script src="/console/static/diary.js"></script>`)
+	require.Contains(t, page, `<script src="`+staticLink(t, "diary.js")+`"></script>`)
 	onDay := getPeek(t, mux, dayView).Body.String()
 	require.Contains(t, onDay, `<a class="dy-open-chip" href="/console/diary?day=`+day+`"`)
 	require.Contains(t, onDay, "Open in Diary")

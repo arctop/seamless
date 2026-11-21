@@ -253,7 +253,7 @@ func TestRender_PatchRequestsGetOnlyWhatTheMorphReads(t *testing.T) {
 	for _, path := range []string{"/console/", "/console/memories", "/console/sessions", "/console/settings"} {
 		full := getPeek(t, mux, path)
 		require.Equal(t, http.StatusOK, full.Code)
-		require.Contains(t, full.Body.String(), `<script src="/console/static/navigation.js"></script>`)
+		require.Contains(t, full.Body.String(), `<script src="`+staticLink(t, "navigation.js")+`"></script>`)
 		require.Empty(t, full.Header().Get("Cache-Control"), "%s: a page load is a page", path)
 
 		for _, header := range []string{liveHeader, partialHeader} {

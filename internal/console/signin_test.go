@@ -573,7 +573,7 @@ func TestSignIn_UnprovenPageChecksThroughTheWorker(t *testing.T) {
 	require.Equal(t, http.StatusOK, rr.Code)
 	body := rr.Body.String()
 	require.Contains(t, body, `<html lang="en" data-browser-proof="missing">`)
-	require.Contains(t, body, `src="/console/static/browserkey.js"`)
+	require.Contains(t, body, `src="`+staticLink(t, "browserkey.js")+`"`)
 	require.Contains(t, body, `data-next="/console/memories?w=7d"`)
 	require.Equal(t, "no-store", rr.Header().Get("Cache-Control"))
 

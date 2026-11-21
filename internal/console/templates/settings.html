@@ -1108,8 +1108,8 @@ window.SEAM_NO_LIVE_REFRESH = true; // preserve unsaved form state on this contr
      loaded on every Settings page, since the sub-nav swaps sections in place.
      Both are inert without their markup. */}}
 {{define "scripts"}}
-<script src="/console/static/passkey.js"></script>
-<script src="/console/static/backups.js"></script>
+<script src="{{static "passkey.js"}}"></script>
+<script src="{{static "backups.js"}}"></script>
 {{end}}
 
 {{/* The briefing preview's fragments (briefing_preview.go), fetched into the

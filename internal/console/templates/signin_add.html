@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>Add a passkey &middot; Seamless</title>
-<link rel="icon" type="image/svg+xml" href="/console/static/favicon.svg">
-<link rel="stylesheet" href="/console/static/console.css">
+<link rel="icon" type="image/svg+xml" href="{{static "favicon.svg"}}">
+<link rel="stylesheet" href="{{static "console.css"}}">
 <script>
 /* The layout's rule: only an explicit Light or Dark sets data-theme; with no
    choice the stylesheet follows the OS. */
@@ -62,7 +62,7 @@
     </aside>
   </div>
 </main>
-<script src="/console/static/passkey.js"></script>
+<script src="{{static "passkey.js"}}"></script>
 <script>
 /* Add a passkey (internal/console/signin.go): create the passkey, then wait
    for the owner to approve the code it is shown with. The page is never

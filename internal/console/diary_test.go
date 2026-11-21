@@ -634,7 +634,7 @@ func TestDiary_RenderedDay(t *testing.T) {
 		`class="dy-entry list-detail-split dy-split"`} {
 		require.Contains(t, main, part)
 	}
-	require.Contains(t, busiest.page, `<script src="/console/static/diary.js"></script>`)
+	require.Contains(t, busiest.page, `<script src="`+staticLink(t, "diary.js")+`"></script>`)
 	// The agents legend, the rhythm's columns and the token mix answer on
 	// hover and link nowhere: no page lists "this agent's sessions that day".
 	day, err := diary.ParseDay(busiest.data.Day)

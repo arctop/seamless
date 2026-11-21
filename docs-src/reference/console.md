@@ -196,8 +196,8 @@ Before an unlock or a sign-in the page asks the daemon for the worker again,
 and when an upgrade brought a new one, it waits while the new worker takes
 over, so the old one never signs for the new daemon. The worker and its key script
 (`/console/static/browserkey.js`) are served `no-cache`, so the browser checks
-with the daemon each time it loads them; the other static files are cached
-for five minutes.
+with the daemon each time it loads them. The other static files are linked by
+version ([After an upgrade](#after-an-upgrade)).
 
 ### Sign in with a passkey {#sign-in-with-a-passkey}
 
@@ -339,6 +339,21 @@ a number, and `prefers-reduced-motion` stills every part of it (the Seam sends n
 sparks, numbers render at their value). Between events the sky and the sidebar
 hold still, so a console left open on the Overview draws nothing while the
 fleet is idle.
+
+### After an upgrade {#after-an-upgrade}
+
+Every page links its stylesheet and scripts by their version, a digest of the
+file this build serves (`/console/static/console.css?v=...`). The browser
+keeps each one until a build changes it, so the first page load after an
+upgrade uses the new stylesheet and scripts, and loads after that fetch none
+of them again. A static file asked for without its version, such as the
+worker's import of `browserkey.js`, is checked with the daemon on each use.
+
+A tab left open across an upgrade keeps the stylesheet and scripts it loaded
+first while its views update in place. When the daemon now serves different
+ones, the page says so once, in the corner: "Seamless was updated. Reload this
+page to use the new version." The console never reloads the page itself;
+Reload does, when you choose.
 
 ## Choose how much you see
 

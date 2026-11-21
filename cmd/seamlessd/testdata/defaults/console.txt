@@ -4,9 +4,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="seamless-build" content="<hash:8>">
 <title>Overview &middot; Seamless</title>
-<link rel="icon" type="image/svg+xml" href="/console/static/favicon.svg">
-<link rel="stylesheet" href="/console/static/console.css">
+<link rel="icon" type="image/svg+xml" href="/console/static/favicon.svg?v=<hash:9>">
+<link rel="stylesheet" href="/console/static/console.css?v=<hash:10>">
 <script>
 
 
@@ -69,6 +70,13 @@
 <div class="nav-progress" aria-hidden="true"></div>
 <button id="live-pill" type="button" hidden>new activity &middot; refresh</button>
 <div id="live-toast" role="status" aria-live="polite" hidden></div>
+
+<div class="build-notice" id="build-notice" role="status" aria-live="polite">
+  <div class="build-notice-card" hidden>
+    <p class="build-notice-copy">Seamless was updated. Reload this page to use the new version.</p>
+    <a class="btn small primary" id="build-reload" href="" data-no-prefetch>Reload</a>
+  </div>
+</div>
 <div id="cmdk" class="cmdk-overlay" hidden>
   <div class="cmdk" role="dialog" aria-modal="true" aria-label="Search or jump to">
     <div class="cmdk-input-row">
@@ -119,12 +127,12 @@
     </div>
   </div>
 </div>
-<script src="/console/static/interactions.js"></script>
-<script src="/console/static/search.js"></script>
-<script src="/console/static/library.js"></script>
-<script src="/console/static/charts.js"></script>
-<script src="/console/static/navigation.js"></script>
-<script src="/console/static/shell.js"></script>
+<script src="/console/static/interactions.js?v=<hash:11>"></script>
+<script src="/console/static/search.js?v=<hash:12>"></script>
+<script src="/console/static/library.js?v=<hash:13>"></script>
+<script src="/console/static/charts.js?v=<hash:14>"></script>
+<script src="/console/static/navigation.js?v=<hash:15>"></script>
+<script src="/console/static/shell.js?v=<hash:16>"></script>
 <script>
 (function () {
   
@@ -805,6 +813,13 @@
 <div class="nav-progress" aria-hidden="true"></div>
 <button id="live-pill" type="button" hidden>new activity &middot; refresh</button>
 <div id="live-toast" role="status" aria-live="polite" hidden></div>
+
+<div class="build-notice" id="build-notice" role="status" aria-live="polite">
+  <div class="build-notice-card" hidden>
+    <p class="build-notice-copy">Seamless was updated. Reload this page to use the new version.</p>
+    <a class="btn small primary" id="build-reload" href="" data-no-prefetch>Reload</a>
+  </div>
+</div>
 <div id="cmdk" class="cmdk-overlay" hidden>
   <div class="cmdk" role="dialog" aria-modal="true" aria-label="Search or jump to">
     <div class="cmdk-input-row">
@@ -855,12 +870,12 @@
     </div>
   </div>
 </div>
-<script src="/console/static/interactions.js"></script>
-<script src="/console/static/search.js"></script>
-<script src="/console/static/library.js"></script>
-<script src="/console/static/charts.js"></script>
-<script src="/console/static/navigation.js"></script>
-<script src="/console/static/shell.js"></script>
+<script src="/console/static/interactions.js?v=<hash:11>"></script>
+<script src="/console/static/search.js?v=<hash:12>"></script>
+<script src="/console/static/library.js?v=<hash:13>"></script>
+<script src="/console/static/charts.js?v=<hash:14>"></script>
+<script src="/console/static/navigation.js?v=<hash:15>"></script>
+<script src="/console/static/shell.js?v=<hash:16>"></script>
 <script>
 (function () {
   
@@ -1289,7 +1304,7 @@
   sync();
 })();
 </script>
-<script src="/console/static/sky.js"></script>
+<script src="/console/static/sky.js?v=<hash:17>"></script>
 
 </body>
 </html>
@@ -2200,6 +2215,13 @@
 <div class="nav-progress" aria-hidden="true"></div>
 <button id="live-pill" type="button" hidden>new activity &middot; refresh</button>
 <div id="live-toast" role="status" aria-live="polite" hidden></div>
+
+<div class="build-notice" id="build-notice" role="status" aria-live="polite">
+  <div class="build-notice-card" hidden>
+    <p class="build-notice-copy">Seamless was updated. Reload this page to use the new version.</p>
+    <a class="btn small primary" id="build-reload" href="" data-no-prefetch>Reload</a>
+  </div>
+</div>
 <div id="cmdk" class="cmdk-overlay" hidden>
   <div class="cmdk" role="dialog" aria-modal="true" aria-label="Search or jump to">
     <div class="cmdk-input-row">
@@ -2250,12 +2272,12 @@
     </div>
   </div>
 </div>
-<script src="/console/static/interactions.js"></script>
-<script src="/console/static/search.js"></script>
-<script src="/console/static/library.js"></script>
-<script src="/console/static/charts.js"></script>
-<script src="/console/static/navigation.js"></script>
-<script src="/console/static/shell.js"></script>
+<script src="/console/static/interactions.js?v=<hash:11>"></script>
+<script src="/console/static/search.js?v=<hash:12>"></script>
+<script src="/console/static/library.js?v=<hash:13>"></script>
+<script src="/console/static/charts.js?v=<hash:14>"></script>
+<script src="/console/static/navigation.js?v=<hash:15>"></script>
+<script src="/console/static/shell.js?v=<hash:16>"></script>
 <script>
 (function () {
   
@@ -4288,6 +4310,13 @@
 <div class="nav-progress" aria-hidden="true"></div>
 <button id="live-pill" type="button" hidden>new activity &middot; refresh</button>
 <div id="live-toast" role="status" aria-live="polite" hidden></div>
+
+<div class="build-notice" id="build-notice" role="status" aria-live="polite">
+  <div class="build-notice-card" hidden>
+    <p class="build-notice-copy">Seamless was updated. Reload this page to use the new version.</p>
+    <a class="btn small primary" id="build-reload" href="" data-no-prefetch>Reload</a>
+  </div>
+</div>
 <div id="cmdk" class="cmdk-overlay" hidden>
   <div class="cmdk" role="dialog" aria-modal="true" aria-label="Search or jump to">
     <div class="cmdk-input-row">
@@ -4338,12 +4367,12 @@
     </div>
   </div>
 </div>
-<script src="/console/static/interactions.js"></script>
-<script src="/console/static/search.js"></script>
-<script src="/console/static/library.js"></script>
-<script src="/console/static/charts.js"></script>
-<script src="/console/static/navigation.js"></script>
-<script src="/console/static/shell.js"></script>
+<script src="/console/static/interactions.js?v=<hash:11>"></script>
+<script src="/console/static/search.js?v=<hash:12>"></script>
+<script src="/console/static/library.js?v=<hash:13>"></script>
+<script src="/console/static/charts.js?v=<hash:14>"></script>
+<script src="/console/static/navigation.js?v=<hash:15>"></script>
+<script src="/console/static/shell.js?v=<hash:16>"></script>
 <script>
 (function () {
   
@@ -5196,6 +5225,13 @@ window.SEAM_NO_LIVE_REFRESH = true;
 <div class="nav-progress" aria-hidden="true"></div>
 <button id="live-pill" type="button" hidden>new activity &middot; refresh</button>
 <div id="live-toast" role="status" aria-live="polite" hidden></div>
+
+<div class="build-notice" id="build-notice" role="status" aria-live="polite">
+  <div class="build-notice-card" hidden>
+    <p class="build-notice-copy">Seamless was updated. Reload this page to use the new version.</p>
+    <a class="btn small primary" id="build-reload" href="" data-no-prefetch>Reload</a>
+  </div>
+</div>
 <div id="cmdk" class="cmdk-overlay" hidden>
   <div class="cmdk" role="dialog" aria-modal="true" aria-label="Search or jump to">
     <div class="cmdk-input-row">
@@ -5246,12 +5282,12 @@ window.SEAM_NO_LIVE_REFRESH = true;
     </div>
   </div>
 </div>
-<script src="/console/static/interactions.js"></script>
-<script src="/console/static/search.js"></script>
-<script src="/console/static/library.js"></script>
-<script src="/console/static/charts.js"></script>
-<script src="/console/static/navigation.js"></script>
-<script src="/console/static/shell.js"></script>
+<script src="/console/static/interactions.js?v=<hash:11>"></script>
+<script src="/console/static/search.js?v=<hash:12>"></script>
+<script src="/console/static/library.js?v=<hash:13>"></script>
+<script src="/console/static/charts.js?v=<hash:14>"></script>
+<script src="/console/static/navigation.js?v=<hash:15>"></script>
+<script src="/console/static/shell.js?v=<hash:16>"></script>
 <script>
 (function () {
   
@@ -5636,8 +5672,8 @@ window.SEAM_NO_LIVE_REFRESH = true;
 })();
 </script>
 
-<script src="/console/static/passkey.js"></script>
-<script src="/console/static/backups.js"></script>
+<script src="/console/static/passkey.js?v=<hash:18>"></script>
+<script src="/console/static/backups.js?v=<hash:19>"></script>
 
 </body>
 </html>

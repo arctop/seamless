@@ -43,7 +43,7 @@ func TestOverview_RendersKnowledgeSky(t *testing.T) {
 		require.Contains(t, body, fmt.Sprintf(`data-sky-band="%d"`, band), "every ring has a readout row")
 	}
 	require.Contains(t, body, `data-sky-kind="gotcha"`, "the kind legend filters the sky")
-	require.Contains(t, body, `<script src="/console/static/sky.js"></script>`)
+	require.Contains(t, body, `<script src="`+staticLink(t, "sky.js")+`"></script>`)
 	require.NotContains(t, body, `aria-label="Memory fabric"`, "the sky replaces the separate kind panel")
 
 	// Everything the page script creates lives in nodes the live morph skips.
