@@ -1333,7 +1333,8 @@ var dgAccepted = []struct {
 			"          \"verdict\": {\n" +
 			"            \"description\": \"Flag this whole session to re-read later: good (it went unusually well), bad (unusually badly), " +
 			"notable (worth re-reading for another reason), or none (clear the flag). One flag per session; the last one set wins. " +
-			"A flagged session's transcript is kept for the owner, copied at the session's end (at once if it already ended); " +
+			"A flagged session's transcript is kept for the owner, copied at the session's end, or as soon as it can be if the " +
+			"session already ended; " +
 			"clearing the flag deletes the copy. Independent of session_end's mishaps (one entry per incident, for recurrence " +
 			"review, whatever the verdict) and of favorite_set (a star on any item, for briefing and recall weight)\",\n" +
 			"            \"enum\": [\n" +
