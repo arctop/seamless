@@ -118,6 +118,14 @@ func TestRunExport_NoDBLeavesTheDatabaseOut(t *testing.T) {
 	require.Contains(t, exportSummary(manifest, dest, 1), "--no-db")
 }
 
+func TestExportSummary_SaysWhenItHoldsTranscriptCopies(t *testing.T) {
+	m := archive.Manifest{IncludesDB: true}
+	require.NotContains(t, exportSummary(m, "a.tar.gz", 1), "transcript")
+	m.Counts.TranscriptFiles, m.Counts.TranscriptBytes = 2, 3<<20
+	require.Contains(t, exportSummary(m, "a.tar.gz", 1),
+		"transcript copies: 2 (3.0 MiB), flagged sessions' whole conversations")
+}
+
 func TestRunExport_DefaultNameLandsInTheWorkingDirectory(t *testing.T) {
 	throwawayInstance(t)
 	out := t.TempDir()

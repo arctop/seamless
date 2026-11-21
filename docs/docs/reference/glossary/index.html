@@ -272,8 +272,8 @@ approver</a>.</p>
 <p><strong>Archive</strong> - marking a Seamless memory invalid because it is no longer
 relevant: it leaves the indexes and stays readable. The gardener's staleness
 pass proposes it, and never for a <code>constraint</code> or a pinned <code>stage</code>.</p>
-<p><strong>Backup</strong> - one archive of a whole Seamless instance, of the kind <code>seamlessd export</code> writes: every memory and note, a snapshot of the database, and a list
-of what each project holds. A release install takes one every day and keeps
+<p><strong>Backup</strong> - one archive of a whole Seamless instance, of the kind <code>seamlessd export</code> writes: every memory and note, a snapshot of the database, the
+flagged sessions' transcript copies, and a list of what each project holds. A release install takes one every day and keeps
 the newest 7 in <code>~/.seamless/backups</code>; <strong>Settings &gt; Backups</strong> in the console
 lists and restores them. See <a href="../../guides/data/">Import, back up &amp; restore</a>.</p>
 <p><strong>Binding</strong> - the association between an MCP connection and a Seamless session,

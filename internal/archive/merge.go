@@ -112,6 +112,13 @@ import (
 // continued) as written. A child whose parent the merge skipped keeps a
 // pointer to a session that is not here: nothing follows it to decide
 // anything, and a reader treats it as "parent not here".
+//
+// sessions also carries the session flag and its copy record (migration 051),
+// and the transcript copies themselves follow the rows: a copy is written
+// only for a session whose row here, after the row pass, holds the archive's
+// own copy record (mergeTranscripts). A session this instance already had
+// keeps its own flag, its own copy or none; the merge never replaces or
+// removes a copy file.
 var mergeTables = []string{
 	"projects", "sessions", "tasks", "task_deps", "trials", "events", "gardener_proposals", "commit_records",
 	"item_provenance",
@@ -137,6 +144,10 @@ type rowPass struct {
 	// consults it so a dry run predicts the same number of registrations the
 	// real run performs.
 	projectSlugs []string
+
+	// copies are the sessions whose transcript copy the merge may bring
+	// (mergeableCopies), sorted.
+	copies []string
 }
 
 // importMerge folds the archive into an instance that already has data.
@@ -217,6 +228,14 @@ func importMerge(ctx context.Context, a *archiveReader, opts ImportOptions, choi
 
 	slugs, err := mergeCorpus(ctx, mgr, db, stage, opts.DryRun, rep)
 	if err != nil {
+		return err
+	}
+
+	// After the rows committed: a copy names a session row, never the other
+	// way round, so a merge stopped before this leaves rows whose copy record
+	// names a file not here (which every reader judges by the file), and a
+	// merge run again brings the copies then.
+	if err := mergeTranscripts(ctx, stage, opts.DataDir, pass.copies, opts.DryRun, rep); err != nil {
 		return err
 	}
 
@@ -592,6 +611,11 @@ func mergeRows(ctx context.Context, db *sql.DB, srcPath string, dry bool, rep *I
 				return pass, err
 			}
 			rep.Rows[table] = n
+			if table == "sessions" {
+				if pass.copies, err = mergeableCopies(ctx, conn, keys); err != nil {
+					return pass, err
+				}
+			}
 		}
 		return pass, nil
 	}
@@ -627,6 +651,9 @@ func mergeRows(ctx context.Context, db *sql.DB, srcPath string, dry bool, rep *I
 	}
 	if err := tx.Commit(); err != nil {
 		return pass, fmt.Errorf("archive.Import: commit merge: %w", err)
+	}
+	if pass.copies, err = mergeableCopies(ctx, conn, nil); err != nil {
+		return pass, err
 	}
 
 	// Every id the pass tried to insert, not only the ones it did: an id that
@@ -891,23 +918,162 @@ func primaryKeyColumns(ctx context.Context, conn *sql.Conn, table string) ([]str
 // session name is predicted as dropped, exactly as the real pass would.
 func predictInserts(ctx context.Context, conn *sql.Conn, table string, keys [][]string) (int, error) {
 	q := fmt.Sprintf(`SELECT COUNT(*) FROM src.%s s`, quoteIdent(table))
-	if len(keys) > 0 {
-		conds := make([]string, 0, len(keys))
-		for _, key := range keys {
-			on := make([]string, 0, len(key))
-			for _, c := range key {
-				on = append(on, fmt.Sprintf("m.%[1]s = s.%[1]s", quoteIdent(c)))
-			}
-			conds = append(conds, fmt.Sprintf(`NOT EXISTS (SELECT 1 FROM main.%s m WHERE %s)`,
-				quoteIdent(table), strings.Join(on, " AND ")))
-		}
-		q += " WHERE " + strings.Join(conds, " AND ")
+	if cond := insertableCond(table, keys); cond != "" {
+		q += " WHERE " + cond
 	}
 	var n int
 	if err := conn.QueryRowContext(ctx, q).Scan(&n); err != nil {
 		return 0, fmt.Errorf("archive.Import: predict %s: %w", table, err)
 	}
 	return n, nil
+}
+
+// insertableCond is the condition on src row s that INSERT OR IGNORE keeps it:
+// NOT EXISTS a destination row sharing any of keys. Empty for no keys.
+func insertableCond(table string, keys [][]string) string {
+	conds := make([]string, 0, len(keys))
+	for _, key := range keys {
+		on := make([]string, 0, len(key))
+		for _, c := range key {
+			on = append(on, fmt.Sprintf("m.%[1]s = s.%[1]s", quoteIdent(c)))
+		}
+		conds = append(conds, fmt.Sprintf(`NOT EXISTS (SELECT 1 FROM main.%s m WHERE %s)`,
+			quoteIdent(table), strings.Join(on, " AND ")))
+	}
+	return strings.Join(conds, " AND ")
+}
+
+// mergeableCopies lists the sessions whose transcript copy a merge may bring:
+// those whose row here holds the archive's own copy record -- flagged, copy
+// copied, the same size and copy time -- which is every flagged session with a
+// copy the row pass inserted, and one already here whose record matches (the
+// same copy, missing from this disk, or a merge run again). After the commit
+// it asks the destination; a dry run (keys set, nothing inserted) adds the src
+// rows INSERT OR IGNORE would keep. Both schemas are this build's by now (the
+// staged snapshot was migrated forward on open), so the columns are there.
+func mergeableCopies(ctx context.Context, conn *sql.Conn, keys [][]string) ([]string, error) {
+	q := `SELECT m.id FROM main.sessions m JOIN src.sessions s ON s.id = m.id
+		 WHERE m.verdict IS NOT NULL AND m.transcript_copy = ?1
+		   AND s.verdict IS NOT NULL AND s.transcript_copy = ?1
+		   AND m.transcript_bytes IS s.transcript_bytes
+		   AND m.transcript_copied_at IS s.transcript_copied_at`
+	if keys != nil {
+		q += ` UNION SELECT s.id FROM src.sessions s
+		 WHERE s.verdict IS NOT NULL AND s.transcript_copy = ?1`
+		if cond := insertableCond("sessions", keys); cond != "" {
+			q += " AND " + cond
+		}
+	}
+	q += ` ORDER BY 1`
+	rows, err := conn.QueryContext(ctx, q, string(core.TranscriptCopied))
+	if err != nil {
+		return nil, fmt.Errorf("archive.Import: transcript copies to merge: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("archive.Import: transcript copies to merge: %w", err)
+		}
+		out = append(out, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("archive.Import: transcript copies to merge: %w", err)
+	}
+	return out, nil
+}
+
+// mergeTranscripts writes the staged transcript copies of the sessions in ids
+// into dataDir's transcripts/, or (dry) counts them. A copy the archive does
+// not hold is skipped, and so is one this disk already holds: the merge adds
+// what is missing and never replaces a file. Each is streamed to a temporary
+// name in the copies' directory (0700, made when absent) and renamed into
+// place, 0600.
+func mergeTranscripts(ctx context.Context, stage, dataDir string, ids []string, dry bool, rep *ImportReport) error {
+	var root *os.Root
+	defer func() {
+		if root != nil {
+			_ = root.Close()
+		}
+	}()
+	for _, id := range ids {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		name := id + TranscriptSuffix
+		if !validTranscriptName(name) {
+			continue
+		}
+		staged := filepath.Join(stage, TranscriptsTree, name)
+		if fi, err := os.Lstat(staged); errors.Is(err, os.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return fmt.Errorf("archive.Import: staged %s: %w", name, err)
+		} else if !fi.Mode().IsRegular() {
+			continue
+		}
+		dir := filepath.Join(dataDir, TranscriptsTree)
+		switch _, err := os.Lstat(filepath.Join(dir, name)); {
+		case err == nil:
+			continue // this disk holds a copy already: it stands
+		case !errors.Is(err, os.ErrNotExist):
+			return fmt.Errorf("archive.Import: %s/%s: %w", TranscriptsTree, name, err)
+		}
+		if dry {
+			rep.Transcripts++
+			continue
+		}
+		if root == nil {
+			var err error
+			if root, err = openCopiesDir(dir); err != nil {
+				return err
+			}
+		}
+		if err := installCopy(root, dir, staged, name); err != nil {
+			return err
+		}
+		rep.Transcripts++
+	}
+	return nil
+}
+
+// openCopiesDir opens dataDir's transcripts/ as a root, making it (0700) when
+// it is absent. A link or a file in its place is refused, as an extraction
+// refuses one.
+func openCopiesDir(dir string) (*os.Root, error) {
+	info, err := os.Lstat(dir)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			return nil, fmt.Errorf("archive.Import: create %s: %w", dir, err)
+		}
+	case err != nil:
+		return nil, fmt.Errorf("archive.Import: %s: %w", dir, err)
+	case info.Mode()&os.ModeSymlink != 0:
+		return nil, fmt.Errorf("archive.Import: %w: %s is a symlink", ErrUnsafeEntry, dir)
+	case !info.IsDir():
+		return nil, fmt.Errorf("archive.Import: %w: %s is not a directory", ErrUnsafeEntry, dir)
+	}
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, fmt.Errorf("archive.Import: open %s: %w", dir, err)
+	}
+	return root, nil
+}
+
+// installCopy streams the staged copy into root under name.
+func installCopy(root *os.Root, dir, staged, name string) error {
+	in, err := os.Open(staged) //nolint:gosec // a copy this import staged in its own temp dir
+	if err != nil {
+		return fmt.Errorf("archive.Import: open staged %s: %w", name, err)
+	}
+	defer func() { _ = in.Close() }()
+	ex := &extraction{dest: dir}
+	if err := ex.writeCopy(root, name, in); err != nil {
+		return fmt.Errorf("archive.Import: %w", err)
+	}
+	return nil
 }
 
 // srcColumnValues reads one column out of the staged snapshot.

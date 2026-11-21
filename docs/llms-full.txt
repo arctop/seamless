@@ -7590,8 +7590,9 @@ backups in two clicks. The rest of this page is about knowing which half of
 schedule, lists the backups it finds, and restores one. Each backup is one
 archive of the kind [`seamlessd export`](#the-whole-instance-in-one-archive)
 writes: every memory and note, a consistent snapshot of the database with your
-sessions, tasks, trials and projects, and a list of what each project holds.
-Like an export, it holds no config and no key.
+sessions, tasks, trials and projects, the [transcript
+copies](#flagged-transcripts) of flagged sessions, and a list of what each
+project holds. Like an export, it holds no config and no key.
 
 ### The schedule
 
@@ -7643,6 +7644,11 @@ its own answer: allow Seamless in **System Settings > Privacy & Security >
 Files and Folders**, or give it **Full Disk Access**. A disk that is not
 connected is never written under: the run fails, says so, and the next one
 tries again.
+
+A backup holds whole conversations: the transcript of every flagged session,
+with whatever that session read or was pasted into it, from any project. A
+folder elsewhere - a synced folder, an external disk, a shared drive - carries
+them wherever it goes, so choose one only you can read.
 
 ### The list
 
@@ -7773,14 +7779,27 @@ kept.
 **Removing one.** Clearing the flag deletes the copy. The event log keeps the
 history of the flag and its clearing, never the transcript.
 
-**Not in backups.** Copies are left out of backups and `seamlessd export`
-archives: an archive carries `memory/`, `notes/` and the database, and the
-release before this one refuses an archive with anything else in it, so a
-backup holding copies could not be restored by a rollback or an older
-`seamlessd import`; an archive also holds each file in memory while it is
-written, and copies run to hundreds of megabytes. A restore leaves the folder
-as it is, and a session page says when its record names a copy this server
-does not hold. Copy the folder yourself if the copies must outlive the disk.
+**In backups.** Every backup that holds the database holds the copies too:
+scheduled and manual backups, `seamlessd export` without `--no-db`, the
+updater's pre-update backup and the safety backup a restore takes. Each copy
+is streamed from disk into the archive, never held in memory, and a backup
+takes only the copies its database records as kept, so its rows and its
+copies agree. A backup of memories and notes only (`--no-db`) holds none. A
+backup folder elsewhere therefore carries whole conversations, as
+[the folder](#the-folder) says.
+
+- **Replace all data** puts the backup's copies back with its database.
+  Today's go into the safety backup with the rest of today's data, so
+  **Undo this restore** brings them back.
+- **Only bring back what's missing** brings a copy only with its session: for
+  a session the backup adds, or for one here that records the same copy and
+  whose file is gone. A session already here keeps its own flag and copy, and
+  no copy file is ever replaced or removed.
+
+An earlier release lists a backup from this one as made by a newer Seamless
+and refuses to restore it, copies or not. An update's rollback puts back the
+database only, so a session page may then say its record names a copy this
+server does not hold.
 
 ## Put it in git
 
@@ -7818,8 +7837,9 @@ seamlessd export
 #   database: schema v25, 18422 rows across 21 tables
 ```
 
-One gzipped tar with the markdown corpus, a consistent snapshot of `seam.db`, and
-a manifest describing what is inside. Full flags in
+One gzipped tar with the markdown corpus, a consistent snapshot of `seam.db`, the
+[transcript copies](#flagged-transcripts) of flagged sessions, and a manifest
+describing what is inside. Full flags in
 [the CLI reference](/reference/cli-seamlessd/#seamlessd_export).
 
 Three things worth knowing:
@@ -7835,7 +7855,7 @@ Three things worth knowing:
   writes the archive to stdout and the report to stderr.
 
 `--no-db` gives you a knowledge-only archive: the two markdown trees, nothing
-else. It is the tarball equivalent of the git recipe above.
+else (no transcript copy either: a copy belongs to a session in the database). It is the tarball equivalent of the git recipe above.
 
 ## Restore
 
@@ -10628,8 +10648,9 @@ account, like everything else it does, so the folder rules are stricter here:
   that cannot keep that - exFAT, and many network shares - fails the run, and
   the file is removed.
 
-A backup holds every project, the locked ones too, so keep the folder as
-carefully as the most sensitive project in it.
+A backup holds every project, the locked ones too, and the whole conversations
+of flagged sessions, so keep the folder as carefully as the most sensitive
+project in it.
 
 **A console restore needs a passkey** while any project is locked - force locked
 in the file, or locked from the console. A restore could roll a locked project
@@ -15331,7 +15352,9 @@ seamlessd export [-o FILE|-] [--no-db]
 ```
 
 Writes the whole instance to one gzipped tar: the markdown corpus, a consistent
-snapshot of `seam.db`, and a `manifest.json` describing what is inside.
+snapshot of `seam.db`, the [flagged sessions' transcript
+copies](/guides/data/#flagged-transcripts) that snapshot records, and a
+`manifest.json` describing what is inside.
 
 **Config and `mcp.api_key` are never in the archive.** A restored instance gets
 its own config and a freshly generated key, which is what lets an archive be
@@ -15341,7 +15364,7 @@ only credential.
 | Flag | Default | Meaning |
 |---|---|---|
 | `-o` | `seamless-<host>-<UTC timestamp>.tar.gz` in the working directory | Where to write the archive. `-` streams it to stdout and puts the report on stderr. |
-| `--no-db` | `false` | Export the markdown trees only. Sessions, tasks, trials, events, and embeddings are then **not** in the archive. |
+| `--no-db` | `false` | Export the markdown trees only. Sessions, tasks, trials, events, embeddings and transcript copies are then **not** in the archive. |
 
 Layout, in tar order:
 
@@ -15350,6 +15373,7 @@ manifest.json                       always first
 seam.db                             absent with --no-db
 memory/{project|_global}/{name}.md
 notes/{project|_global}/{slug}.md
+transcripts/{session ULID}.jsonl.gz the copies the snapshot records; absent with --no-db
 ```
 
 `manifest.json` first is deliberate: a reader can refuse an archive - wrong
@@ -20611,7 +20635,7 @@ _global/{name}.md Machine-wide memories
 notes/ Durable note tree
 _global/{slug}.md Machine-wide notes
 {project}/{slug}.md One project note per file
-transcripts/ Flagged sessions' transcript copies, 0700 (files 0600); not in backups
+transcripts/ Flagged sessions' transcript copies, 0700 (files 0600); in every backup that holds the database
 {session ULID}.jsonl.gz One flagged session's whole transcript, gzip; removed when the flag is cleared
 backups/ Backups: the scheduled ones (unless backup.dir names another folder), the safety backups taken before a restore, and the pre-update archives (pre-update-v{old}-{time}.tar.gz), the newest two
 .schedule.json The schedule's record: the last run, the failure streak, the folder in use and this install's id
@@ -20833,8 +20857,8 @@ had already migrated the database, the backup's database is put back. The
 migrated one, with its `-wal` and `-shm`, stays beside it as
 `seam.db.pre-rollback-<attempt>` until you delete it. A backup's database that
 lacks a console lock the migrated one holds is not put back: the migrated
-database stays in place, so a rollback never unlocks a project. Memories and notes are
-never rolled back. Creating `update/test-fail-confirm` rehearses a rollback on
+database stays in place, so a rollback never unlocks a project. Memories, notes and
+transcript copies are never rolled back. Creating `update/test-fail-confirm` rehearses a rollback on
 a real install: while it exists, every update fails its confirmation on purpose
 and rolls back, and `seamlessd doctor` warns. Delete it afterwards.
 
@@ -20847,7 +20871,8 @@ automatic backup, `seamless-<host>-<UTC time>-before-restore.tar.gz` for the
 safety backup a restore takes, which always stays in `<data_dir>/backups`, and
 `seamless-<host>-<UTC time>.tar.gz` for one made with **Back up now**, the name
 `seamlessd export` gives too. Each one is an export archive whose manifest also
-says why it was written, which install wrote it, and what each project held. A
+says why it was written, which install wrote it, what each project held and how
+many transcript copies it carries. A
 backup is written to a dot-prefixed temporary file in its folder, synced,
 renamed into place and read back. Listings skip dot files.
 
@@ -20965,8 +20990,8 @@ relevant: it leaves the indexes and stays readable. The gardener's staleness
 pass proposes it, and never for a `constraint` or a pinned `stage`.
 
 **Backup** - one archive of a whole Seamless instance, of the kind `seamlessd
-export` writes: every memory and note, a snapshot of the database, and a list
-of what each project holds. A release install takes one every day and keeps
+export` writes: every memory and note, a snapshot of the database, the
+flagged sessions' transcript copies, and a list of what each project holds. A release install takes one every day and keeps
 the newest 7 in `~/.seamless/backups`; **Settings > Backups** in the console
 lists and restores them. See [Import, back up & restore](/guides/data/).
 

@@ -33,8 +33,8 @@ relevant: it leaves the indexes and stays readable. The gardener's staleness
 pass proposes it, and never for a `constraint` or a pinned `stage`.
 
 **Backup** - one archive of a whole Seamless instance, of the kind `seamlessd
-export` writes: every memory and note, a snapshot of the database, and a list
-of what each project holds. A release install takes one every day and keeps
+export` writes: every memory and note, a snapshot of the database, the
+flagged sessions' transcript copies, and a list of what each project holds. A release install takes one every day and keeps
 the newest 7 in `~/.seamless/backups`; **Settings > Backups** in the console
 lists and restores them. See [Import, back up & restore](/guides/data/).
 

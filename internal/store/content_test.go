@@ -95,9 +95,63 @@ func TestContentFingerprint_ToleratesAnOlderSchema(t *testing.T) {
 	ctx := context.Background()
 	_, err := db.ExecContext(ctx, `DROP TABLE console_locks`)
 	require.NoError(t, err)
+	// A database from before the session flag (migration 051).
+	_, err = db.ExecContext(ctx, `DROP INDEX idx_sessions_flagged`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `ALTER TABLE sessions DROP COLUMN verdict`)
+	require.NoError(t, err)
 	got, err := ContentFingerprint(ctx, db)
 	require.NoError(t, err)
 	require.Len(t, got, 64)
+}
+
+// A flag, a transcript copy made or made again, and a flag cleared each move
+// the fingerprint, though none touches updated_at: a backup carries the copies
+// the flags keep, so the next scheduled one must not be skipped as unchanged.
+func TestContentFingerprint_MovesWithTheSessionFlag(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	at := time.Date(2026, 11, 20, 3, 0, 0, 0, time.UTC)
+	id, err := core.NewID()
+	require.NoError(t, err)
+	require.NoError(t, CreateSession(ctx, db, core.Session{
+		ID: id, Name: "cc/flagged", ProjectSlug: "alpha", Status: core.SessionCompleted, CreatedAt: at, UpdatedAt: at,
+	}))
+	fp := func() string {
+		t.Helper()
+		got, err := ContentFingerprint(ctx, db)
+		require.NoError(t, err)
+		return got
+	}
+	seen := map[string]string{"unflagged": fp()}
+	step := func(name string, fn func()) {
+		t.Helper()
+		fn()
+		got := fp()
+		for prev, v := range seen {
+			require.NotEqual(t, v, got, "%s leaves the fingerprint as it was at %s", name, prev)
+		}
+		seen[name] = got
+	}
+	step("flagged", func() {
+		_, err := SetSessionFlag(ctx, db, id, core.VerdictBad, "it went badly", at)
+		require.NoError(t, err)
+	})
+	step("copied", func() {
+		_, err := SetTranscriptCopy(ctx, db, id, core.TranscriptCopied, 100, at)
+		require.NoError(t, err)
+	})
+	step("copied again", func() {
+		_, err := SetTranscriptCopy(ctx, db, id, core.TranscriptCopied, 200, at.Add(time.Minute))
+		require.NoError(t, err)
+	})
+	_, _, err = ClearSessionFlag(ctx, db, id)
+	require.NoError(t, err)
+	require.Equal(t, seen["unflagged"], fp(), "a cleared flag is the unflagged session again")
+
+	var updated string
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT updated_at FROM sessions WHERE id = ?`, id).Scan(&updated))
+	require.Equal(t, core.FormatTime(at), updated, "none of it touched updated_at")
 }
 
 func TestInstallID_MintedOnceAndKept(t *testing.T) {

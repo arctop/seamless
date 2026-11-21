@@ -44,9 +44,11 @@
 //     kept and checked, a merge's safety backup of today's data taken) and
 //     records restore/pending.json; Applier finishes it at the next start,
 //     under the data dir lock and before anything opens the database: a
-//     replacement through a write-ahead swap record (staged, swapping,
-//     applied = the commit point) rolled back entry by entry from wherever a
-//     stop left it, a merge idempotently, at most three times. Archiver turns
+//     replacement (the database, the markdown trees and the transcript
+//     copies, which move together) through a write-ahead swap record
+//     (staged, swapping, applied = the commit point) rolled back entry by
+//     entry from wherever a stop left it, a merge idempotently, at most
+//     three times. Archiver turns
 //     the replaced data into a before-restore backup once the daemon serves,
 //     reading it back before it removes the original: the owner's undo.
 //     Today's locks, approvers, kept settings and repo routes survive every

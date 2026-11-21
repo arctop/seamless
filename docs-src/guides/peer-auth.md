@@ -1513,8 +1513,9 @@ account, like everything else it does, so the folder rules are stricter here:
   that cannot keep that - exFAT, and many network shares - fails the run, and
   the file is removed.
 
-A backup holds every project, the locked ones too, so keep the folder as
-carefully as the most sensitive project in it.
+A backup holds every project, the locked ones too, and the whole conversations
+of flagged sessions, so keep the folder as carefully as the most sensitive
+project in it.
 
 **A console restore needs a passkey** while any project is locked - force locked
 in the file, or locked from the console. A restore could roll a locked project

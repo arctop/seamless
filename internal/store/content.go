@@ -119,6 +119,9 @@ type fingerprintPart struct {
 	// summary hashes only the row count and the newest value of each column,
 	// for tables whose every row would be too much to read on each check.
 	summary bool
+	// nonNull, when set, keeps only the rows where that column is not NULL;
+	// a table without the column (an older database) hashes as absent.
+	nonNull string
 }
 
 // fingerprintParts is what ContentFingerprint covers: the knowledge (by id and
@@ -135,6 +138,11 @@ var fingerprintParts = []fingerprintPart{
 	{table: "repo_map", cols: []string{"host", "path", "slug", "origin"}, order: "host, path"},
 	{table: "approver_credentials", cols: []string{"id", "sign_count", "last_used_at"}, order: "id"},
 	{table: "sessions", cols: []string{"updated_at"}, summary: true},
+	// The flagged sessions, row by row: a flag, its clearing and a transcript
+	// copy made or made again touch no updated_at, and a backup carries the
+	// copies the flags keep, so each one is a change to back up.
+	{table: "sessions", cols: []string{"id", "verdict", "transcript_copy", "transcript_bytes", "transcript_copied_at"},
+		order: "id", nonNull: "verdict"},
 	{table: "tasks", cols: []string{"updated_at"}, summary: true},
 	{table: "task_deps", summary: true},
 	{table: "trials", cols: []string{"created_at"}, summary: true},
@@ -187,8 +195,12 @@ func fingerprintTable(ctx context.Context, db *sql.DB, h hash.Hash, part fingerp
 	if err != nil {
 		return err
 	}
-	if have == nil {
-		h.Write([]byte(part.table + "\x00absent\x1d"))
+	label := part.table
+	if part.nonNull != "" {
+		label += "." + part.nonNull
+	}
+	if have == nil || (part.nonNull != "" && !slices.Contains(have, part.nonNull)) {
+		h.Write([]byte(label + "\x00absent\x1d"))
 		return nil
 	}
 	var cols []string
@@ -210,8 +222,12 @@ func fingerprintTable(ctx context.Context, db *sql.DB, h hash.Hash, part fingerp
 		q = `SELECT COUNT(*) FROM "` + part.table + `"`
 		return fingerprintRows(ctx, db, h, part.table, q, 1)
 	default:
-		q = `SELECT ` + strings.Join(cols, ", ") + ` FROM "` + part.table + `" ORDER BY ` + part.order
-		return fingerprintRows(ctx, db, h, part.table, q, len(cols))
+		q = `SELECT ` + strings.Join(cols, ", ") + ` FROM "` + part.table + `"`
+		if part.nonNull != "" {
+			q += ` WHERE "` + part.nonNull + `" IS NOT NULL`
+		}
+		q += ` ORDER BY ` + part.order
+		return fingerprintRows(ctx, db, h, label, q, len(cols))
 	}
 }
 

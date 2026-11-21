@@ -183,7 +183,9 @@ seamlessd export [-o FILE|-] [--no-db]
 ```
 
 Writes the whole instance to one gzipped tar: the markdown corpus, a consistent
-snapshot of `seam.db`, and a `manifest.json` describing what is inside.
+snapshot of `seam.db`, the [flagged sessions' transcript
+copies](https://thereisnospoon.org/docs/guides/data/#flagged-transcripts) that snapshot records, and a
+`manifest.json` describing what is inside.
 
 **Config and `mcp.api_key` are never in the archive.** A restored instance gets
 its own config and a freshly generated key, which is what lets an archive be
@@ -193,7 +195,7 @@ only credential.
 | Flag | Default | Meaning |
 |---|---|---|
 | `-o` | `seamless-<host>-<UTC timestamp>.tar.gz` in the working directory | Where to write the archive. `-` streams it to stdout and puts the report on stderr. |
-| `--no-db` | `false` | Export the markdown trees only. Sessions, tasks, trials, events, and embeddings are then **not** in the archive. |
+| `--no-db` | `false` | Export the markdown trees only. Sessions, tasks, trials, events, embeddings and transcript copies are then **not** in the archive. |
 
 Layout, in tar order:
 
@@ -202,6 +204,7 @@ manifest.json                       always first
 seam.db                             absent with --no-db
 memory/{project|_global}/{name}.md
 notes/{project|_global}/{slug}.md
+transcripts/{session ULID}.jsonl.gz the copies the snapshot records; absent with --no-db
 ```
 
 `manifest.json` first is deliberate: a reader can refuse an archive - wrong

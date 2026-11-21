@@ -259,8 +259,9 @@ backups in two clicks. The rest of this page is about knowing which half of
 schedule, lists the backups it finds, and restores one. Each backup is one
 archive of the kind <a href="#the-whole-instance-in-one-archive"><code>seamlessd export</code></a>
 writes: every memory and note, a consistent snapshot of the database with your
-sessions, tasks, trials and projects, and a list of what each project holds.
-Like an export, it holds no config and no key.</p>
+sessions, tasks, trials and projects, the <a href="#flagged-transcripts">transcript
+copies</a> of flagged sessions, and a list of what each
+project holds. Like an export, it holds no config and no key.</p>
 <h3 id="the-schedule">The schedule</h3>
 <p>A release install (the installer's or Homebrew's) backs up <strong>every day, keeping
 the newest 7</strong>, in <code>~/.seamless/backups</code>. A Seamless built from source backs up only once you
@@ -305,6 +306,10 @@ its own answer: allow Seamless in <strong>System Settings &gt; Privacy &amp; Sec
 Files and Folders</strong>, or give it <strong>Full Disk Access</strong>. A disk that is not
 connected is never written under: the run fails, says so, and the next one
 tries again.</p>
+<p>A backup holds whole conversations: the transcript of every flagged session,
+with whatever that session read or was pasted into it, from any project. A
+folder elsewhere - a synced folder, an external disk, a shared drive - carries
+them wherever it goes, so choose one only you can read.</p>
 <h3 id="the-list">The list</h3>
 <p><strong>Available backups</strong> lists, newest first, the backups in the chosen folder and
 in <code>~/.seamless/backups</code>, where the safety and pre-update backups always stay.
@@ -432,14 +437,27 @@ sessions, with whether the original file is still there and whether a copy is
 kept.</p>
 <p><strong>Removing one.</strong> Clearing the flag deletes the copy. The event log keeps the
 history of the flag and its clearing, never the transcript.</p>
-<p><strong>Not in backups.</strong> Copies are left out of backups and <code>seamlessd export</code>
-archives: an archive carries <code>memory/</code>, <code>notes/</code> and the database, and the
-release before this one refuses an archive with anything else in it, so a
-backup holding copies could not be restored by a rollback or an older
-<code>seamlessd import</code>; an archive also holds each file in memory while it is
-written, and copies run to hundreds of megabytes. A restore leaves the folder
-as it is, and a session page says when its record names a copy this server
-does not hold. Copy the folder yourself if the copies must outlive the disk.</p>
+<p><strong>In backups.</strong> Every backup that holds the database holds the copies too:
+scheduled and manual backups, <code>seamlessd export</code> without <code>--no-db</code>, the
+updater's pre-update backup and the safety backup a restore takes. Each copy
+is streamed from disk into the archive, never held in memory, and a backup
+takes only the copies its database records as kept, so its rows and its
+copies agree. A backup of memories and notes only (<code>--no-db</code>) holds none. A
+backup folder elsewhere therefore carries whole conversations, as
+<a href="#the-folder">the folder</a> says.</p>
+<ul>
+<li><strong>Replace all data</strong> puts the backup's copies back with its database.
+Today's go into the safety backup with the rest of today's data, so
+<strong>Undo this restore</strong> brings them back.</li>
+<li><strong>Only bring back what's missing</strong> brings a copy only with its session: for
+a session the backup adds, or for one here that records the same copy and
+whose file is gone. A session already here keeps its own flag and copy, and
+no copy file is ever replaced or removed.</li>
+</ul>
+<p>An earlier release lists a backup from this one as made by a newer Seamless
+and refuses to restore it, copies or not. An update's rollback puts back the
+database only, so a session page may then say its record names a copy this
+server does not hold.</p>
 <h2 id="put-it-in-git">Put it in git</h2>
 <p>The strongest backup is the one you already know how to use:</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nb">cd</span> ~/.seamless
@@ -466,8 +484,9 @@ instance.</p>
 </span></span><span class="line"><span class="cl"><span class="c1">#   corpus: 214 memories, 38 notes</span>
 </span></span><span class="line"><span class="cl"><span class="c1">#   database: schema v25, 18422 rows across 21 tables</span>
 </span></span></code></pre></div>
-<p>One gzipped tar with the markdown corpus, a consistent snapshot of <code>seam.db</code>, and
-a manifest describing what is inside. Full flags in
+<p>One gzipped tar with the markdown corpus, a consistent snapshot of <code>seam.db</code>, the
+<a href="#flagged-transcripts">transcript copies</a> of flagged sessions, and a manifest
+describing what is inside. Full flags in
 <a href="../../reference/cli-seamlessd/#seamlessd_export">the CLI reference</a>.</p>
 <p>Three things worth knowing:</p>
 <ul>
@@ -482,7 +501,7 @@ machine's only credential.</li>
 writes the archive to stdout and the report to stderr.</li>
 </ul>
 <p><code>--no-db</code> gives you a knowledge-only archive: the two markdown trees, nothing
-else. It is the tarball equivalent of the git recipe above.</p>
+else (no transcript copy either: a copy belongs to a session in the database). It is the tarball equivalent of the git recipe above.</p>
 <h2 id="restore">Restore</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd backups                                           <span class="c1"># what there is to restore</span>
 </span></span><span class="line"><span class="cl">seamlessd restore seamless-nuc.local-20260923T030000Z-auto.tar.gz

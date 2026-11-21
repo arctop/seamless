@@ -222,6 +222,12 @@ type ImportReport struct {
 	Notes    int
 	Skipped  int
 
+	// Transcripts counts the flagged sessions' transcript copies written: every
+	// copy the archive holds for a fresh restore, and for a merge only those
+	// whose session row came out of the merge with the archive's own copy
+	// record (mergeTranscripts).
+	Transcripts int
+
 	// Projects counts projects-table rows registered for a slug the archive's
 	// corpus referenced but its projects table did not carry.
 	Projects int
@@ -249,6 +255,9 @@ func (r ImportReport) String() string {
 	}
 	fmt.Fprintf(&b, "import (%s) into %s: %d memories, %d notes, %d projects (%d skipped, already present)",
 		mode, r.DataDir, r.Memories, r.Notes, r.Projects, r.Skipped)
+	if r.Transcripts > 0 {
+		fmt.Fprintf(&b, "\ntranscript copies: %d", r.Transcripts)
+	}
 
 	if len(r.Rows) > 0 {
 		parts := make([]string, 0, len(r.Rows))
@@ -375,7 +384,8 @@ func Import(ctx context.Context, opts ImportOptions) (*ImportReport, error) {
 //
 // Order: markdown first, then the database under a temporary name (which is
 // where the archive puts it, so this is really "rename it last"), then the
-// rename. Reconcile afterwards heals the one window the exporter leaves open --
+// rename. The transcript copies land beside the markdown, so the restored
+// rows and the copies they name come from the same archive. Reconcile afterwards heals the one window the exporter leaves open --
 // it snapshots the database before walking the trees, so a file written during
 // the export is in the archive with no index row behind it.
 func importFresh(ctx context.Context, a *archiveReader, opts ImportOptions, choice LockChoice, logger *slog.Logger, rep *ImportReport) error {
@@ -386,6 +396,7 @@ func importFresh(ctx context.Context, a *archiveReader, opts ImportOptions, choi
 		// it were interrupted.
 		rep.Memories = a.manifest.Counts.MemoryFiles
 		rep.Notes = a.manifest.Counts.NoteFiles
+		rep.Transcripts = a.manifest.Counts.TranscriptFiles
 		rep.Warnings = append(rep.Warnings, embeddingWarnings(a.manifest, opts.Embedder, ModeFresh)...)
 		return applyFreshLocks(ctx, nil, opts, manifestLocks(a.manifest), choice, rep)
 	}
@@ -396,6 +407,7 @@ func importFresh(ctx context.Context, a *archiveReader, opts ImportOptions, choi
 	}
 	rep.Memories = ex.MemoryFiles
 	rep.Notes = ex.NoteFiles
+	rep.Transcripts = ex.TranscriptFiles
 
 	dbPath := filepath.Join(opts.DataDir, DBName)
 	if ex.dbPath != "" {

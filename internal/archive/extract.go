@@ -4,6 +4,8 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,7 +15,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/oklog/ulid/v2"
+
 	"github.com/arctop/seamless/internal/files"
+	"github.com/arctop/seamless/internal/harvest"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/validate"
 )
@@ -30,7 +35,38 @@ const (
 	// importer allocate without limit. The database entry is exempt because it
 	// is streamed to disk rather than buffered.
 	maxEntryBytes = 64 << 20
+
+	// maxTranscriptEntryBytes bounds one transcript copy, checked on its
+	// header before a byte of it is read. A copy is streamed, never buffered,
+	// so the bound is about disk rather than memory: the largest copy the
+	// transcripts service keeps (harvest.MaxTranscriptBytes uncompressed; gzip
+	// adds a few bytes per 64 KiB block to data it cannot shrink) and a slack
+	// no deflate overhead reaches.
+	maxTranscriptEntryBytes = harvest.MaxTranscriptBytes + 1<<20
+
+	// transcriptTempPrefix starts the temporary name a copy is extracted
+	// under before its rename. It starts with the transcripts service's own
+	// partial-copy prefix (".tmp-"), so one an interrupted restore left in a
+	// data dir is swept when the daemon starts.
+	transcriptTempPrefix = ".tmp-archive-"
 )
+
+// validTranscriptName reports whether base names a transcript copy as the
+// transcripts service writes it: <session ULID>.jsonl.gz, the ULID in its
+// canonical form, nothing else.
+func validTranscriptName(base string) bool {
+	id, ok := strings.CutSuffix(base, TranscriptSuffix)
+	if !ok || id == "" || strings.ContainsAny(id, "/.") {
+		return false
+	}
+	u, err := ulid.ParseStrict(id)
+	return err == nil && u.String() == id
+}
+
+// isTranscriptEntry reports whether an entry name is under transcripts/.
+func isTranscriptEntry(name string) bool {
+	return strings.HasPrefix(name, TranscriptsTree+"/")
+}
 
 // archiveReader is the guarded reader for an archive stream.
 //
@@ -167,6 +203,17 @@ func (a *archiveReader) nextEntry() (*tar.Header, error) {
 	if err := checkEntryName(hdr.Name); err != nil {
 		return nil, err
 	}
+	if isTranscriptEntry(hdr.Name) {
+		// A copy belongs to a session row, so it rides only beside the
+		// database that holds one.
+		if !a.manifest.IncludesDB {
+			return nil, fmt.Errorf("archive.extract: %w: %s in an archive without a database", ErrUnsafeEntry, hdr.Name)
+		}
+		if hdr.Size < 0 || hdr.Size > maxTranscriptEntryBytes {
+			return nil, fmt.Errorf("archive.extract: %w: %s is %d bytes, over the %d a transcript copy may be",
+				ErrUnsafeEntry, hdr.Name, hdr.Size, maxTranscriptEntryBytes)
+		}
+	}
 	if a.seen[hdr.Name] {
 		return nil, fmt.Errorf("archive.extract: %w: %s appears twice", ErrUnsafeEntry, hdr.Name)
 	}
@@ -181,7 +228,8 @@ func (a *archiveReader) nextEntry() (*tar.Header, error) {
 // and a trailing slash) and only then handed to validate.Path, which is the
 // repo's shared traversal guard. The layout check is last because it is the
 // narrowest: even a perfectly safe relative path is refused unless it is one of
-// the two fixed names or a .md file under one of the two trees.
+// the two fixed names, a .md file under one of the two markdown trees, or a
+// transcript copy directly under transcripts/ (validTranscriptName).
 func checkEntryName(name string) error {
 	if name == "" {
 		return fmt.Errorf("archive.extract: %w: empty entry name", ErrUnsafeEntry)
@@ -199,6 +247,13 @@ func checkEntryName(name string) error {
 		return nil
 	}
 	top, rest, ok := strings.Cut(name, "/")
+	if ok && top == TranscriptsTree {
+		if !validTranscriptName(rest) {
+			return fmt.Errorf("archive.extract: %w: %q is not a transcript copy (%s/<session ULID>%s)",
+				ErrUnsafeEntry, name, TranscriptsTree, TranscriptSuffix)
+		}
+		return nil
+	}
 	if !ok || rest == "" || (top != MemoryTree && top != NotesTree) {
 		return fmt.Errorf("archive.extract: %w: %q is outside the archive layout", ErrUnsafeEntry, name)
 	}
@@ -224,8 +279,9 @@ type extraction struct {
 	// none (a NoDB export).
 	dbPath string
 
-	MemoryFiles int
-	NoteFiles   int
+	MemoryFiles     int
+	NoteFiles       int
+	TranscriptFiles int
 }
 
 // rollback removes everything this extraction created, deepest first.
@@ -259,7 +315,8 @@ func (ex *extraction) rollback() {
 // whose parent the root has just verified is a real directory inside dest; the
 // database is streamed through the root with O_EXCL instead, because buffering
 // a multi-hundred-megabyte snapshot to hand it to AtomicWrite would be the only
-// unbounded allocation in the importer.
+// unbounded allocation in the importer. A transcript copy is streamed the same
+// way, to a temporary name renamed over its own (writeCopy).
 func (a *archiveReader) extractTo(ctx context.Context, dest, dbName string) (_ *extraction, retErr error) {
 	ex := &extraction{dest: dest}
 	defer func() {
@@ -309,6 +366,13 @@ func (a *archiveReader) extractTo(ctx context.Context, dest, dbName string) (_ *
 			if err := ex.writeStream(root, target, a.tr); err != nil {
 				return nil, err
 			}
+			continue
+		}
+		if isTranscriptEntry(hdr.Name) {
+			if err := ex.writeCopy(root, target, a.tr); err != nil {
+				return nil, err
+			}
+			ex.TranscriptFiles++
 			continue
 		}
 		if err := ex.writeAtomic(target, a.tr); err != nil {
@@ -451,5 +515,46 @@ func (ex *extraction) writeStream(root *os.Root, name string, r io.Reader) (retE
 	if err := f.Close(); err != nil {
 		return fmt.Errorf("archive.extract: close %s: %w", name, err)
 	}
+	return nil
+}
+
+// writeCopy streams one transcript copy through the root to a temporary name
+// in its directory, 0600 and synced, and renames it over its own name: the
+// copy is either whole under that name or not there. It never holds the copy
+// in memory, and the entry's size was bounded on its header (nextEntry).
+func (ex *extraction) writeCopy(root *os.Root, name string, r io.Reader) (retErr error) {
+	var suffix [8]byte
+	if _, err := rand.Read(suffix[:]); err != nil {
+		return fmt.Errorf("archive.extract: temporary name for %s: %w", name, err)
+	}
+	tmp := path.Join(path.Dir(name), transcriptTempPrefix+hex.EncodeToString(suffix[:]))
+	f, err := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return fmt.Errorf("archive.extract: create %s: %w", tmp, err)
+	}
+	installed := false
+	defer func() {
+		if !installed {
+			_ = f.Close()        // a second Close after a failed one only reports it again
+			_ = root.Remove(tmp) //nolint:errcheck // best-effort cleanup on a path already failing; the daemon's start sweeps a leftover
+		}
+	}()
+	if _, err := io.Copy(f, io.LimitReader(r, maxTranscriptEntryBytes)); err != nil {
+		return fmt.Errorf("archive.extract: write %s: %w", name, err)
+	}
+	if err := f.Chmod(0o600); err != nil {
+		return fmt.Errorf("archive.extract: chmod %s: %w", name, err)
+	}
+	if err := f.Sync(); err != nil {
+		return fmt.Errorf("archive.extract: sync %s: %w", name, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("archive.extract: close %s: %w", name, err)
+	}
+	if err := root.Rename(tmp, name); err != nil {
+		return fmt.Errorf("archive.extract: install %s: %w", name, err)
+	}
+	installed = true
+	ex.files = append(ex.files, filepath.Join(ex.dest, filepath.FromSlash(name)))
 	return nil
 }

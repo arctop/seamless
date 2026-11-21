@@ -524,7 +524,9 @@ recall has quietly gone lexical.</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd <span class="nb">export</span> <span class="o">[</span>-o FILE<span class="p">|</span>-<span class="o">]</span> <span class="o">[</span>--no-db<span class="o">]</span>
 </span></span></code></pre></div>
 <p>Writes the whole instance to one gzipped tar: the markdown corpus, a consistent
-snapshot of <code>seam.db</code>, and a <code>manifest.json</code> describing what is inside.</p>
+snapshot of <code>seam.db</code>, the <a href="../../guides/data/#flagged-transcripts">flagged sessions' transcript
+copies</a> that snapshot records, and a
+<code>manifest.json</code> describing what is inside.</p>
 <p><strong>Config and <code>mcp.api_key</code> are never in the archive.</strong> A restored instance gets
 its own config and a freshly generated key, which is what lets an archive be
 copied to another machine, a NAS, or a colleague without carrying this machine's
@@ -547,7 +549,7 @@ only credential.</p>
 <tr>
 <td><code>--no-db</code></td>
 <td><code>false</code></td>
-<td>Export the markdown trees only. Sessions, tasks, trials, events, and embeddings are then <strong>not</strong> in the archive.</td>
+<td>Export the markdown trees only. Sessions, tasks, trials, events, embeddings and transcript copies are then <strong>not</strong> in the archive.</td>
 </tr>
 </tbody>
 </table>
@@ -557,6 +559,7 @@ only credential.</p>
 </span></span><span class="line"><span class="cl">seam.db                             absent with --no-db
 </span></span><span class="line"><span class="cl">memory/{project|_global}/{name}.md
 </span></span><span class="line"><span class="cl">notes/{project|_global}/{slug}.md
+</span></span><span class="line"><span class="cl">transcripts/{session ULID}.jsonl.gz the copies the snapshot records; absent with --no-db
 </span></span></code></pre></div>
 <p><code>manifest.json</code> first is deliberate: a reader can refuse an archive - wrong
 format, or a schema newer than its own binary understands - before extracting a

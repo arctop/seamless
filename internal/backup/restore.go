@@ -34,6 +34,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/arctop/seamless/internal/archive"
 )
 
 // Restore modes.
@@ -117,10 +119,13 @@ const (
 )
 
 // swapEntries are the data dir entries a replacement moves, in order: the
-// database and its companions, then the two markdown trees. Everything else
+// database and its companions, then the two markdown trees, then the flagged
+// sessions' transcript copies, which go with the rows that name them: the
+// backup's come in with its database, and today's go to previous/ with
+// today's (and so into the before-restore backup, the undo). Everything else
 // in the data dir (the lock, the backups, the update and restore records, the
 // feed spool) stays.
-var swapEntries = []string{"seam.db", "seam.db-wal", "seam.db-shm", "seam.db.import-tmp", "memory", "notes"}
+var swapEntries = []string{"seam.db", "seam.db-wal", "seam.db-shm", "seam.db.import-tmp", "memory", "notes", archive.TranscriptsTree}
 
 // RestoreRoot is <dataDir>/restore.
 func RestoreRoot(dataDir string) string { return filepath.Join(dataDir, RestoreDirName) }
@@ -233,7 +238,8 @@ type Result struct {
 	// what a merge added of each.
 	Memories int `json:"memories,omitempty"`
 	Notes    int `json:"notes,omitempty"`
-	// Added counts what a merge added: memories, notes and database rows.
+	// Added counts what a merge added: memories, notes, transcript copies and
+	// database rows.
 	Added int       `json:"added,omitempty"`
 	Kept  KeptWords `json:"kept,omitzero"`
 	// Recorded is whether its event is in the event log.

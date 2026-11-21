@@ -15,8 +15,9 @@ backups in two clicks. The rest of this page is about knowing which half of
 schedule, lists the backups it finds, and restores one. Each backup is one
 archive of the kind [`seamlessd export`](#the-whole-instance-in-one-archive)
 writes: every memory and note, a consistent snapshot of the database with your
-sessions, tasks, trials and projects, and a list of what each project holds.
-Like an export, it holds no config and no key.
+sessions, tasks, trials and projects, the [transcript
+copies](#flagged-transcripts) of flagged sessions, and a list of what each
+project holds. Like an export, it holds no config and no key.
 
 ### The schedule
 
@@ -68,6 +69,11 @@ its own answer: allow Seamless in **System Settings > Privacy & Security >
 Files and Folders**, or give it **Full Disk Access**. A disk that is not
 connected is never written under: the run fails, says so, and the next one
 tries again.
+
+A backup holds whole conversations: the transcript of every flagged session,
+with whatever that session read or was pasted into it, from any project. A
+folder elsewhere - a synced folder, an external disk, a shared drive - carries
+them wherever it goes, so choose one only you can read.
 
 ### The list
 
@@ -200,14 +206,27 @@ kept.
 **Removing one.** Clearing the flag deletes the copy. The event log keeps the
 history of the flag and its clearing, never the transcript.
 
-**Not in backups.** Copies are left out of backups and `seamlessd export`
-archives: an archive carries `memory/`, `notes/` and the database, and the
-release before this one refuses an archive with anything else in it, so a
-backup holding copies could not be restored by a rollback or an older
-`seamlessd import`; an archive also holds each file in memory while it is
-written, and copies run to hundreds of megabytes. A restore leaves the folder
-as it is, and a session page says when its record names a copy this server
-does not hold. Copy the folder yourself if the copies must outlive the disk.
+**In backups.** Every backup that holds the database holds the copies too:
+scheduled and manual backups, `seamlessd export` without `--no-db`, the
+updater's pre-update backup and the safety backup a restore takes. Each copy
+is streamed from disk into the archive, never held in memory, and a backup
+takes only the copies its database records as kept, so its rows and its
+copies agree. A backup of memories and notes only (`--no-db`) holds none. A
+backup folder elsewhere therefore carries whole conversations, as
+[the folder](#the-folder) says.
+
+- **Replace all data** puts the backup's copies back with its database.
+  Today's go into the safety backup with the rest of today's data, so
+  **Undo this restore** brings them back.
+- **Only bring back what's missing** brings a copy only with its session: for
+  a session the backup adds, or for one here that records the same copy and
+  whose file is gone. A session already here keeps its own flag and copy, and
+  no copy file is ever replaced or removed.
+
+An earlier release lists a backup from this one as made by a newer Seamless
+and refuses to restore it, copies or not. An update's rollback puts back the
+database only, so a session page may then say its record names a copy this
+server does not hold.
 
 ## Put it in git
 
@@ -245,8 +264,9 @@ seamlessd export
 #   database: schema v25, 18422 rows across 21 tables
 ```
 
-One gzipped tar with the markdown corpus, a consistent snapshot of `seam.db`, and
-a manifest describing what is inside. Full flags in
+One gzipped tar with the markdown corpus, a consistent snapshot of `seam.db`, the
+[transcript copies](#flagged-transcripts) of flagged sessions, and a manifest
+describing what is inside. Full flags in
 [the CLI reference](/reference/cli-seamlessd/#seamlessd_export).
 
 Three things worth knowing:
@@ -262,7 +282,7 @@ Three things worth knowing:
   writes the archive to stdout and the report to stderr.
 
 `--no-db` gives you a knowledge-only archive: the two markdown trees, nothing
-else. It is the tarball equivalent of the git recipe above.
+else (no transcript copy either: a copy belongs to a session in the database). It is the tarball equivalent of the git recipe above.
 
 ## Restore
 

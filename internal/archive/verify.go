@@ -26,10 +26,11 @@ type Verified struct {
 	Bytes int64
 	// Unpacked is the size of its entries after the manifest, decompressed:
 	// what a restore writes to disk.
-	Unpacked    int64
-	MemoryFiles int
-	NoteFiles   int
-	HasDB       bool
+	Unpacked        int64
+	MemoryFiles     int
+	NoteFiles       int
+	TranscriptFiles int
+	HasDB           bool
 }
 
 // Verify reads a whole archive through the guards an import applies, writing
@@ -68,7 +69,9 @@ func Verify(ctx context.Context, r io.Reader, copyTo io.Writer) (Verified, error
 		if err != nil {
 			return Verified{}, err
 		}
-		if hdr.Name != DBName && hdr.Size > maxEntryBytes {
+		// The database and the transcript copies are streamed (a copy's own
+		// bound is on its header, in nextEntry); a markdown entry is read whole.
+		if hdr.Name != DBName && !isTranscriptEntry(hdr.Name) && hdr.Size > maxEntryBytes {
 			return Verified{}, fmt.Errorf("archive.Verify: %w: %s exceeds %d bytes", ErrUnsafeEntry, hdr.Name, maxEntryBytes)
 		}
 		n, err := io.Copy(io.Discard, a.tr)
@@ -83,6 +86,8 @@ func Verify(ctx context.Context, r io.Reader, copyTo io.Writer) (Verified, error
 			v.MemoryFiles++
 		case strings.HasPrefix(hdr.Name, NotesTree+"/"):
 			v.NoteFiles++
+		case isTranscriptEntry(hdr.Name):
+			v.TranscriptFiles++
 		}
 	}
 	// The tar ends before the gzip stream does: read the stream to its end, which
@@ -106,6 +111,9 @@ func Verify(ctx context.Context, r io.Reader, copyTo io.Writer) (Verified, error
 	case m.Counts.NoteFiles != v.NoteFiles:
 		return Verified{}, fmt.Errorf("archive.Verify: %w: %d note files, the manifest lists %d",
 			ErrIncomplete, v.NoteFiles, m.Counts.NoteFiles)
+	case m.Counts.TranscriptFiles != v.TranscriptFiles:
+		return Verified{}, fmt.Errorf("archive.Verify: %w: %d transcript copies, the manifest lists %d",
+			ErrIncomplete, v.TranscriptFiles, m.Counts.TranscriptFiles)
 	}
 	v.SHA256 = hex.EncodeToString(h.Sum(nil))
 	v.Bytes = counted.n

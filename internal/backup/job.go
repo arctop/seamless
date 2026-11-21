@@ -211,7 +211,8 @@ func (s *Service) checkSpace(dir, local string) *Failure {
 }
 
 // estimateNeed is the space one backup takes, at most: the database and its
-// WAL (the snapshot, then the archive holding it) and the markdown trees.
+// WAL (the snapshot, then the archive holding it), the markdown trees and the
+// transcript copies.
 func estimateNeed(dataDir string) (uint64, error) {
 	var need uint64
 	for _, name := range []string{archive.DBName, archive.DBName + "-wal"} {
@@ -224,7 +225,7 @@ func estimateNeed(dataDir string) (uint64, error) {
 		}
 		need += uint64(fi.Size())
 	}
-	for _, tree := range []string{archive.MemoryTree, archive.NotesTree} {
+	for _, tree := range []string{archive.MemoryTree, archive.NotesTree, archive.TranscriptsTree} {
 		err := filepath.WalkDir(filepath.Join(dataDir, tree), func(_ string, d fs.DirEntry, err error) error {
 			if errors.Is(err, fs.ErrNotExist) {
 				return nil

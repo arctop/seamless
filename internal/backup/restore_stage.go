@@ -447,7 +447,8 @@ func writeLocalBackup(ctx context.Context, spec localBackupSpec) (string, error)
 	syncDir(local)
 	back, err := readManifestFile(final)
 	if err == nil && (back.Fingerprint != m.Fingerprint || !back.CreatedAt.Equal(m.CreatedAt) ||
-		back.Counts.MemoryFiles != m.Counts.MemoryFiles || back.Counts.NoteFiles != m.Counts.NoteFiles) {
+		back.Counts.MemoryFiles != m.Counts.MemoryFiles || back.Counts.NoteFiles != m.Counts.NoteFiles ||
+		back.Counts.TranscriptFiles != m.Counts.TranscriptFiles) {
 		err = errors.New("its manifest is not the one just written")
 	}
 	if err != nil {

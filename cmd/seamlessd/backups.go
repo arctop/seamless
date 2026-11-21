@@ -255,6 +255,9 @@ func holdsWord(e backup.Entry) string {
 		if sessions > 0 {
 			holds += fmt.Sprintf(", %d sessions", sessions)
 		}
+		if n := m.Counts.TranscriptFiles; n > 0 {
+			holds += fmt.Sprintf(", %d transcript copies", n)
+		}
 		if !m.IncludesDB {
 			holds += " (memories and notes only)"
 		}

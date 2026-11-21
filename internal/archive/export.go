@@ -22,6 +22,7 @@ import (
 	// driver is how a later refactor turns this into a runtime panic.
 	_ "modernc.org/sqlite"
 
+	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -130,6 +131,7 @@ func Export(ctx context.Context, opts ExportOptions) (Manifest, error) {
 	}
 
 	snapPath := ""
+	var keptCopies []string
 	if !opts.NoDB {
 		snapPath = filepath.Join(tmpDir, DBName)
 		if err := snapshotDB(ctx, filepath.Join(opts.DataDir, DBName), snapPath); err != nil {
@@ -144,6 +146,7 @@ func Export(ctx context.Context, opts ExportOptions) (Manifest, error) {
 		manifest.EmbeddingModels = facts.models
 		manifest.Projects, manifest.ProjectsOmitted = capProjects(snapshotProjects(facts.projects))
 		manifest.Fingerprint = facts.fingerprint
+		keptCopies = facts.keptCopies
 	}
 
 	// Read from the snapshot when there is one, so the record describes the
@@ -180,7 +183,25 @@ func Export(ctx context.Context, opts ExportOptions) (Manifest, error) {
 		manifest.Projects, manifest.ProjectsOmitted = capProjects(treeProjects(memFiles, noteFiles))
 	}
 
-	if err := writeArchive(opts.Out, manifest, snapPath, append(memFiles, noteFiles...)); err != nil {
+	// The transcript copies the snapshot records as kept, each opened here so
+	// the manifest can count it and the archive streams it as it is now: a
+	// copy is replaced by a rename and never rewritten in place, so an open
+	// file keeps its bytes whatever happens to the name. A NoDB export has no
+	// session rows to name a copy, and carries none.
+	var copies []transcriptFile
+	if snapPath != "" {
+		copies, err = openTranscripts(opts.DataDir, keptCopies)
+		if err != nil {
+			return Manifest{}, err
+		}
+		defer closeTranscripts(copies)
+		manifest.Counts.TranscriptFiles = len(copies)
+		for _, c := range copies {
+			manifest.Counts.TranscriptBytes += c.size
+		}
+	}
+
+	if err := writeArchive(opts.Out, manifest, snapPath, append(memFiles, noteFiles...), copies); err != nil {
 		return Manifest{}, err
 	}
 	return manifest, nil
@@ -214,6 +235,10 @@ type snapshotFacts struct {
 	models        []string
 	projects      []store.ProjectContent
 	fingerprint   string
+	// keptCopies are the sessions whose transcript copy the snapshot records
+	// as kept (flagged, copy copied), sorted: the only copies the archive may
+	// carry, so the rows and the files it brings back agree.
+	keptCopies []string
 }
 
 // inspectSnapshot verifies the snapshot and reads what the manifest reports
@@ -252,7 +277,45 @@ func inspectSnapshot(ctx context.Context, snapPath string) (snapshotFacts, error
 	if f.fingerprint, err = store.ContentFingerprint(ctx, db); err != nil {
 		return snapshotFacts{}, fmt.Errorf("archive.Export: fingerprint the snapshot: %w", err)
 	}
+	if f.keptCopies, err = snapshotKeptCopies(ctx, db); err != nil {
+		return snapshotFacts{}, err
+	}
 	return f, nil
+}
+
+// snapshotKeptCopies lists the sessions whose transcript copy the snapshot
+// records as kept. A snapshot from before the session flag (no verdict or
+// transcript_copy column) records none, so its archive carries none -- which
+// is also what keeps a copy out of every archive an older release could
+// open: the columns arrive with the migration that makes its schema_version
+// too new for one.
+func snapshotKeptCopies(ctx context.Context, db *sql.DB) ([]string, error) {
+	var cols int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info('sessions')
+		WHERE name IN ('verdict', 'transcript_copy')`).Scan(&cols); err != nil {
+		return nil, fmt.Errorf("archive.Export: read the snapshot's sessions: %w", err)
+	}
+	if cols < 2 {
+		return nil, nil
+	}
+	rows, err := db.QueryContext(ctx, `SELECT id FROM sessions
+		WHERE verdict IS NOT NULL AND transcript_copy = ? ORDER BY id`, string(core.TranscriptCopied))
+	if err != nil {
+		return nil, fmt.Errorf("archive.Export: the snapshot's transcript copies: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("archive.Export: the snapshot's transcript copies: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("archive.Export: the snapshot's transcript copies: %w", err)
+	}
+	return ids, nil
 }
 
 // snapshotProjects converts the snapshot's per-project counts for the manifest.
@@ -523,9 +586,111 @@ func collectTree(ctx context.Context, dataDir, tree string) ([]treeFile, error) 
 	return out, nil
 }
 
+// transcriptFile is one transcript copy destined for the archive, open since
+// the walk: it is streamed, never read whole.
+type transcriptFile struct {
+	name    string // transcripts/<session ULID>.jsonl.gz
+	f       *os.File
+	size    int64
+	modTime time.Time
+}
+
+// openTranscripts opens the copies of the sessions in ids that are on disk
+// under dataDir's transcripts/, in ids' order. The walk takes only what the
+// transcripts service writes: a regular file named <session ULID>.jsonl.gz,
+// never a link (the name is looked at, not followed) and never a partial
+// copy, whose dot-prefixed temporary name no id produces. A copy the
+// snapshot names but the disk does not hold (cleared since) is left out; one
+// larger than an extractor accepts is refused, since an archive no import
+// could read back is no backup. The tree root is refused when it is a link
+// or not a directory, as the markdown trees are.
+func openTranscripts(dataDir string, ids []string) (_ []transcriptFile, retErr error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	dir := filepath.Join(dataDir, TranscriptsTree)
+	info, err := os.Lstat(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("archive.Export: lstat %s: %w", dir, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("archive.Export: %w: %s is a symlink", ErrUnsafeEntry, dir)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("archive.Export: %w: %s is not a directory", ErrUnsafeEntry, dir)
+	}
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, fmt.Errorf("archive.Export: open %s: %w", dir, err)
+	}
+	defer func() { _ = root.Close() }()
+
+	var out []transcriptFile
+	defer func() {
+		if retErr != nil {
+			closeTranscripts(out)
+		}
+	}()
+	for _, id := range ids {
+		name := id + TranscriptSuffix
+		if !validTranscriptName(name) {
+			continue
+		}
+		li, err := root.Lstat(name)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("archive.Export: lstat %s: %w", name, err)
+		}
+		if !li.Mode().IsRegular() {
+			continue // a link or anything else is not a copy the service made
+		}
+		f, err := root.Open(name)
+		if errors.Is(err, os.ErrNotExist) {
+			continue // cleared between the look and the open
+		}
+		if err != nil {
+			return nil, fmt.Errorf("archive.Export: open %s: %w", name, err)
+		}
+		// The root keeps the open inside the copies' directory; the file it
+		// opened is judged again, since a copy re-made in between is a new
+		// file under the same name.
+		fi, err := f.Stat()
+		if err != nil {
+			_ = f.Close()
+			return nil, fmt.Errorf("archive.Export: stat %s: %w", name, err)
+		}
+		if !fi.Mode().IsRegular() {
+			_ = f.Close()
+			continue
+		}
+		if fi.Size() > maxTranscriptEntryBytes {
+			_ = f.Close()
+			return nil, fmt.Errorf("archive.Export: %w: %s/%s is %d bytes, over the %d an archive holds",
+				ErrUnsafeEntry, TranscriptsTree, name, fi.Size(), maxTranscriptEntryBytes)
+		}
+		out = append(out, transcriptFile{
+			name: TranscriptsTree + "/" + name, f: f, size: fi.Size(), modTime: fi.ModTime(),
+		})
+	}
+	return out, nil
+}
+
+// closeTranscripts closes every opened copy.
+func closeTranscripts(copies []transcriptFile) {
+	for _, c := range copies {
+		_ = c.f.Close()
+	}
+}
+
 // writeArchive streams the gzipped tar: manifest first, then the snapshot, then
-// the markdown files in walk order.
-func writeArchive(out io.Writer, manifest Manifest, snapPath string, files []treeFile) (retErr error) {
+// the markdown files in walk order, then the transcript copies, each streamed
+// from its open file.
+func writeArchive(out io.Writer, manifest Manifest, snapPath string, files []treeFile, copies []transcriptFile) (retErr error) {
 	manifestJSON, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return fmt.Errorf("archive.Export: marshal manifest: %w", err)
@@ -573,6 +738,17 @@ func writeArchive(out io.Writer, manifest Manifest, snapPath string, files []tre
 	for _, f := range files {
 		if err := writeEntry(tw, f.name, f.modTime, int64(len(f.data)), func(w io.Writer) error {
 			_, err := w.Write(f.data)
+			return err
+		}); err != nil {
+			return err
+		}
+	}
+
+	for _, c := range copies {
+		if err := writeEntry(tw, c.name, c.modTime, c.size, func(w io.Writer) error {
+			// Exactly the size the header promised: a file cut short is an
+			// error here, never a short entry.
+			_, err := io.CopyN(w, c.f, c.size)
 			return err
 		}); err != nil {
 			return err

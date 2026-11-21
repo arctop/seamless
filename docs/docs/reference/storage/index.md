@@ -25,7 +25,7 @@ _global/{name}.md Machine-wide memories
 notes/ Durable note tree
 _global/{slug}.md Machine-wide notes
 {project}/{slug}.md One project note per file
-transcripts/ Flagged sessions' transcript copies, 0700 (files 0600); not in backups
+transcripts/ Flagged sessions' transcript copies, 0700 (files 0600); in every backup that holds the database
 {session ULID}.jsonl.gz One flagged session's whole transcript, gzip; removed when the flag is cleared
 backups/ Backups: the scheduled ones (unless backup.dir names another folder), the safety backups taken before a restore, and the pre-update archives (pre-update-v{old}-{time}.tar.gz), the newest two
 .schedule.json The schedule's record: the last run, the failure streak, the folder in use and this install's id
@@ -247,8 +247,8 @@ had already migrated the database, the backup's database is put back. The
 migrated one, with its `-wal` and `-shm`, stays beside it as
 `seam.db.pre-rollback-<attempt>` until you delete it. A backup's database that
 lacks a console lock the migrated one holds is not put back: the migrated
-database stays in place, so a rollback never unlocks a project. Memories and notes are
-never rolled back. Creating `update/test-fail-confirm` rehearses a rollback on
+database stays in place, so a rollback never unlocks a project. Memories, notes and
+transcript copies are never rolled back. Creating `update/test-fail-confirm` rehearses a rollback on
 a real install: while it exists, every update fails its confirmation on purpose
 and rolls back, and `seamlessd doctor` warns. Delete it afterwards.
 
@@ -261,7 +261,8 @@ automatic backup, `seamless-<host>-<UTC time>-before-restore.tar.gz` for the
 safety backup a restore takes, which always stays in `<data_dir>/backups`, and
 `seamless-<host>-<UTC time>.tar.gz` for one made with **Back up now**, the name
 `seamlessd export` gives too. Each one is an export archive whose manifest also
-says why it was written, which install wrote it, and what each project held. A
+says why it was written, which install wrote it, what each project held and how
+many transcript copies it carries. A
 backup is written to a dot-prefixed temporary file in its folder, synced,
 renamed into place and read back. Listings skip dot files.
 

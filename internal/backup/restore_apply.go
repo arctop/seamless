@@ -397,9 +397,10 @@ func mergeInto(ctx context.Context, src, dataDir, tmp string, forceLocked []stri
 	})
 }
 
-// added counts what an import wrote.
+// added counts what an import wrote: memories, notes, transcript copies and
+// database rows.
 func added(rep *archive.ImportReport) int {
-	n := rep.Memories + rep.Notes
+	n := rep.Memories + rep.Notes + rep.Transcripts
 	for _, c := range rep.Rows {
 		n += c
 	}

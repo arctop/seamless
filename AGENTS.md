@@ -1121,9 +1121,19 @@ any of it.
   restricted account, a relay's caller or a paired device. It is not fenced
   per project; a locked project's session answers as locked because the
   session is read through `s.db(ctx)`.
-- **Copies are not in archives.** `internal/archive` carries `memory/`,
-  `notes/` and the database, and an older release's extractor refuses any
-  other entry; do not add `transcripts/` without solving that rollback.
+- **Copies ride with the database in archives** (`internal/archive`,
+  `transcripts/<session ULID>.jsonl.gz` after the markdown). Export takes only
+  the copies its snapshot records as kept, opened before the manifest is
+  written and streamed (never read whole: `TestTranscripts_AreStreamedNotBuffered`);
+  a NoDB export carries none, and the extractor refuses a copy beside no
+  database, any other name under `transcripts/`, and one over
+  `maxTranscriptEntryBytes`, on its header. An older release refuses such an
+  archive before its first entry because the copy record arrives with
+  migration 051 (schema too new), so `FormatVersion` stays 1. A replace restore
+  swaps `transcripts/` with the database (`swapEntries`); a merge writes a copy
+  only for a session whose row afterwards holds the archive's own copy record
+  (`mergeableCopies`), never replacing a file. The flagged rows are in
+  `store.ContentFingerprint`, so a new copy is never skipped as unchanged.
 
 ### Write screening (`internal/screening`)
 

@@ -161,7 +161,7 @@ func dbSchemaVersion(dbPath string) (int, error) {
 
 // backupNeed estimates the free space a backup takes: the database and its
 // WAL twice (the VACUUM INTO snapshot Export stages, then the archive holding
-// it), the markdown trees once, and backupSpare.
+// it), the markdown trees and the transcript copies once, and backupSpare.
 func backupNeed(dataDir string) (uint64, error) {
 	var need uint64 = backupSpare
 	for _, name := range []string{archive.DBName, archive.DBName + "-wal"} {
@@ -174,7 +174,7 @@ func backupNeed(dataDir string) (uint64, error) {
 		}
 		need += 2 * uint64(fi.Size())
 	}
-	for _, tree := range []string{archive.MemoryTree, archive.NotesTree} {
+	for _, tree := range []string{archive.MemoryTree, archive.NotesTree, archive.TranscriptsTree} {
 		err := filepath.WalkDir(filepath.Join(dataDir, tree), func(_ string, d fs.DirEntry, err error) error {
 			if errors.Is(err, fs.ErrNotExist) {
 				return nil

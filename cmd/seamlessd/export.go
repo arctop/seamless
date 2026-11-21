@@ -191,6 +191,10 @@ func exportSummary(m archive.Manifest, dest string, size int64) string {
 		if len(m.EmbeddingModels) > 0 {
 			fmt.Fprintf(&b, "\n  embeddings: %s", strings.Join(m.EmbeddingModels, ", "))
 		}
+		if n := m.Counts.TranscriptFiles; n > 0 {
+			fmt.Fprintf(&b, "\n  transcript copies: %d (%s), flagged sessions' whole conversations",
+				n, humanSize(m.Counts.TranscriptBytes))
+		}
 	} else {
 		fmt.Fprintf(&b, "\n  database: not included (--no-db); sessions, tasks, trials and events are NOT in this archive")
 	}

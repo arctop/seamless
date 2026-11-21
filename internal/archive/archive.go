@@ -13,16 +13,27 @@
 //	seam.db                           absent when exported with NoDB
 //	memory/<project|_global>/<name>.md
 //	notes/<project|_global>/<slug>.md
+//	transcripts/<session ULID>.jsonl.gz
+//	                                  the flagged sessions' transcript copies
+//	                                  the snapshot records as kept; only beside
+//	                                  seam.db, never in a NoDB export
 //
 // Every entry is a regular file with mode 0600 and uid/gid zeroed: an archive
 // restored as another user must not carry the exporting machine's ownership,
 // and the corpus is owner-only on disk for the same reason the data dir is.
 //
-// The package imports core, events, files, store, and validate. It must NOT import
-// internal/config: an archive is described by its manifest and its data dir
-// argument, never by the config of whatever process happens to be holding it,
-// which is what lets an export run against a data dir the caller names and an
-// import target a directory that has no config yet.
+// The transcript copies are streamed from disk on both sides (a copy can run
+// to tens of megabytes; the markdown is read whole). An older release refuses
+// an archive holding them before it reads a single entry: they ride only
+// beside a snapshot that has the copy record (migration 051), whose
+// schema_version is past every release without it (ErrSchemaTooNew).
+//
+// The package imports core, events, files, store, transcripts (its directory
+// and file names only) and validate. It must NOT import internal/config: an
+// archive is described by its manifest and its data dir argument, never by the
+// config of whatever process happens to be holding it, which is what lets an
+// export run against a data dir the caller names and an import target a
+// directory that has no config yet.
 package archive
 
 import (
@@ -30,6 +41,7 @@ import (
 	"time"
 
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/transcripts"
 )
 
 // FormatVersion is the archive container version. It describes the tar layout
@@ -49,6 +61,12 @@ const (
 	// MemoryTree and NotesTree are the two markdown trees carried verbatim.
 	MemoryTree = "memory"
 	NotesTree  = "notes"
+	// TranscriptsTree holds the flagged sessions' transcript copies, one
+	// <session ULID>.jsonl.gz each (TranscriptSuffix): the data dir's own
+	// directory for them, under the same name.
+	TranscriptsTree = transcripts.DirName
+	// TranscriptSuffix ends every transcript copy's name.
+	TranscriptSuffix = transcripts.Suffix
 )
 
 // Sentinels. Each one names a distinct refusal, so callers can tell "this file
@@ -134,6 +152,13 @@ type Counts struct {
 	// MemoryFiles and NoteFiles count the .md entries in each tree.
 	MemoryFiles int `json:"memory_files"`
 	NoteFiles   int `json:"note_files"`
+
+	// TranscriptFiles counts the transcript copies under transcripts/, and
+	// TranscriptBytes their size as stored (gzip). Both are absent from an
+	// archive that holds none: a NoDB export, one with no flagged session's
+	// copy kept, and every archive written before copies were carried.
+	TranscriptFiles int   `json:"transcript_files,omitempty"`
+	TranscriptBytes int64 `json:"transcript_bytes,omitempty"`
 
 	// Tables maps table name to row count in the seam.db snapshot, read from
 	// the snapshot after it verified rather than from the live database, so the

@@ -41,11 +41,12 @@ func exportTo(t *testing.T, dataDir, dir, name string, noDB bool) string {
 	return path
 }
 
-// corpus maps every file under dataDir's memory/ and notes/ to its digest.
+// corpus maps every file under dataDir's memory/ and notes/, and every
+// transcript copy under transcripts/, to its digest.
 func corpus(t *testing.T, dataDir string) map[string]string {
 	t.Helper()
 	out := map[string]string{}
-	for _, tree := range []string{archive.MemoryTree, archive.NotesTree} {
+	for _, tree := range []string{archive.MemoryTree, archive.NotesTree, archive.TranscriptsTree} {
 		root := filepath.Join(dataDir, tree)
 		err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 			if errors.Is(err, fs.ErrNotExist) {
@@ -82,6 +83,37 @@ func writeNote(t *testing.T, dataDir, project, slug, id, body string) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(p), 0o700))
 	require.NoError(t, os.WriteFile(p, []byte("---\nid: "+id+"\ntitle: "+slug+"\nslug: "+slug+"\nproject: "+project+
 		"\ncreated: 2026-11-10T03:00:00Z\nupdated: 2026-11-10T03:00:00Z\n---\n"+body+"\n"), 0o600))
+}
+
+// keepCopy flags a new session in db and keeps a transcript copy of it
+// holding content under dataDir, as the transcripts service does, and returns
+// the session's id.
+func keepCopy(t *testing.T, db *sql.DB, dataDir, content string) string {
+	t.Helper()
+	ctx := context.Background()
+	id, err := core.NewID()
+	require.NoError(t, err)
+	now := time.Now().UTC()
+	require.NoError(t, store.CreateSession(ctx, db, core.Session{
+		ID: id, Name: "cc/" + strings.ToLower(id[len(id)-8:]), ProjectSlug: "alpha",
+		Status: core.SessionCompleted, CreatedAt: now, UpdatedAt: now,
+	}))
+	_, err = store.SetSessionFlag(ctx, db, id, core.VerdictGood, "went well", now)
+	require.NoError(t, err)
+	recopy(t, db, dataDir, id, content)
+	return id
+}
+
+// recopy replaces session id's copy with content and records it, as a copy
+// made again (a Codex rollout that grew) does.
+func recopy(t *testing.T, db *sql.DB, dataDir, id, content string) {
+	t.Helper()
+	dir := filepath.Join(dataDir, archive.TranscriptsTree)
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, id+archive.TranscriptSuffix), []byte(content), 0o600))
+	recorded, err := store.SetTranscriptCopy(context.Background(), db, id, core.TranscriptCopied, int64(len(content)), time.Now().UTC())
+	require.NoError(t, err)
+	require.True(t, recorded)
 }
 
 // reconcile indexes the data dir's corpus into db, as the daemon does.
@@ -122,14 +154,18 @@ func lockAlpha(t *testing.T, db *sql.DB) {
 }
 
 // scene is a data dir with a backup taken, then changed since: the backup
-// holds task 01TASKSEED and memory boot-race; today adds 01TASKTODAY and
-// memory today-only, and locks alpha.
+// holds task 01TASKSEED, memory boot-race and a flagged session's transcript
+// copy; today adds 01TASKTODAY, memory today-only and a second flagged
+// session's copy, makes the first copy again, and locks alpha.
 type scene struct {
 	dataDir string
 	db      *sql.DB
 	backup  string
-	before  map[string]string // the backup's corpus
+	before  map[string]string // the backup's corpus, its transcript copies included
 	today   map[string]string // today's corpus
+	// copied is the session flagged before the backup, copiedToday the one
+	// flagged after it.
+	copied, copiedToday string
 }
 
 func newScene(t *testing.T) *scene {
@@ -139,12 +175,15 @@ func newScene(t *testing.T) *scene {
 	writeMemory(t, dataDir, "alpha", "boot-race", "01MEMSEED", "chroma races on boot")
 	writeNote(t, dataDir, "alpha", "design", "01NOTESEED", "the design")
 	reconcile(t, dataDir, db)
+	sc.copied = keepCopy(t, db, dataDir, "the conversation, as it stood at the backup")
 	sc.before = corpus(t, dataDir)
 	sc.backup = exportTo(t, dataDir, filepath.Join(t.TempDir(), "folder"), "seamless-test-host-20261110T030000Z.tar.gz", false)
 	addTask(t, db, "01TASKTODAY")
 	writeMemory(t, dataDir, "alpha", "today-only", "01MEMTODAY", "written after the backup")
 	writeNote(t, dataDir, "alpha", "today-note", "01NOTETODAY", "a note from today")
 	reconcile(t, dataDir, db)
+	recopy(t, db, dataDir, sc.copied, "the conversation, grown since the backup")
+	sc.copiedToday = keepCopy(t, db, dataDir, "a conversation flagged after the backup")
 	lockAlpha(t, db)
 	sc.today = corpus(t, dataDir)
 	require.NotEqual(t, sc.before, sc.today)
@@ -188,9 +227,10 @@ func TestRestore_ReplacePutsTheBackupBackAndKeepsTodaysLock(t *testing.T) {
 	out, err := applier(sc.dataDir).Apply(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, RestoreDone, out.Result.Outcome)
-	require.Equal(t, sc.before, corpus(t, sc.dataDir), "the corpus is the backup's, byte for byte")
+	require.Equal(t, sc.before, corpus(t, sc.dataDir), "the corpus and the copies are the backup's, byte for byte")
 	require.Equal(t, []string{"01TASKSEED"}, taskIDs(t, sc.dataDir))
 	require.NoFileExists(t, PendingPath(sc.dataDir))
+	require.Equal(t, []string{sc.copied}, flaggedWithCopy(t, sc.dataDir), "the rows name the copies the disk holds")
 
 	db, err := store.OpenExisting(filepath.Join(sc.dataDir, archive.DBName))
 	require.NoError(t, err)
@@ -218,6 +258,7 @@ func TestRestore_ReplacePutsTheBackupBackAndKeepsTodaysLock(t *testing.T) {
 	m, err := readManifestFile(safety)
 	require.NoError(t, err)
 	require.Equal(t, archive.KindBeforeRestore, m.Kind)
+	require.Equal(t, 2, m.Counts.TranscriptFiles, "the replaced data's copies are in the undo")
 
 	// Undo: restoring the safety backup brings today's data back, byte for byte.
 	db, err = store.Open(filepath.Join(sc.dataDir, archive.DBName))
@@ -231,6 +272,27 @@ func TestRestore_ReplacePutsTheBackupBackAndKeepsTodaysLock(t *testing.T) {
 	require.Equal(t, RestoreDone, out.Result.Outcome)
 	require.Equal(t, sc.today, corpus(t, sc.dataDir))
 	require.Equal(t, []string{"01TASKSEED", "01TASKTODAY"}, taskIDs(t, sc.dataDir))
+	require.ElementsMatch(t, []string{sc.copied, sc.copiedToday}, flaggedWithCopy(t, sc.dataDir))
+}
+
+// flaggedWithCopy lists the sessions the data dir's database records as
+// flagged with a copy kept.
+func flaggedWithCopy(t *testing.T, dataDir string) []string {
+	t.Helper()
+	db, err := store.OpenExisting(filepath.Join(dataDir, archive.DBName))
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+	rows, err := db.Query(`SELECT id FROM sessions WHERE verdict IS NOT NULL AND transcript_copy = 'copied' ORDER BY id`)
+	require.NoError(t, err)
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var id string
+		require.NoError(t, rows.Scan(&id))
+		out = append(out, id)
+	}
+	require.NoError(t, rows.Err())
+	return out
 }
 
 // The steps a replacement's apply takes, in order, as the hook hears them.
@@ -251,6 +313,8 @@ func TestRestore_AStopAtEveryStepOfTheSwapLeavesADataDirThatRecovers(t *testing.
 	steps := applySteps(t)
 	require.Contains(t, steps, "move-out:memory")
 	require.Contains(t, steps, "move-in:notes")
+	require.Contains(t, steps, "move-out:transcripts")
+	require.Contains(t, steps, "move-in:transcripts")
 	for _, stop := range steps {
 		t.Run(stop, func(t *testing.T) {
 			sc := newScene(t)
@@ -296,7 +360,7 @@ func TestRestore_AStopAtEveryStepOfTheSwapLeavesADataDirThatRecovers(t *testing.
 }
 
 func TestRestore_AStopDuringTheRollbackIsRolledBackAgain(t *testing.T) {
-	for _, stop := range []string{"rollback-out:memory", "rollback-in:notes", "rollback-in:seam.db"} {
+	for _, stop := range []string{"rollback-out:memory", "rollback-in:notes", "rollback-in:seam.db", "rollback-in:transcripts"} {
 		t.Run(stop, func(t *testing.T) {
 			sc := newScene(t)
 			sc.stage(t, ModeReplace)
@@ -497,6 +561,11 @@ func TestRestore_MergeBringsBackADeletedMemoryAndKeepsTodays(t *testing.T) {
 	require.Equal(t, p.Safety, out.Result.Previous)
 	require.FileExists(t, gone, "the deleted memory is back")
 	require.FileExists(t, filepath.Join(sc.dataDir, archive.MemoryTree, "alpha", "today-only.md"), "today's stays")
+	after := corpus(t, sc.dataDir)
+	for _, id := range []string{sc.copied, sc.copiedToday} {
+		rel := archive.TranscriptsTree + "/" + id + archive.TranscriptSuffix
+		require.Equal(t, sc.today[rel], after[rel], "a merge keeps today's copies: the session here has its own copy record")
+	}
 	require.Equal(t, []string{"01TASKSEED", "01TASKTODAY"}, taskIDs(t, sc.dataDir))
 	require.NoDirExists(t, workDir(sc.dataDir, p.ID))
 	require.FileExists(t, safety, "the safety backup stays")

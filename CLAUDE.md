@@ -269,7 +269,8 @@ on `/console/passkeys/add` and the owner approves the code it shows with
   memory/{project|_global}/{name}.md   one memory per file (source of truth)
   notes/{project|_global}/{slug}.md    work artifacts (source of truth)
   transcripts/<session ULID>.jsonl.gz  flagged sessions' transcript copies (0700/0600; the
-                                   owner's alone, removed with the flag, not in backups)
+                                   owner's alone, removed with the flag; streamed into every
+                                   backup that holds the database, restored with it)
   backups/                         scheduled backups (unless backup.dir names another folder),
                                    *-before-restore safety backups, and the updater's
                                    pre-update-v*.tar.gz archives (newest 2)
