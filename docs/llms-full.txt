@@ -2222,6 +2222,46 @@ bumps) filtered out. Each heading links the release's downloads and checksums.
 Install with one command ([quickstart](/quickstart/)), or update an existing
 install in place with `seamlessd update`.
 
+## v0.10.5 {#v0-10-5}
+
+Released 2026-11-21 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.10.5)
+
+### Features
+
+- feat(sessions): a flagged session's transcript survives a missing end signal and a large upload
+- feat(backups): transcript copies ride in every backup that holds the database
+- feat(sessions): the session flag keeps a flagged session's transcript
+- feat(setup): seamlessd setup and the installers turn locked projects on; console-open --path
+- feat(peer-auth): setup holds the release to the owner's release signers and moves the pin with the daemon
+- feat(peer-auth): seamlessd peer-auth setup|status|undo moves the daemon to its own account in one resumable command (01M73MX602TYCQTJTBJYSRWKCV)
+
+### Fixes
+
+- fix(sessions): a transcript upload answers what it kept, and the reaper leaves an upload in flight alone
+- fix(peer-auth): the move re-points only the agent clients wired before it
+- fix(update): a release signers pin accepts a group write bit when the group holds this account alone
+- fix(test): the detached-spawn test reads session ids with unix.Getsid; the gate vets linux too
+- fix(peer-auth): the hooks step never stops a move to ask which agent clients
+- fix(update): a release signers pin under a group-writable directory names the chmod that fixes it
+- fix(peer-auth): a release the pin refuses says to undo and plan afresh; the installer names no version to drop when none was pinned
+- fix(sessions): the verdict's text says a session that already ended is copied as soon as it can be
+- fix(console): the Flag filter lists flagged sessions of all time unless a window is chosen
+- fix(site-stamp): stamp an asset's references only, not text that names it
+- fix(console-open): --path refuses a %2e dot segment, which a browser reads as a dot
+- fix(update): the plan's backup row names the backup without a stamp it will not have
+- fix(recall): a kind listing returns every match up to its limit and counts the rest
+- fix(peer-auth): what the live run on macOS 26 and Ubuntu 24.04 found in setup and undo
+- fix(install): the cosign warning says the owner's signature is still checked
+- fix(branding): console-shots dismisses the welcome card again
+- fix(notes_read): a plan's slug answers with the plan's narrative when it is in the scope searched
+- fix(tasks_list): a query holding one task id is the id lookup, and the query redirect names recall's scopes
+- fix(commits): a refused commits list names every bad entry and the git rev-parse that expands it
+- fix(recall): read a hit's item kind sent as kind (note, task, session, ...) as the scope that selects it
+
+### Other
+
+- build(make): stamp the nearest release tag, not a site-* tag
+
 ## v0.10.4 {#v0-10-4}
 
 Released 2026-11-19 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.10.4)
