@@ -90,6 +90,50 @@ func TestContentFingerprint_MovesOnlyWithWhatABackupCarries(t *testing.T) {
 	require.NotEqual(t, edited, fp(), "a settings row a restore brings back is a change")
 }
 
+// A harvest that lands on a session that has ended moves no updated_at, and a
+// Codex turn grows a ledger row already there: each still moves the
+// fingerprint, since a backup carries the ledger. The same rows again do not.
+func TestContentFingerprint_MovesWithTheLedger(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	at := time.Date(2026, 11, 20, 3, 0, 0, 0, time.UTC)
+	require.NoError(t, CreateSession(ctx, db, core.Session{
+		ID: "01FPLEDGER0000000000000000", Name: "cx/ended", ProjectSlug: "alpha", Status: core.SessionCompleted, Ambient: true,
+		ExternalClient: "codex", ExternalSessionID: "fp-ledger", CreatedAt: at, UpdatedAt: at,
+	}))
+	fp := func() string {
+		t.Helper()
+		got, err := ContentFingerprint(ctx, db)
+		require.NoError(t, err)
+		return got
+	}
+	credit := func(in int, when time.Time) {
+		t.Helper()
+		u := core.TokenUsage{Input: in}
+		u.Normalize()
+		ok, err := CreditConversationUsage(ctx, db, "codex", "fp-ledger", UsageCredit{Cumulative: u, At: when, Turn: true})
+		require.NoError(t, err)
+		require.True(t, ok)
+	}
+	base := fp()
+	credit(10, at)
+	first := fp()
+	require.NotEqual(t, base, first, "a harvest on an ended session is a change")
+	credit(25, at.Add(time.Minute)) // the same quarter-hour's row grows
+	grown := fp()
+	require.NotEqual(t, first, grown, "a row that grew is a change")
+
+	rows, err := SessionUsage(ctx, db, "01FPLEDGER0000000000000000")
+	require.NoError(t, err)
+	_, err = ReplaceConversationUsage(ctx, db, "codex", "fp-ledger", ledgerBuckets(rows), at.Add(time.Hour))
+	require.NoError(t, err)
+	require.Equal(t, grown, fp(), "the same rows again are no change")
+
+	var updated string
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT updated_at FROM sessions WHERE id = ?`, "01FPLEDGER0000000000000000").Scan(&updated))
+	require.Equal(t, core.FormatTime(at), updated, "none of it touched updated_at")
+}
+
 func TestContentFingerprint_ToleratesAnOlderSchema(t *testing.T) {
 	db := openTestDB(t)
 	ctx := context.Background()

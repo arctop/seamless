@@ -558,7 +558,7 @@ func (h *Handler) harvestCodexStop(ctx context.Context, host string, p stopPaylo
 	// Under peer_auth the daemon reads no rollout: `seam hook stop` read it and
 	// pushed the same two values (pushed.go), which land the same way.
 	if p.Capture != nil {
-		return h.applyCodexStop(ctx, p.SessionID, p.Capture.Tokens, p.Capture.Findings)
+		return h.applyCodexStop(ctx, p.SessionID, p.Capture.Tokens, p.Model, p.Capture.Findings)
 	}
 	// Everything below reads the agent's rollout file. On another machine that
 	// path either does not exist here or, worse, is a DIFFERENT session's
@@ -567,29 +567,27 @@ func (h *Handler) harvestCodexStop(ctx context.Context, host string, p stopPaylo
 	if !h.localDiskOK(ctx, "codex-rollout", ClientCodex, host) {
 		return ""
 	}
-	// Real token totals: the rollout carries a cumulative token_count every turn, so
-	// re-reading the latest one each Stop and overwriting is idempotent (Codex has no
-	// SessionEnd, so this is the only place its usage lands). Independent of findings
-	// -- a turn may update one without the other.
+	// Real token totals: the rollout carries a cumulative token_count every turn,
+	// and what it grew by since the ledger last counted it is this turn's (Codex
+	// has no SessionEnd, so this is the only place its usage lands): reading the
+	// same total again credits nothing. Independent of findings -- a turn may
+	// update one without the other.
 	var tokens *core.TokenUsage
 	if usage, ok := codexRolloutTokens(p.TranscriptPath); ok {
 		tokens = &usage
 	}
-	return h.applyCodexStop(ctx, p.SessionID, tokens, codexStopFindings(p.LastAssistantMessage, p.TranscriptPath))
+	return h.applyCodexStop(ctx, p.SessionID, tokens, p.Model, codexStopFindings(p.LastAssistantMessage, p.TranscriptPath))
 }
 
-// applyCodexStop records one Codex turn's harvest: the absolute token totals
-// when there are any (on the ambient row: metadata), and the findings when the
+// applyCodexStop records one Codex turn's harvest: the token counter's growth
+// when there is any (credited to the bucket of the Stop under model, the one
+// the Stop stated, on the ambient row: metadata), and the findings when the
 // turn had assistant text ("" leaves the previous turn's in place) -- on the
 // ambient row, as always, unless the conversation's record goes elsewhere
 // (codexStopRouted).
-func (h *Handler) applyCodexStop(ctx context.Context, externalSessionID string, tokens *core.TokenUsage, findings string) (notice string) {
+func (h *Handler) applyCodexStop(ctx context.Context, externalSessionID string, tokens *core.TokenUsage, model, findings string) (notice string) {
 	if tokens != nil {
-		if _, err := store.SetAmbientSessionTokens(
-			ctx, h.db, ClientCodex.externalIdentity(), externalSessionID, *tokens, time.Now().UTC(),
-		); err != nil {
-			h.recordHookError(ctx, "codex-stop-token-harvest", ClientCodex, err, "external_session_id", externalSessionID)
-		}
+		h.creditCodexTurn(ctx, externalSessionID, *tokens, strings.TrimSpace(model), time.Now().UTC())
 	}
 	if findings == "" {
 		return "" // nothing this turn; the heartbeat kept the session alive
@@ -684,36 +682,6 @@ func (h *Handler) setLinkFindings(ctx context.Context, link core.Session, findin
 	}
 	if _, _, err := store.LinkUpdateFindings(ctx, h.db, link.ID, link.Findings, findings, false, now); err != nil {
 		h.recordHookError(ctx, "codex-stop-link-findings", ClientCodex, err, "session", link.ID)
-	}
-}
-
-// harvestClaudeTokens parses the Claude Code transcript for the session's real
-// model token totals and overwrites them on the ambient row. Best-effort by the
-// package's never-block contract: a blank/unparseable transcript records nothing
-// (never an error). It must run while the row is still active -- the caller invokes
-// it before the SessionEnd completion flips the status, so SetAmbientSessionTokens'
-// active-only guard matches.
-func (h *Handler) harvestClaudeTokens(ctx context.Context, client Client, host, externalSessionID, transcriptPath string, now time.Time) {
-	if h.db == nil || externalSessionID == "" {
-		return
-	}
-	if !h.localDiskOK(ctx, "token-harvest", client, host) {
-		return
-	}
-	usage, ok := claudeTranscriptTokens(transcriptPath)
-	if !ok {
-		return
-	}
-	h.setSessionTokens(ctx, client, externalSessionID, usage, now)
-}
-
-// setSessionTokens overwrites the ambient session's token totals (it must
-// still be active: SetAmbientSessionTokens guards on it).
-func (h *Handler) setSessionTokens(ctx context.Context, client Client, externalSessionID string, usage core.TokenUsage, now time.Time) {
-	if _, err := store.SetAmbientSessionTokens(
-		ctx, h.db, client.externalIdentity(), externalSessionID, usage, now,
-	); err != nil {
-		h.recordHookError(ctx, "session-end-token-harvest", client, err, "external_session_id", externalSessionID)
 	}
 }
 
@@ -886,9 +854,11 @@ func (h *Handler) stampAgentProcess(ctx context.Context, client Client, sessionI
 // harvested from the transcript) plus any explicit session_start linked to that
 // client/id pair. Because a graceful SessionEnd is a KNOWN end, these close
 // immediately rather than waiting out the idle TTL -- the reaper is only for
-// sessions we get no end signal for. Task claims are released. It is a no-op when
-// nothing is active (an explicit session_end already ran, or a crash left it to
-// the reaper). Never errors: the hook must always 200.
+// sessions we get no end signal for. Task claims are released. When nothing is
+// active (an explicit session_end already ran, or the reaper expired the
+// session while its conversation stayed open) it completes nothing and records
+// only the token counts, on the conversation's ambient row (usageAfterEnd).
+// Never errors: the hook must always 200.
 //
 // metadataOnly completes a session recorded in a locked project before any
 // approval: status, claims and leases only -- no transcript is read for it and
@@ -912,10 +882,12 @@ func (h *Handler) completeClaudeSessions(ctx context.Context, client Client, p e
 		return ""
 	}
 	if len(sessions) == 0 {
-		// Nothing active to complete (an explicit session_end already ran, or a
-		// crash left it to the reaper). Returning here rather than falling into an
-		// empty loop is what keeps a remote end from recording a skipped capture
-		// for work there was none of.
+		// Nothing active to complete (an explicit session_end already ran, or the
+		// reaper expired the session while its conversation stayed open). Only
+		// the token counts are still the end's to record, on that ambient row;
+		// nothing else is harvested, so a remote end records a skipped capture
+		// only for a conversation that has a row to count into.
+		h.usageAfterEnd(ctx, client, p, metadataOnly)
 		return ""
 	}
 
@@ -986,6 +958,14 @@ func (h *Handler) completeClaudeSessions(ctx context.Context, client Client, p e
 			}
 		}
 	}
+	// The token counts, once for the conversation and before any row
+	// completes (an active ambient row takes them as a heartbeat): metadata,
+	// they land on its ambient row wherever the findings go, also when that
+	// row is not among the active ones (session_end ended it while a linked
+	// session is still open).
+	if localDisk || pushed {
+		h.harvestEndUsage(ctx, client, p.SessionID, p.TranscriptPath, push, localDisk, now)
+	}
 	for _, sess := range sessions {
 		// UpdateSession deliberately does not write model (the live model setter is
 		// targeted so another lifecycle write cannot clobber it). Stamp while the
@@ -1022,16 +1002,6 @@ func (h *Handler) completeClaudeSessions(ctx context.Context, client Client, p e
 				sess.Findings = findings
 			}
 			took = t
-		}
-		if sess.Ambient && localDisk {
-			// Overwrite the real token totals while the row is STILL active, before the
-			// UpdateSession below flips it to completed -- SetAmbientSessionTokens guards
-			// on status = 'active'. Token totals are metadata: they stay on the
-			// ambient row wherever the findings go.
-			h.harvestClaudeTokens(ctx, client, host, p.SessionID, p.TranscriptPath, now)
-		}
-		if sess.Ambient && pushed && push.Tokens != nil {
-			h.setSessionTokens(ctx, client, p.SessionID, *push.Tokens, now)
 		}
 		if err := store.UpdateSession(ctx, h.db, sess); err != nil {
 			h.recordHookError(ctx, "session-end-complete", client, err, "session", sess.ID)

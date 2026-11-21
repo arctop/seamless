@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -54,11 +55,11 @@ func newCaptureFixture(t *testing.T) captureFixture {
 
 	f.transcript = filepath.Join(home, "session.jsonl")
 	require.NoError(t, os.WriteFile(f.transcript, []byte(strings.Join([]string{
-		`{"type":"user","message":{"role":"user","content":"deploy the ops service"}}`,
-		`{"type":"assistant","message":{"id":"m1","role":"assistant","model":"claude-early","content":[{"type":"text","text":"Looking."},{"type":"tool_use","id":"t","name":"Bash","input":{}}],"usage":{"input_tokens":10,"output_tokens":4,"cache_read_input_tokens":100,"cache_creation_input_tokens":20}}}`,
-		`{"type":"assistant","message":{"id":"m1","role":"assistant","model":"claude-early","content":[{"type":"text","text":"Looking."}],"usage":{"input_tokens":10,"output_tokens":4,"cache_read_input_tokens":100,"cache_creation_input_tokens":20}}}`,
-		`{"type":"assistant","isSidechain":true,"message":{"id":"s1","role":"assistant","model":"claude-sub","content":[{"type":"text","text":"sub"}],"usage":{"input_tokens":3,"output_tokens":2}}}`,
-		`{"type":"assistant","message":{"id":"m2","role":"assistant","model":"claude-late","content":[{"type":"text","text":"Deployed the ops service; the health check race is fixed."}],"usage":{"input_tokens":5,"output_tokens":9}}}`,
+		`{"type":"user","timestamp":"2026-11-20T09:00:30Z","message":{"role":"user","content":"deploy the ops service"}}`,
+		`{"type":"assistant","timestamp":"2026-11-20T09:01:00Z","message":{"id":"m1","role":"assistant","model":"claude-early","content":[{"type":"text","text":"Looking."},{"type":"tool_use","id":"t","name":"Bash","input":{}}],"usage":{"input_tokens":10,"output_tokens":4,"cache_read_input_tokens":100,"cache_creation_input_tokens":20}}}`,
+		`{"type":"assistant","timestamp":"2026-11-20T09:01:02Z","message":{"id":"m1","role":"assistant","model":"claude-early","content":[{"type":"text","text":"Looking."}],"usage":{"input_tokens":10,"output_tokens":4,"cache_read_input_tokens":100,"cache_creation_input_tokens":20}}}`,
+		`{"type":"assistant","timestamp":"2026-11-20T09:02:00Z","isSidechain":true,"message":{"id":"s1","role":"assistant","model":"claude-sub","content":[{"type":"text","text":"sub"}],"usage":{"input_tokens":3,"output_tokens":2}}}`,
+		`{"type":"assistant","timestamp":"2026-11-20T09:20:00Z","message":{"id":"m2","role":"assistant","model":"claude-late","content":[{"type":"text","text":"Deployed the ops service; the health check race is fixed."}],"usage":{"input_tokens":5,"output_tokens":9}}}`,
 	}, "\n")+"\n"), 0o600))
 
 	// Where Claude Code writes the subagent's transcript, so SubagentStart
@@ -225,16 +226,25 @@ func TestRunHook_OnTheSocketPushesTheCaptures(t *testing.T) {
 	require.True(t, pushesCaptures(cfg))
 
 	ccTokens := core.TokenUsage{Input: 18, Cached: 100, CacheCreation: 20, Output: 15, Total: 153} // m1 once, s1, m2
+	nine := time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC)
+	ccUsage := []core.UsageBucket{ // the same messages, by quarter-hour, model and thread
+		{Bucket: nine, Model: "claude-early", Thread: core.UsageThreadMain, Input: 10, Cached: 100, CacheCreation: 20, Output: 4,
+			Messages: 1, MinuteMask: 1 << 1},
+		{Bucket: nine, Model: "claude-sub", Thread: core.UsageThreadSubagent, Input: 3, Output: 2, Messages: 1, MinuteMask: 1 << 2},
+		{Bucket: nine.Add(15 * time.Minute), Model: "claude-late", Thread: core.UsageThreadMain, Input: 5, Output: 9,
+			Messages: 1, MinuteMask: 1 << 5},
+	}
 	cxTokens := core.TokenUsage{Input: 12655 - 9600, Cached: 9600, Output: 75, Total: 12730}
 	report := "Final report: the gardener has three passes."
 	planText := "# Example plan\n\nFix the health check race."
 	want := map[string]*harvest.Push{
-		"session-start?":           {Version: 1, Model: "claude-late"},
-		"user-prompt-submit?":      {Version: 1, Model: "claude-late"},
-		"subagent-start?":          {Version: 1, Prompt: "Explore the gardener package and report its structure"},
-		"subagent-stop?":           {Version: 1, Prompt: "Explore the gardener package and report its structure", Report: report, GitHead: captureHead},
-		"permission-request?":      {Version: 1},
-		"session-end?":             {Version: 1, Model: "claude-late", Findings: "(auto-harvested) Deployed the ops service; the health check race is fixed.", Tokens: &ccTokens},
+		"session-start?":      {Version: 1, Model: "claude-late"},
+		"user-prompt-submit?": {Version: 1, Model: "claude-late"},
+		"subagent-start?":     {Version: 1, Prompt: "Explore the gardener package and report its structure"},
+		"subagent-stop?":      {Version: 1, Prompt: "Explore the gardener package and report its structure", Report: report, GitHead: captureHead},
+		"permission-request?": {Version: 1},
+		"session-end?": {Version: 1, Model: "claude-late", Findings: "(auto-harvested) Deployed the ops service; the health check race is fixed.",
+			Tokens: &ccTokens, Usage: ccUsage},
 		"session-start?codex":      nil, // Codex states its model
 		"user-prompt-submit?codex": nil,
 		"subagent-start?codex":     {Version: 1, Prompt: harvest.CodexFirstUserMessage(f.rollout)},
@@ -330,6 +340,16 @@ func TestHookCaptures_ThePushMatchesTheDaemonsOwnRead(t *testing.T) {
 		require.NotEmpty(t, read.Model)
 		require.Equal(t, read.Model, pushed.Model, id.external)
 		require.Equal(t, read.Status, pushed.Status, id.external)
+		// The usage ledger: the same rows, which sum to the same totals. A
+		// Codex turn is credited to the quarter-hour each daemon took its Stop
+		// in, so its rows are compared without the time.
+		readRows, pushedRows := off.ledger(t, read.ID), on.ledger(t, pushed.ID)
+		require.NotEmpty(t, readRows, id.external)
+		require.Equal(t, core.SumUsage(readRows), read.Tokens, id.external)
+		if id.client == "codex" {
+			readRows, pushedRows = untimed(readRows), untimed(pushedRows)
+		}
+		require.Equal(t, readRows, pushedRows, id.external)
 	}
 	for _, slug := range []string{"cc-plan-example-plan", "cc-agent-a1"} {
 		read, pushed := off.note(t, slug), on.note(t, slug)
@@ -354,6 +374,28 @@ func (d captureDB) ambient(t *testing.T, client, external string) core.Session {
 	require.NoError(t, err)
 	require.True(t, ok, "%s/%s", client, external)
 	return sess
+}
+
+// ledger is a session's usage ledger rows.
+func (d captureDB) ledger(t *testing.T, sessionID string) []core.UsageBucket {
+	t.Helper()
+	rows, err := store.SessionUsage(context.Background(), d.db, sessionID)
+	require.NoError(t, err)
+	out := make([]core.UsageBucket, len(rows))
+	for i, r := range rows {
+		out[i] = r.UsageBucket
+	}
+	return out
+}
+
+// untimed is rows without the quarter-hour and the minute each landed in.
+func untimed(rows []core.UsageBucket) []core.UsageBucket {
+	out := make([]core.UsageBucket, len(rows))
+	for i, r := range rows {
+		r.Bucket, r.MinuteMask = time.Time{}, 0
+		out[i] = r
+	}
+	return out
 }
 
 func (d captureDB) note(t *testing.T, slug string) core.Note {

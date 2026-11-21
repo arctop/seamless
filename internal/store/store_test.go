@@ -31,7 +31,7 @@ func TestOpen_FreshDB_PragmasAndMigration(t *testing.T) {
 	for _, tbl := range []string{
 		"projects", "memories_index", "notes_index", "embeddings", "sessions",
 		"tasks", "task_deps", "trials", "events", "retrieval_stats",
-		"gardener_proposals", "settings", "jobs",
+		"gardener_proposals", "settings", "jobs", "session_usage",
 	} {
 		var name string
 		err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name=?", tbl).Scan(&name)

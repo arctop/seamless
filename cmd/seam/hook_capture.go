@@ -120,8 +120,14 @@ func buildCapture(ctx context.Context, event, client string, payload []byte, pla
 			return harvest.Push{}, false // Codex has no SessionEnd
 		}
 		push.Findings = harvest.Findings(in.TranscriptPath)
-		if usage, ok := harvest.ClaudeTokens(in.TranscriptPath); ok {
+		if usage, rows, ok := harvest.ClaudeUsage(in.TranscriptPath); ok {
 			push.Tokens = &usage
+			// The usage ledger's rows ride beside the totals they sum to. A
+			// transcript past the cap pushes its totals alone, which the daemon
+			// credits as a client that names no buckets.
+			if len(rows) <= harvest.MaxUsageRows {
+				push.Usage = rows
+			}
 		}
 		push.Model = sniffModel(in.TranscriptPath)
 		return push, true

@@ -89,6 +89,10 @@ func seedViewFixture(t *testing.T, db *sql.DB) (hiddenMem, shownMem, hiddenTask,
 	// Its queue is no project's either: a waiter in the hidden project stays,
 	// as its holder does (the console names neither).
 	ins(`INSERT INTO repo_lock_waiters (lock_id, session_id, queued_at, place_until) VALUES ('lk-1','s-hidden',?,?), ('lk-1','s-shown',?,?)`, ts, ts, ts, ts)
+	// The usage ledger's rows are their session's (migration 053).
+	bucket := core.FormatTime(core.UsageBucketStart(now))
+	ins(`INSERT INTO session_usage (session_id, bucket, model, thread, input_tokens, messages)
+		VALUES ('s-hidden',?,'claude-x','main',7,1), ('s-shown',?,'claude-x','main',5,1)`, bucket, bucket)
 	ph, err := CreateProposal(ctx, db, ProposalArchive, map[string]any{"id": "m-hidden", "project": "example-finance"})
 	require.NoError(t, err)
 	_, err = CreateProposal(ctx, db, ProposalMerge, map[string]any{"keep": map[string]any{"id": "m-shown"}, "drop": map[string]any{"id": "m-hidden"}})
@@ -141,6 +145,8 @@ func TestOpenView_HidesTheSealedProjectEverywhere(t *testing.T) {
 		{`SELECT COUNT(*) FROM repo_lock_projects`, 1}, // the hidden project's listing is hidden
 		{`SELECT COUNT(*) FROM repo_lock_projects WHERE project_slug = 'example-finance'`, 0},
 		{`SELECT COUNT(*) FROM repo_lock_waiters`, 2}, // the queue is no project's
+		{`SELECT COUNT(*) FROM session_usage`, 1},     // hidden with its session
+		{`SELECT COUNT(*) FROM session_usage WHERE session_id = 's-hidden'`, 0},
 	} {
 		require.Equal(t, c.want, count(c.q), c.q)
 	}

@@ -315,65 +315,10 @@ func SetAmbientSessionModel(ctx context.Context, db *sql.DB, externalClient, ext
 	return nil
 }
 
-// SetAmbientSessionTokens overwrites the harvested model token totals on an
-// active ambient session, keyed by authoritative external identity. Like the
-// other targeted ambient writers it is a single-purpose write (only the five
-// token columns + updated_at, never a read-modify-write of the whole row), so a
-// concurrent findings/model update cannot clobber it and vice versa.
-//
-// The totals are absolute cumulative values, so this OVERWRITES rather than
-// accumulates: re-harvesting a resumed session's grown transcript (Claude Code
-// SessionEnd) or re-reading the latest cumulative token_count every turn (Codex
-// Stop) writes the same absolute total again -- idempotent, never double-counted.
-// The active-only + ambient guard means it never revives a completed/expired row
-// and never touches an explicit session. Bumping updated_at doubles as a
-// heartbeat. No-op on an incomplete identity or an empty (all-zero) usage (a turn
-// with no token record leaves any prior harvest intact). Reports whether a row
-// was updated.
-//
-// A move's child (isolation.requests) is the conversation's ambient row from
-// the move on, while the transcript's totals are the whole conversation's: the
-// session the move ended keeps what it harvested, and the child takes what
-// came after (the totals less its earlier sessions', carriedTokens), so the
-// conversation's usage is never counted twice. A difference of nothing writes
-// nothing. Every other row has no earlier session, and takes the totals as
-// they are.
-func SetAmbientSessionTokens(
-	ctx context.Context,
-	db *sql.DB,
-	externalClient, externalSessionID string,
-	tokens core.TokenUsage,
-	now time.Time,
-) (bool, error) {
-	if externalClient == "" || externalSessionID == "" || tokens.Empty() {
-		return false, nil
-	}
-	carried, err := carriedTokens(ctx, db, externalClient, externalSessionID)
-	if err != nil {
-		return false, fmt.Errorf("store.SetAmbientSessionTokens: %w", err)
-	}
-	if !carried.Empty() {
-		if tokens = tokensAfter(tokens, carried); tokens.Empty() {
-			return false, nil
-		}
-	}
-	res, err := db.ExecContext(ctx, `
-		UPDATE sessions
-		   SET input_tokens = ?, cached_input_tokens = ?, cache_creation_tokens = ?,
-		       output_tokens = ?, total_tokens = ?, updated_at = ?
-		 WHERE ambient = 1 AND external_client = ? AND claude_session_id = ?
-		   AND status = 'active'`,
-		tokens.Input, tokens.Cached, tokens.CacheCreation, tokens.Output, tokens.Total,
-		core.FormatTime(now.UTC()), externalClient, externalSessionID)
-	if err != nil {
-		return false, fmt.Errorf("store.SetAmbientSessionTokens: %w", err)
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return false, fmt.Errorf("store.SetAmbientSessionTokens: rows affected: %w", err)
-	}
-	return n > 0, nil
-}
+// A session's token totals (the five token columns) are written by the usage
+// ledger's writers alone (ledger.go: ReplaceConversationUsage,
+// CreditConversationUsage), which set them to the sum of the session's ledger
+// rows in the same transaction.
 
 // UpdateAmbientFindings upserts provisional findings onto an active ambient
 // session by full external identity. It backs the Codex Stop hook, which

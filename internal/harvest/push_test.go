@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -68,18 +69,78 @@ func TestDecodePush(t *testing.T) {
 	}
 }
 
+// Pushed usage rows ride with the totals they sum to, and each one must hold:
+// a quarter-hour's start, a known thread, a model id or none, no negative
+// count, a minute mask within the bucket, no two for one key, at most
+// MaxUsageRows. A push that breaks any of it is refused whole.
+func TestDecodePush_Usage(t *testing.T) {
+	bucket := time.Date(2026, 11, 20, 9, 15, 0, 0, time.UTC)
+	row := core.UsageBucket{Bucket: bucket, Model: "claude-x", Thread: core.UsageThreadMain, Input: 1, Cached: 2,
+		CacheCreation: 3, Output: 4, Messages: 2, MinuteMask: 0b101}
+	tokens := row.Tokens()
+	body := func(rows []core.UsageBucket, tok *core.TokenUsage) []byte {
+		raw, err := json.Marshal(map[string]any{"session_id": "s", Field: Push{Version: 1, Tokens: tok, Usage: rows}})
+		require.NoError(t, err)
+		return raw
+	}
+	got, present, err := DecodePush(body([]core.UsageBucket{row}, &tokens))
+	require.NoError(t, err)
+	require.True(t, present)
+	require.Equal(t, []core.UsageBucket{row}, got.Usage)
+	require.True(t, got.Carries())
+	require.True(t, Push{Version: 1, Usage: []core.UsageBucket{row}}.Carries())
+
+	with := func(edit func(*core.UsageBucket)) []core.UsageBucket {
+		r := row
+		edit(&r)
+		return []core.UsageBucket{r}
+	}
+	tooMany := make([]core.UsageBucket, MaxUsageRows+1)
+	for i := range tooMany {
+		tooMany[i] = core.UsageBucket{Bucket: bucket.Add(time.Duration(i) * core.UsageBucketWidth), Thread: core.UsageThreadMain}
+	}
+	zero := core.TokenUsage{}
+	for name, b := range map[string][]byte{
+		"no totals":        body([]core.UsageBucket{row}, nil),
+		"not the totals":   body([]core.UsageBucket{row}, &core.TokenUsage{Input: 1, Total: 1}),
+		"unaligned":        body(with(func(r *core.UsageBucket) { r.Bucket = bucket.Add(time.Minute) }), &tokens),
+		"before 2000":      body(with(func(r *core.UsageBucket) { r.Bucket = time.Date(1999, 12, 31, 23, 45, 0, 0, time.UTC) }), &tokens),
+		"unknown thread":   body(with(func(r *core.UsageBucket) { r.Thread = "sidechain" }), &tokens),
+		"no thread":        body(with(func(r *core.UsageBucket) { r.Thread = "" }), &tokens),
+		"synthetic model":  body(with(func(r *core.UsageBucket) { r.Model = "<synthetic>" }), &tokens),
+		"negative message": body(with(func(r *core.UsageBucket) { r.Messages = -1 }), &tokens),
+		"mask past 15":     body(with(func(r *core.UsageBucket) { r.MinuteMask = 1 << 15 }), &tokens),
+		"duplicate":        body([]core.UsageBucket{row, {Bucket: bucket, Model: "claude-x", Thread: core.UsageThreadMain}}, &tokens),
+		"past the cap":     body(tooMany, &zero),
+	} {
+		got, present, err := DecodePush(b)
+		require.ErrorIs(t, err, ErrInvalidPush, name)
+		require.False(t, present, name)
+		require.Equal(t, Push{}, got, name)
+	}
+	negative := []byte(`{"seamless_capture":{"version":1,"tokens":{"input":0,"total":0},` +
+		`"usage":[{"bucket":"2026-11-20T09:15:00Z","thread":"main","input":-1,"output":1}]}}`)
+	_, _, err = DecodePush(negative)
+	require.ErrorIs(t, err, ErrInvalidPush, "a negative count")
+	// An unknown model names none: the row counts, unattributed.
+	_, _, err = DecodePush(body(with(func(r *core.UsageBucket) { r.Model = "" }), &tokens))
+	require.NoError(t, err)
+}
+
 // What the parsers produce always validates: the client never builds a push
 // the daemon would refuse from an ordinary transcript.
 func TestPush_ParserOutputValidates(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "t.jsonl")
 	long := strings.Repeat("y", MaxRunes*2)
-	line := `{"type":"assistant","message":{"id":"m","role":"assistant","model":"claude-x","content":[{"type":"text","text":"` +
+	line := `{"type":"assistant","timestamp":"2026-11-20T09:01:00Z","message":{"id":"m","role":"assistant","model":"claude-x","content":[{"type":"text","text":"` +
 		long + `"}],"usage":{"input_tokens":3,"output_tokens":4}}}`
-	require.NoError(t, os.WriteFile(path, []byte(line+"\n"), 0o600))
-	usage, ok := ClaudeTokens(path)
+	sub := `{"type":"assistant","isSidechain":true,"message":{"id":"s","role":"assistant","model":"claude-y","usage":{"input_tokens":1}}}`
+	require.NoError(t, os.WriteFile(path, []byte(line+"\n"+sub+"\n"), 0o600))
+	usage, rows, ok := ClaudeUsage(path)
 	require.True(t, ok)
-	p := Push{Version: PushVersion, Findings: Findings(path), Model: TranscriptModel(path), Tokens: &usage}
+	require.Len(t, rows, 2)
+	p := Push{Version: PushVersion, Findings: Findings(path), Model: TranscriptModel(path), Tokens: &usage, Usage: rows}
 	require.NoError(t, p.Validate())
 	require.Len(t, []rune(p.Findings), MaxFindingsRunes)
 	require.NoError(t, Push{Version: PushVersion, Findings: Fallback}.Validate())
@@ -89,8 +150,10 @@ func TestPush_ParserOutputValidates(t *testing.T) {
 // The wire names are a frozen, additive contract between `seam hook` and the
 // daemon: a rename here strands every client of the other release.
 func TestPush_WireNames(t *testing.T) {
+	row := core.UsageBucket{Bucket: time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC), Model: "m", Thread: core.UsageThreadMain,
+		Input: 1, Cached: 1, CacheCreation: 1, Output: 1, Messages: 1, MinuteMask: 1}
 	raw, err := json.Marshal(Push{Version: 1, Model: "m", Findings: "f", Tokens: &core.TokenUsage{}, GitHead: "h",
-		Plan: &PlanFile{Basename: "b", Content: "c"}, Prompt: "p", Report: "r"})
+		Plan: &PlanFile{Basename: "b", Content: "c"}, Prompt: "p", Report: "r", Usage: []core.UsageBucket{row}})
 	require.NoError(t, err)
 	var keys map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(raw, &keys))
@@ -98,9 +161,20 @@ func TestPush_WireNames(t *testing.T) {
 	for k := range keys {
 		got = append(got, k)
 	}
-	require.ElementsMatch(t, []string{"version", "model", "findings", "tokens", "git_head", "plan", "prompt", "report"}, got)
+	require.ElementsMatch(t, []string{"version", "model", "findings", "tokens", "git_head", "plan", "prompt", "report", "usage"}, got)
 	require.Equal(t, "seamless_capture", Field)
 	require.Equal(t, "X-Seamless-Capture-Refused", RefusedHeader)
+	// A usage row's own names.
+	var rows []map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(keys["usage"], &rows))
+	require.Len(t, rows, 1)
+	rowKeys := make([]string, 0, len(rows[0]))
+	for k := range rows[0] {
+		rowKeys = append(rowKeys, k)
+	}
+	require.ElementsMatch(t, []string{"bucket", "model", "thread", "input", "cached", "cacheCreation", "output",
+		"messages", "minuteMask"}, rowKeys)
+	require.JSONEq(t, `"2026-11-20T09:00:00Z"`, string(rows[0]["bucket"]))
 }
 
 func TestPlanFilePath(t *testing.T) {

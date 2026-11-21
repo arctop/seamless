@@ -119,6 +119,9 @@ type fingerprintPart struct {
 	// summary hashes only the row count and the newest value of each column,
 	// for tables whose every row would be too much to read on each check.
 	summary bool
+	// sums are columns a summary also hashes the sum of: counts that grow in
+	// rows whose newest value does not move.
+	sums []string
 	// nonNull, when set, keeps only the rows where that column is not NULL;
 	// a table without the column (an older database) hashes as absent.
 	nonNull string
@@ -148,6 +151,11 @@ var fingerprintParts = []fingerprintPart{
 	{table: "trials", cols: []string{"created_at"}, summary: true},
 	{table: "gardener_proposals", cols: []string{"created_at", "resolved_at"}, summary: true},
 	{table: "commit_records", cols: []string{"recorded_at"}, summary: true},
+	// The usage ledger (migration 053): a harvest that lands on a session that
+	// has ended touches no updated_at, and a Codex turn grows a row already
+	// there, so its counts are summed.
+	{table: "session_usage", cols: []string{"bucket"}, summary: true, sums: []string{
+		"input_tokens", "cached_input_tokens", "cache_creation_tokens", "output_tokens", "messages", "minute_mask"}},
 }
 
 // fingerprintVolatileSettings are the settings rows ContentFingerprint skips:
@@ -215,6 +223,11 @@ func fingerprintTable(ctx context.Context, db *sql.DB, h hash.Hash, part fingerp
 		sel := []string{"COUNT(*)"}
 		for _, c := range cols {
 			sel = append(sel, "MAX("+c+")")
+		}
+		for _, c := range part.sums {
+			if slices.Contains(have, c) {
+				sel = append(sel, `COALESCE(SUM("`+c+`"), 0)`)
+			}
 		}
 		q = `SELECT ` + strings.Join(sel, ", ") + ` FROM "` + part.table + `"`
 		return fingerprintRows(ctx, db, h, part.table, q, len(sel))

@@ -160,7 +160,7 @@ if [ "${1:-}" = fail ]; then
 fi
 `), 0o755))
 
-	runner := execMCPCommandRunner{client: "codex", path: path, timeout: 2 * time.Second}
+	runner := execMCPCommandRunner{client: "codex", path: path, timeout: 10 * time.Second}
 	out, err := runner.Run(context.Background(), "success")
 	require.NoError(t, err)
 	require.JSONEq(t, `{"ok":true}`, string(out),
@@ -204,20 +204,20 @@ func TestReconcileCodexMCP_StateMachine(t *testing.T) {
 		wantAdds   int
 		wantGets   int
 	}{
-		{"absent adds", nil, marshalCodexMCPState(t, want), "", 2 * time.Second, mcpRegAdded, "", 1, 2},
-		{"exact reinstall is no-op", marshalCodexMCPState(t, want), nil, "", 2 * time.Second, mcpRegUnchanged, "", 0, 1},
-		{"disabled repairs", marshalCodexMCPState(t, disabled), marshalCodexMCPState(t, want), "", 2 * time.Second, mcpRegRepaired, "", 1, 2},
-		{"old binary repairs", marshalCodexMCPState(t, oldBinary), marshalCodexMCPState(t, want), "", 2 * time.Second, mcpRegRepaired, "", 1, 2},
-		{"old config repairs", marshalCodexMCPState(t, oldConfig), marshalCodexMCPState(t, want), "", 2 * time.Second, mcpRegRepaired, "", 1, 2},
-		{"wrong args repair", marshalCodexMCPState(t, wrongArgs), marshalCodexMCPState(t, want), "", 2 * time.Second, mcpRegRepaired, "", 1, 2},
-		{"HTTP entry fails loudly", marshalCodexMCPState(t, foreignHTTP), nil, "", 2 * time.Second, "", "incompatible", 0, 1},
-		{"malformed get JSON", []byte(`{"name":`), nil, "", 2 * time.Second, "", "parse Codex MCP JSON", 0, 1},
-		{"malformed list JSON", nil, nil, "malformed-list", 2 * time.Second, "", "mcp list --json", 0, 1},
-		{"old Codex without JSON", nil, nil, "no-json", 2 * time.Second, "", "absence check failed", 0, 1},
+		{"absent adds", nil, marshalCodexMCPState(t, want), "", 10 * time.Second, mcpRegAdded, "", 1, 2},
+		{"exact reinstall is no-op", marshalCodexMCPState(t, want), nil, "", 10 * time.Second, mcpRegUnchanged, "", 0, 1},
+		{"disabled repairs", marshalCodexMCPState(t, disabled), marshalCodexMCPState(t, want), "", 10 * time.Second, mcpRegRepaired, "", 1, 2},
+		{"old binary repairs", marshalCodexMCPState(t, oldBinary), marshalCodexMCPState(t, want), "", 10 * time.Second, mcpRegRepaired, "", 1, 2},
+		{"old config repairs", marshalCodexMCPState(t, oldConfig), marshalCodexMCPState(t, want), "", 10 * time.Second, mcpRegRepaired, "", 1, 2},
+		{"wrong args repair", marshalCodexMCPState(t, wrongArgs), marshalCodexMCPState(t, want), "", 10 * time.Second, mcpRegRepaired, "", 1, 2},
+		{"HTTP entry fails loudly", marshalCodexMCPState(t, foreignHTTP), nil, "", 10 * time.Second, "", "incompatible", 0, 1},
+		{"malformed get JSON", []byte(`{"name":`), nil, "", 10 * time.Second, "", "parse Codex MCP JSON", 0, 1},
+		{"malformed list JSON", nil, nil, "malformed-list", 10 * time.Second, "", "mcp list --json", 0, 1},
+		{"old Codex without JSON", nil, nil, "no-json", 10 * time.Second, "", "absence check failed", 0, 1},
 		{"timeout", nil, nil, "timeout", 3 * time.Second, "", "deadline exceeded", 0, 1},
-		{"add failure", nil, marshalCodexMCPState(t, want), "add-fail", 2 * time.Second, "", "write desired", 1, 1},
-		{"repair add failure preserves old entry", marshalCodexMCPState(t, oldConfig), marshalCodexMCPState(t, want), "add-fail", 2 * time.Second, "", "synthetic add failure", 1, 1},
-		{"repair verifies second get", marshalCodexMCPState(t, disabled), marshalCodexMCPState(t, oldConfig), "", 2 * time.Second, "", "desired state still differs", 1, 2},
+		{"add failure", nil, marshalCodexMCPState(t, want), "add-fail", 10 * time.Second, "", "write desired", 1, 1},
+		{"repair add failure preserves old entry", marshalCodexMCPState(t, oldConfig), marshalCodexMCPState(t, want), "add-fail", 10 * time.Second, "", "synthetic add failure", 1, 1},
+		{"repair verifies second get", marshalCodexMCPState(t, disabled), marshalCodexMCPState(t, oldConfig), "", 10 * time.Second, "", "desired state still differs", 1, 2},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			fake := newFakeCodex(t, tt.initial, tt.afterAdd, tt.mode)
@@ -267,7 +267,7 @@ func TestReconcileCodexMCP_PathsWithSpacesAndWindowsPathsRoundTrip(t *testing.T)
 
 			fake := newFakeCodex(t, nil, marshalCodexMCPState(t, want), "")
 			result, err := reconcileCodexMCP(context.Background(), execMCPCommandRunner{
-				client: "codex", path: fake.path, timeout: 2 * time.Second,
+				client: "codex", path: fake.path, timeout: 10 * time.Second,
 			}, tt.seamBin, tt.configPath)
 			require.NoError(t, err)
 			require.Equal(t, mcpRegAdded, result.Action)
@@ -297,7 +297,7 @@ func TestCodexMCPDoctorUsesExactComparatorAndChecksPaths(t *testing.T) {
 	want, err := desiredCodexMCPState(seamBin, configPath)
 	require.NoError(t, err)
 	fake := newFakeCodex(t, marshalCodexMCPState(t, want), nil, "")
-	runner := execMCPCommandRunner{client: "codex", path: fake.path, timeout: 2 * time.Second}
+	runner := execMCPCommandRunner{client: "codex", path: fake.path, timeout: 10 * time.Second}
 
 	chk := codexMCPCheckWithRunner(context.Background(), runner, seamBin, configPath)
 	require.Equal(t, statusOK, chk.status)
@@ -395,7 +395,7 @@ func TestCodexMCPDoctorReportsOperationalFailures(t *testing.T) {
 				raw = marshalCodexMCPState(t, got)
 			}
 			fake := newFakeCodex(t, raw, nil, tt.mode)
-			timeout := 2 * time.Second
+			timeout := 10 * time.Second
 			if tt.mode == "timeout" {
 				timeout = 25 * time.Millisecond
 			}

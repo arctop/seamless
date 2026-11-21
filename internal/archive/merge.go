@@ -119,10 +119,28 @@ import (
 // own copy record (mergeTranscripts). A session this instance already had
 // keeps its own flag, its own copy or none; the merge never replaces or
 // removes a copy file.
+//
+// session_usage, the usage ledger (migration 053), rides with the sessions it
+// counts, and only with the ones the row pass inserts itself
+// (ledgerInsertSelect): ids, model ids, counts and times, no path. A session's
+// token totals are the sum of its ledger rows, so a session this instance
+// already had keeps its own rows and totals, and an archive's rows for it are
+// left out: added beside them they would no longer sum to its totals. A
+// session the pass skips (its name taken here) takes none either.
 var mergeTables = []string{
-	"projects", "sessions", "tasks", "task_deps", "trials", "events", "gardener_proposals", "commit_records",
-	"item_provenance",
+	"projects", "sessions", ledgerTable, "tasks", "task_deps", "trials", "events", "gardener_proposals",
+	"commit_records", "item_provenance",
 }
+
+// ledgerTable is the usage ledger, the one table the row pass copies with a
+// condition of its own (ledgerInsertSelect, predictLedgerInserts).
+const ledgerTable = "session_usage"
+
+// newSessions is the temporary table the real row pass fills, just before it
+// copies sessions, with the archive's sessions this instance does not have:
+// the ones the ledger may ride with (ledgerInsertSelect). It lives on the
+// pass's pinned connection and is dropped when the pass ends.
+const newSessions = "archive_merge_new_sessions"
 
 // uniqueNameColumns are the UNIQUE columns whose collisions are worth naming in
 // the report. INSERT OR IGNORE skips such a row silently, and "one fewer
@@ -601,17 +619,24 @@ func mergeRows(ctx context.Context, db *sql.DB, srcPath string, dry bool, rep *I
 	}
 
 	if dry {
+		var sessionKeys [][]string
 		for _, table := range mergeTables {
 			keys, err := uniqueKeySets(ctx, conn, table)
 			if err != nil {
 				return pass, err
 			}
-			n, err := predictInserts(ctx, conn, table, keys)
+			var n int
+			if table == ledgerTable {
+				n, err = predictLedgerInserts(ctx, conn, sessionKeys, keys)
+			} else {
+				n, err = predictInserts(ctx, conn, table, keys)
+			}
 			if err != nil {
 				return pass, err
 			}
 			rep.Rows[table] = n
 			if table == "sessions" {
+				sessionKeys = keys
 				if pass.copies, err = mergeableCopies(ctx, conn, keys); err != nil {
 					return pass, err
 				}
@@ -632,6 +657,23 @@ func mergeRows(ctx context.Context, db *sql.DB, srcPath string, dry bool, rep *I
 		cols[table] = c
 	}
 
+	// The sessions the pass inserts are known only by comparing the two sides
+	// before the sessions copy, so the comparison is kept in a table on this
+	// connection, which goes back to the pool afterwards: dropped first, in case
+	// an earlier pass left one, and again when this one ends.
+	dropNew := func() error {
+		_, err := conn.ExecContext(ctx, `DROP TABLE IF EXISTS temp.`+newSessions)
+		return err
+	}
+	if err := dropNew(); err != nil {
+		return pass, fmt.Errorf("archive.Import: clear %s: %w", newSessions, err)
+	}
+	defer func() {
+		if err := dropNew(); err != nil && retErr == nil {
+			retErr = fmt.Errorf("archive.Import: drop %s: %w", newSessions, err)
+		}
+	}()
+
 	tx, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return pass, fmt.Errorf("archive.Import: begin merge: %w", err)
@@ -639,7 +681,17 @@ func mergeRows(ctx context.Context, db *sql.DB, srcPath string, dry bool, rep *I
 	defer func() { _ = tx.Rollback() }()
 
 	for _, table := range mergeTables {
-		res, err := tx.ExecContext(ctx, insertSelect(table, cols[table]))
+		stmt := insertSelect(table, cols[table])
+		switch table {
+		case "sessions":
+			if _, err := tx.ExecContext(ctx, `CREATE TEMP TABLE `+newSessions+` AS
+				SELECT id FROM src.sessions WHERE id NOT IN (SELECT id FROM main.sessions)`); err != nil {
+				return pass, fmt.Errorf("archive.Import: the archive's new sessions: %w", err)
+			}
+		case ledgerTable:
+			stmt = ledgerInsertSelect(cols[table])
+		}
+		res, err := tx.ExecContext(ctx, stmt)
 		if err != nil {
 			return pass, fmt.Errorf("archive.Import: merge %s: %w", table, err)
 		}
@@ -727,6 +779,41 @@ func insertSelect(table string, cols []string) string {
 	list := strings.Join(quoted, ", ")
 	return fmt.Sprintf(`INSERT OR IGNORE INTO main.%[1]s (%[2]s) SELECT %[2]s FROM src.%[1]s`,
 		quoteIdent(table), list)
+}
+
+// ledgerInsertSelect is the usage ledger's copy statement: insertSelect's,
+// kept to the archive's sessions this instance did not have before the
+// sessions copy (newSessions) and has now, so only a session the pass
+// inserted itself takes its rows (see mergeTables).
+func ledgerInsertSelect(cols []string) string {
+	quoted := make([]string, len(cols))
+	for i, c := range cols {
+		quoted[i] = quoteIdent(c)
+	}
+	list := strings.Join(quoted, ", ")
+	return fmt.Sprintf(`INSERT OR IGNORE INTO main.%[1]s (%[2]s) SELECT %[2]s FROM src.%[1]s
+		 WHERE session_id IN (SELECT id FROM temp.%[3]s) AND session_id IN (SELECT id FROM main.sessions)`,
+		quoteIdent(ledgerTable), list, newSessions)
+}
+
+// predictLedgerInserts is predictInserts for the usage ledger: the archive's
+// rows of the sessions INSERT OR IGNORE would keep (sessionKeys), that collide
+// with no destination row (keys).
+func predictLedgerInserts(ctx context.Context, conn *sql.Conn, sessionKeys, keys [][]string) (int, error) {
+	q := fmt.Sprintf(`SELECT COUNT(*) FROM src.%s s WHERE s.session_id IN (SELECT s.id FROM src.sessions s`,
+		quoteIdent(ledgerTable))
+	if cond := insertableCond("sessions", sessionKeys); cond != "" {
+		q += " WHERE " + cond
+	}
+	q += ")"
+	if cond := insertableCond(ledgerTable, keys); cond != "" {
+		q += " AND " + cond
+	}
+	var n int
+	if err := conn.QueryRowContext(ctx, q).Scan(&n); err != nil {
+		return 0, fmt.Errorf("archive.Import: predict %s: %w", ledgerTable, err)
+	}
+	return n, nil
 }
 
 // mergeColumns returns the destination's columns for a table, having checked

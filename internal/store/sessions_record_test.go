@@ -26,7 +26,7 @@ func homeSessionTokens(t *testing.T, db *sql.DB, id string, u core.TokenUsage) {
 // conversation's: the child takes what came after -- through every move of
 // the chain -- so the conversation's usage is counted once. A harvest that
 // adds nothing writes nothing, and a damaged chain that loops still ends.
-func TestSetAmbientSessionTokens_AMoveChildKeepsWhatCameAfter(t *testing.T) {
+func TestCreditConversationUsage_AMoveChildKeepsWhatCameAfter(t *testing.T) {
 	ctx := context.Background()
 	db := openTestDB(t)
 	now := time.Now().UTC()
@@ -50,29 +50,28 @@ func TestSetAmbientSessionTokens_AMoveChildKeepsWhatCameAfter(t *testing.T) {
 		require.True(t, ok)
 		return s.Tokens
 	}
-	ok, err := SetAmbientSessionTokens(ctx, db, "codex", "conv-home-1",
-		core.TokenUsage{Input: 300, Cached: 20, Output: 30, Total: 350}, now)
-	require.NoError(t, err)
-	require.True(t, ok)
+	credit := func(u core.TokenUsage) bool {
+		t.Helper()
+		ok, err := CreditConversationUsage(ctx, db, "codex", "conv-home-1", UsageCredit{Cumulative: u, At: now, Turn: true})
+		require.NoError(t, err)
+		return ok
+	}
+	require.True(t, credit(core.TokenUsage{Input: 300, Cached: 20, Output: 30, Total: 350}))
 	require.Equal(t, core.TokenUsage{Input: 160, Output: 15, Total: 175}, tokens("01HTOKC0000000000000000000"))
 	require.Equal(t, 110, tokens("01HTOKA0000000000000000000").Total, "the earlier sessions keep theirs")
 	require.Equal(t, 65, tokens("01HTOKB0000000000000000000").Total)
 
-	ok, err = SetAmbientSessionTokens(ctx, db, "codex", "conv-home-1",
-		core.TokenUsage{Input: 140, Cached: 20, Output: 15, Total: 175}, now)
-	require.NoError(t, err)
-	require.False(t, ok, "nothing after the moves: nothing written")
+	require.False(t, credit(core.TokenUsage{Input: 140, Cached: 20, Output: 15, Total: 175}),
+		"nothing after the moves: nothing written")
 	require.Equal(t, 175, tokens("01HTOKC0000000000000000000").Total)
 
-	_, err = db.ExecContext(ctx, `UPDATE sessions SET parent_session_id = ? WHERE id = ?`,
+	_, err := db.ExecContext(ctx, `UPDATE sessions SET parent_session_id = ? WHERE id = ?`,
 		"01HTOKC0000000000000000000", "01HTOKA0000000000000000000")
 	require.NoError(t, err)
-	ok, err = SetAmbientSessionTokens(ctx, db, "codex", "conv-home-1",
-		core.TokenUsage{Input: 400, Cached: 20, Output: 40, Total: 460}, now)
-	require.NoError(t, err)
-	require.True(t, ok)
+	require.True(t, credit(core.TokenUsage{Input: 400, Cached: 20, Output: 40, Total: 460}))
 	require.Equal(t, core.TokenUsage{Input: 260, Output: 25, Total: 285}, tokens("01HTOKC0000000000000000000"),
 		"a loop in the chain counts each earlier session once")
+	requireTotalsAreTheLedger(t, db, "01HTOKC0000000000000000000")
 }
 
 // The briefing's Recent findings and Sibling findings skip a session whose

@@ -13,7 +13,7 @@ import (
 )
 
 // seedTokenSession inserts a session with a harvested total_tokens value (0 =
-// never harvested, exactly as SetAmbientSessionTokens leaves a live session).
+// never harvested, as a live Claude Code session is until its SessionEnd).
 func seedTokenSession(t *testing.T, db *sql.DB, id string, status core.SessionStatus, tokens int) {
 	t.Helper()
 	now := time.Now().UTC()

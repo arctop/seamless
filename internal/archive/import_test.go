@@ -139,6 +139,12 @@ func seedIndexedInto(t *testing.T, dir string, s instanceSpec) {
 		Status: core.SessionCompleted, Findings: "the row pass runs on one pinned conn",
 		CreatedAt: now, UpdatedAt: now,
 	}))
+	// Its usage ledger: two quarter-hours, the totals their sum.
+	seedLedgerRows(t, db, s.sessionID,
+		core.UsageBucket{Bucket: now.Add(-30 * time.Minute), Model: "claude-x", Thread: core.UsageThreadMain,
+			Input: 10, Cached: 100, Output: 5, Messages: 2, MinuteMask: 0b11},
+		core.UsageBucket{Bucket: now.Add(-15 * time.Minute), Model: "claude-x", Thread: core.UsageThreadSubagent,
+			Input: 3, Output: 1, Messages: 1, MinuteMask: 1})
 	require.NoError(t, store.CreateTask(ctx, db, core.Task{
 		ID: s.taskA, ProjectSlug: s.project, Title: "extract first",
 		Status: core.TaskOpen, CreatedAt: now, UpdatedAt: now,
@@ -164,6 +170,51 @@ func seedIndexedInto(t *testing.T, dir string, s instanceSpec) {
 	require.NoError(t, store.UpsertEmbedding(ctx, db, s.memID, "memory", testEmbedModel,
 		[]float32{0.1, 0.2, 0.3}))
 	require.NoError(t, store.SetSetting(ctx, db, "repo_project_map", s.settingVal))
+}
+
+// seedLedgerRows gives session id the usage ledger rows and, as the ledger's
+// writers leave every session, the totals they sum to.
+func seedLedgerRows(t *testing.T, db *sql.DB, id string, rows ...core.UsageBucket) {
+	t.Helper()
+	ctx := context.Background()
+	for _, r := range rows {
+		_, err := db.ExecContext(ctx, `INSERT INTO session_usage (session_id, bucket, model, thread, input_tokens,
+			cached_input_tokens, cache_creation_tokens, output_tokens, messages, minute_mask)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, core.FormatTime(r.Bucket), r.Model, string(r.Thread),
+			r.Input, r.Cached, r.CacheCreation, r.Output, r.Messages, r.MinuteMask)
+		require.NoError(t, err)
+	}
+	sum := core.SumUsage(rows)
+	_, err := db.ExecContext(ctx, `UPDATE sessions SET input_tokens = ?, cached_input_tokens = ?,
+		cache_creation_tokens = ?, output_tokens = ?, total_tokens = ? WHERE id = ?`,
+		sum.Input, sum.Cached, sum.CacheCreation, sum.Output, sum.Total, id)
+	require.NoError(t, err)
+}
+
+// requireLedgerSums holds every session of a data dir's database to the
+// ledger's rule: its token totals are the sum of its ledger rows, or it has
+// no rows at all (a session harvested before the ledger, or never).
+func requireLedgerSums(t *testing.T, dir string) {
+	t.Helper()
+	db, err := store.OpenExisting(filepath.Join(dir, DBName))
+	require.NoError(t, err)
+	defer func() { require.NoError(t, db.Close()) }()
+	rows, err := db.QueryContext(context.Background(), `SELECT s.id, s.total_tokens,
+		(SELECT COUNT(*) FROM session_usage u WHERE u.session_id = s.id),
+		(SELECT COALESCE(SUM(input_tokens + cached_input_tokens + cache_creation_tokens + output_tokens), 0)
+		   FROM session_usage u WHERE u.session_id = s.id)
+		FROM sessions s`)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, rows.Close()) }()
+	for rows.Next() {
+		var id string
+		var total, n, sum int
+		require.NoError(t, rows.Scan(&id, &total, &n, &sum))
+		if n > 0 {
+			require.Equalf(t, total, sum, "session %s: its totals are not its ledger's sum", id)
+		}
+	}
+	require.NoError(t, rows.Err())
 }
 
 // exportOf returns the archive bytes for a data dir.
@@ -401,6 +452,7 @@ func TestImport_FreshRoundTrip(t *testing.T) {
 	require.Equal(t, srcCounts, dstCounts)
 	require.Equal(t, 1, dstCounts["embeddings"])
 	require.Equal(t, 1, dstCounts["settings"])
+	require.Equal(t, 2, dstCounts["session_usage"], "the usage ledger travels in the snapshot")
 	require.Equal(t, specA.settingVal, settingOf(t, dst, "repo_project_map"))
 
 	// Reconcile ran during the import and found nothing to do: the snapshot's
@@ -471,11 +523,12 @@ func TestImport_Merge(t *testing.T) {
 	require.Empty(t, rep.PathCollisions)
 	require.Empty(t, rep.NameCollisions)
 	require.Equal(t, map[string]int{
-		"projects": 1, "sessions": 1, "tasks": 2, "task_deps": 1,
+		"projects": 1, "sessions": 1, "session_usage": 2, "tasks": 2, "task_deps": 1,
 		"trials": 1, "events": 1, "gardener_proposals": 0, "commit_records": 1,
 		"item_provenance": 0,
 	}, rep.Rows)
 	require.Zero(t, rep.Projects, "the archive's own projects row carried the slug")
+	requireLedgerSums(t, dst)
 
 	after := countsOf(t, dst)
 	require.Equal(t, before["settings"], after["settings"])
@@ -553,7 +606,73 @@ func TestImport_MergeSessionNameCollisionIsReported(t *testing.T) {
 		IncomingID: specA.sessionID, ExistingID: "01SESSSQUATTER",
 	}}, rep.NameCollisions)
 	require.Zero(t, rep.Rows["sessions"], "INSERT OR IGNORE drops the colliding row")
+	require.Zero(t, rep.Rows["session_usage"], "and its usage ledger stays behind with it")
 	require.Contains(t, rep.String(), "sessions.name collision")
+	require.Equal(t, 2, countsOf(t, dst)["session_usage"], "only the destination's own session's rows")
+	requireLedgerSums(t, dst)
+}
+
+// The usage ledger rides only with the sessions the row pass inserts itself. A
+// session this instance already had keeps its own rows and totals, however the
+// archive's differ, and every session afterwards still sums its rows to its
+// totals; a dry run predicts as much, and the same archive merged again adds
+// nothing.
+func TestImport_MergeCarriesTheLedgerOnlyWithTheSessionsItInserts(t *testing.T) {
+	ctx := context.Background()
+	src := seedIndexed(t, specA)
+	srcDB, err := store.Open(filepath.Join(src, DBName))
+	require.NoError(t, err)
+	at := time.Date(2026, 7, 10, 17, 0, 0, 0, time.UTC)
+	require.NoError(t, store.CreateSession(ctx, srcDB, core.Session{ID: "01SESSALPHANEW", Name: "cc/alpha-new",
+		ProjectSlug: specA.project, Status: core.SessionCompleted, CreatedAt: at, UpdatedAt: at}))
+	seedLedgerRows(t, srcDB, "01SESSALPHANEW", core.UsageBucket{Bucket: at, Model: "claude-y", Thread: core.UsageThreadMain,
+		Input: 4, Output: 4, Messages: 1, MinuteMask: 1})
+	require.NoError(t, srcDB.Close())
+	data := exportOf(t, src)
+
+	// The destination has specA's session already, with a ledger of its own.
+	seedDst := func(t *testing.T) string {
+		t.Helper()
+		dir := seedIndexed(t, specB)
+		db, err := store.Open(filepath.Join(dir, DBName))
+		require.NoError(t, err)
+		defer func() { require.NoError(t, db.Close()) }()
+		require.NoError(t, store.CreateSession(ctx, db, core.Session{ID: specA.sessionID, Name: specA.sessName,
+			ProjectSlug: specA.project, Status: core.SessionCompleted, CreatedAt: at, UpdatedAt: at}))
+		seedLedgerRows(t, db, specA.sessionID, core.UsageBucket{Bucket: at.Add(time.Hour), Model: "claude-z",
+			Thread: core.UsageThreadMain, Input: 70, Output: 7, Messages: 3, MinuteMask: 0b111})
+		return dir
+	}
+	dry, err := Import(ctx, ImportOptions{DataDir: seedDst(t), Src: bytes.NewReader(data), DryRun: true})
+	require.NoError(t, err)
+	dst := seedDst(t)
+	live, err := Import(ctx, ImportOptions{DataDir: dst, Src: bytes.NewReader(data)})
+	require.NoError(t, err)
+	require.Equal(t, 1, live.Rows["sessions"], "the new session; specA's was here")
+	require.Equal(t, 1, live.Rows["session_usage"], "the new session's row alone")
+	require.Equal(t, live.Rows, dry.Rows, "the dry run predicts the ledger too")
+
+	db, err := store.OpenExisting(filepath.Join(dst, DBName))
+	require.NoError(t, err)
+	kept, err := store.SessionUsage(ctx, db, specA.sessionID)
+	require.NoError(t, err)
+	require.Len(t, kept, 1)
+	require.Equal(t, "claude-z", kept[0].Model, "the session the destination had keeps its own rows")
+	s, _, err := store.SessionByID(ctx, db, specA.sessionID)
+	require.NoError(t, err)
+	require.Equal(t, 77, s.Tokens.Total, "and its own totals")
+	carried, err := store.SessionUsage(ctx, db, "01SESSALPHANEW")
+	require.NoError(t, err)
+	require.Len(t, carried, 1)
+	require.Equal(t, core.UsageBucket{Bucket: at, Model: "claude-y", Thread: core.UsageThreadMain, Input: 4, Output: 4,
+		Messages: 1, MinuteMask: 1}, carried[0].UsageBucket)
+	require.NoError(t, db.Close())
+	requireLedgerSums(t, dst)
+
+	again, err := Import(ctx, ImportOptions{DataDir: dst, Src: bytes.NewReader(data)})
+	require.NoError(t, err)
+	require.Zero(t, again.Rows["session_usage"], "the same archive again adds no row")
+	requireLedgerSums(t, dst)
 }
 
 func TestImport_MergeDryRunPredictsTheRealRun(t *testing.T) {
@@ -665,6 +784,8 @@ func TestImport_MergeAnArchiveFromBefore039(t *testing.T) {
 		`DROP TABLE repo_locks`, `DROP TABLE repo_lock_aliases`, `DROP TABLE repo_lock_projects`,
 		// What 048 added (the repo lock queue).
 		`DROP TABLE repo_lock_waiters`,
+		// What 053 added (the usage ledger).
+		`DROP TABLE session_usage`,
 	} {
 		_, err := db.ExecContext(ctx, q)
 		require.NoError(t, err, q)
@@ -687,6 +808,7 @@ func TestImport_MergeAnArchiveFromBefore039(t *testing.T) {
 	require.Equal(t, ModeMerge, rep.Mode)
 	require.Equal(t, 1, rep.Rows["sessions"])
 	require.Zero(t, rep.Rows["item_provenance"])
+	require.Zero(t, rep.Rows["session_usage"], "an archive from before the ledger carries none")
 
 	out, err := store.OpenExisting(filepath.Join(dst, DBName))
 	require.NoError(t, err)
