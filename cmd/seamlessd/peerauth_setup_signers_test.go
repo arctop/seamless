@@ -119,13 +119,16 @@ func TestPeerAuthSetup_ReleaseSignersRefuseAReleaseTheKeysDoNotVouchFor(t *testi
 		sig  func(owner *sshsigtest.Key) []byte
 		want string
 		is   error
+		// rerun: whether the advice is to run setup again (a signature
+		// still to come), not to undo and plan afresh (a pin that refuses).
+		rerun bool
 	}{
 		{"a key the pin does not list", func(*sshsigtest.Key) []byte { return signChecksums(t, stranger, pasTestChecksums) },
-			"checksums.txt.sshsig of v0.10.4, against update.release_signers", sshsig.ErrUnlisted},
+			"checksums.txt.sshsig of v0.10.4, against update.release_signers", sshsig.ErrUnlisted, false},
 		{"another checksums.txt", func(owner *sshsigtest.Key) []byte { return signChecksums(t, owner, "ffff  other.tar.gz\n") },
-			"checksums.txt.sshsig of v0.10.4, against update.release_signers", nil},
+			"checksums.txt.sshsig of v0.10.4, against update.release_signers", nil, false},
 		{"no signature at all", func(*sshsigtest.Key) []byte { return nil },
-			"v0.10.4 has no checksums.txt.sshsig, and update.release_signers", errOwnerSignatureMissing},
+			"v0.10.4 has no checksums.txt.sshsig, and update.release_signers", errOwnerSignatureMissing, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newPasFake(t, "darwin")
@@ -139,6 +142,12 @@ func TestPeerAuthSetup_ReleaseSignersRefuseAReleaseTheKeysDoNotVouchFor(t *testi
 			}
 			var refusal *ownerSignatureError
 			require.True(t, errors.As(err, &refusal), "the updater's own refusal: %v", err)
+			if tc.rerun {
+				require.ErrorContains(t, err, "it continues from this step")
+			} else {
+				require.ErrorContains(t, err, "run seamlessd peer-auth undo, set the pin right")
+				require.NotContains(t, err.Error(), "it continues from this step")
+			}
 			require.NotContains(t, f.all(), pasStage+"/seamlessd", "nothing was staged")
 			require.NotEqual(t, pasLineDone, f.st().status["binaries"])
 		})

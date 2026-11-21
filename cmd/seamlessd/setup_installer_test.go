@@ -447,6 +447,17 @@ func TestSetupInstaller_SetupKnobsRunSetup(t *testing.T) {
 			out, err := w.run(t, append(scripted, "SEAMLESS_PEER_AUTH=1", "SETUP_E2E_SETUP=nopeer")...)
 			require.Error(t, err, out)
 			require.Contains(t, out, "setup predates SEAMLESS_PEER_AUTH; nothing was installed")
+			require.Contains(t, out, "drop SEAMLESS_VERSION to get the latest", "a pinned release: the latest may take it")
+			require.NoFileExists(t, filepath.Join(w.installDir, "seamlessd"), "nothing is installed")
+			require.Empty(t, setupCallsWithin(t, w))
+		})
+
+		t.Run("the latest release's setup from before SEAMLESS_PEER_AUTH says so, and no version to drop", func(t *testing.T) {
+			w := newSetupInstallerWorld(t, shell, installer)
+			out, err := w.run(t, "SEAMLESS_CLIENT=claude", "SEAMLESS_NO_SERVICE=1", "SEAMLESS_PEER_AUTH=1", "SETUP_E2E_SETUP=nopeer")
+			require.Error(t, err, out)
+			require.Contains(t, out, "the latest release, predates SEAMLESS_PEER_AUTH; nothing was installed")
+			require.NotContains(t, out, "drop SEAMLESS_VERSION")
 			require.NoFileExists(t, filepath.Join(w.installDir, "seamlessd"), "nothing is installed")
 			require.Empty(t, setupCallsWithin(t, w))
 		})

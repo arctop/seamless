@@ -810,7 +810,9 @@ run_setup() {
 	# A setup that speaks the hand-off but predates SEAMLESS_PEER_AUTH would
 	# take it for a script's marker and leave locked projects off: stop first.
 	if [ -n "${SEAMLESS_PEER_AUTH:-}" ] && ! printf '%s\n' "$probe" | grep -qF SEAMLESS_PEER_AUTH; then
-		die "seamless $VERSION's setup predates SEAMLESS_PEER_AUTH; nothing was installed. Unset it, or drop SEAMLESS_VERSION to get the latest"
+		[ -n "${SEAMLESS_VERSION:-}" ] &&
+			die "seamless $VERSION's setup predates SEAMLESS_PEER_AUTH; nothing was installed. Unset it, or drop SEAMLESS_VERSION to get the latest"
+		die "seamless $VERSION, the latest release, predates SEAMLESS_PEER_AUTH; nothing was installed. Unset it, and turn locked projects on later with seamlessd peer-auth setup"
 	fi
 	import_path
 	SETUP_STATE=$TMP/setup.state

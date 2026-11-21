@@ -409,6 +409,21 @@ func pasSetupCmd(h *pasHost, args []string) error {
 	return pasSetup(context.Background(), h, o)
 }
 
+// pasStopAdvice is what a stopped step tells the owner to do next. A rerun
+// continues from the step, except after a release signature the pin refuses:
+// the plan holds the pin as it read it, so a pin set right is a new plan
+// (undo first), and a release a right pin refuses is not one to install.
+func pasStopAdvice(err error) string {
+	var sig *ownerSignatureError
+	if errors.As(err, &sig) && sig.word != update.SignatureMissing {
+		return "The move holds this release to the release signers pin as the plan read it, so a rerun refuses it again. " +
+			"If the pin is wrong, run seamlessd peer-auth undo, set the pin right, and run seamlessd peer-auth setup to plan " +
+			"the move afresh; if the pin is right, this release is not one it vouches for, so do not install it"
+	}
+	return "Fix that and run seamlessd peer-auth setup again: it continues from this step. " +
+		"seamlessd peer-auth undo rolls back what is done"
+}
+
 // errPasRefused is a move setup will not start or continue; its message says
 // why and what to do.
 var errPasRefused = errors.New("peer-auth setup")
@@ -482,8 +497,7 @@ func pasSetup(ctx context.Context, h *pasHost, o pasOptions) error {
 		}
 		fmt.Fprintf(h.out, "\n%d/%d %s: %s\n", i+1, len(pasSteps), s.id, s.title(plan))
 		if err := pasRunStep(x, s); err != nil {
-			return fmt.Errorf("%w: step %d (%s) stopped: %w\n\nFix that and run seamlessd peer-auth setup again: it continues from this step. "+
-				"seamlessd peer-auth undo rolls back what is done", errPasRefused, i+1, s.id, err)
+			return fmt.Errorf("%w: step %d (%s) stopped: %w\n\n%s", errPasRefused, i+1, s.id, err, pasStopAdvice(err))
 		}
 		if err := h.record(ctx, x.t, pasLineDone, s.id); err != nil {
 			return fmt.Errorf("%w: step %d (%s) ran, but recording it failed (%w): a run again repeats it", errPasRefused, i+1, s.id, err)
