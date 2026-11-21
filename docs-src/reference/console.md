@@ -658,8 +658,8 @@ recorded trial, the same covered-ness test the coverage numbers apply. The
 Overview's continuity vital links straight to `?retained=no`, so its click
 answers "which sessions dropped knowledge".
 
-The list defaults to the last 24 hours. When that leaves most sessions out, the
-list ends by saying so ("3 of 212 sessions were active in the last 24h") and
+The list defaults to the last 24 hours (`?w=24h|7d|30d|all`; any other value is
+refused). When that leaves most sessions out, the list ends by saying so ("3 of 212 sessions were active in the last 24h") and
 offers the wider windows in place, so a quiet day never reads as an empty
 system. A row names its host only when the session ran on a different machine
 from the console's, and its source only when it was not a normal startup.
@@ -676,6 +676,11 @@ client wrote, and what became of the copy, with **Download JSONL** while a copy
 is kept (`/console/sessions/{id}/transcript`, the owner's alone: never a
 restricted account, a relay's caller or a paired device). Once any session is
 flagged, the list offers a **Flag** filter (`?verdict=flagged|good|bad|notable`).
+With no window chosen it lists the flagged sessions of all time, as `seam
+sessions --flagged` does: a flag changes no session's last update, so the
+24-hour default would hide a session flagged after its day. A window chosen
+under **Updated** applies to the filter as to every other, and stays chosen
+while the other filters change; until then the page's links carry none.
 
 ### The conversation {#conversation}
 

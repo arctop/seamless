@@ -83,7 +83,11 @@ type sessionsData struct {
 	Window      string         `json:"window"`
 	WindowLabel string         `json:"windowLabel"`
 	Windows     []windowOption `json:"-"`
-	Sessions    []sessionRow   `json:"sessions"`
+	// WindowParam is ?w= as the request named it, "" when it named none: the
+	// links the page draws carry the window only once it was chosen, so a
+	// verdict filter picked from the default view still spans all time.
+	WindowParam string       `json:"-"`
+	Sessions    []sessionRow `json:"sessions"`
 	// Day and DayLabel carry the ?day drill-down: a single local day the list
 	// is focused on (clicking a capture-calendar cell mints these URLs), empty
 	// when the list answers about a window instead.
@@ -181,7 +185,25 @@ func (s *Service) sessionsList(w http.ResponseWriter, r *http.Request) {
 	}
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	q := strings.ToLower(query)
-	win := store.ResolveRetrievalWindow(r.URL.Query().Get("w"), time.Now())
+	// The ?w window. Absent, it is the page's default -- the last 24h, or all
+	// time once a verdict filter is set, since a flag is metadata that moves
+	// no updated_at and a flagged session is worth finding however old (seam
+	// sessions --flagged lists all time too). A window the owner chose applies
+	// to the flag filter as to every other. Present but none of the windows is
+	// a loud 400, never a quiet default: it would read as the window chosen.
+	chosen := "" // the window the request named, "" for none
+	if ws, ok := r.URL.Query()["w"]; ok {
+		chosen = ws[0]
+		if !slices.Contains(store.RetrievalWindowKeys, chosen) {
+			s.badRequest(w, r, fmt.Sprintf("invalid w %q: valid values are %s", chosen, strings.Join(store.RetrievalWindowKeys, ", ")))
+			return
+		}
+	}
+	windowKey := chosen
+	if windowKey == "" && verdict != "" {
+		windowKey = "all"
+	}
+	win := store.ResolveRetrievalWindow(windowKey, time.Now())
 
 	// The ?day drill-down: clicking a capture-calendar cell focuses the list on
 	// the sessions CREATED that local day -- created, not updated, because that
@@ -300,7 +322,8 @@ func (s *Service) sessionsList(w http.ResponseWriter, r *http.Request) {
 			Active: active, Idle: idle, Completed: completed, Expired: expired,
 			Total:  counts.Sessions,
 			Window: win.Key, WindowLabel: win.Label, Windows: windowOptions(win.Key),
-			Day: dayParam, DayLabel: dayLabel, Retained: retained,
+			WindowParam: chosen,
+			Day:         dayParam, DayLabel: dayLabel, Retained: retained,
 			Sessions: rows,
 			Calendar: calendar, Streak: streak,
 			Locked:  lockedProjects(ctx),

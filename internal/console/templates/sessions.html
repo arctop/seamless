@@ -1,6 +1,6 @@
 {{define "content"}}
 {{with .Data}}
-{{$filter := .Filter}}{{$sort := .Sort}}{{$query := .Query}}{{$day := .Day}}{{$retained := .Retained}}{{$verdict := .Verdict}}
+{{$filter := .Filter}}{{$sort := .Sort}}{{$query := .Query}}{{$day := .Day}}{{$retained := .Retained}}{{$verdict := .Verdict}}{{$w := .WindowParam}}
 <div class="ops-page" data-ops="sessions">
 <header class="mv2-bar">
   <h1>{{icon "terminal"}}Sessions</h1>{{about "Follow active runs, reopen completed findings, and inspect the work each agent left behind."}}
@@ -10,8 +10,8 @@
   <form class="search lib-query" method="get" action="/console/sessions" data-seam-query>
     {{icon "search"}}
     <input name="q" aria-label="Search sessions by name, project, or findings" placeholder="Search name, project, findings&hellip;" value="{{.Query}}">
-    <input type="hidden" name="status" value="{{.Filter}}">
-    <input type="hidden" name="w" value="{{.Window}}">
+    <input type="hidden" name="status" value="{{.Filter}}">{{with $w}}
+    <input type="hidden" name="w" value="{{.}}">{{end}}
     <input type="hidden" name="sort" value="{{.Sort}}">
     <input type="hidden" name="day" value="{{.Day}}">
     <input type="hidden" name="retained" value="{{.Retained}}">{{with .Verdict}}
@@ -23,19 +23,19 @@
   <div class="mv2-sort">
     <span class="mv2-sort-label">Status</span>
     <div class="seg" data-seam-query>
-      <a class="{{if eq .Filter ""}}on{{end}}" href="/console/sessions?w={{.Window}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}">All</a>
-      <a class="{{if eq .Filter "active"}}on{{end}}" href="/console/sessions?status=active&amp;w={{.Window}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}">Active</a>
-      <a class="{{if eq .Filter "completed"}}on{{end}}" href="/console/sessions?status=completed&amp;w={{.Window}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}">Completed</a>
-      <a class="{{if eq .Filter "expired"}}on{{end}}" href="/console/sessions?status=expired&amp;w={{.Window}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}">Expired</a>
+      <a class="{{if eq .Filter ""}}on{{end}}" href="/console/sessions?sort={{.Sort}}{{with $w}}&amp;w={{.}}{{end}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}">All</a>
+      <a class="{{if eq .Filter "active"}}on{{end}}" href="/console/sessions?status=active{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}">Active</a>
+      <a class="{{if eq .Filter "completed"}}on{{end}}" href="/console/sessions?status=completed{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}">Completed</a>
+      <a class="{{if eq .Filter "expired"}}on{{end}}" href="/console/sessions?status=expired{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}">Expired</a>
     </div>
   </div>
   {{if $.Level.AtLeast "standard"}}
   <div class="mv2-sort">
     <span class="mv2-sort-label">Retained</span>
     <div class="seg" data-seam-query>
-      <a class="{{if eq .Retained ""}}on{{end}}" href="/console/sessions?status={{.Filter}}&amp;w={{.Window}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}{{with $verdict}}&amp;verdict={{.}}{{end}}">All</a>
-      <a class="{{if eq .Retained "yes"}}on{{end}}" title="Sessions that left a durable artifact behind: findings, a memory, a note, or a trial" href="/console/sessions?status={{.Filter}}&amp;w={{.Window}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained=yes{{with $verdict}}&amp;verdict={{.}}{{end}}">Knowledge</a>
-      <a class="{{if eq .Retained "no"}}on{{end}}" title="Sessions that retained nothing durable" href="/console/sessions?status={{.Filter}}&amp;w={{.Window}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained=no{{with $verdict}}&amp;verdict={{.}}{{end}}">Nothing</a>
+      <a class="{{if eq .Retained ""}}on{{end}}" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}{{with $verdict}}&amp;verdict={{.}}{{end}}">All</a>
+      <a class="{{if eq .Retained "yes"}}on{{end}}" title="Sessions that left a durable artifact behind: findings, a memory, a note, or a trial" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained=yes{{with $verdict}}&amp;verdict={{.}}{{end}}">Knowledge</a>
+      <a class="{{if eq .Retained "no"}}on{{end}}" title="Sessions that retained nothing durable" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained=no{{with $verdict}}&amp;verdict={{.}}{{end}}">Nothing</a>
     </div>
   </div>
   {{end}}
@@ -43,11 +43,11 @@
   <div class="mv2-sort">
     <span class="mv2-sort-label">Flag</span>
     <div class="seg" data-seam-query>
-      <a class="{{if eq .Verdict ""}}on{{end}}" href="/console/sessions?status={{.Filter}}&amp;w={{.Window}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}">All</a>
-      <a class="{{if eq .Verdict "flagged"}}on{{end}}" title="Sessions flagged with any verdict" href="/console/sessions?status={{.Filter}}&amp;w={{.Window}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}&amp;verdict=flagged">Flagged</a>
-      <a class="{{if eq .Verdict "good"}}on{{end}}" title="Flagged as going unusually well" href="/console/sessions?status={{.Filter}}&amp;w={{.Window}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}&amp;verdict=good">Good</a>
-      <a class="{{if eq .Verdict "bad"}}on{{end}}" title="Flagged as going unusually badly" href="/console/sessions?status={{.Filter}}&amp;w={{.Window}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}&amp;verdict=bad">Bad</a>
-      <a class="{{if eq .Verdict "notable"}}on{{end}}" title="Flagged as worth re-reading" href="/console/sessions?status={{.Filter}}&amp;w={{.Window}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}&amp;verdict=notable">Notable</a>
+      <a class="{{if eq .Verdict ""}}on{{end}}" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}">All</a>
+      <a class="{{if eq .Verdict "flagged"}}on{{end}}" title="Sessions flagged with any verdict" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}&amp;verdict=flagged">Flagged</a>
+      <a class="{{if eq .Verdict "good"}}on{{end}}" title="Flagged as going unusually well" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}&amp;verdict=good">Good</a>
+      <a class="{{if eq .Verdict "bad"}}on{{end}}" title="Flagged as going unusually badly" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}&amp;verdict=bad">Bad</a>
+      <a class="{{if eq .Verdict "notable"}}on{{end}}" title="Flagged as worth re-reading" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}&amp;verdict=notable">Notable</a>
     </div>
   </div>
   {{- end}}
@@ -55,8 +55,8 @@
   <details class="menu sort-menu">
     <summary class="menu-btn" aria-label="Sort: {{sortLabel .Sort}}">{{icon "arrow-up-down"}}<span class="menu-k">Sort</span><strong>{{sortLabel .Sort}}</strong>{{icon "chevron-down"}}</summary>
     <div class="menu-list" data-seam-query>
-      <a class="{{if eq .Sort "recent"}}on{{end}}" href="/console/sessions?status={{.Filter}}&amp;w={{.Window}}&amp;sort=recent&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}">Recent</a>
-      <a class="{{if eq .Sort "name"}}on{{end}}" href="/console/sessions?status={{.Filter}}&amp;w={{.Window}}&amp;sort=name&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}">Name</a>
+      <a class="{{if eq .Sort "recent"}}on{{end}}" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort=recent&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}">Recent</a>
+      <a class="{{if eq .Sort "name"}}on{{end}}" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort=name&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}">Name</a>
     </div>
   </details>
   {{end}}
@@ -77,7 +77,7 @@
     <span class="mom-cal-streak"><strong>{{.Current}}</strong>{{if .Ember}}<span class="mom-cal-ember" title="{{.EmberTitle}}">{{icon "flame"}}</span>{{end}}<small>day capture streak</small></span>
     <span class="mom-cal-streak"><strong>{{.Longest}}</strong><small>longest ever</small></span>
     {{end}}
-    {{if .Day}}<span class="mom-cal-day" title="The session map below is focused on this day">{{.DayLabel}}<a class="mom-cal-day-x" href="/console/sessions?status={{.Filter}}&amp;w={{.Window}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}" data-seam-query aria-label="Clear the day focus" title="Back to the {{.WindowLabel}} view">&times;</a></span>{{end}}
+    {{if .Day}}<span class="mom-cal-day" title="The session map below is focused on this day">{{.DayLabel}}<a class="mom-cal-day-x" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}" data-seam-query aria-label="Clear the day focus" title="Back to the {{.WindowLabel}} view">&times;</a></span>{{end}}
     <span class="mom-cal-key"><span class="mom-cal-ramp" title="Cell intensity scales with sessions that day">less<i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i>more</span><i class="mom-cal-key-dot"></i>day that captured knowledge</span>
   </header>
   <div class="mom-cal-scroll" data-scroll-end>{{.Calendar}}</div>

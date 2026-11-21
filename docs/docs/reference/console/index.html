@@ -1567,8 +1567,8 @@ durable artifact behind - non-empty findings, or a written memory, note, or
 recorded trial, the same covered-ness test the coverage numbers apply. The
 Overview's continuity vital links straight to <code>?retained=no</code>, so its click
 answers &quot;which sessions dropped knowledge&quot;.</p>
-<p>The list defaults to the last 24 hours. When that leaves most sessions out, the
-list ends by saying so (&quot;3 of 212 sessions were active in the last 24h&quot;) and
+<p>The list defaults to the last 24 hours (<code>?w=24h|7d|30d|all</code>; any other value is
+refused). When that leaves most sessions out, the list ends by saying so (&quot;3 of 212 sessions were active in the last 24h&quot;) and
 offers the wider windows in place, so a quiet day never reads as an empty
 system. A row names its host only when the session ran on a different machine
 from the console's, and its source only when it was not a normal startup.</p>
@@ -1582,7 +1582,11 @@ page. Its page adds a card: when it was flagged, the transcript file the agent
 client wrote, and what became of the copy, with <strong>Download JSONL</strong> while a copy
 is kept (<code>/console/sessions/{id}/transcript</code>, the owner's alone: never a
 restricted account, a relay's caller or a paired device). Once any session is
-flagged, the list offers a <strong>Flag</strong> filter (<code>?verdict=flagged|good|bad|notable</code>).</p>
+flagged, the list offers a <strong>Flag</strong> filter (<code>?verdict=flagged|good|bad|notable</code>).
+With no window chosen it lists the flagged sessions of all time, as <code>seam sessions --flagged</code> does: a flag changes no session's last update, so the
+24-hour default would hide a session flagged after its day. A window chosen
+under <strong>Updated</strong> applies to the filter as to every other, and stays chosen
+while the other filters change; until then the page's links carry none.</p>
 <h3 id="conversation">The conversation</h3>
 <p>With <a href="../../concepts/project-isolation/#asking-for-access">access requests</a> on, a
 conversation can span sessions: a move into a fenced project continues it as a

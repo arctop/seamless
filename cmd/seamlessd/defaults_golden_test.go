@@ -1347,6 +1347,23 @@ var dgAccepted = []struct {
 	{"tools_list.json", "session flag: session_update requires nothing",
 		"        \"required\": [],\n        \"type\": \"object\"\n      },\n      \"name\": \"session_update\"",
 		"        \"required\": [\n          \"findings\"\n        ],\n        \"type\": \"object\"\n      },\n      \"name\": \"session_update\"", 1},
+	// Open: the Sessions list carries ?w= only once a window was chosen (task
+	// 01M7XPJH07VWVHNBAW60JPR9VV), so its Flag filter, picked from the default
+	// view, lists flagged sessions of all time. The default view's search form
+	// and status links lose the default window they used to pin.
+	{"console.txt", "sessions: the search form pins no default window",
+		"    <input type=\"hidden\" name=\"status\" value=\"\">\n    <input type=\"hidden\" name=\"sort\" value=\"recent\">",
+		"    <input type=\"hidden\" name=\"status\" value=\"\">\n    <input type=\"hidden\" name=\"w\" value=\"24h\">\n" +
+			"    <input type=\"hidden\" name=\"sort\" value=\"recent\">", 1},
+	{"console.txt", "sessions: the status links pin no default window",
+		"      <a class=\"on\" href=\"/console/sessions?sort=recent&amp;q=&amp;day=&amp;retained=\">All</a>\n" +
+			"      <a class=\"\" href=\"/console/sessions?status=active&amp;sort=recent&amp;q=&amp;day=&amp;retained=\">Active</a>\n" +
+			"      <a class=\"\" href=\"/console/sessions?status=completed&amp;sort=recent&amp;q=&amp;day=&amp;retained=\">Completed</a>\n" +
+			"      <a class=\"\" href=\"/console/sessions?status=expired&amp;sort=recent&amp;q=&amp;day=&amp;retained=\">Expired</a>\n",
+		"      <a class=\"on\" href=\"/console/sessions?w=24h&amp;sort=recent&amp;q=&amp;day=&amp;retained=\">All</a>\n" +
+			"      <a class=\"\" href=\"/console/sessions?status=active&amp;w=24h&amp;sort=recent&amp;q=&amp;day=&amp;retained=\">Active</a>\n" +
+			"      <a class=\"\" href=\"/console/sessions?status=completed&amp;w=24h&amp;sort=recent&amp;q=&amp;day=&amp;retained=\">Completed</a>\n" +
+			"      <a class=\"\" href=\"/console/sessions?status=expired&amp;w=24h&amp;sort=recent&amp;q=&amp;day=&amp;retained=\">Expired</a>\n", 1},
 }
 
 // dgAccept maps the accepted differences in file's normalized text back to
