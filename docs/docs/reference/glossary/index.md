@@ -15,6 +15,12 @@ the ambient session, and the agent's MCP requests name it, which binds the
 agent's tool calls to that session with no `session_start`. See [Sessions &
 briefings](https://thereisnospoon.org/docs/concepts/sessions/#process-binding).
 
+**Agent time** - on the console's *Diary*, the minutes in which an agent sent
+at least one model message, counted for each session, model and thread (the
+agent's own turns, and its subagents' apart) and added up, so agents working
+in parallel make more agent time than the clock passed. Read from the *usage
+ledger*. See [Agent time and model tokens](https://thereisnospoon.org/docs/reference/console/#diary-usage).
+
 **Ambient session** - a Seamless session opened automatically by a Claude Code
 or Codex SessionStart hook, without the agent asking, displayed with an opaque
 `cc/...` or `cx/...` handle. Lifecycle identity uses the full external session
@@ -69,6 +75,11 @@ staleness-archived.
 **Description** - the one-line summary in a Seamless memory's frontmatter, the
 **only** text shown in any index and therefore the entire retrieval surface.
 See [Write memories that get recalled](https://thereisnospoon.org/docs/guides/write-good-memories/).
+
+**Diary** - the optional console screen with a page for each day of work: what
+was worked on, which agents did it, and what it took in *agent time* and
+*model tokens*, composed by stated rules from what Seamless already records.
+Off by default. See [Diary](https://thereisnospoon.org/docs/reference/console/#diary).
 
 **Digest** - a note summarizing a Seamless project's recent activity, proposed
 by the gardener.
@@ -147,6 +158,11 @@ with a passkey, or force it in the config file (`peer_auth.force_locked`). See
 
 **Memory** - in Seamless, a markdown file with YAML frontmatter holding one
 durable piece of knowledge; the unit that reaches briefings.
+
+**Model tokens** - the token counts a model reported for a session, added:
+output, fresh input, cache writes and cache reads. They include cache reads, so
+they are not a billing figure; Seamless shows no cost. They come from the
+agent client's own transcript or rollout, never an estimate.
 
 **Note** - in Seamless, a markdown file holding a work artifact - research
 findings, a meeting summary, a design record; found via recall, never injected
@@ -255,6 +271,12 @@ expected, what happened.
 
 **ULID** - the id format Seamless uses everywhere, sortable by creation time.
 Never UUID.
+
+**Usage ledger** - the `session_usage` table: each session's *model tokens* by
+quarter-hour, model and thread, with the minutes a message landed in. It is a
+session's token record, written on every install whether or not the *Diary*
+is on, and a session's token totals are always the sum of its rows. See
+[Storage](https://thereisnospoon.org/docs/reference/storage/#what-lives-only-in-sqlite).
 
 **Write screening** - the optional Seamless feature that screens every agent
 write to a memory or note for secrets, injection markers, hidden characters,

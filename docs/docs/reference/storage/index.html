@@ -260,7 +260,7 @@ it by hand, and what happens if you delete it.</p>
   <span class="figure-kicker">On-disk layout</span>
   <div class="doc-tree">
     <div class="tree-root"><code>~/.seamless/</code><span class="tree-note">Owner-only local data directory</span></div>
-    <div class="tree-branch"><code>seam.db</code><span class="tree-note">Indexes, sessions, tasks, trials, events, and embeddings</span></div>
+    <div class="tree-branch"><code>seam.db</code><span class="tree-note">Indexes, sessions and their token usage, tasks, trials, events, and embeddings</span></div>
     <div class="tree-branch"><code>seamlessd.lock</code><span class="tree-note">serve's one-daemon lock; holds the holder's PID (never delete it)</span></div>
     <div class="tree-branch"><code>seam.db.pre-rollback-{attempt}</code><span class="tree-note">Only after a rollback restored the database: the one the rolled-back release had migrated (with its -wal and -shm), kept until you delete it</span></div>
     <div class="tree-branch"><code>memory/</code><span class="tree-note">Durable memory tree</span></div>
@@ -507,7 +507,22 @@ so losing <code>seam.db</code> loses them:</p>
 <li><code>sessions</code> - ambient and explicit sessions, findings, cwd, status, and the
 agent process that owns an ambient session (what binds the agent's tool calls
 to it).</li>
-<li><code>tasks</code> and <code>task_deps</code> - the ready-queue, plan slugs, claims, and leases.</li>
+<li><code>session_usage</code> - the usage ledger: each session's model token usage by
+quarter-hour (UTC), model and thread (<code>main</code> for the agent's own turns,
+<code>subagent</code> for the subagents it launched), with how many model messages it
+counts and which minutes of the quarter-hour a message landed in. A row holds
+a session id, a model id, counts and a time: no text. It is written whether
+or not the <a href="../../reference/console/#diary">Diary</a> is on: Claude Code's
+<code>SessionEnd</code> replaces a session's rows from its transcript, each Codex <code>Stop</code>
+adds what the session's token counter grew by, and while the Diary is on a
+Claude Code prompt keeps a live session's rows current
+(<a href="../../reference/hooks/#mid-session-usage">mid-session usage</a>). A session's
+token totals are always the sum of its rows. It travels in backups and
+restores with the database; a merge into another instance carries a
+session's rows only with a session the merge adds.</li>
+<li><code>tasks</code> and <code>task_deps</code> - the ready-queue, plan slugs, claims, and leases.
+<code>task_body_revisions</code> keeps the bodies a <code>tasks_update</code> replaced or appended
+to, at most 20 for a task; a merge carries them only with a task it adds.</li>
 <li><code>repo_locks</code>, <code>repo_lock_aliases</code>, <code>repo_lock_projects</code> and
 <code>repo_lock_waiters</code> - the <a href="../../concepts/repo-locks/">repo locks</a>: each lock's
 name, guarded refs, state, holder, since and until; the repository

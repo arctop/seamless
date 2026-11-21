@@ -713,8 +713,10 @@ None of this is silent. On the **server**:
   here" rather than treated as missing.
 
 Every skip is also an event in the log (`hook.error`, stage
-`remote-host-skip`, with the capture name and the host), recorded at INFO -
-on a shared daemon a skip is the design working, not a fault.
+`remote-host-skip`, with the capture name and the host), except that the model
+sniff, which runs on every prompt and turn, records its skip once a
+conversation. Skips are recorded at INFO - on a shared daemon a skip is the
+design working, not a fault.
 
 ## Updates on a shared daemon
 

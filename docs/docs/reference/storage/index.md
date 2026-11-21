@@ -16,7 +16,7 @@ it by hand, and what happens if you delete it.
 ```text
 On-disk layout
 ~/.seamless/ Owner-only local data directory
-seam.db Indexes, sessions, tasks, trials, events, and embeddings
+seam.db Indexes, sessions and their token usage, tasks, trials, events, and embeddings
 seamlessd.lock serve's one-daemon lock; holds the holder's PID (never delete it)
 seam.db.pre-rollback-{attempt} Only after a rollback restored the database: the one the rolled-back release had migrated (with its -wal and -shm), kept until you delete it
 memory/ Durable memory tree
@@ -171,7 +171,22 @@ so losing `seam.db` loses them:
 - `sessions` - ambient and explicit sessions, findings, cwd, status, and the
   agent process that owns an ambient session (what binds the agent's tool calls
   to it).
+- `session_usage` - the usage ledger: each session's model token usage by
+  quarter-hour (UTC), model and thread (`main` for the agent's own turns,
+  `subagent` for the subagents it launched), with how many model messages it
+  counts and which minutes of the quarter-hour a message landed in. A row holds
+  a session id, a model id, counts and a time: no text. It is written whether
+  or not the [Diary](https://thereisnospoon.org/docs/reference/console/#diary) is on: Claude Code's
+  `SessionEnd` replaces a session's rows from its transcript, each Codex `Stop`
+  adds what the session's token counter grew by, and while the Diary is on a
+  Claude Code prompt keeps a live session's rows current
+  ([mid-session usage](https://thereisnospoon.org/docs/reference/hooks/#mid-session-usage)). A session's
+  token totals are always the sum of its rows. It travels in backups and
+  restores with the database; a merge into another instance carries a
+  session's rows only with a session the merge adds.
 - `tasks` and `task_deps` - the ready-queue, plan slugs, claims, and leases.
+  `task_body_revisions` keeps the bodies a `tasks_update` replaced or appended
+  to, at most 20 for a task; a merge carries them only with a task it adds.
 - `repo_locks`, `repo_lock_aliases`, `repo_lock_projects` and
   `repo_lock_waiters` - the [repo locks](https://thereisnospoon.org/docs/concepts/repo-locks/): each lock's
   name, guarded refs, state, holder, since and until; the repository

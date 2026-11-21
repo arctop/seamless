@@ -1315,6 +1315,21 @@ Guide: docs-src/guides/security-monitor.md.
 The Diary's facts (plan:diary). The console renders them; the package knows no
 URLs and no feature state.
 
+- **The usage ledger is the token record, and it is not the Diary's.**
+  `session_usage` (migration 053) is the single source of a session's token
+  totals: `store.setUsageTotalsTx` is the one writer of the sessions token
+  columns, and it sets them to the sum of the session's rows inside the
+  ledger write's own transaction (`ReplaceConversationUsage`,
+  `RefreshConversationUsage`, `CreditConversationUsage`). The harvests that
+  write it (Claude Code's SessionEnd and each Codex Stop,
+  `internal/hooks/usage.go`; `seam usage backfill`'s fill,
+  `usage_backfill.go`) check no feature: never put a ledger write, or a
+  totals write beside it, behind `features.Diary`, or turning the Diary on
+  would show a history that was never kept. The feature gates what the owner
+  sees and the one hook cost it adds, the mid-session harvest
+  (`usage_live.go`, above). A row holds no text; a merge carries rows only
+  with the sessions it inserts (`archive/merge.go`'s riders), so totals stay
+  the sum.
 - **Read through the handle you are given.** Day, Month and Usual take the
   console's filtered handle (`store.OpenView`), so a locked project's work is
   simply absent. A new read goes in `internal/store/diary.go` with a test
@@ -1323,10 +1338,11 @@ URLs and no feature state.
   Day, Month and Usual share (`TestMonth_AgreesWithEveryDay`). Month reads a
   bounded number of queries for the whole month, never one per day.
 - **Tokens follow `plan-token-attribution-contract`.** A day's totals are the
-  sum of its ledger rows, so each session counts once. A session in two
-  threads counts in full in each, so never sum threads. A session with totals
-  and no rows predates the ledger: it counts only on the day it ended, marked
-  approximate.
+  sum of its ledger rows, so each session counts once (the tally in
+  `facts.go` adds each session-day's usage once). A session in two threads
+  counts in full in each, so never compute a day's figure, or the month's, by
+  summing threads or cards. A session with totals and no rows predates the
+  ledger: it counts only on the day it ended, marked approximate.
 - **Evidence is the agent's own work:** ledger rows, credited events, or a
   start or end on the day. A flag is not evidence (the owner may flag long
   after), and the transport events (tool.call, hook.prompt,
@@ -1342,7 +1358,15 @@ URLs and no feature state.
   href per item. `MonthView.Agents` totals the month by agent, held to its
   days by `TestMonth_AgentsAgreeWithEveryDay`; the screen picks each agent's
   color from it, so an agent keeps one color for the month.
-- **The Diary screen (the `diary` optional feature).** No link may answer 404:
+- **The Diary screen (the `diary` optional feature).** `diaryPage` reads Day,
+  Month and Usual through `s.db(ctx)`, the request's handle, never
+  `s.cfg.DB`: a locked project's work is absent from the read, not filtered
+  out afterwards (`TestDiary_LockedProjectIsAbsent`, and the peer_auth
+  matrix's Diary targets). A link is built only from an id the day resolved
+  through that handle (`refHref`: a plan's page only with `HasPage`, else its
+  project's Plans & tasks tab when the project resolved; a commit through its
+  owner); an item that does not resolve is text titled "No longer exists",
+  never a link that answers 404, and never a link built from a title.
   `TestDiary_LinkIntegrity` GETs every href a seeded day renders, page and
   JSON. With research off a trial appears nowhere (`withoutTrials`). The page
   owns its liveness: only today refreshes, throttled, from the one SSE stream

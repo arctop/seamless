@@ -300,7 +300,7 @@ restart, and stay until reset.</li>
 <tr>
 <td><code>features:</code></td>
 <td>Settings → <a href="../../reference/console/#optional-features">Features</a>, or the Home welcome card's write-screening box</td>
-<td>Immediately in the console; an agent sees it from its next session (tool lists and briefings alike), and write screening from its next write.</td>
+<td>Immediately in the console; an agent sees it from its next session (tool lists and briefings alike), write screening from its next write, and the Diary's <a href="../../reference/hooks/#mid-session-usage">mid-session usage</a> from the next Claude Code prompt.</td>
 </tr>
 <tr>
 <td><code>console.level</code></td>
@@ -1329,8 +1329,11 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># The Diary: a console screen with one entry per day -- what was worked on,</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># which agents did it, and what it took in agent time and model tokens, with</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># short question-and-answer sessions folded away -- and an Open in Diary link</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># on a Sessions day view. Presentation only: the usage ledger and the event</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># log it reads are recorded whether it is on or off.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># on a Sessions day view. The usage ledger and the event log it reads are</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># recorded whether it is on or off, so turning it on shows the history at</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># once. On, it also keeps a live Claude Code session&#39;s usage ledger current</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># from its prompts: read after a prompt is answered, at most once every three</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># minutes a conversation. The console&#39;s toggle applies without a restart.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_FEATURES_DIARY</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">diary</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">

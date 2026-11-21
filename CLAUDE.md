@@ -273,7 +273,8 @@ on `/console/passkeys/add` and the owner approves the code it shows with
 
 ```
 ~/.seamless/
-  seam.db                          SQLite: indexes, sessions, tasks, trials, events, embeddings, ...
+  seam.db                          SQLite: indexes, sessions, tasks, trials, events, embeddings,
+                                   the usage ledger (session_usage), ...
   seamlessd.lock                   serve's one-daemon-per-data-dir lock (holder's PID; never delete it)
   memory/{project|_global}/{name}.md   one memory per file (source of truth)
   notes/{project|_global}/{slug}.md    work artifacts (source of truth)
@@ -302,7 +303,10 @@ certificate fingerprint, device, the relay's certificate and key),
 
 Files are the source of truth for durable knowledge; the DB is the record for
 high-churn state (sessions, tasks, trials, events, telemetry) and a rebuildable
-index for the files.
+index for the files. A session's model tokens live in the usage ledger
+(`session_usage`, migration 053: per quarter-hour, model and thread, no text),
+written by every harvest whether or not the Diary is on; the session's token
+totals are always the sum of its rows (store/ledger.go).
 
 Under `peer_auth` the data dir belongs to the daemon's own OS account instead
 (the guide's layout: `/opt/seamless/data`, 0700), and serve refuses to start

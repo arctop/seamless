@@ -46,7 +46,7 @@
       {{- if or .ApproxNote .Unreported}}
       <div class="dy-notes">
         {{- with .ApproxNote}}<p class="dy-note">{{icon "info"}}<span>{{.}}</span></p>{{end}}
-        {{- with .Unreported}}<p class="dy-note">{{icon "clock"}}<span>{{len .}} {{if eq (len .) 1}}session has{{else}}sessions have{{end}} no token record yet: {{range $i, $s := .}}{{if $i}}, {{end}}{{$s}}{{end}}. A live session reports when it ends.</span></p>{{end}}
+        {{- with .Unreported}}<p class="dy-note">{{icon "clock"}}<span>{{len .}} {{if eq (len .) 1}}session has{{else}}sessions have{{end}} no token record yet: {{range $i, $s := .}}{{if $i}}, {{end}}{{$s}}{{end}}. A live session reports as its prompts are answered, or when it ends.</span></p>{{end}}
       </div>
       {{- end}}
 
@@ -190,7 +190,7 @@
 {{/* One session's part of the day: who it was, what it was about, what it took. */}}
 {{define "dy-sess"}}<li class="dy-sess">
   <p class="dy-sess-line">{{.Link}}</p>
-  <div class="dy-sess-meta">{{.Pill}}<span class="dy-sess-fig">{{with .Minutes}}{{.}}{{else}}no agent time recorded{{end}}{{if .Unreported}} &middot; <span class="dy-unrep" title="No token record: a live session reports when it ends">no token record</span>{{else if .Approximate}} &middot; &asymp;{{.Tokens}} tok <span class="faint">{{.Approximate}}</span>{{else}} &middot; {{.Tokens}} tok{{end}}</span>{{.Flag}}{{if .Shared}}<span class="kind faint" title="This session is in more than one thread and counts in full in each">shared</span>{{end}}</div>
+  <div class="dy-sess-meta">{{.Pill}}<span class="dy-sess-fig">{{with .Minutes}}{{.}}{{else}}no agent time recorded{{end}}{{if .Unreported}} &middot; <span class="dy-unrep" title="No token record: a live session reports as its prompts are answered, or when it ends">no token record</span>{{else if .Approximate}} &middot; &asymp;{{.Tokens}} tok <span class="faint">{{.Approximate}}</span>{{else}} &middot; {{.Tokens}} tok{{end}}</span>{{.Flag}}{{if .Shared}}<span class="kind faint" title="This session is in more than one thread and counts in full in each">shared</span>{{end}}</div>
 </li>{{end}}
 
 {{define "scripts"}}<script src="/console/static/diary.js"></script>

@@ -348,7 +348,7 @@ install order:</p>
 <td>http</td>
 <td>5s</td>
 <td><code>/api/hooks/user-prompt-submit</code></td>
-<td>Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a <a href="#claim-notices">claim the conversation lost</a> or a <a href="#repo-locks">repo lock whose holder changed</a> when there is one. A miss is logged as a <code>hook.prompt</code> event. With the Diary on, it also keeps the session's <a href="#mid-session-usage">usage ledger current</a>, at most once every three minutes.</td>
+<td>Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a <a href="#claim-notices">claim the conversation lost</a> or a <a href="#repo-locks">repo lock whose holder changed</a> when there is one. A miss is logged as a <code>hook.prompt</code> event. With the Diary on, it also keeps the session's <a href="#mid-session-usage">usage ledger current</a>, read after the prompt is answered, at most once every three minutes.</td>
 </tr>
 <tr>
 <td><code>SessionEnd</code></td>
@@ -356,7 +356,7 @@ install order:</p>
 <td>command (<code>seam hook session-end</code>)</td>
 <td>10s</td>
 <td><code>/api/hooks/session-end</code></td>
-<td>Harvests findings and the session's model token usage, and completes the agent's sessions. The usage counts the transcripts of the subagents it launched too, which Claude Code keeps beside the session's (<code>&lt;session&gt;/subagents/agent-*.jsonl</code>). Bare ack - Claude Code's schema has no <code>hookSpecificOutput</code> for <code>SessionEnd</code>.</td>
+<td>Harvests findings and the session's model token usage, and completes the agent's sessions. The usage counts the transcripts of the subagents it launched too, which Claude Code keeps beside the session's (<code>&lt;session&gt;/subagents/agent-*.jsonl</code>). When the agent already ended its session with <code>session_end</code>, or the idle reaper expired it, the hook records the token usage alone, on that session, which stays as it ended. Bare ack - Claude Code's schema has no <code>hookSpecificOutput</code> for <code>SessionEnd</code>.</td>
 </tr>
 <tr>
 <td><code>PostToolUse</code></td>
@@ -478,7 +478,7 @@ lifecycle.</p>
 <td><code>Stop</code></td>
 <td>command (<code>seam hook stop --client codex</code>)</td>
 <td><code>/api/hooks/stop</code></td>
-<td>Heartbeats and harvests findings from the turn's final assistant message. No injection - Codex's <code>Stop</code> has no <code>hookSpecificOutput</code>. Fires at every turn end.</td>
+<td>Heartbeats, harvests findings from the turn's final assistant message, and adds what the session's token counter grew by this turn to its <a href="../../reference/storage/#what-lives-only-in-sqlite">usage ledger</a>. No injection - Codex's <code>Stop</code> has no <code>hookSpecificOutput</code>. Fires at every turn end.</td>
 </tr>
 <tr>
 <td><code>SubagentStart</code></td>
@@ -859,7 +859,9 @@ computes an identity for it; the daemon attributes it through the ambient
 session that client already has.</p>
 <p>When the host is <em>not</em> the daemon's, every daemon-side read of the agent's
 filesystem is skipped rather than attempted, and the skip is recorded as a
-<code>hook.error</code> event with stage <code>remote-host-skip</code>. It is a host check and not a
+<code>hook.error</code> event with stage <code>remote-host-skip</code>. The model sniff, which runs
+at a session's start, on every prompt and at every Stop, records its skip once
+a conversation, not once a turn. It is a host check and not a
 &quot;does the file exist&quot; check on purpose: two devices with the same username and
 home layout produce the same transcript and plan-file paths, so a missing-file
 test would sometimes find a real file - the wrong one. See

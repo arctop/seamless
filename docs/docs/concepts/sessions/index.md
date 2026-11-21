@@ -445,7 +445,12 @@ cache-creation, and output counts read from the client's own transcript
 (Claude Code, the transcripts of the subagents it launched included) or rollout
 file (Codex), not estimated from injected bytes. The session's console page
 shows them as its "Model tokens" panel; a session whose client exposes no
-transcript simply records none. A session whose Claude Code transcript is still
+transcript simply records none. They are kept in the
+[usage ledger](https://thereisnospoon.org/docs/reference/storage/#what-lives-only-in-sqlite), by quarter-hour,
+model and thread, and a session's totals are the sum of its rows. A Claude Code
+session the agent already ended with `session_end`, or the reaper expired,
+still gets its usage when its client ends it, and stays as it ended. A session
+whose Claude Code transcript is still
 on its computer but was never harvested is filled by
 [`seam usage backfill`](https://thereisnospoon.org/docs/reference/cli-seam/#seam_usage_backfill).
 With the Diary [optional feature](https://thereisnospoon.org/docs/reference/console/#optional-features) on, a

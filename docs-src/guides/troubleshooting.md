@@ -299,11 +299,14 @@ search scope, and `lab_open`, `trial_record`, `trial_query`); the in-page
 momentum surfaces (finish-line cards, the capture calendar, payoff moments,
 maturity stages) belong to momentum; the Now screen's arcade (the day tape,
 personal records, the hot-streak pulse, celebration moments) belongs to
-gamification - the Now screen itself is core and always on.
+gamification - the Now screen itself is core and always on; the Locks screen,
+the `locks_*` tools and `seam lock` belong to repo locks; and the Diary screen,
+with its Open in Diary link on a Sessions day view, belongs to the Diary.
 
 **Fix.** Turn the feature on in the console under Settings → Features (or set
 its `features:` key in YAML, or `SEAMLESS_FEATURES_RESEARCH=1` /
-`SEAMLESS_FEATURES_MOMENTUM=1` / `SEAMLESS_FEATURES_GAMIFICATION=1`). The
+`SEAMLESS_FEATURES_MOMENTUM=1` / `SEAMLESS_FEATURES_GAMIFICATION=1` /
+`SEAMLESS_FEATURES_REPO_LOCKS=1` / `SEAMLESS_FEATURES_DIARY=1`). The
 console toggle stores an override that beats both the file and the
 environment, so check it before you edit YAML.
 

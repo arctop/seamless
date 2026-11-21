@@ -1269,9 +1269,11 @@ Two behaviours matter if you are debugging a hook:
 - **On the peer_auth socket the hook makes the captures.** With `server_url`
   naming the socket the daemon opens none of the agent's files, so `seam hook`
   reads them and sends what it found beside the payload: the transcript's
-  findings, token totals (its subagents' transcripts beside it included) and
-  model, the plan file, a subagent's prompt and report (waiting up to 3s for
-  its final message), and the git head. A capture
+  findings, token usage for the
+  [usage ledger](https://thereisnospoon.org/docs/reference/storage/#what-lives-only-in-sqlite) (its
+  subagents' transcripts beside it included) and model, the plan file, a
+  subagent's prompt and report (waiting up to 3s for its final message), and
+  the git head. A capture
   the daemon refuses (a locked project the owner has not approved) is named in
   one line on stderr and not retried. When the daemon's answer to a
   [flagged session's](https://thereisnospoon.org/docs/guides/data/#flagged-transcripts) `session-end` (or

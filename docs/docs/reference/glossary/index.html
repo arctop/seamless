@@ -259,6 +259,11 @@ and launches its MCP transports. The SessionStart hook stamps its identity on
 the ambient session, and the agent's MCP requests name it, which binds the
 agent's tool calls to that session with no <code>session_start</code>. See <a href="../../concepts/sessions/#process-binding">Sessions &amp;
 briefings</a>.</p>
+<p><strong>Agent time</strong> - on the console's <em>Diary</em>, the minutes in which an agent sent
+at least one model message, counted for each session, model and thread (the
+agent's own turns, and its subagents' apart) and added up, so agents working
+in parallel make more agent time than the clock passed. Read from the <em>usage
+ledger</em>. See <a href="../../reference/console/#diary-usage">Agent time and model tokens</a>.</p>
 <p><strong>Ambient session</strong> - a Seamless session opened automatically by a Claude Code
 or Codex SessionStart hook, without the agent asking, displayed with an opaque
 <code>cc/...</code> or <code>cx/...</code> handle. Lifecycle identity uses the full external session
@@ -301,6 +306,10 @@ staleness-archived.</p>
 <p><strong>Description</strong> - the one-line summary in a Seamless memory's frontmatter, the
 <strong>only</strong> text shown in any index and therefore the entire retrieval surface.
 See <a href="../../guides/write-good-memories/">Write memories that get recalled</a>.</p>
+<p><strong>Diary</strong> - the optional console screen with a page for each day of work: what
+was worked on, which agents did it, and what it took in <em>agent time</em> and
+<em>model tokens</em>, composed by stated rules from what Seamless already records.
+Off by default. See <a href="../../reference/console/#diary">Diary</a>.</p>
 <p><strong>Digest</strong> - a note summarizing a Seamless project's recent activity, proposed
 by the gardener.</p>
 <p><strong>Explicit session</strong> - a Seamless session opened by calling <code>session_start</code>.
@@ -361,6 +370,10 @@ with a passkey, or force it in the config file (<code>peer_auth.force_locked</co
 <a href="../../guides/peer-auth/">Lock projects behind your approval</a>.</p>
 <p><strong>Memory</strong> - in Seamless, a markdown file with YAML frontmatter holding one
 durable piece of knowledge; the unit that reaches briefings.</p>
+<p><strong>Model tokens</strong> - the token counts a model reported for a session, added:
+output, fresh input, cache writes and cache reads. They include cache reads, so
+they are not a billing figure; Seamless shows no cost. They come from the
+agent client's own transcript or rollout, never an estimate.</p>
 <p><strong>Note</strong> - in Seamless, a markdown file holding a work artifact - research
 findings, a meeting summary, a design record; found via recall, never injected
 into a briefing.</p>
@@ -444,6 +457,11 @@ replacement.</p>
 expected, what happened.</p>
 <p><strong>ULID</strong> - the id format Seamless uses everywhere, sortable by creation time.
 Never UUID.</p>
+<p><strong>Usage ledger</strong> - the <code>session_usage</code> table: each session's <em>model tokens</em> by
+quarter-hour, model and thread, with the minutes a message landed in. It is a
+session's token record, written on every install whether or not the <em>Diary</em>
+is on, and a session's token totals are always the sum of its rows. See
+<a href="../../reference/storage/#what-lives-only-in-sqlite">Storage</a>.</p>
 <p><strong>Write screening</strong> - the optional Seamless feature that screens every agent
 write to a memory or note for secrets, injection markers, hidden characters,
 encoded blobs and unlisted links, and keeps the suspicious ones as <em>held

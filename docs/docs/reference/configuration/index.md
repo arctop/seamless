@@ -44,7 +44,7 @@ That fourth layer covers four blocks where the stored row simply wins:
 | Block | Written by | When it takes effect |
 |---|---|---|
 | `briefing:` | Settings → [Briefing](https://thereisnospoon.org/docs/reference/console/#briefing) | From the next session start. |
-| `features:` | Settings → [Features](https://thereisnospoon.org/docs/reference/console/#optional-features), or the Home welcome card's write-screening box | Immediately in the console; an agent sees it from its next session (tool lists and briefings alike), and write screening from its next write. |
+| `features:` | Settings → [Features](https://thereisnospoon.org/docs/reference/console/#optional-features), or the Home welcome card's write-screening box | Immediately in the console; an agent sees it from its next session (tool lists and briefings alike), write screening from its next write, and the Diary's [mid-session usage](https://thereisnospoon.org/docs/reference/hooks/#mid-session-usage) from the next Claude Code prompt. |
 | `console.level` | Settings → [Experience](https://thereisnospoon.org/docs/reference/console/#experience), or the Home welcome card | Immediately, in the console only. |
 | `backup:` | Settings → [Backups](https://thereisnospoon.org/docs/reference/console/#backups) | From the next scheduled backup. |
 
@@ -676,8 +676,11 @@ features:
   # The Diary: a console screen with one entry per day -- what was worked on,
   # which agents did it, and what it took in agent time and model tokens, with
   # short question-and-answer sessions folded away -- and an Open in Diary link
-  # on a Sessions day view. Presentation only: the usage ledger and the event
-  # log it reads are recorded whether it is on or off.
+  # on a Sessions day view. The usage ledger and the event log it reads are
+  # recorded whether it is on or off, so turning it on shows the history at
+  # once. On, it also keeps a live Claude Code session's usage ledger current
+  # from its prompts: read after a prompt is answered, at most once every three
+  # minutes a conversation. The console's toggle applies without a restart.
   # env: SEAMLESS_FEATURES_DIARY
   diary: false
 

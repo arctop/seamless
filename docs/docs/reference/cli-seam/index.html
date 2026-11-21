@@ -1218,9 +1218,11 @@ config or touching the network. The daemon re-validates the path anyway.</li>
 <li><strong>On the peer_auth socket the hook makes the captures.</strong> With <code>server_url</code>
 naming the socket the daemon opens none of the agent's files, so <code>seam hook</code>
 reads them and sends what it found beside the payload: the transcript's
-findings, token totals (its subagents' transcripts beside it included) and
-model, the plan file, a subagent's prompt and report (waiting up to 3s for
-its final message), and the git head. A capture
+findings, token usage for the
+<a href="../../reference/storage/#what-lives-only-in-sqlite">usage ledger</a> (its
+subagents' transcripts beside it included) and model, the plan file, a
+subagent's prompt and report (waiting up to 3s for its final message), and
+the git head. A capture
 the daemon refuses (a locked project the owner has not approved) is named in
 one line on stderr and not retried. When the daemon's answer to a
 <a href="../../guides/data/#flagged-transcripts">flagged session's</a> <code>session-end</code> (or

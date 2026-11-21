@@ -1014,8 +1014,10 @@ belonging to other hosts are reported as present but &quot;not verifiable from
 here&quot; rather than treated as missing.</li>
 </ul>
 <p>Every skip is also an event in the log (<code>hook.error</code>, stage
-<code>remote-host-skip</code>, with the capture name and the host), recorded at INFO -
-on a shared daemon a skip is the design working, not a fault.</p>
+<code>remote-host-skip</code>, with the capture name and the host), except that the model
+sniff, which runs on every prompt and turn, records its skip once a
+conversation. Skips are recorded at INFO - on a shared daemon a skip is the
+design working, not a fault.</p>
 <h2 id="updates-on-a-shared-daemon">Updates on a shared daemon</h2>
 <p>The server's <a href="../../updating/#automatic-update-checks">automatic update check</a>
 covers the server: its briefing notice reaches every session, and a session on

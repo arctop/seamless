@@ -46,7 +46,7 @@ That fourth layer covers four blocks where the stored row simply wins:
 | Block | Written by | When it takes effect |
 |---|---|---|
 | `briefing:` | Settings → [Briefing](/reference/console/#briefing) | From the next session start. |
-| `features:` | Settings → [Features](/reference/console/#optional-features), or the Home welcome card's write-screening box | Immediately in the console; an agent sees it from its next session (tool lists and briefings alike), and write screening from its next write. |
+| `features:` | Settings → [Features](/reference/console/#optional-features), or the Home welcome card's write-screening box | Immediately in the console; an agent sees it from its next session (tool lists and briefings alike), write screening from its next write, and the Diary's [mid-session usage](/reference/hooks/#mid-session-usage) from the next Claude Code prompt. |
 | `console.level` | Settings → [Experience](/reference/console/#experience), or the Home welcome card | Immediately, in the console only. |
 | `backup:` | Settings → [Backups](/reference/console/#backups) | From the next scheduled backup. |
 

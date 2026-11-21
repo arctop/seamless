@@ -273,9 +273,11 @@ The sidebar groups the screens by the job they serve rather than by table:
 | Group | Screens |
 |---|---|
 | **Live** | Overview, Now, Interactions |
-| **Knowledge** | Memories, Notes, Retrieval, Gardener |
-| **Work** | Projects, Plans, Tasks, Sessions, Locks (only while that [optional feature](#optional-features) is on) |
+| **Knowledge** | Memories, Notes, Retrieval, Gardener, Held (only while [write screening](#held) is on, or restricted accounts are configured) |
+| **Work** | Diary (only while that [optional feature](#optional-features) is on), Projects, Plans, Tasks, Sessions, Locks (only while that [optional feature](#optional-features) is on) |
 | **Research** | Labs, Trials (only while that [optional feature](#optional-features) is on) |
+| **Server** | System, Privacy, Devices (only on a server that [serves other computers](#devices)) |
+| **Access** | Access requests, Approvers (only while `peer_auth` locks a project) |
 
 That is the full list, at the Advanced [level](#choose-how-much-you-see); a
 lower level shows a subset, in the same order and under the same names.
@@ -305,7 +307,7 @@ groups the level offers.
 |---|---|
 | `Cmd/Ctrl+K` | Search or jump to a section |
 | `/` | Focus this screen's filter; open the palette where there is none |
-| `g` then a key | Go to a section: `o` Overview, `n` Now, `i` Interactions, `m` Memories, `e` Notes, `r` Retrieval, `g` Gardener, `w` Projects, `p` Plans, `t` Tasks, `s` Sessions, `l` Labs, `x` Trials, `,` Settings |
+| `g` then a key | Go to a section: `o` Overview, `n` Now, `i` Interactions, `m` Memories, `e` Notes, `r` Retrieval, `g` Gardener, `h` Held, `d` Diary, `w` Projects, `p` Plans, `t` Tasks, `s` Sessions, `b` Locks, `l` Labs, `x` Trials, `y` System, `v` Privacy, `c` Devices, `a` Access requests, `k` Approvers, `,` Settings |
 | `j` / `k` | Next / previous item in a library rail |
 | `[` | Collapse or expand the sidebar |
 | `?` | The shortcut sheet |
@@ -600,6 +602,261 @@ can judge a weak hit for itself.
 Coverage is deliberately partial in one place: events are excluded because the
 telemetry stream has its own Interactions surface and would flood results.
 
+## Diary {#diary}
+
+`/console/diary`, `/console/diary?day=YYYY-MM-DD`
+
+Only while the **Diary** [optional feature](#optional-features) is on. Then it
+shows at every [level](#choose-how-much-you-see), as the first row of the
+sidebar's Work group, and `g` then `d` opens it. It is a page for each day of
+work: what was worked on, which agents did it, and what it took in agent time
+and model tokens, with the meaningful work in the spotlight and short
+question-and-answer sessions folded away. A day runs from midnight to midnight
+in the daemon's time zone, so a daylight-saving day has 23 or 25 hours. The
+page is composed from what Seamless already records (the
+[usage ledger](/reference/storage/#what-lives-only-in-sqlite), the event log,
+the sessions, tasks, memories, notes, trials and commit records), by stated
+rules and no model.
+
+`/console/diary` is today; `?day=` is another day, and `&m=YYYY-MM` shows
+another month in the rail beside it. A `day` or `m` that does not parse is a
+400 that names the format.
+
+### What a day shows {#diary-day}
+
+**The date block.** The weekday, the date, and the day's character as a stamp
+whose tooltip states its rule. The character is the first of these the day
+meets:
+
+| Character | Rule |
+|---|---|
+| Quiet | No session, task or item recorded |
+| Shipped | A plan shipped: its last open step closed as done |
+| Closing day | 5 or more tasks closed as done |
+| Planning day | A plan drafted (captured, presented or approved) or 6 or more tasks created, and fewer than 2 closed |
+| Deep work | 2h or more of agent time, 60% or more of it in one project |
+| Busy day | 3h or more of agent time, 12 or more sessions beyond the short ones, or work in 4 or more projects |
+| Light day | Work recorded, under every threshold of a fuller day |
+
+Under it, the headline: "Mostly *X*: ..." when one thing took at least half
+the day's agent time (or was the only thing worked on), "Led by *X*: ..."
+otherwise, saying what it did ("1 step closed and the plan shipped (5 of 5)").
+Its second sentence counts the day's sessions, where they were, and how many
+things they worked on. Then **Sessions started this day (N)**, and under
+`peer_auth` a line naming the locked projects this browser has not unlocked,
+whose work the page leaves out.
+
+**Four tiles.** Agent time, model tokens, tasks closed (closed as done and
+still done at the day's end) and kept (the distinct memories, notes and trials
+written, new or updated). Each states the usual day and draws a trend line over
+the last active days, then this one; past days also carry the change against
+the usual day, in percent and never judged good or bad. The usual day is the
+median of the active days before this one (a day with a session, a task closed
+or an item kept): up to the 14 most recent within 90 days, and no comparison
+at all with fewer than 3. Today's tiles show no change, since part of a day
+against a whole one would read as a fall every morning, and its agent time and
+tokens say "so far". Each tile jumps to the part of the entry that lists what
+it counts.
+
+**Day rhythm.** One column per hour, agent time stacked by agent, the busiest
+hour's figure on its column. A column's full height stands for at least an
+hour of agent time, so a light day looks light.
+
+**What was worked on.** The day is written in threads. A **plan** thread is
+one plan in one project: the steps that moved that day and the sessions that
+moved them or captured, presented or approved the plan. A **project** thread is
+one project's tasks outside any plan that moved, and its sessions whose work
+named no plan or task; sessions in no project make a thread named after their
+working directory's last folder. The spotlight's threads are cards: the plan's
+progress before and after the day ("12 → 14 of 14 steps closed"), each task
+that moved with its status before and after, each session with its agent, what
+it was about, its agent time and tokens, then the hours it was worked in, the
+thread's figures, what its sessions kept and the commits it recorded, and a
+**Why this is here** disclosure listing the facts that scored. The other
+threads are one line each under **Also that day**, and the short sessions one
+collapsed row, **N short sessions**.
+
+What a session was about is the first of these that exists: the first line of
+the findings its agent wrote, its first prompt of the day, the first line of
+the findings the hooks harvested from its transcript, or "Session in
+*project*". The sentence links to the session.
+
+**The usage panel.** **Agents**: a ring of model tokens by agent (one client
+and one model, named as its pill reads), the day's total in the center and a
+legend row per agent with its share and figure; a day with one agent draws its
+legend line and no ring. **Token mix**: output, fresh input, cache write and
+cache read, as one bar. **Projects**: bars by agent time, or by model tokens on
+a day with none. Then **Tasks closed**, **Kept** (a superseded or archived
+memory is marked), and **Moments**: plans shipped, commits recorded (with what
+recorded them), flags set, and mishaps the agents reported. **Show as table**
+lists every figure the charts draw.
+
+**The rail.** The month as a heat grid shaded by agent time, then its days,
+newest first: each with a bar of its agent time against the month's busiest
+day, the figure, a dot for each of its top projects, and its sessions and
+character in the tooltip. A run of quiet days is one thin row, and a day from
+before the usage ledger shows its agent time as "—", not 0m.
+
+### The spotlight {#diary-spotlight}
+
+A thread scores its outcomes and its effort, each fact capped so that no single
+one carries a thread alone:
+
+| Fact | Points | At most |
+|---|---|---|
+| The plan shipped: its last open step closed as done | 10 | 10 |
+| Each task or step closed as done | 3 | 12 |
+| Each task or step created or claimed | 1 | 3 |
+| Each memory, note or trial its sessions wrote | 1 | 4 |
+| Each commit its tasks or sessions recorded | 1 | 4 |
+| Each session that ended with findings its agent wrote | 1 | 2 |
+| Agent time | 1 for every 10 minutes | 12 |
+| Output tokens | 1 for every 80,000 | 6 |
+
+A thread needs 4 points to be a card, and at most six are, most points first.
+A thread holding a [flagged session](/guides/data/#flagged-transcripts) is
+always a card, whatever it scored, and counts toward the six. **Why this is here** lists each fact with the points it
+scored.
+
+A session's part of a day is **short** when it has no outcome, under 10
+minutes of agent time and under 30,000 output tokens, and is not flagged. An
+outcome is something the record keeps: a task moved, a plan captured,
+presented or approved, a memory, note or trial written, a mishap reported, a
+commit recorded, or an end that day with findings its agent wrote (a summary
+the hooks harvested does not count). A short session is never a card or part
+of a thread: it is one line in the folded row, and the character's session and
+project counts leave it out.
+
+### Agent time and model tokens {#diary-usage}
+
+**Agent time** is a count of minutes in which an agent sent at least one
+model message, counted for each session, model and thread (the agent's own
+turns, and the subagents it launched apart), and added up. Agents working in
+parallel, and a session beside its subagents, make more agent time than the
+clock passed.
+
+**Model tokens** are the four kinds the token mix shows, added: output, fresh
+input, cache writes and cache reads. They include cache reads, so they are not
+a billing figure, and the Diary shows no cost.
+
+A day's totals come from the usage ledger with each session counted once;
+they are never the sum of the cards. Three words mark where a figure is less
+than whole:
+
+- **Unreported** - a session with no token record at all. It is named in a
+  note under the tiles, counted as "(N unreported)" on the tokens tile and on
+  its thread's card, and never counted as zero. A Claude Code session reports at its end,
+  and while the Diary is on its prompts keep it current
+  ([mid-session usage](/reference/hooks/#mid-session-usage)); a Codex session
+  reports at each turn's `Stop`.
+- **Approximate** - a session from before the usage ledger, which has token
+  totals and no ledger rows. Its whole total counts on the day it ended and on
+  no other ("counted on Nov 12"), with no hour, thread or agent time: the
+  tokens tile says approximate, a note under the tiles says why, and agent
+  time reads "not recorded before the usage ledger". `seam usage backfill`
+  replaces it with real rows while the session's Claude Code transcript is
+  still on its computer ([the command](/reference/cli-seam/#seam_usage_backfill)).
+- **Shared** - a session that worked on more than one thing (two plans, or a
+  plan and loose tasks) is in each thread, and counts in full in each: a
+  card's figures say how many of its sessions are shared, and the cards never
+  add up to the day.
+
+### Links {#diary-links}
+
+Every link is built from an id resolved, as the page renders, through what
+this browser may read. An item that no longer exists is plain text titled "No
+longer exists": the Diary never offers a link that answers 404. A link into
+an optional feature exists only while that feature is on. A link to an entity
+opens it beside the day as a peek; a modified click opens the full page.
+
+| On the Diary | Opens |
+|---|---|
+| A day in the rail, a cell of the month grid, the previous or next day, Today | That day, in place. A day still to come is never a link; the month arrows keep the day and change the month the rail shows. |
+| A task | The task's page. |
+| A session's line, its flag badge | The session's page, where its flag and any kept transcript are. |
+| A memory | The memory's page; a superseded or archived memory keeps its page, and the Kept list marks it. |
+| A note | The note's page. |
+| A trial | The trial's page, only while Research is on. With Research off, trials are not on the page at all. |
+| A mishap | Its event's page. |
+| A plan: a card's title, a shipped moment | The plan's page when it has one in that project; otherwise that project's Plans & tasks tab, as a page; a plan in the global scope with no page is text. |
+| A project chip, a project bar | The project's page; the global scope and a working directory are text. |
+| A commit | The page of the task or session that recorded it (a commit has no page of its own), with a button to copy its full id. |
+| Sessions started this day (N) | The Sessions screen's list for that day, which lists the sessions created on it: hence "started", and N is that list's count. The day's own session count, in the headline, also holds sessions started earlier that worked on it. |
+| A tile | The part of this entry that lists what it counts. |
+
+The agents legend, the rhythm's columns and the token mix are not links: no
+page lists "this agent's sessions that day", so they answer on hover only. The
+other way in is the [Sessions](#sessions) screen: a day view there carries
+**Open in Diary** while the Diary is on.
+
+### Moving around {#diary-keys}
+
+| Keys | Does |
+|---|---|
+| `←` / `→` | The previous / next day (today has no next) |
+| `t` | Today |
+| Arrows, `Home`, `End`, `Esc` in a chart | Walk its marks, jump to the first or last, rest |
+| Arrows, `Enter` in the month grid | Move a day or a week, open the day |
+
+The day keys stand down while you type, while a dialog is open, inside a chart
+or a peek, and after `g`, which belongs to the section shortcuts.
+
+**How the charts answer.** Every mark answers on hover or a tap: a ring
+segment, an hour of the day rhythm, a project bar, a part of the token mix, a
+day of the month, a stretch of a card's presence strip. The readout gives its
+figures and the rest of the chart goes quiet. From the keyboard each chart is
+one tab stop. Days and project names are real links, so a modified click opens
+a new tab and the grid works without scripts. Colors name agents only: an
+agent keeps one color for the whole month, and agents past the month's five
+busiest share a neutral Other, whose readout names them. A card's presence
+strip lights whole hours, so its readout gives a stretch of hours, not agent
+minutes.
+
+**Peeks.** A peek opens beside the day on a window 1380px wide or more, and
+under it below that, and the item you clicked stays where it was. Back closes
+it, and a `#peek=` link opens the day with it open. Changing the day happens in
+place and keeps the browser's history.
+
+**Today is live.** It refreshes in place from the console's live stream, at
+most every 15 seconds, and an open peek stays open. A past day does not
+refresh.
+
+**On a phone** the entry comes first and the month after it, and the tiles go
+two by two.
+
+**With Research off**, trials appear nowhere: the day's kept counts, a
+thread's kept list and its points, the headline and the character are
+composed without them. The rail and the usual day still count trials among the
+items kept (counts, never an item).
+
+### Empty days {#diary-empty}
+
+- **A quiet day**: "A quiet day.", with no tiles or charts: no session, task
+  or item was recorded.
+- **The first run**: a day with nothing recorded on it, in its month or in the
+  90 days before it says "This is the Diary's first page." and draws no
+  stamp.
+- **A day still to come**: "This day has not begun." and "Still to come.",
+  with **Back to today**.
+- **A day of only short sessions**: "Only short sessions: they are folded
+  below."
+- **A day from before the usage ledger**: totals marked approximate, and agent
+  time not recorded.
+
+### The JSON answer {#diary-json}
+
+`?format=json` answers with the day model, the same at every level: the day
+and its bounds (`day`, `start`, `end`, `hours`, `today`), `headline`,
+`character` (`word` and `rule`), `facts` (the tiles' and the character's
+counts), `usage` (by agent, project and hour, with the token mix,
+`unreported` and `approximate`), `spotlight` and `also` (the threads, each with
+its `score` and `reasons`), `short`, `kept`, `moments`, `sessionsStarted` and
+`projects`; then `month` (the rail's month, its days and its agents) and
+`usual` (the usual day). Every item the day names carries its `kind`, `id`,
+`title`, `resolved` and `href`, the link the page shows, empty when the item no
+longer resolves or its feature is off. A day still to come answers
+`"future": true` with every list empty.
+
 ## Projects
 
 `/console/projects`
@@ -663,6 +920,10 @@ refused). When that leaves most sessions out, the list ends by saying so ("3 of 
 offers the wider windows in place, so a quiet day never reads as an empty
 system. A row names its host only when the session ran on a different machine
 from the console's, and its source only when it was not a normal startup.
+
+A day view (`?day=YYYY-MM-DD`, what a click on the momentum calendar opens)
+lists the sessions started on that day, whatever the window. While the
+[Diary](#diary) is on, its heading carries **Open in Diary**, that day's page.
 
 A session's page is the workspace: its findings (rendered), its full event
 timeline as interaction rows, per-session counts (tool calls, memory reads and
@@ -816,8 +1077,9 @@ or captured the plan) - compact in the rail (`~483k tok`) and qualified in the
 reader (`~483k model tokens · 3 sessions (1 unreported)`). Attribution is
 whole-session on purpose: tokens are only ever known per session, so a
 session's full burn counts toward each plan it touched, counted once however
-many steps it moved. Claude Code reports tokens at session end, so a live
-session stays *unreported* until it finishes; a session that touched more than
+many steps it moved. Claude Code reports tokens at session end (and, while the
+[Diary](#diary) is on, as its prompts keep its usage current), so a live
+session stays *unreported* until then; a session that touched more than
 one plan is disclosed as *shared* rather than split by guesswork - which is
 also why plan totals must never be summed across plans.
 
@@ -1177,7 +1439,7 @@ feature is, a generated line naming exactly what switching it off hides, and a
 live count of the data it holds either way ("Data kept: 12 trials across 3
 labs").
 
-There are five today:
+There are six today:
 
 **Research labs & trials** owns the [Labs](#labs) and [Trials](#trials)
 screens, the trials search scope, and the `lab_open`, `trial_record`, and
@@ -1290,6 +1552,22 @@ lock`: [locks on a repository's refs](/concepts/repo-locks/) that agents
 declare once and hold while they land changes. Turning it off deletes no lock
 and no declaration.
 
+**Diary** owns the [Diary](#diary) screen - a page for each day of work, at
+every level, the first row of the Work group - and one in-page surface, the
+**Open in Diary** link on a [Sessions](#sessions) day view. Turn it on here,
+or with `features.diary: true` in the config file or
+`SEAMLESS_FEATURES_DIARY=true`. Off (the default), there is no sidebar row,
+palette entry, shortcut, link or script, and `/console/diary` answers with the
+switched-off page. It owns no MCP tools. The token record underneath is kept
+either way: the [usage ledger](/reference/storage/#what-lives-only-in-sqlite)
+and the event log the Diary reads are written whether it is on or off, so the
+history is there the moment you turn it on. Turning it on adds one cost that
+is not presentation: while it is on, a Claude Code prompt keeps its session's
+usage ledger current, read after the prompt is answered, at most once every
+three minutes a conversation
+([mid-session usage](/reference/hooks/#mid-session-usage)). With it off, every
+hook answers and writes exactly as before.
+
 **Nothing is ever deleted.** Switching a feature off gates exposure and nothing
 else: the trials stay in the database, its screens answer with a short "switched
 off" page that links back here (a JSON caller gets a 403), and switching it back
@@ -1302,6 +1580,7 @@ each card is for - it reports the feature's own rows whether it is on or off.
 |---|---|
 | The console | Immediately - nav entries, screens, the search scope, and the overview tiles appear or disappear on the next render. |
 | A tool call | Immediately - a disabled feature's tool is refused as an unknown tool, whatever list the caller is holding. |
+| A hook | Immediately - the Diary's mid-session usage read follows the switch from the next Claude Code prompt, with no restart. |
 | The agent briefing | The next session start - momentum's finish-line emphasis reads the same stored override the console gates on. |
 | A client's tool list | The next time it lists tools, in practice its next session. Seamless declares `listChanged: false` and sends no tool-list notification, so a connected client keeps the list it already has. |
 | The client-side skill | The next `seamlessd install-hooks` run. The daemon does not reach into `~/.claude/skills` on a toggle, so `seamlessd doctor` raises an **info** line while a skill for a disabled feature is still sitting in a client's skill home. |
