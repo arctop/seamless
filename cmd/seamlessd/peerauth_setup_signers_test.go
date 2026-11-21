@@ -15,6 +15,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/arctop/seamless/internal/releasesig"
+	"github.com/arctop/seamless/internal/shellcmd"
 	"github.com/arctop/seamless/internal/sshsig"
 	"github.com/arctop/seamless/internal/sshsig/sshsigtest"
 	"github.com/arctop/seamless/internal/update"
@@ -225,6 +226,16 @@ func TestPasReadSigners_TheUpdatersRules(t *testing.T) {
 		require.ErrorIs(t, err, errReleaseSigners)
 		require.ErrorContains(t, err, "group- or world-writable")
 		require.NoError(t, os.Chmod(path, 0o644))
+
+		// A group-writable directory above it -- a Linux home under umask 002
+		// -- is refused with the fix named, found in a live run on Ubuntu.
+		require.NoError(t, os.Chmod(dir, 0o775))
+		_, err = pasReadSigners(path)
+		require.ErrorIs(t, err, errReleaseSigners)
+		real, rerr := filepath.EvalSymlinks(dir) // the check names the directory it inspected
+		require.NoError(t, rerr)
+		require.ErrorContains(t, err, "is mode 0775, writable by other accounts: chmod go-w "+shellcmd.PosixArg(real))
+		require.NoError(t, os.Chmod(dir, 0o700))
 	}
 
 	require.NoError(t, os.WriteFile(path, []byte(key.SignersLine("owner", "file")+"\n"), 0o644))

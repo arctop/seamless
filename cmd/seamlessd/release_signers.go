@@ -137,7 +137,11 @@ func releaseSignersFileProblem(path string, rootOnly bool, fsys signersFS) strin
 				return fmt.Sprintf("%s: directory %s above %s is owned by uid %d, who could replace the file: keep it under directories owned by %s",
 					releaseSignersWhat, dir, path, facts.uid, who)
 			case facts.mode.Perm()&0o022 != 0 && (rootOnly || facts.mode&os.ModeSticky == 0):
-				return fmt.Sprintf("%s: directory %s above %s is mode %04o, writable by other accounts", releaseSignersWhat, dir, path, facts.mode.Perm())
+				// The fix named outright: on Linux a default umask of 002 leaves a
+				// home's directories group-writable (0775), which the check cannot
+				// tell from a group other accounts are in.
+				return fmt.Sprintf("%s: directory %s above %s is mode %04o, writable by other accounts: chmod go-w %s, or keep the file under directories only you can write",
+					releaseSignersWhat, dir, path, facts.mode.Perm(), shellcmd.PosixArg(dir))
 			}
 			if next := filepath.Dir(dir); next == dir {
 				break
