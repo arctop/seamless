@@ -139,9 +139,13 @@ type Handler struct {
 	transcripts   *transcripts.Service
 	// live is the Diary's mid-session usage harvest: its throttle, its open
 	// asks and its reads under way (usage_live.go).
-	live   *liveUsage
-	now    func() time.Time
-	logger *slog.Logger
+	live *liveUsage
+	// sniffSkips holds the conversations whose model sniff was skipped as
+	// another machine's, so that skip is recorded once a conversation rather
+	// than once a prompt or a turn (modelSniffOK, model_sniff.go).
+	sniffSkips onceSet
+	now        func() time.Time
+	logger     *slog.Logger
 }
 
 // NewHandler builds a hook Handler from cfg.
@@ -1615,7 +1619,7 @@ func (h *Handler) setAmbientModel(ctx context.Context, client Client, host, clau
 	model = strings.TrimSpace(model)
 	// A model the client STATED is good from any machine; sniffing one out of a
 	// transcript means opening a file, so that half is host-gated.
-	if model == "" && client == ClientClaudeCode && h.localDiskOK(ctx, "model-sniff", client, host) {
+	if model == "" && client == ClientClaudeCode && h.modelSniffOK(ctx, client, host, claudeSessionID) {
 		model = transcriptModel(transcriptPath)
 	}
 	if model == "" {
