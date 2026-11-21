@@ -269,10 +269,11 @@ takes were never committed, by design.
 
 ## Flow B: console screenshots
 
-`docs/static/shots/` holds six console pages x dark/light, plus the Privacy
+`docs/static/shots/` holds seven console pages x dark/light, plus the Privacy
 screen's machine plan in two setups for the /security/ page, all WebP. They
 come from a throwaway instance seeded with the invented six-week fleet history
-in `internal/demokit/data.go` -- never from a live data dir.
+in `internal/demokit/data.go`, and the Diary's from one seeded with its own
+fixture (`internal/demokit/diary.go`, below) -- never from a live data dir.
 
 The Privacy screen prints the account the daemon runs as, and the data
 directory's path. Run the demo as a build that cannot see your account name:
@@ -357,6 +358,16 @@ rail reads "set today" off the same anchor.
 The `relations` capture deliberately keeps its legacy filename while pointing at
 `/console/context` -- published and cached landing-page URLs reference the old
 basename.
+
+**The Diary** (`diary-*.webp`) has a seed of its own, so it comes from a second
+throwaway instance. Seed it with `go run ./cmd/demoseed -diary -data
+/tmp/diary-home/.seamless` (three weeks of days around now), serve it as in
+step 2 with `HOME=/tmp/diary-home`, that data dir, and `SEAMLESS_FEATURES_DIARY=1`
+in place of the four other feature flags (the Diary is off by default too), and
+capture it alone with `SEAMLESS_SHOT_PAGES=diary` in step 3. A run without
+`SEAMLESS_SHOT_PAGES` leaves the Diary out, so neither instance is captured for
+the other's pages. The entry opens the seed's day of seven agents, the third
+weekday before the seeding day, so capture on the day you seeded.
 
 ---
 

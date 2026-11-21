@@ -1,9 +1,16 @@
 // Captures the console screenshots for the landing page (docs/static/shots/).
-// Drives the locally installed Chrome via playwright-core; no bundled browser.
+// Drives the locally installed Chrome via playwright-core by default
+// (SEAMLESS_SHOT_CHANNEL, below, picks playwright-core's own Chromium instead).
 //
 //   pnpm add playwright-core          # once, anywhere; or run from a dir that has it
 //   SEAMLESS_SHOT_BASE=http://127.0.0.1:8090 SEAMLESS_MCP_API_KEY=<key> \
 //     node scripts/branding/console-shots.js /tmp/shots
+//
+// SEAMLESS_SHOT_PAGES=<name>[,<name>...] captures only the pages it names. The
+// Diary (`diary`) comes from an instance of its own, seeded by
+// `demoseed -diary` and served with SEAMLESS_FEATURES_DIARY=1, so a run
+// without SEAMLESS_SHOT_PAGES leaves it out, and SEAMLESS_SHOT_PAGES=diary
+// against that instance captures it alone.
 //
 // Point it at a THROWAWAY instance seeded by cmd/demoseed, never a live one.
 // Convert the PNGs with `cwebp -q 84` into docs/static/shots/.
@@ -51,7 +58,35 @@ const PAGES = [
   // its own account. Element shots, not the whole screen.
   { name: 'privacy-shared', url: '/console/privacy', element: '.pv-machine', prepare: (page) => breach(page, 'shared') },
   { name: 'privacy-dedicated', url: '/console/privacy', element: '.pv-machine', prepare: (page) => breach(page, 'dedicated') },
+  // The Diary, from its own instance: captured only when SEAMLESS_SHOT_PAGES
+  // names it (ownSeed). Its day is the seed's day of seven agents.
+  { name: 'diary', url: `/console/diary?day=${diaryAgentsDay()}`, ownSeed: true },
 ];
+
+// SEAMLESS_SHOT_PAGES names the pages to capture; unset, every page of the
+// console fleet's instance (all but the ownSeed ones).
+const ONLY = (process.env.SEAMLESS_SHOT_PAGES || '').split(',').map((s) => s.trim()).filter(Boolean);
+const unknownPages = ONLY.filter((name) => !PAGES.some((p) => p.name === name));
+if (unknownPages.length) {
+  console.error(`SEAMLESS_SHOT_PAGES names no page: ${unknownPages.join(', ')}`);
+  process.exit(1);
+}
+const SHOOT = ONLY.length ? PAGES.filter((p) => ONLY.includes(p.name)) : PAGES.filter((p) => !p.ownSeed);
+
+// diaryAgentsDay is the local date (YYYY-MM-DD) `demoseed -diary` lays its day
+// of seven agents on: the third weekday before the seeding day (diaryAgentsDay
+// in internal/demokit/diary_story.go; the weekday scripts are laid newest
+// first). It is the fullest entry, every part of the page drawn and the most
+// agents in the rhythm and the ring, so capture on the day you seeded.
+function diaryAgentsDay() {
+  const d = new Date();
+  for (let weekdays = 0; weekdays < 3;) {
+    d.setDate(d.getDate() - 1);
+    if (d.getDay() !== 0 && d.getDay() !== 6) weekdays++;
+  }
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 // breach picks a setup on the Privacy screen's machine plan and turns its
 // Compromised agent switch on.
@@ -106,7 +141,7 @@ async function dismissWelcome(browser) {
       try { localStorage.setItem('seamless-theme', t); } catch (e) {}
     }, theme);
     const page = await context.newPage();
-    for (const p of PAGES) {
+    for (const p of SHOOT) {
       // 'load', not 'networkidle': the console's SSE stream never goes idle.
       await page.goto(BASE + p.url, { waitUntil: 'load' });
       await page.waitForTimeout(1500);

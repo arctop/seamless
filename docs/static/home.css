@@ -1686,6 +1686,11 @@ svg { overflow: visible; }
 .thumb img { width: 100%; aspect-ratio: 1440 / 900; object-fit: cover; }
 .thumb p { margin: 12px 2px 0; font-size: 14.5px; line-height: 1.5; color: var(--muted); }
 .thumb p b { display: block; color: var(--ink); font-weight: 600; margin-bottom: 2px; }
+/* The optional Diary takes a row of its own, on the same columns (subgrid):
+   its shot the size of the four above, its caption beside it, so a fifth
+   screen leaves no orphan in the grid. */
+.thumb-wide { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; }
+.thumb-wide p { grid-column: 2 / -1; margin: 0 2px; max-width: 34em; }
 .console .wrap > .fine { margin: 22px 0 0; }
 .lightbox {
   border: 0; padding: 0; background: transparent; max-width: min(1400px, 94vw); width: 94vw; max-height: 94vh;
