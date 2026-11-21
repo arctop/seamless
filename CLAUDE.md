@@ -84,6 +84,12 @@ internal/feed/     write screening's metadata feed: event log -> metadata
 internal/commitfeed/ commit records' snapshot (the commits: option, off by
                    default): sessions, tasks and the commits they recorded ->
                    one JSON file an integrity monitor matches commits against
+internal/diary/    the Diary's day model: one local day as threads (plans,
+                   projects), session-days, usage from the ledger (each session
+                   once), kept items and moments, spotlight scoring, headline
+                   and character; Month and Usual for the rail and the stat
+                   tiles. Composes store/diary.go's reads through the handle it
+                   is given; knows no URLs and no feature state
 # (the dependency-aware ready-queue + lease-based claiming live in
 #  internal/store/tasks*.go -- there is no internal/tasks package)
 internal/gardener/ the propose-only passes (dedup, staleness, stale-stage,

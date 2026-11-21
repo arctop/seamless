@@ -29,7 +29,7 @@ Strict layering, no circular imports. `cmd/` wires everything; no package import
 ```
 cmd/seamlessd, cmd/seam, cmd/seambench, cmd/demoseed, cmd/docsgen
   -> internal/{mcp,hooks,console}         (API surfaces)
-    -> internal/{retrieve,lifecycle,gardener,files,capture,bench,demokit,update,screening,feed,commitfeed,approval,backup,transcripts} (domains)
+    -> internal/{retrieve,lifecycle,gardener,files,capture,bench,demokit,update,screening,feed,commitfeed,approval,backup,transcripts,diary} (domains)
       -> internal/{store,events,llm,core,config,validate,access}   (foundations)
 ```
 
@@ -1277,6 +1277,32 @@ Guide: docs-src/guides/security-monitor.md.
   qualified `<account>:<name>` id appear only for a restricted account; an
   owner's session is held to the bare pattern (`sessionNamed`).
   `TestBuild_OwnerGolden` pins the shape.
+
+### The day model (`internal/diary`)
+
+The Diary's facts (plan:diary). The console renders them; the package knows no
+URLs and no feature state.
+
+- **Read through the handle you are given.** Day, Month and Usual take the
+  console's filtered handle (`store.OpenView`), so a locked project's work is
+  simply absent. A new read goes in `internal/store/diary.go` with a test
+  through the view.
+- **One tally.** Every number comes from the per-day tally in `facts.go`, which
+  Day, Month and Usual share (`TestMonth_AgreesWithEveryDay`). Month reads a
+  bounded number of queries for the whole month, never one per day.
+- **Tokens follow `plan-token-attribution-contract`.** A day's totals are the
+  sum of its ledger rows, so each session counts once. A session in two
+  threads counts in full in each, so never sum threads. A session with totals
+  and no rows predates the ledger: it counts only on the day it ended, marked
+  approximate.
+- **Evidence is the agent's own work:** ledger rows, credited events, or a
+  start or end on the day. A flag is not evidence (the owner may flag long
+  after), and the transport events (tool.call, hook.prompt,
+  retrieval.injected) are left out on purpose.
+- **Shipping is derived** from the tasks per (project, slug), never from the
+  momentum `plan.shipped` event, which exists only while momentum is on.
+- **The significance consts are calibrated.** Change a weight, the floor, the
+  cap or the minor test only together with the `TestCalibration_*` tests.
 
 ### FTS5 and LIKE escaping (`internal/store`)
 
