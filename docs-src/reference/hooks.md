@@ -262,8 +262,49 @@ the socket - sends the file, gzip-compressed as it reads it, to `POST
 /api/hooks/transcript?session_id=<client session id>`, when the file is larger
 than that. The upload is taken only on the socket, for a flagged session the
 caller may act on, and checked as it arrives: it must decode whole, to no more
-than 256 MB. It runs inside the hook's deadline, and a failure costs only the
-copy (one line on the hook's stderr; the session records why).
+than 256 MB. It does not run inside the hook's deadline: `seam hook` starts
+`seam hook-transcript`, a process of its own in a session of its own (its
+standard streams the null device), which has 30 minutes to send it, and
+returns at once. A second upload of a session while one is under way is
+refused (`409`), and the end signal asks for none meanwhile. A failure costs
+only the copy; the session records why.
+
+**A flagged session whose end signal never came** (a crash, a closed terminal,
+a session the reaper expired) is made up for at the same caller's later hooks:
+its next `SessionStart`, `SessionEnd` or Codex `Stop` from the same agent
+client, account and computer. With peer_auth off the daemon copies the file
+itself then, and the reaper's pass copies every flagged session that ended
+without one. Under peer_auth such a session is pending, and the answer carries
+one `X-Seamless-Transcript-Pending` value per pending session, at most three an
+answer:
+
+```text
+X-Seamless-Transcript-Pending: path=%2FUsers%2Fyou%2F.claude%2Fprojects%2F-work-app%2F<id>.jsonl&session_id=<client session id>
+```
+
+Each value is URL-query-encoded: `session_id` is the agent client's own
+session id, `path` the transcript path its hooks recorded. Only an answer to a
+caller that has a pending session carries the header; no default answer does,
+so the client needs no probe. Each session is asked for with a growing wait
+between asks (2 minutes, doubling), and after five asks nobody answered it is
+given up on (`not_sent`). `seam hook-transcript --named` reads the path only
+when it is an absolute, regular, non-symlink `*.jsonl` file whose folder,
+symlinks resolved, lies inside the agent client's own transcript folder:
+`$CLAUDE_CONFIG_DIR/projects` (else `~/.claude/projects`) for Claude Code,
+`$CODEX_HOME/sessions` (else `~/.codex/sessions`) for Codex. Otherwise it
+sends no body, only `POST /api/hooks/transcript?session_id=<id>&refused=path`
+(or `refused=missing` for a file that is not there), and the session records
+`refused` (or `unreadable`) and is asked no more.
+
+**Keeping one by hand.** `POST /api/hooks/transcript/<session ULID>` is the
+owner's route behind `seam sessions <id> --keep-transcript`: never a
+restricted account, a relay's caller or a paired device, and a session in a
+project locked to the caller answers as locked. With `from_daemon=1` the
+daemon copies the recorded path itself, where it may (peer_auth off, its own
+computer), while the request waits. Under peer_auth, on the socket, a request
+without a body is answered with the path, computer and agent client to send
+(`{"send": {"path": ..., "host": ..., "client": ...}}`), and the owner's own
+account then posts the gzip body there, checked as any upload.
 
 ## Repo locks in the briefing {#repo-locks}
 

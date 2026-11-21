@@ -1335,7 +1335,8 @@ the locked notice, and `seam approve` in your own terminal shows its request.
   Agents can still record findings with `session_end`. A
   [flagged session's transcript](https://thereisnospoon.org/docs/guides/data/#flagged-transcripts) is sent
   the same way, in a request of its own, when the daemon's answer to the
-  session's end asks for it.
+  session's end asks for it, or a later answer asks for one whose end never
+  came.
 - **It updates itself, as its own account.** The installer's per-user service
   cannot host peer_auth, so neither the installer nor a `seamlessd update` run
   as you touches this install. The daemon installs new releases by itself

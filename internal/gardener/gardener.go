@@ -115,7 +115,23 @@ type Service struct {
 	logger   *slog.Logger
 	now      func() time.Time // injectable clock (tests)
 	done     chan struct{}    // closed when the Start goroutine exits; nil until Start
+	// transcripts settles flagged sessions' transcript copies after the
+	// reaper's pass (SetTranscripts); nil settles none.
+	transcripts TranscriptKeeper
 }
+
+// TranscriptKeeper is what the reaper needs of the session flag's transcript
+// copies (*transcripts.Service): KeepEnded settles the flagged sessions that
+// ended before cutoff without a copy, their end signal never having made one
+// -- copied where the daemon reads the file, pending for the agent's later
+// hooks under peer_auth.
+type TranscriptKeeper interface {
+	KeepEnded(ctx context.Context, cutoff time.Time)
+}
+
+// SetTranscripts hands the reaper the transcript copies to settle after each
+// pass. Call it before Start.
+func (s *Service) SetTranscripts(t TranscriptKeeper) { s.transcripts = t }
 
 // New builds a gardener Service. embedder and chat may each be nil, disabling
 // the pass that needs them (dedup and digest respectively); staleness always
@@ -266,12 +282,23 @@ func (s *Service) pruneToolEvents(ctx context.Context) {
 // reap problem never aborts the pass. This is the backstop for the fact that an
 // active session is only otherwise cleared by an explicit session_end or the
 // SessionEnd hook, neither of which fires on a crash/kill.
+//
+// A flagged session among them, or any other that ended without its end
+// signal making its transcript copy, is then settled (TranscriptKeeper): the
+// daemon copies it where it may read the file, and under peer_auth it waits,
+// pending, for the agent's later hooks to send it.
 func (s *Service) reapStaleSessions(ctx context.Context) {
 	now := s.now().UTC()
 	stale, err := store.ExpireIdleSessions(ctx, s.db, now, s.cfg.SessionIdle)
 	if err != nil {
 		s.logger.Warn("gardener: reap stale sessions", "error", err)
 		return
+	}
+	if s.transcripts != nil {
+		// After the flips above, so the sessions just expired are among the
+		// ended ones; the idle threshold gives a completed session's end signal
+		// its time to come first.
+		defer s.transcripts.KeepEnded(ctx, now.Add(-s.cfg.SessionIdle))
 	}
 	if len(stale) == 0 {
 		return

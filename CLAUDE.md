@@ -100,8 +100,10 @@ internal/console/  server-rendered observability UI (html/template + SSE)  [P5]
 internal/capture/  SSRF-safe URL fetch                                     [P4]
 internal/transcripts/ the session flag's transcript copies: a flagged session's
                    JSONL kept gzip under <data_dir>/transcripts, made at its
-                   end signal (the daemon's own read, or `seam hook`'s upload
-                   under peer_auth), read by the owner alone, removed with the flag
+                   end signal (the daemon's own read, or `seam hook`'s detached
+                   upload under peer_auth), or -- when that never came -- by the
+                   reaper or the same caller's next hook (pending.go), read by
+                   the owner alone, removed with the flag
 internal/update/   update check + automatic updates: GitHub release list,
                    install-kind detection, Target/Decide policy, attempt-record
                    fold, <data_dir>/update/state.json, the Status every surface

@@ -174,6 +174,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/hooks/permission-request", h.permissionRequest)
 	mux.HandleFunc("POST /api/hooks/session-taint", h.sessionTaint)
 	mux.HandleFunc("POST "+harvest.TranscriptEndpoint, h.transcriptUpload)
+	mux.HandleFunc("POST "+transcriptKeepPattern, h.transcriptKeep)
 }
 
 // hookPayload is the SessionStart request body (tolerant decode; unknown fields
@@ -433,6 +434,10 @@ func (h *Handler) sessionStart(w http.ResponseWriter, r *http.Request) {
 	// a subagent's would spend it on the child.
 	if p.AgentType == "" {
 		briefing = injectNotice(briefing, h.claimNotice(ctx, client, p.SessionID, reach))
+		// A flagged session of this caller's whose end signal never came: a
+		// crashed agent's next start is the likeliest next contact
+		// (transcript.go).
+		h.keepPending(ctx, w, client, host, p.SessionID)
 	}
 	// Cap after the ambient line is appended, then record and serialize the same
 	// prepared bytes. A SessionStart carries no user prompt (prompt="").
@@ -475,6 +480,7 @@ func (h *Handler) sessionEnd(w http.ResponseWriter, r *http.Request) {
 	// A flagged session's transcript is kept from here, the last point at
 	// which the whole conversation is on disk (transcript.go).
 	h.snapshotAtEnd(ctx, w, client, h.hostOf(p.Identity), p.SessionID, p.TranscriptPath, reach, true)
+	h.keepPending(ctx, w, client, h.hostOf(p.Identity), p.SessionID)
 	// SessionEnd has no hookSpecificOutput variant in Claude Code's schema, so
 	// the response is a bare ack -- emitting one fails root validation.
 	writeHookAck(w)
@@ -530,6 +536,7 @@ func (h *Handler) stop(w http.ResponseWriter, r *http.Request) {
 		// Codex has no SessionEnd: a flagged session's rollout is kept from
 		// each turn's end, copied again only once it grew (transcript.go).
 		h.snapshotAtEnd(ctx, w, client, host, p.SessionID, p.TranscriptPath, reach, false)
+		h.keepPending(ctx, w, client, host, p.SessionID)
 	}
 
 	// Stop has no hookSpecificOutput variant in Codex's schema (it can only

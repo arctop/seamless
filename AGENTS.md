@@ -1089,10 +1089,15 @@ any of it.
   does not validate refuses the whole push, and the format is additive.
   A flagged session's transcript is the one capture that rides a request of
   its own (`internal/hooks/transcript.go`): only a flagged session's
-  SessionEnd or Stop answer carries `harvest.TranscriptWantedHeader`, `seam
-  hook` sends the file only to the socket (`pushTranscript`), and the upload
-  route takes it only from `access.PeerAuthenticated`, for a `reachOK`
-  session that is flagged. Never put a wanted marker in a default answer.
+  SessionEnd or Stop answer carries `harvest.TranscriptWantedHeader`, and
+  only an answer to a caller with a pending flagged session (its end signal
+  never sent it) carries `harvest.TranscriptPendingHeader`; `seam hook` hands
+  the upload to a detached `seam hook-transcript` (`transcriptJobs`), which
+  sends only to the socket, and the upload route takes it only from
+  `access.PeerAuthenticated`, for a `reachOK` session that is flagged. A path
+  the daemon named is read only inside the agent client's own transcript
+  folder (`openNamedTranscript`). Never put a wanted or pending marker in a
+  default answer.
 - **Prove it in the matrix.** The `TestPeerAuthMatrix_*` tests above drive
   every tool in `mcp.Catalog()` (a tool without a probe row fails the coverage
   check), every console route (read from console.go), the hooks, A2A and the
@@ -1114,9 +1119,26 @@ any of it.
   never the record alone: a restored or merged database names copies this
   disk may not hold.
 - **The daemon reads an agent's transcript only where `Service.Readable` (or
-  the hooks' `localDiskOK`) says so**: no peer_auth View, the agent's own
-  computer. Everywhere else the copy is the client's push or is recorded as
-  not made, with the word for why.
+  the hooks' `localDiskOK`) says so**: no peer_auth View and no peer_auth on
+  the daemon (`Config.PeerAuth`, which background work such as the reaper has
+  no View to say), the agent's own computer. Everywhere else the copy is the
+  client's push or is recorded as not made, with the word for why.
+- **A flagged session whose end signal never came stays pending**
+  (`transcripts/pending.go`): the reaper's pass (`KeepEnded`) and the same
+  caller's next SessionStart, SessionEnd or Codex Stop (`keepPending`) make up
+  for it. Under peer_auth a pending session is asked of the same agent
+  client, account and computer only, a few an answer, each ask waiting out a
+  doubling wait, until a copy, a reported path, or `core.TranscriptAskLimit`
+  unanswered asks (`not_sent`). The asks live in migration 052's table
+  (`session_transcript_asks`, not columns every session read scans; only
+  `store.PendingTranscriptSessions` fills `Session.TranscriptAsks`); a new
+  flag starts them over. One upload of a session at a time
+  (`Service.BeginUpload`).
+- **Keeping one by hand is the owner's route** (`transcriptKeep`, `POST
+  /api/hooks/transcript/{id}`, `seam sessions <id> --keep-transcript`): it
+  refuses the callers `refusedTranscriptReader` refuses, and under peer_auth
+  it names the path for the owner's own account to read and send, never
+  reading it itself.
 - **Reading a copy is the owner's alone** (`refusedTranscriptReader`): never a
   restricted account, a relay's caller or a paired device. It is not fenced
   per project; a locked project's session answers as locked because the

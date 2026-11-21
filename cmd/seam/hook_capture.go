@@ -23,24 +23,23 @@ package main
 // socket.)
 //
 // One capture rides a request of its own: a flagged session's transcript
-// (pushTranscript), which runs past every hook body's cap. The same rule
+// (transcriptJobs), which runs past every hook body's cap. The same rule
 // holds for it: it is sent only to the peer_auth socket, and only when the
-// daemon's answer to the session's end signal names it in a header
-// (harvest.TranscriptWantedHeader) -- an answer that carries it only for a
-// flagged session, so no probe, no default-answer field and no state between
-// hooks is needed. The header is never printed: the agent client reads the
-// reply's body alone.
+// daemon's answer names it in a header -- the session's end signal's
+// (harvest.TranscriptWantedHeader), carried only for a flagged session, or a
+// later hook's (harvest.TranscriptPendingHeader), carried only while this
+// caller has a flagged session whose end signal never sent it -- so no probe,
+// no default-answer field and no state between hooks is needed. The headers
+// are never printed: the agent client reads the reply's body alone. The
+// upload itself runs in a detached process (hook_transcript.go), so the hook
+// returns at once whatever the transcript's size.
 
 import (
-	"compress/gzip"
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
 
 	"github.com/arctop/seamless/internal/config"
@@ -233,74 +232,42 @@ func gitHead(cwd string) string {
 	return ""
 }
 
-// pushTranscript sends the transcript a flagged session's end signal named
-// (the payload's transcript_path) to the daemon's upload route,
-// gzip-compressed as it is read, when the file is larger than wanted (the
-// copy the daemon already keeps; "0" for none). It never fails the hook: a
-// problem is one line on stderr, and the daemon records why it holds no copy.
-func pushTranscript(ctx context.Context, stderr io.Writer, cfg config.Config, client *http.Client, clientFlag string, payload []byte, wanted string) {
-	least, err := strconv.ParseInt(wanted, 10, 64)
-	if err != nil || least < 0 {
-		return
+// transcriptJobs are the `seam hook-transcript` command lines for the
+// transcripts the daemon's answer to event asked for: the session's own at its
+// end signal (wanted, the payload's transcript_path, when larger than wanted
+// bytes), and each pending session a pending header value names (at most
+// harvest.MaxPendingPerAnswer, read only inside the client's own transcript
+// folder: --named). A value that does not parse is skipped.
+func transcriptJobs(o *hookOpts, event string, payload []byte, wanted string, pending []string) [][]string {
+	base := []string{"hook-transcript"}
+	if o.config != "" {
+		base = append(base, "--config", o.config)
 	}
-	var in struct {
-		SessionID      string `json:"session_id"`
-		TranscriptPath string `json:"transcript_path"`
+	if o.client != "" {
+		base = append(base, "--client", o.client)
 	}
-	if err := json.Unmarshal(payload, &in); err != nil || in.SessionID == "" || in.TranscriptPath == "" {
-		return
-	}
-	f, err := os.Open(in.TranscriptPath) //nolint:gosec // the agent's own transcript, read as the owner beside it
-	if err != nil {
-		fmt.Fprintln(stderr, "seam hook: transcript not sent:", err)
-		return
-	}
-	defer func() { _ = f.Close() }()
-	fi, err := f.Stat()
-	if err != nil || !fi.Mode().IsRegular() || fi.Size() <= least {
-		return // nothing new since the copy kept, or nothing to send
-	}
-	q := url.Values{harvest.TranscriptSessionParam: {in.SessionID}}
-	if clientFlag != "" {
-		q.Set(clientQueryParam, clientFlag)
-	}
-	if host := config.Hostname(); host != "" {
-		q.Set("host", host)
-	}
-	// Compressed as it is read: the body is never held whole.
-	pr, pw := io.Pipe()
-	go func() {
-		gz, gerr := gzip.NewWriterLevel(pw, gzip.BestSpeed)
-		if gerr == nil {
-			_, gerr = io.Copy(gz, f)
-			gerr = errors.Join(gerr, gz.Close())
+	job := func(extra ...string) []string { return append(slices.Clone(base), extra...) }
+	var jobs [][]string
+	if least, err := strconv.ParseInt(wanted, 10, 64); err == nil && least >= 0 && (event == "session-end" || event == "stop") {
+		var in struct {
+			SessionID      string `json:"session_id"`
+			TranscriptPath string `json:"transcript_path"`
 		}
-		pw.CloseWithError(gerr) //nolint:errcheck // CloseWithError on a pipe writer always returns nil
-	}()
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.ServerURL()+harvest.TranscriptEndpoint+"?"+q.Encode(), pr)
-	if err != nil {
-		_ = pr.Close()
-		fmt.Fprintln(stderr, "seam hook: transcript not sent:", err)
-		return
-	}
-	req.Header.Set("Authorization", "Bearer "+cfg.MCP.APIKey)
-	req.Header.Set("Content-Type", "application/gzip")
-	req.Header.Set(harvest.TranscriptSizeHeader, strconv.FormatInt(fi.Size(), 10))
-	resp, err := client.Do(req)
-	if err != nil {
-		_ = pr.Close()
-		fmt.Fprintln(stderr, "seam hook: transcript not sent:", err)
-		return
-	}
-	defer func() { _ = resp.Body.Close() }()
-	_ = pr.Close() // ends the compressing goroutine if the daemon answered before reading it all
-	if resp.StatusCode != http.StatusOK {
-		var answer struct {
-			Error string `json:"error"`
+		if err := json.Unmarshal(payload, &in); err == nil && in.SessionID != "" && in.TranscriptPath != "" {
+			jobs = append(jobs, job("--session-id", in.SessionID, "--path", in.TranscriptPath,
+				"--wanted", strconv.FormatInt(least, 10)))
 		}
-		if derr := json.NewDecoder(io.LimitReader(resp.Body, maxErrorBody)).Decode(&answer); derr != nil || answer.Error == "" {
-			answer.Error = resp.Status
-		}
-		fmt.Fprintln(stderr, "seam hook: transcript not kept:", answer.Error)
 	}
+	for _, raw := range pending[:min(len(pending), harvest.MaxPendingPerAnswer)] {
+		q, err := url.ParseQuery(raw)
+		if err != nil {
+			continue
+		}
+		id, path := q.Get(harvest.TranscriptSessionParam), q.Get(harvest.TranscriptPathParam)
+		if id == "" || path == "" {
+			continue
+		}
+		jobs = append(jobs, job("--named", "--session-id", id, "--path", path))
+	}
+	return jobs
 }

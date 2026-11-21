@@ -80,6 +80,8 @@ var viewTables = []struct {
 	{"held_writes", "project_slug NOT IN %[1]s AND session_id NOT IN %[2]s AND item_id NOT IN %[3]s"},
 	{"owner_confirmations", "item_id NOT IN %[3]s"},
 	{"session_taints", "session_id NOT IN %[2]s"},
+	// A pending transcript's asks are about one session (migration 052).
+	{"session_transcript_asks", "session_id NOT IN %[2]s"},
 	// The corpus record names one file of one project: hidden by the project
 	// its path is under, and by the item it records.
 	{"corpus_records", "project_slug NOT IN %[1]s AND item_id NOT IN %[3]s"},

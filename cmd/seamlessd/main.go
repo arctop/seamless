@@ -634,12 +634,15 @@ func runServe(args []string) error {
 	// after it ended, and the console serves them to the owner. A copy still
 	// in flight at shutdown gets a bounded wait before the database closes.
 	transcriptCopies, err := transcripts.New(transcripts.Config{
-		DataDir: cfg.DataDir, DB: db, Events: rec, LocalHost: config.Hostname(), Logger: logger,
+		DataDir: cfg.DataDir, DB: db, Events: rec, LocalHost: config.Hostname(), PeerAuth: cfg.PeerAuth.Enabled, Logger: logger,
 	})
 	if err != nil {
 		return fmt.Errorf("seamlessd.serve: %w", err)
 	}
 	defer transcriptCopies.WaitFor(10 * time.Second)
+	// The reaper settles a flagged session it expired, or one that ended
+	// without its end signal, after each pass.
+	garden.SetTranscripts(transcriptCopies)
 	mcpSrv := mcp.New(mcp.Config{
 		DB: db, Files: mgr, Retrieve: ret, Events: rec, Gardener: garden, Embedder: embedder, Screening: screen,
 		Transcripts: transcriptCopies,

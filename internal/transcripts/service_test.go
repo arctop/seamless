@@ -35,11 +35,18 @@ type fixture struct {
 
 func newFixture(t *testing.T, maxBytes int64) fixture {
 	t.Helper()
+	return newFixtureWith(t, Config{MaxBytes: maxBytes})
+}
+
+// newFixtureWith is newFixture with cfg's MaxBytes and PeerAuth.
+func newFixtureWith(t *testing.T, cfg Config) fixture {
+	t.Helper()
 	dir := t.TempDir()
 	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
-	svc, err := New(Config{DataDir: dir, DB: db, Events: events.NewRecorder(db), LocalHost: testHost, MaxBytes: maxBytes})
+	svc, err := New(Config{DataDir: dir, DB: db, Events: events.NewRecorder(db), LocalHost: testHost,
+		MaxBytes: cfg.MaxBytes, PeerAuth: cfg.PeerAuth})
 	require.NoError(t, err)
 	return fixture{svc: svc, db: db, dir: dir, tdir: t.TempDir()}
 }
@@ -231,7 +238,7 @@ func TestUnflag_RemovesTheCopy(t *testing.T) {
 	f.svc.Snapshot(ctx, sess.ID, path, true)
 	f.svc.Wait()
 	require.False(t, f.svc.Kept(sess.ID), "an unflagged session keeps no copy")
-	require.Empty(t, f.svc.Receive(ctx, nil, bytes.NewReader(gz(t, line1)), -1))
+	require.Empty(t, f.svc.Receive(ctx, nil, bytes.NewReader(gz(t, line1)), -1, ViaClient))
 
 	cleared, removed, err = f.svc.Unflag(ctx, sess.ID, "agent")
 	require.NoError(t, err)
@@ -260,7 +267,7 @@ func TestReceive(t *testing.T) {
 			f := newFixture(t, 128)
 			a := f.flag(t, f.session(t, "01MRECVAAAAAAAAAAAAAAAAAAA", core.SessionActive, "beta", "/remote/a.jsonl"))
 			b := f.flag(t, f.session(t, "01MRECVBBBBBBBBBBBBBBBBBBB", core.SessionActive, "beta", "/remote/a.jsonl"))
-			got := f.svc.Receive(ctx, []core.Session{a, b}, bytes.NewReader(tc.body(t)), tc.claimed)
+			got := f.svc.Receive(ctx, []core.Session{a, b}, bytes.NewReader(tc.body(t)), tc.claimed, ViaClient)
 			require.Equal(t, tc.want, got)
 			for _, s := range []core.Session{a, b} {
 				require.Equal(t, tc.want == core.TranscriptCopied, f.svc.Kept(s.ID))
@@ -281,8 +288,10 @@ func TestReceive(t *testing.T) {
 }
 
 // A session flagged after it ended is copied at once where the daemon may
-// read its transcript; otherwise the record says why not. An active session
-// waits for its end signal.
+// read its transcript; under peer_auth -- a View on the request, or the
+// daemon's own -- it is pending, for the agent's later hooks to send;
+// otherwise the record says why not. An active session waits for its end
+// signal.
 func TestAfterEnd(t *testing.T) {
 	ctx := context.Background()
 	policy, err := access.New(config.PeerAuth{Owner: "owner"}, func(n string) (access.Account, error) {
@@ -297,18 +306,20 @@ func TestAfterEnd(t *testing.T) {
 		status core.SessionStatus
 		host   string
 		path   bool
+		peer   bool // the daemon's own peer_auth
 		want   core.TranscriptCopy
 		kept   bool
 	}{
-		{"ended, readable", ctx, core.SessionCompleted, testHost, true, "", true},
-		{"ended, older client names no host", ctx, core.SessionExpired, "", true, "", true},
-		{"ended, another computer", ctx, core.SessionCompleted, "beta", true, core.TranscriptRemote, false},
-		{"ended, peer_auth", access.WithView(ctx, owner), core.SessionCompleted, testHost, true, core.TranscriptNotPushed, false},
-		{"ended, no hook named a transcript", ctx, core.SessionCompleted, testHost, false, core.TranscriptNoPath, false},
-		{"active: the end signal copies it", ctx, core.SessionActive, testHost, true, "", false},
+		{"ended, readable", ctx, core.SessionCompleted, testHost, true, false, "", true},
+		{"ended, older client names no host", ctx, core.SessionExpired, "", true, false, "", true},
+		{"ended, another computer", ctx, core.SessionCompleted, "beta", true, false, core.TranscriptRemote, false},
+		{"ended, peer_auth", access.WithView(ctx, owner), core.SessionCompleted, testHost, true, false, core.TranscriptPending, false},
+		{"ended, the daemon's peer_auth, no View", ctx, core.SessionCompleted, testHost, true, true, core.TranscriptPending, false},
+		{"ended, no hook named a transcript", ctx, core.SessionCompleted, testHost, false, false, core.TranscriptNoPath, false},
+		{"active: the end signal copies it", ctx, core.SessionActive, testHost, true, false, "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			f := newFixture(t, 0)
+			f := newFixtureWith(t, Config{PeerAuth: tc.peer})
 			path := ""
 			if tc.path {
 				path = f.write(t, "t.jsonl", line1)

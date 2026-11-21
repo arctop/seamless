@@ -183,12 +183,33 @@ file grew. A session flagged after it ended is copied at once, if its
 transcript can be read. A transcript over 256 MB is not copied, and the
 session says so.
 
+**When the end never came.** An agent that crashed, a terminal closed
+mid-session, a session the reaper expired for going quiet: no end signal
+fires, but the flagged session is not left without a copy. Where the daemon
+reads the file itself, the reaper's next pass copies every flagged session
+that ended without one, and so does the next hook of the same agent client on
+the same computer. Under peer_auth the session stays **pending** until a copy
+arrives: the next answers to the same caller - the same agent client, account
+and computer, at its next session start or end - ask for it again, naming the
+session and the transcript path its hooks recorded, a few sessions an answer,
+with a growing wait between asks. `seam hook` reads that path only when it is
+a regular `*.jsonl` file inside its agent client's own transcript folder
+(Claude Code's `projects` folder under `$CLAUDE_CONFIG_DIR` or `~/.claude`,
+Codex's `sessions` folder under `$CODEX_HOME` or `~/.codex`); any other path is
+reported back unread, and the session records that it was refused, or that
+the file is gone. After five asks nobody answered, the copy is given up on,
+and the session says so. Flagging the session again starts the asks over. You
+can also keep one by hand: `seam sessions <id> --keep-transcript`.
+
 **Who reads the agent's file.** A daemon that runs as your account, on the
 agent's computer, copies it itself. Under [peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/) the
-daemon opens no file an agent names: when the daemon's answer to the session's
-end asks for the transcript, `seam hook` (running as you, beside the agent)
-sends it over the socket, and only there. On a server without peer_auth, an
-agent on another computer gets no copy, and its session says why.
+daemon opens no file an agent names: when the daemon's answer asks for the
+transcript, `seam hook` (running as you, beside the agent) sends it over the
+socket, and only there. It hands the upload to a process of its own and
+returns at once, so a transcript near the 256 MB cap has up to 30 minutes to
+arrive rather than the few seconds a hook has; one upload of a session runs at
+a time. On a server without peer_auth, an agent on another computer gets no
+copy, and its session says why.
 
 **Who can read a copy.** You, the owner, alone: the session's page in the
 console (**Download JSONL**) and `seam sessions <id> --transcript`, both

@@ -949,6 +949,7 @@ under the same rule ([JSON output](#json-output)).
 ```bash
 seam sessions [--status STATUS] [--flagged] [--verdict VERDICT] [--json] [<id>]
 seam sessions --transcript <id>
+seam sessions --keep-transcript <id>
 ```
 
 With no positional, lists sessions with name (or short id), project, status, age,
@@ -966,6 +967,20 @@ stdout, decompressed - the JSONL the client wrote - through the daemon, so it
 works under peer_auth, where the daemon's data directory is not yours to read.
 It is the owner's alone, and fails rather than end early when the daemon could
 not read the copy whole.
+
+`--keep-transcript <id>` keeps a flagged session's transcript now, by hand,
+when its end signal never sent it (a crash, a closed terminal) and you would
+rather not wait for the agent's next hook to be
+[asked for it](/guides/data/#flagged-transcripts). With `server_url` naming
+an http(s) address the daemon copies the file itself, where it may: with
+peer_auth off, for a session that ran on the daemon's own computer. With
+`server_url` naming the peer_auth socket the daemon names the path the
+session's hooks recorded, and `seam` - your account, on this computer - reads
+it, only when it is a regular `*.jsonl` file inside the agent client's own
+transcript folder, and sends it over the socket. It prints where to read the
+copy, and fails with the reason when none was kept. Like `--transcript` it is
+the owner's alone: a restricted account, a relay's caller and a paired device
+are refused.
 
 `--status` is `active`, `completed`, or `expired`; anything else is a parse
 error. The console rejects an unrecognized `?status=` too, so a direct URL cannot
@@ -1161,6 +1176,7 @@ an absolute path into the client registration so it works from every repository.
 seam hook session-start|user-prompt-submit|session-end|stop
 seam hook subagent-start|subagent-stop|post-tool-use|permission-request
 seam hook session-taint
+seam hook-transcript --session-id ID --path PATH [--wanted BYTES] [--named] [--client CLIENT] [--config PATH]
 ```
 
 Invoked by Claude Code or Codex, not by hand. Each reads the hook payload from stdin,
@@ -1197,13 +1213,24 @@ Two behaviours matter if you are debugging a hook:
   the daemon refuses (a locked project the owner has not approved) is named in
   one line on stderr and not retried. When the daemon's answer to a
   [flagged session's](/guides/data/#flagged-transcripts) `session-end` (or
-  Codex's `stop`) asks for it, the hook then sends the whole transcript,
-  gzip-compressed, in a request of its own. On any other `server_url` the
-  payload is forwarded exactly as the client wrote it, and no transcript is
-  sent.
+  Codex's `stop`) asks for it, or a later answer asks for a pending one whose
+  end signal never sent it, the hook starts `seam hook-transcript` to send the
+  whole transcript, gzip-compressed, in a request of its own, and returns at
+  once. On any other `server_url` the payload is forwarded exactly as the
+  client wrote it, and no transcript is sent.
 
 Install these with `seamlessd install-hooks`. The one exception is
 `session-taint`, which no installer wires: an agent guard's own PostToolUse
 hook pipes its stdin to it after a tool that read outside text, and the daemon
 marks the session for [write screening](/guides/write-screening/#the-outside-text-mark).
 It retries and gives up like the others (5s, 9s).
+
+`seam hook-transcript` is not wired either, and not run by hand: `seam hook`
+starts it, detached from the agent (a session of its own, its standard
+streams the null device), to send a flagged session's transcript over the
+peer_auth socket, and only there. It gives up after 30 minutes. `--wanted`
+sends the file only when it is larger than that many bytes (the copy already
+kept). `--named` marks a path the daemon named for a pending session: it is
+read only when it is a regular `*.jsonl` file inside the agent client's own
+transcript folder, and any other is reported to the daemon unread
+([transcript copies](/reference/hooks/#transcripts)).

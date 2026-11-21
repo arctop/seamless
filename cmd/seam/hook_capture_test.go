@@ -162,12 +162,19 @@ func serveSocket(t *testing.T, h http.Handler) string {
 // runHookCall runs one hook through runHook with cfg as the loaded config.
 func runHookCall(t *testing.T, cfg config.Config, c hookCall) (stderr string) {
 	t.Helper()
+	return runHookSpawning(t, cfg, c, nil)
+}
+
+// runHookSpawning is runHookCall with spawn standing in for the detached
+// transcript upload (nil: none may start; TestMain makes the real one fail).
+func runHookSpawning(t *testing.T, cfg config.Config, c hookCall, spawn func([]string) error) (stderr string) {
+	t.Helper()
 	raw, err := json.Marshal(c.payload)
 	require.NoError(t, err)
 	e, _, errb := stubEnv()
 	e.stdin = bytes.NewReader(raw)
 	e.loadConfig = func() (config.Config, error) { return cfg, nil }
-	require.NoError(t, runHook(context.Background(), e, &hookOpts{client: c.client}, []string{c.event}))
+	require.NoError(t, runHook(context.Background(), e, &hookOpts{client: c.client, spawn: spawn}, []string{c.event}))
 	return errb.String()
 }
 

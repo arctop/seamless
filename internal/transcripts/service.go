@@ -20,6 +20,18 @@
 //   - On any other server, for an agent on another computer, no copy is made,
 //     and the record says why (core.TranscriptRemote).
 //
+// A flagged session whose end signal never made its copy -- a crash, a closed
+// terminal, a session the reaper expired, a flag set after the end -- is not
+// left without one. With the daemon reading the file, the reaper's pass
+// (KeepEnded) and the next hook of the same agent client, account and
+// computer (CopyPending) copy it. Under peer_auth the session stays pending
+// (core.TranscriptPending): that caller's later hooks are asked for it
+// (PendingFor, Ask; harvest.TranscriptPendingHeader), a few sessions an
+// answer, with a growing wait between asks, until a copy arrives, the hook
+// reports the recorded path refused or gone, or core.TranscriptAskLimit asks
+// went unanswered (core.TranscriptNotSent). The owner may also keep one by
+// hand (CopyNow, or Receive of the owner's own upload).
+//
 // A copy is written to a temporary file in the same directory, synced and
 // renamed into place, 0600 in a 0700 directory, and recorded on the session's
 // row only while the session is still flagged. Copies of one session are
@@ -72,7 +84,23 @@ const uploadSlack int64 = 1 << 20
 const (
 	ViaDaemon = "daemon"
 	ViaClient = "client"
+	// ViaOwner is the owner's own account, by hand (`seam sessions <id>
+	// --keep-transcript` under peer_auth).
+	ViaOwner = "owner"
 )
+
+// askBackoff is the wait after the first ask for a pending transcript before
+// the next; each later ask waits twice the one before.
+const askBackoff = 2 * time.Minute
+
+// askWait is how long after its asks-th ask a pending transcript waits before
+// it is asked again (or, after the last ask, given up on).
+func askWait(asks int) time.Duration {
+	if asks < 1 {
+		return 0
+	}
+	return askBackoff << min(asks-1, 16)
+}
 
 // ErrNoCopy reports that a session has no copy on this disk.
 var ErrNoCopy = errors.New("transcripts: no copy kept")
@@ -91,6 +119,10 @@ type Config struct {
 	LocalHost string
 	// MaxBytes caps a copy, uncompressed; 0 is harvest.MaxTranscriptBytes.
 	MaxBytes int64
+	// PeerAuth is the daemon's peer_auth: the daemon then runs as its own
+	// account and reads no agent file, background work (the reaper)
+	// included, whose context carries no View to say so.
+	PeerAuth bool
 	Logger   *slog.Logger
 }
 
@@ -102,9 +134,14 @@ type Service struct {
 	localHost string
 	max       int64
 	logger    *slog.Logger
+	peerAuth  bool
 	locks     keyLocks
 	wg        sync.WaitGroup
 	now       func() time.Time
+	// uploading holds the sessions an upload is being received for
+	// (BeginUpload): one at a time per session.
+	upMu      sync.Mutex
+	uploading map[string]bool
 }
 
 // New builds a Service over cfg.DataDir and removes the partial copies a
@@ -123,7 +160,8 @@ func New(cfg Config) (*Service, error) {
 	s := &Service{
 		dir: filepath.Join(cfg.DataDir, DirName), db: cfg.DB, events: cfg.Events,
 		localHost: strings.ToLower(strings.TrimSpace(cfg.LocalHost)), max: cfg.MaxBytes, logger: cfg.Logger,
-		locks: keyLocks{m: map[string]*keyLock{}}, now: time.Now,
+		peerAuth: cfg.PeerAuth, locks: keyLocks{m: map[string]*keyLock{}}, now: time.Now,
+		uploading: map[string]bool{},
 	}
 	entries, err := os.ReadDir(s.dir)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -244,17 +282,33 @@ func (s *Service) Unflag(ctx context.Context, id, by string) (cleared, removed b
 
 // Readable reports whether the daemon itself may read the transcript of a
 // session on host for the request in ctx, and when not, the word for why: no
-// peer_auth View (the daemon runs as the agent's account), and the agent's
-// own computer (an empty host is an older client's, on this one).
+// peer_auth (neither the daemon's, nor a View on the request: the daemon runs
+// as the agent's account), and the agent's own computer (an empty host is an
+// older client's, on this one).
 func (s *Service) Readable(ctx context.Context, host string) (ok bool, why core.TranscriptCopy) {
-	if _, peerAuth := access.FromContext(ctx); peerAuth {
+	if _, peerAuth := access.FromContext(ctx); peerAuth || s.peerAuth {
 		return false, core.TranscriptNotPushed
 	}
-	host = strings.ToLower(strings.TrimSpace(host))
-	if host != "" && host != s.localHost {
+	if !s.sameHost(host) {
 		return false, core.TranscriptRemote
 	}
 	return true, ""
+}
+
+// sameHost reports whether host -- a session's, or a hook's -- names this
+// daemon's computer; "" is an older client's, on this one.
+func (s *Service) sameHost(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	return host == "" || host == s.localHost
+}
+
+// hostOf is host as the sessions record it: lower-cased, this computer's name
+// for "".
+func (s *Service) hostOf(host string) string {
+	if host = strings.ToLower(strings.TrimSpace(host)); host != "" {
+		return host
+	}
+	return s.localHost
 }
 
 // AfterEnd makes the copy of a session flagged after it ended: now, when the
@@ -280,11 +334,34 @@ func (s *Service) AfterEnd(ctx context.Context, sess core.Session) core.Transcri
 		return core.TranscriptNoPath
 	}
 	if ok, why := s.Readable(ctx, sess.Host); !ok {
+		if why == core.TranscriptNotPushed {
+			// Under peer_auth the agent's own later hooks are asked for it.
+			if s.Kept(sess.ID) && sess.Transcript == core.TranscriptCopied {
+				return core.TranscriptCopied
+			}
+			s.MarkPending(ctx, sess)
+			return core.TranscriptPending
+		}
 		s.NotMade(ctx, sess, why, ViaDaemon)
 		return why
 	}
 	s.Snapshot(ctx, sess.ID, path, false)
 	return ""
+}
+
+// MarkPending records flagged session sess's transcript pending
+// (core.TranscriptPending): its end signal sent none, so under peer_auth the
+// agent's later hooks are asked for it. A copy kept, or a word that stands,
+// is left as it is.
+func (s *Service) MarkPending(ctx context.Context, sess core.Session) {
+	recorded, err := store.SetTranscriptPending(ctx, s.db, sess.ID)
+	if err != nil {
+		s.logger.Warn("transcripts: record pending", "session", sess.ID, "error", err)
+		return
+	}
+	if recorded {
+		s.record(ctx, core.EventSessionTranscript, sess, map[string]any{"copy": string(core.TranscriptPending), "via": ViaClient})
+	}
 }
 
 // NotMade records why flagged session sess has no copy, unless an earlier copy
@@ -319,36 +396,48 @@ func (s *Service) Snapshot(ctx context.Context, id, path string, force bool) {
 	})
 }
 
-// copyFile is Snapshot's work, under the session's lock.
-func (s *Service) copyFile(ctx context.Context, id, path string, force bool) {
+// CopyNow is Snapshot made while the caller waits, whatever the copy kept
+// (the owner's by hand): the caller has judged that the daemon may read path
+// (Readable). It reports what became of the copy: copied, the word for why
+// not, or "" when the session is no longer flagged.
+func (s *Service) CopyNow(ctx context.Context, id, path string) core.TranscriptCopy {
+	ctx, cancel := context.WithTimeout(ctx, copyTimeout)
+	defer cancel()
+	return s.copyFile(ctx, id, path, true)
+}
+
+// copyFile is Snapshot's work, under the session's lock. It reports what
+// became of the copy, "" when none was attempted (the flag was cleared, or
+// the file has not grown past the copy kept).
+func (s *Service) copyFile(ctx context.Context, id, path string, force bool) core.TranscriptCopy {
 	unlock := s.locks.lock(id)
 	defer unlock()
 	sess, found, err := store.SessionByID(ctx, s.db, id)
 	if err != nil {
 		s.logger.Warn("transcripts: load session", "session", id, "error", err)
-		return
+		return core.TranscriptFailed
 	}
 	if !found || !sess.Flagged() {
-		return // the flag was cleared first: nothing to keep
+		return "" // the flag was cleared first: nothing to keep
 	}
 	f, err := os.Open(path) //nolint:gosec // the agent's own transcript, opened only where Readable says the daemon may
 	if err != nil {
 		s.notMade(ctx, sess, core.TranscriptUnreadable, ViaDaemon)
-		return
+		return core.TranscriptUnreadable
 	}
 	defer func() { _ = f.Close() }()
 	fi, err := f.Stat()
 	if err != nil || !fi.Mode().IsRegular() {
 		s.notMade(ctx, sess, core.TranscriptUnreadable, ViaDaemon)
-		return
+		return core.TranscriptUnreadable
 	}
 	kept := s.Kept(id) && sess.Transcript == core.TranscriptCopied
 	if !force && kept && fi.Size() <= sess.TranscriptBytes {
-		return // not grown since the copy kept
+		return "" // not grown since the copy kept
 	}
 	if fi.Size() > s.max {
 		s.notMade(ctx, sess, core.TranscriptTooLarge, ViaDaemon)
-		return
+		return core.TranscriptTooLarge
 	}
 	tmp, raw, state, err := s.writeCompressed(f)
 	if err != nil {
@@ -356,9 +445,9 @@ func (s *Service) copyFile(ctx context.Context, id, path string, force bool) {
 	}
 	if state != core.TranscriptCopied {
 		s.notMade(ctx, sess, state, ViaDaemon)
-		return
+		return state
 	}
-	s.commit(ctx, sess, tmp, raw, ViaDaemon)
+	return s.commit(ctx, sess, tmp, raw, ViaDaemon)
 }
 
 // writeCompressed gzips r into a new temporary file in the copies' directory,
@@ -389,18 +478,56 @@ func (s *Service) writeCompressed(r io.Reader) (tmp string, raw int64, state cor
 	return t.Name(), raw, core.TranscriptCopied, nil
 }
 
-// Receive keeps a transcript the agent's own hook sent (peer_auth): body is
-// its gzip-compressed JSONL, claimed the size its sender read. The body is
-// checked as it is written -- it must decode whole, and to no more than the
-// cap -- and the copy then goes to every session in sessions that is still
-// flagged. It returns what became of it.
-func (s *Service) Receive(ctx context.Context, sessions []core.Session, body io.Reader, claimed int64) core.TranscriptCopy {
+// BeginUpload marks every session in sessions as receiving an upload, so a
+// second upload of the same transcript -- a Codex turn's while the turn
+// before is still sending, a pending ask's -- is refused rather than run
+// beside it: one at a time per session. ok is false, and nothing is marked,
+// when any of them already is; end clears the marks.
+func (s *Service) BeginUpload(sessions []core.Session) (end func(), ok bool) {
+	s.upMu.Lock()
+	defer s.upMu.Unlock()
+	for _, sess := range sessions {
+		if s.uploading[sess.ID] {
+			return nil, false
+		}
+	}
+	for _, sess := range sessions {
+		s.uploading[sess.ID] = true
+	}
+	return func() {
+		s.upMu.Lock()
+		defer s.upMu.Unlock()
+		for _, sess := range sessions {
+			delete(s.uploading, sess.ID)
+		}
+	}, true
+}
+
+// Uploading reports whether an upload is being received for any of sessions.
+func (s *Service) Uploading(sessions []core.Session) bool {
+	s.upMu.Lock()
+	defer s.upMu.Unlock()
+	for _, sess := range sessions {
+		if s.uploading[sess.ID] {
+			return true
+		}
+	}
+	return false
+}
+
+// Receive keeps a transcript the agent's own hook -- or, via ViaOwner, the
+// owner's own account -- sent (peer_auth): body is its gzip-compressed JSONL,
+// claimed the size its sender read. The body is checked as it is written --
+// it must decode whole, and to no more than the cap -- and the copy then goes
+// to every session in sessions that is still flagged. It returns what became
+// of it.
+func (s *Service) Receive(ctx context.Context, sessions []core.Session, body io.Reader, claimed int64, via string) core.TranscriptCopy {
 	if len(sessions) == 0 {
 		return ""
 	}
 	if claimed > s.max {
 		for _, sess := range sessions {
-			s.NotMade(ctx, sess, core.TranscriptTooLarge, ViaClient)
+			s.NotMade(ctx, sess, core.TranscriptTooLarge, via)
 		}
 		return core.TranscriptTooLarge
 	}
@@ -410,7 +537,7 @@ func (s *Service) Receive(ctx context.Context, sessions []core.Session, body io.
 	}
 	if state != core.TranscriptCopied {
 		for _, sess := range sessions {
-			s.NotMade(ctx, sess, state, ViaClient)
+			s.NotMade(ctx, sess, state, via)
 		}
 		return state
 	}
@@ -421,7 +548,7 @@ func (s *Service) Receive(ctx context.Context, sessions []core.Session, body io.
 			// the last takes the file itself.
 			if src, err = s.duplicate(tmp); err != nil {
 				s.logger.Warn("transcripts: duplicate copy", "session", sess.ID, "error", err)
-				s.NotMade(ctx, sess, core.TranscriptFailed, ViaClient)
+				s.NotMade(ctx, sess, core.TranscriptFailed, via)
 				continue
 			}
 		}
@@ -433,7 +560,7 @@ func (s *Service) Receive(ctx context.Context, sessions []core.Session, body io.
 				_ = os.Remove(src)
 				return
 			}
-			s.commit(ctx, cur, src, raw, ViaClient)
+			s.commit(ctx, cur, src, raw, via)
 		}()
 	}
 	return core.TranscriptCopied
@@ -468,19 +595,20 @@ func (s *Service) receiveCompressed(r io.Reader) (tmp string, raw int64, state c
 }
 
 // commit renames tmp into sess's copy and records it, under the session's
-// lock; a commit that fails removes tmp.
-func (s *Service) commit(ctx context.Context, sess core.Session, tmp string, raw int64, via string) {
+// lock; a commit that fails removes tmp. It reports what became of the copy
+// ("" when the flag went first).
+func (s *Service) commit(ctx context.Context, sess core.Session, tmp string, raw int64, via string) core.TranscriptCopy {
 	path, ok := s.file(sess.ID)
 	if !ok {
 		_ = os.Remove(tmp)
 		s.notMade(ctx, sess, core.TranscriptFailed, via)
-		return
+		return core.TranscriptFailed
 	}
 	if err := os.Rename(tmp, path); err != nil {
 		_ = os.Remove(tmp)
 		s.logger.Warn("transcripts: keep copy", "session", sess.ID, "error", err)
 		s.notMade(ctx, sess, core.TranscriptFailed, via)
-		return
+		return core.TranscriptFailed
 	}
 	syncDir(s.dir)
 	recorded, err := store.SetTranscriptCopy(ctx, s.db, sess.ID, core.TranscriptCopied, raw, s.now())
@@ -490,11 +618,12 @@ func (s *Service) commit(ctx context.Context, sess core.Session, tmp string, raw
 	if err == nil && !recorded {
 		// The flag went between the check and the record: so does the copy.
 		_ = os.Remove(path)
-		return
+		return ""
 	}
 	s.record(ctx, core.EventSessionTranscript, sess, map[string]any{
 		"copy": string(core.TranscriptCopied), "bytes": raw, "via": via,
 	})
+	return core.TranscriptCopied
 }
 
 // createTemp opens a new temporary file in the copies' directory, creating

@@ -1,10 +1,11 @@
 package main
 
 // seam sessions -- session list/detail via the console JSON endpoint, the
-// flagged sessions (--flagged), and a flagged session's transcript copy
+// flagged sessions (--flagged), a flagged session's transcript copy
 // (--transcript), streamed from the console's route: under peer_auth the
 // owner cannot read the daemon's data dir, so the daemon's API is the one way
-// to it.
+// to it -- and keeping one by hand (--keep-transcript) when its end signal
+// never sent it.
 
 import (
 	"cmp"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/harvest"
 )
 
 // The list and the detail view are one command, which is what `between` exists
@@ -33,13 +35,21 @@ whether it is still there, and whether Seamless keeps a copy of it.
 
 --transcript with an id writes that flagged session's transcript copy to stdout,
 decompressed: the JSONL the agent client wrote. It is read through the daemon,
-by the owner only (never through a relay or a paired device).`)
+by the owner only (never through a relay or a paired device).
+
+--keep-transcript with an id keeps that flagged session's transcript now, by
+hand, when its end signal never sent it (a crash, a closed terminal): the daemon
+copies the file itself where it may read it; under peer_auth, with server_url
+naming the socket, this account reads the path the session's hooks recorded --
+only a regular *.jsonl file inside the agent client's own transcript folder, on
+this computer -- and sends it. The owner's alone, like --transcript.`)
 
 type sessionsOpts struct {
 	status     *string
 	flagged    *bool
 	verdict    *string
 	transcript *bool
+	keep       *bool
 	asJSON     *bool
 }
 
@@ -54,6 +64,7 @@ func bindSessions(fs *flag.FlagSet) *sessionsOpts {
 		verdict: enumFlag(fs, "verdict", "", "list only the sessions flagged with `VERDICT` (implies --flagged)",
 			enumOf(core.FlagVerdicts)),
 		transcript: fs.Bool("transcript", false, "with an id: write the flagged session's transcript copy (JSONL) to stdout"),
+		keep:       fs.Bool("keep-transcript", false, "with an id: keep the flagged session's transcript now, by hand"),
 		asJSON:     jsonFlag(fs, jsonUsage),
 	}
 }
@@ -75,13 +86,19 @@ type sessionRow struct {
 	TranscriptPath string    `json:"transcriptPath"`
 }
 
-func runSessions(_ context.Context, e *env, o *sessionsOpts, pos []string) error {
+func runSessions(ctx context.Context, e *env, o *sessionsOpts, pos []string) error {
 	flagged := *o.flagged || *o.verdict != ""
 	switch {
 	case *o.transcript && len(pos) == 0:
 		return errors.New("--transcript writes one session's copy: name the session by its id")
+	case *o.keep && len(pos) == 0:
+		return errors.New("--keep-transcript keeps one session's transcript: name the session by its id")
+	case *o.transcript && *o.keep:
+		return errors.New("--transcript and --keep-transcript are two steps: keep the transcript first, then read it")
 	case *o.transcript && (*o.asJSON || flagged || *o.status != ""):
 		return errors.New("--transcript writes the JSONL itself: it takes an id and no other flag")
+	case *o.keep && (*o.asJSON || flagged || *o.status != ""):
+		return errors.New("--keep-transcript takes an id and no other flag")
 	case len(pos) > 0 && (flagged || *o.status != ""):
 		return errors.New("--status, --flagged and --verdict filter the list: drop them to show one session")
 	}
@@ -92,6 +109,9 @@ func runSessions(_ context.Context, e *env, o *sessionsOpts, pos []string) error
 	if len(pos) > 0 {
 		if *o.transcript {
 			return sessionTranscript(e.stdout, cfg, pos[0])
+		}
+		if *o.keep {
+			return keepTranscript(ctx, e.stdout, cfg, pos[0], nil)
 		}
 		if *o.asJSON {
 			return printConsoleJSON(e, cfg, sessionDetailPath(pos[0]))
@@ -293,4 +313,66 @@ func sessionTranscript(out io.Writer, cfg config.Config, id string) error {
 		return fmt.Errorf("transcript of %s: %s", id, msg)
 	}
 	return nil
+}
+
+// keepTranscript keeps flagged session id's transcript by hand, through the
+// owner's route (harvest.TranscriptKeepPath). Off the peer_auth socket the
+// daemon reads the file itself, where it may. On the socket the daemon names
+// the path its hooks recorded, and this account -- the owner's, on this
+// computer -- reads it, only inside its agent client's own transcript folder
+// (openNamedTranscript), and sends it. newClient is nil for cfg.HTTPClient(0).
+func keepTranscript(ctx context.Context, out io.Writer, cfg config.Config, id string, newClient func(config.Config) (*http.Client, error)) error {
+	if newClient == nil {
+		newClient = func(cfg config.Config) (*http.Client, error) { return cfg.HTTPClient(0) }
+	}
+	// No timeout of its own beyond the upload's: a copy runs to hundreds of
+	// megabytes.
+	ctx, cancel := context.WithTimeout(ctx, harvest.TranscriptUploadTimeout)
+	defer cancel()
+	client, err := newClient(cfg)
+	if err != nil {
+		return err
+	}
+	path := harvest.TranscriptKeepPath(id)
+	kept := func() error {
+		fmt.Fprintf(out, "copy kept; read it with `seam sessions %s --transcript`\n", id)
+		return nil
+	}
+	if !pushesCaptures(cfg) {
+		status, answer, err := postTranscript(ctx, client, cfg, path+"?"+harvest.TranscriptFromDaemonParam+"=1", nil, 0)
+		if err != nil {
+			return fmt.Errorf("daemon unreachable at %s: %w", cfg.DaemonAddress(), err)
+		}
+		if status != http.StatusOK {
+			return errors.New(answer.Error)
+		}
+		return kept()
+	}
+	status, answer, err := postTranscript(ctx, client, cfg, path, nil, 0)
+	if err != nil {
+		return fmt.Errorf("daemon unreachable at %s: %w", cfg.DaemonAddress(), err)
+	}
+	if status != http.StatusOK || answer.Send == nil {
+		return errors.New(cmp.Or(answer.Error, "the daemon named no transcript to send"))
+	}
+	send := answer.Send
+	if host := strings.ToLower(strings.TrimSpace(send.Host)); host != "" && host != config.Hostname() {
+		return fmt.Errorf("session %s ran on %s: its transcript is there, not on this computer", id, host)
+	}
+	f, size, refusal := openNamedTranscript(send.Path, transcriptRoots(send.Client))
+	switch refusal {
+	case harvest.TranscriptRefusedMissing:
+		return fmt.Errorf("not sent: %s is not there, or not readable from this account", send.Path)
+	case harvest.TranscriptRefusedPath:
+		return fmt.Errorf("not sent: %s is not a regular *.jsonl file inside %s's own transcript folder", send.Path, send.Client)
+	}
+	defer func() { _ = f.Close() }()
+	status, answer, err = postTranscript(ctx, client, cfg, path, f, size)
+	if err != nil {
+		return fmt.Errorf("transcript of %s not sent: %w", id, err)
+	}
+	if status != http.StatusOK {
+		return fmt.Errorf("transcript of %s not kept: %s", id, answer.Error)
+	}
+	return kept()
 }

@@ -2,6 +2,7 @@ package core
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -268,9 +269,21 @@ const (
 	TranscriptRemote TranscriptCopy = "remote"
 	// TranscriptNotPushed: under peer_auth the daemon opens no file an agent
 	// names, and the agent's own hook sent none: it sends one only over the
-	// peer_auth socket, at the session's end signal (a session flagged after
-	// it ended, or an agent on the TCP key, sends none).
+	// peer_auth socket (an agent on the TCP key sends none). A later hook of
+	// the same caller on the socket is asked for it, as for TranscriptPending.
 	TranscriptNotPushed TranscriptCopy = "not_pushed"
+	// TranscriptPending: under peer_auth, a flagged session holds no copy and
+	// its end signal sent none (a crash, a closed terminal, a flag set after
+	// the end), so a later hook of the same agent client, account and computer
+	// is asked for it, at most TranscriptAskLimit times.
+	TranscriptPending TranscriptCopy = "pending"
+	// TranscriptRefused: the agent's hook would not read the path the daemon
+	// recorded for the session: it is not a regular *.jsonl file inside its
+	// agent client's own transcript folder.
+	TranscriptRefused TranscriptCopy = "refused"
+	// TranscriptNotSent: the agent's later hooks were asked for the
+	// transcript TranscriptAskLimit times, and none sent it.
+	TranscriptNotSent TranscriptCopy = "not_sent"
 	// TranscriptUnreadable: the transcript file could not be read (gone, or
 	// not a regular file).
 	TranscriptUnreadable TranscriptCopy = "unreadable"
@@ -285,10 +298,25 @@ const (
 var TranscriptCopies = []TranscriptCopy{
 	TranscriptCopied, TranscriptNoPath, TranscriptRemote, TranscriptNotPushed,
 	TranscriptUnreadable, TranscriptTooLarge, TranscriptFailed,
+	TranscriptPending, TranscriptRefused, TranscriptNotSent,
 }
+
+// TranscriptAsked lists the states in which a flagged session that holds no
+// copy is still asked for its transcript at the agent's later hooks
+// (peer_auth): none attempted yet, pending, not pushed, and an upload that
+// failed. Every other state stands until the session is flagged again.
+var TranscriptAsked = []TranscriptCopy{"", TranscriptPending, TranscriptNotPushed, TranscriptFailed}
+
+// TranscriptAskLimit is how many times the agent's later hooks are asked for
+// a session's transcript before Seamless gives up on it (TranscriptNotSent).
+const TranscriptAskLimit = 5
 
 // Valid reports whether c is a TranscriptCopy value.
 func (c TranscriptCopy) Valid() bool { return slices.Contains(TranscriptCopies, c) }
+
+// Asked reports whether a flagged session in state c that holds no copy is
+// still asked for its transcript (TranscriptAsked).
+func (c TranscriptCopy) Asked() bool { return slices.Contains(TranscriptAsked, c) }
 
 // Explain is the copy's state in words, for the owner's surfaces.
 func (c TranscriptCopy) Explain() string {
@@ -302,7 +330,16 @@ func (c TranscriptCopy) Explain() string {
 	case TranscriptRemote:
 		return "no copy: the agent ran on another computer, whose files this daemon cannot read"
 	case TranscriptNotPushed:
-		return "no copy: under peer_auth only the agent's own hook sends it, over the socket at the session's end, and none came"
+		return "no copy yet: under peer_auth only the agent's own hook sends it, over the socket, and none came; " +
+			"the agent's next hook on the socket is asked for it"
+	case TranscriptPending:
+		return "no copy yet: the session ended without sending it, so the agent's next hook on its computer is asked for it"
+	case TranscriptRefused:
+		return "no copy: the agent's hook would not read the recorded path, which is not a transcript " +
+			"in its agent client's own transcript folder"
+	case TranscriptNotSent:
+		return "no copy: the agent's later hooks were asked for it " + strconv.Itoa(TranscriptAskLimit) +
+			" times, and none sent it"
 	case TranscriptUnreadable:
 		return "no copy: the transcript file could not be read"
 	case TranscriptTooLarge:
@@ -443,9 +480,17 @@ type Session struct {
 	Transcript         TranscriptCopy `json:"transcriptCopy,omitempty"`
 	TranscriptBytes    int64          `json:"transcriptBytes,omitempty"`
 	TranscriptCopiedAt *time.Time     `json:"transcriptCopiedAt,omitempty"`
-	Metadata           map[string]any `json:"metadata"`
-	CreatedAt          time.Time      `json:"createdAt"`
-	UpdatedAt          time.Time      `json:"updatedAt"`
+	// TranscriptAsks is how many times the agent's later hooks were asked for
+	// the transcript of a flagged session holding no copy (peer_auth;
+	// TranscriptAsked), and TranscriptAskedAt when last; a new flag starts
+	// them over. They live in a table of their own, and only the pending
+	// read (store.PendingTranscriptSessions) fills them: every other read
+	// leaves them zero, and no JSON surface carries them.
+	TranscriptAsks    int            `json:"-"`
+	TranscriptAskedAt *time.Time     `json:"-"`
+	Metadata          map[string]any `json:"metadata"`
+	CreatedAt         time.Time      `json:"createdAt"`
+	UpdatedAt         time.Time      `json:"updatedAt"`
 	// HeldUntil is when the furthest of the holds the session has lapses: the
 	// latest lease among the in_progress tasks it claimed and the repo locks
 	// it holds, lapsed or not; nil when it holds none. Every store read of a session fills it in the
@@ -704,7 +749,7 @@ const (
 	// transcript copy it keeps (internal/transcripts).
 	EventSessionFlagged    EventKind = "session.flagged"    // a session was flagged, or its flag changed (session_id; payload: verdict, reason, by, retroactive)
 	EventSessionUnflagged  EventKind = "session.unflagged"  // a session's flag was cleared and its transcript copy removed (session_id; payload: verdict -- the one cleared -- by, copy_removed)
-	EventSessionTranscript EventKind = "session.transcript" // a flagged session's transcript was copied, or why not (session_id; payload: copy -- a core.TranscriptCopy word -- bytes, via: daemon or client)
+	EventSessionTranscript EventKind = "session.transcript" // a flagged session's transcript was copied, or why not, or asked for again (session_id; payload: copy -- a core.TranscriptCopy word -- bytes, via: daemon, client or owner, asks)
 
 	// Claude Code plan-mode capture (PostToolUse/PermissionRequest/SubagentStop hooks).
 	EventPlanCaptured     EventKind = "plan.captured"     // a plan-file iteration landed as a cc-plan note
