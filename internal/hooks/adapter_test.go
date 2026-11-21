@@ -52,9 +52,9 @@ func TestDecodeSessionStart_CodexFixtures(t *testing.T) {
 		"Codex ambient display names keep a readable prefix plus a full-id digest")
 }
 
-// The whole reason the adapter exists: Codex names the submitted prompt `prompt`,
-// Claude Code names it `user_prompt`. decodePrompt must normalize the Codex
-// fixture into the internal UserPrompt field so downstream recall is shared code.
+// Codex names the submitted prompt `prompt`, as Claude Code does: decodePrompt
+// must land the Codex fixture's in the internal UserPrompt field so downstream
+// recall is shared code.
 func TestDecodePrompt_CodexFixturesNormalizePromptField(t *testing.T) {
 	for frontend, wantID := range map[string]string{
 		"exec": "019f8000-0000-7000-8000-000000000001",
@@ -73,23 +73,27 @@ func TestDecodePrompt_CodexFixturesNormalizePromptField(t *testing.T) {
 	}
 }
 
-// Claude Code bodies already carry `user_prompt`; the Codex normalization must
-// never run for them (a stray `prompt` key from a CC client is ignored), so CC
-// behavior is provably unchanged.
-func TestDecodePrompt_ClaudeCodeIgnoresCodexPromptField(t *testing.T) {
+// Claude Code names the submitted prompt `prompt` too (its 2.1.330 builds the
+// hook input with it), and decodePrompt reads it into UserPrompt; a body that
+// carries the internal name, `user_prompt` -- as the repository's tests and a
+// hand-written POST do -- is read as it always was.
+func TestDecodePrompt_ClaudeCodeReadsItsPromptField(t *testing.T) {
 	p := decodePrompt(ClientClaudeCode, []byte(`{"session_id":"abc","cwd":"/w","user_prompt":"cc words"}`))
 	require.Equal(t, "cc words", p.UserPrompt)
 
-	// A Codex-shaped body under the CC client does not cross-read `prompt`.
-	require.Empty(t, decodePrompt(ClientClaudeCode, []byte(`{"prompt":"cx words"}`)).UserPrompt)
+	p = decodePrompt(ClientClaudeCode, []byte(`{"session_id":"abc","cwd":"/w","hook_event_name":"UserPromptSubmit",`+
+		`"prompt":"cc words","session_title":"Example"}`))
+	require.Equal(t, "cc words", p.UserPrompt)
 }
 
 // If a body somehow carries both fields, the internal user_prompt wins: the
-// Codex fallback only fills an empty UserPrompt, so it can never clobber a value
-// that decoded straight into the internal shape.
-func TestDecodePrompt_CodexFallbackDoesNotClobberUserPrompt(t *testing.T) {
-	p := decodePrompt(ClientCodex, []byte(`{"user_prompt":"already","prompt":"other"}`))
-	require.Equal(t, "already", p.UserPrompt)
+// `prompt` fallback only fills an empty UserPrompt, so it can never clobber a
+// value that decoded straight into the internal shape.
+func TestDecodePrompt_PromptFallbackDoesNotClobberUserPrompt(t *testing.T) {
+	for _, client := range []Client{ClientClaudeCode, ClientCodex} {
+		p := decodePrompt(client, []byte(`{"user_prompt":"already","prompt":"other"}`))
+		require.Equal(t, "already", p.UserPrompt, client)
+	}
 }
 
 // The current Codex fixtures prove that both subagent events carry the parent

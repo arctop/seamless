@@ -708,7 +708,7 @@ func dgRunScript(t *testing.T, s *dgScript) {
 	// ---- the agent's hooks with content in place -------------------------
 	s.hook("hook-user-prompt-submit", "user-prompt-submit", nil, map[string]any{
 		"session_id": "dg-claude-0001", "cwd": dgRepoA,
-		"user_prompt":     "Before I deploy to production: does the staging gate apply, and when do stale cache entries clear?",
+		"prompt":          "Before I deploy to production: does the staging gate apply, and when do stale cache entries clear?",
 		"hook_event_name": "UserPromptSubmit",
 	})
 	s.hook("hook-session-start-resume", "session-start", procQuery, map[string]any{
@@ -718,7 +718,7 @@ func dgRunScript(t *testing.T, s *dgScript) {
 		"session_id": "dg-claude-0002", "cwd": dgRepoConf, "source": "startup",
 	})
 	s.hook("hook-user-prompt-confidential", "user-prompt-submit", nil, map[string]any{
-		"session_id": "dg-claude-0002", "cwd": dgRepoConf, "user_prompt": "Which day of the month the confidential ledger closes on?",
+		"session_id": "dg-claude-0002", "cwd": dgRepoConf, "prompt": "Which day of the month the confidential ledger closes on?",
 		"hook_event_name": "UserPromptSubmit",
 	})
 

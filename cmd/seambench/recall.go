@@ -64,9 +64,9 @@ func recallCheck(ctx context.Context, a *arm, prompt, logPath string) stepOutcom
 		return stepOutcome{exitCode: -1, err: err}
 	}
 	body, err := json.Marshal(map[string]string{
-		"session_id":  "seambench-recall",
-		"cwd":         a.repo,
-		"user_prompt": prompt,
+		"session_id": "seambench-recall",
+		"cwd":        a.repo,
+		"prompt":     prompt,
 	})
 	if err != nil {
 		return stepOutcome{exitCode: -1, err: fmt.Errorf("marshal hook body: %w", err)}

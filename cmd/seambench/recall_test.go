@@ -26,7 +26,7 @@ func recallServer(t *testing.T, additionalContext string, status int) *httptest.
 		require.NoError(t, err)
 		var got map[string]string
 		require.NoError(t, json.Unmarshal(body, &got))
-		require.NotEmpty(t, got["user_prompt"])
+		require.NotEmpty(t, got["prompt"])
 		require.NotEmpty(t, got["cwd"])
 
 		w.Header().Set("Content-Type", "application/json")

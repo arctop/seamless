@@ -1959,8 +1959,8 @@
       "body": {
         "cwd": "/work/example-open-alpha",
         "hook_event_name": "UserPromptSubmit",
-        "session_id": "dg-claude-0001",
-        "user_prompt": "Before I deploy to production: does the staging gate apply, and when do stale cache entries clear?"
+        "prompt": "Before I deploy to production: does the staging gate apply, and when do stale cache entries clear?",
+        "session_id": "dg-claude-0001"
       }
     },
     "result": {
@@ -2082,8 +2082,8 @@
       "body": {
         "cwd": "/work/example-confidential",
         "hook_event_name": "UserPromptSubmit",
-        "session_id": "dg-claude-0002",
-        "user_prompt": "Which day of the month the confidential ledger closes on?"
+        "prompt": "Which day of the month the confidential ledger closes on?",
+        "session_id": "dg-claude-0002"
       }
     },
     "result": {

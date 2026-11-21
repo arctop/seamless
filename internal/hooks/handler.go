@@ -201,7 +201,7 @@ type promptPayload struct {
 	SessionID      string `json:"session_id"`
 	TranscriptPath string `json:"transcript_path"`
 	CWD            string `json:"cwd"`
-	UserPrompt     string `json:"user_prompt"` // Codex names this `prompt`; decodePrompt normalizes it
+	UserPrompt     string `json:"user_prompt"` // both clients send it as `prompt`; decodePrompt fills it
 	HookEventName  string `json:"hook_event_name"`
 	Model          string `json:"model"` // Codex sends it; Claude Code does not (see setAmbientModel)
 	// Host is resolved by the handler, not the client: UserPromptSubmit stays an

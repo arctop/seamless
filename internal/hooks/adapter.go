@@ -11,20 +11,20 @@ import (
 	"github.com/arctop/seamless/internal/agentproc"
 )
 
-// Codex's hook payloads differ from Claude Code's in a few field names (captured
-// live and versioned in internal/hooks/testdata/codex). A per-client adapter
-// decodes each raw hook body into the single
-// internal struct the handlers already use, so project registration, briefing
-// assembly, ambient sessions, and recall stay shared code with no per-client
-// branches downstream. Claude Code is the identity adapter -- its payloads already
-// ARE the internal shape -- so only Codex's renames live here.
+// Codex's hook payloads and Claude Code's (Codex's captured live and versioned
+// in internal/hooks/testdata/codex) are decoded here into the single internal
+// struct each handler uses, so project registration, briefing assembly,
+// ambient sessions, and recall stay shared code with no per-client branches
+// downstream. Both clients' payloads are the internal shape but for one name:
+// the submitted prompt, which both send as `prompt` and the internal struct
+// keeps as `user_prompt` (decodePrompt).
 //
 // The client discriminator arrives OUT OF BAND, as the ?client= query param that
-// `seam hook --client` appends, not in the body: the body decode is itself
-// client-specific (Codex names the submitted prompt differently), so the handler
-// must know the client BEFORE it can decode. An absent value resolves to Claude
-// Code, so every existing CC hook -- which sends no client and no query param --
-// is byte-for-byte unchanged. A present unknown value is rejected before decode.
+// `seam hook --client` appends, not in the body, and the handler knows it
+// BEFORE it decodes, so a client whose payload must be decoded differently
+// can be. An absent value resolves to Claude Code, so every existing CC hook --
+// which sends no client and no query param -- is byte-for-byte unchanged. A
+// present unknown value is rejected before decode.
 
 // clientQueryParam is the query key `seam hook --client` sets on the forwarded
 // request. It is the sole transport for the discriminator -- the body never
@@ -88,19 +88,24 @@ func decodeSessionStart(_ Client, body []byte) hookPayload {
 	return p
 }
 
-// decodePrompt decodes a UserPromptSubmit body into promptPayload, normalizing
-// Codex's `prompt` field to Claude Code's `user_prompt` -- the one rename this
-// hook needs, per the fixtures. A CC body already carries `user_prompt`, so the
-// Codex branch never runs for it. Tolerant: a decode error leaves the zero payload.
-func decodePrompt(client Client, body []byte) promptPayload {
+// decodePrompt decodes a UserPromptSubmit body into promptPayload. Both
+// clients name the submitted prompt `prompt`: Codex's fixtures, and Claude
+// Code's own hook input (its 2.1.330 builds it with `prompt` beside
+// `hook_event_name`). The internal field keeps the name `user_prompt`, which a
+// body that already carries it -- a hand-written POST, the repository's own
+// tests -- fills directly and which wins when a body carries both, so the
+// `prompt` fallback only fills an empty UserPrompt. The parameter is kept so
+// the adapter surface is uniform. Tolerant: a decode error leaves the zero
+// payload.
+func decodePrompt(_ Client, body []byte) promptPayload {
 	var p promptPayload
 	_ = json.Unmarshal(body, &p) //nolint:errcheck // tolerant: a decode error leaves p zero
-	if client == ClientCodex && p.UserPrompt == "" {
-		var cx struct {
+	if p.UserPrompt == "" {
+		var in struct {
 			Prompt string `json:"prompt"`
 		}
-		if err := json.Unmarshal(body, &cx); err == nil {
-			p.UserPrompt = cx.Prompt
+		if err := json.Unmarshal(body, &in); err == nil {
+			p.UserPrompt = in.Prompt
 		}
 	}
 	return p
