@@ -39,6 +39,7 @@ import (
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/gardener"
+	"github.com/arctop/seamless/internal/harvest"
 	"github.com/arctop/seamless/internal/hooks"
 	"github.com/arctop/seamless/internal/mcp"
 	"github.com/arctop/seamless/internal/mcp/mcpversion"
@@ -273,6 +274,36 @@ func TestPairDeviceKey_EveryBearerPlace(t *testing.T) {
 	for _, p := range devicePlaces() {
 		require.Equal(t, http.StatusUnauthorized, d.deviceDo(t, client, p, "Bearer "+key), "%s: a revoked device key is refused", p.name)
 		require.Equal(t, http.StatusOK, d.deviceDo(t, client, p, "Bearer "+deviceSharedKey), "%s: the shared key still works", p.name)
+	}
+}
+
+// The hook routes taken only on the peer_auth socket -- a flagged session's
+// transcript upload and a live session's usage push (the Diary's) -- check
+// the bearer first, as every other place does (devices.Bearer): a device key
+// passes it, as the shared key does, and is then refused there for not being
+// the socket (403); a key never paired, none, or a revoked one is 401.
+func TestPairDeviceKey_SocketOnlyHookRoutes(t *testing.T) {
+	d := deviceNewDaemon(t, false)
+	dev, key := d.devicePairKey(t, "example-ci")
+	never, _, err := devices.NewKey()
+	require.NoError(t, err)
+	client := d.deviceHTTP(nil)
+	places := []devicePlace{
+		{"hooks transcript", http.MethodPost, harvest.TranscriptEndpoint + "?client=claude-code&session_id=device-test-session",
+			"", http.Header{"Content-Type": {"application/gzip"}}},
+		{"hooks usage", http.MethodPost, harvest.UsageEndpoint + "?client=claude-code",
+			`{"session_id":"device-test-session"}`, http.Header{"Content-Type": {"application/json"}}},
+	}
+	for _, p := range places {
+		require.Equal(t, http.StatusForbidden, d.deviceDo(t, client, p, "Bearer "+deviceSharedKey), "%s: the shared key, off the socket", p.name)
+		require.Equal(t, http.StatusForbidden, d.deviceDo(t, client, p, "Bearer "+key), "%s: a device key is the owner, off the socket", p.name)
+		require.Equal(t, http.StatusUnauthorized, d.deviceDo(t, client, p, "Bearer "+never), "%s: a key never paired", p.name)
+		require.Equal(t, http.StatusUnauthorized, d.deviceDo(t, client, p, ""), "%s: no key", p.name)
+	}
+	_, err = d.pairing.Revoke(context.Background(), dev.ID, store.DeviceByConsole)
+	require.NoError(t, err)
+	for _, p := range places {
+		require.Equal(t, http.StatusUnauthorized, d.deviceDo(t, client, p, "Bearer "+key), "%s: a revoked device key is refused", p.name)
 	}
 }
 

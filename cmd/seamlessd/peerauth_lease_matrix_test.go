@@ -410,10 +410,12 @@ func lmFirstJSON(text string) string {
 // route, probed with a session id nobody holds: an answer is the owner's
 // refusal or "no session", never a session's path. "usage-backfill" is the
 // owner's usage fill, probed without the rows a fill carries: an answer is a
-// refusal, never a session's path or a write.
+// refusal, never a session's path or a write. "usage" is the Diary's
+// mid-session usage push, probed the same way, with the Diary off as on every
+// default install: an answer is a refusal, never a write.
 var lmHookEvents = []string{"session-start", "user-prompt-submit", "stop", "post-tool-use", "subagent-start",
 	"subagent-stop", "permission-request", "session-taint", "transcript", "transcript/01MLMPR0BEAAAAAAAAAAAAAAAA",
-	"usage-backfill", "session-end"}
+	"usage-backfill", "usage", "session-end"}
 
 // lmHookBody is one hook event's body naming the agent session id.
 func lmHookBody(id, cwd string) map[string]any {

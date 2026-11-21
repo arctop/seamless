@@ -685,7 +685,12 @@ file (Codex), not estimated from injected bytes. The session's console page
 shows them as its &quot;Model tokens&quot; panel; a session whose client exposes no
 transcript simply records none. A session whose Claude Code transcript is still
 on its computer but was never harvested is filled by
-<a href="../../reference/cli-seam/#seam_usage_backfill"><code>seam usage backfill</code></a>.</p>
+<a href="../../reference/cli-seam/#seam_usage_backfill"><code>seam usage backfill</code></a>.
+With the Diary <a href="../../reference/console/#optional-features">optional feature</a> on, a
+Claude Code session's usage is kept current while it runs as well: a prompt
+refreshes it at most once every three minutes, so a session still open, or one
+killed before its end, shows its usage up to then
+(<a href="../../reference/hooks/#mid-session-usage">mid-session usage</a>).</p>
 <h2 id="flag">Flagging a session</h2>
 <p>A session that stands out as a whole - a big win, a bad failure, a run worth
 re-reading for another reason - can be flagged: <code>session_update</code> or

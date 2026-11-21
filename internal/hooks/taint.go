@@ -212,14 +212,7 @@ func (h *Handler) taintTarget(ctx context.Context, client Client, extID, ref str
 	return sess, true, nil
 }
 
-// screeningOn resolves the screening feature live, like every other surface:
-// the file/env base with the console's stored override over it. Failure-soft
-// to the base.
+// screeningOn resolves the screening feature live (featureOn).
 func (h *Handler) screeningOn(ctx context.Context) bool {
-	cfg, _, err := store.FeaturesConfig(ctx, h.db, h.features)
-	if err != nil {
-		h.logger.Warn("hooks: features override unreadable; using the file/env config", "error", err)
-		cfg = h.features
-	}
-	return features.Enabled(cfg, features.Screening)
+	return h.featureOn(ctx, features.Screening)
 }

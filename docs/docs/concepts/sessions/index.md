@@ -448,6 +448,11 @@ shows them as its "Model tokens" panel; a session whose client exposes no
 transcript simply records none. A session whose Claude Code transcript is still
 on its computer but was never harvested is filled by
 [`seam usage backfill`](https://thereisnospoon.org/docs/reference/cli-seam/#seam_usage_backfill).
+With the Diary [optional feature](https://thereisnospoon.org/docs/reference/console/#optional-features) on, a
+Claude Code session's usage is kept current while it runs as well: a prompt
+refreshes it at most once every three minutes, so a session still open, or one
+killed before its end, shows its usage up to then
+([mid-session usage](https://thereisnospoon.org/docs/reference/hooks/#mid-session-usage)).
 
 ## Flagging a session {#flag}
 

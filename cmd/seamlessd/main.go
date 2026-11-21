@@ -685,6 +685,10 @@ func runServe(args []string) error {
 		Features: cfg.Features, Screening: screen, RevokeSessionLeases: revokeLeases, Approvals: hookApprovals,
 		ReadGrants: cfg.Isolation.Requests, Transcripts: transcriptCopies,
 	})
+	// The Diary's mid-session usage reads run after their prompt is answered:
+	// one still running at shutdown gets a bounded wait before the database
+	// closes, as a transcript copy does.
+	defer hooksH.WaitFor(10 * time.Second)
 	// The console reads through a handle on which locked projects do not
 	// exist, when there are any (store.OpenView); its writes go to the main
 	// handle after reading their target through the filtered one. The handles

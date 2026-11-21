@@ -43,7 +43,7 @@ install order:
 | Event | Matcher | Transport | Timeout | Endpoint | Effect |
 |---|---|---|---|---|---|
 | `SessionStart` | `startup\|resume\|clear\|compact` | command (`seam hook session-start`) | 10s | `/api/hooks/session-start` | Registers the agent's cwd in the repo→project map, assembles the `<seam-briefing>`, and creates or resumes an opaque `cc/<prefix>-<digest>` ambient handle keyed by the full external ID, stamped with the [agent process](#what-rides-on-the-query-string) that ran the hook. A [claim the conversation lost](#claim-notices) leads the briefing. With repo locks on, the briefing shows the checkout's [locks and live peers](#repo-locks). |
-| `UserPromptSubmit` | none | http | 5s | `/api/hooks/user-prompt-submit` | Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a [claim the conversation lost](#claim-notices) or a [repo lock whose holder changed](#repo-locks) when there is one. A miss is logged as a `hook.prompt` event. |
+| `UserPromptSubmit` | none | http | 5s | `/api/hooks/user-prompt-submit` | Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a [claim the conversation lost](#claim-notices) or a [repo lock whose holder changed](#repo-locks) when there is one. A miss is logged as a `hook.prompt` event. With the Diary on, it also keeps the session's [usage ledger current](#mid-session-usage), at most once every three minutes. |
 | `SessionEnd` | none | command (`seam hook session-end`) | 10s | `/api/hooks/session-end` | Harvests findings and the session's model token usage, and completes the agent's sessions. The usage counts the transcripts of the subagents it launched too, which Claude Code keeps beside the session's (`<session>/subagents/agent-*.jsonl`). Bare ack - Claude Code's schema has no `hookSpecificOutput` for `SessionEnd`. |
 | `PostToolUse` | `Write\|Edit\|MultiEdit\|ExitPlanMode` | command (`seam hook post-tool-use`) | 10s | `/api/hooks/post-tool-use` | Captures plan-file iterations (`Write`/`Edit`/`MultiEdit` under the plans dir) and plan approvals (`ExitPlanMode`), and heartbeats the ambient session for those calls only: `seam hook` drops every other file's write before it leaves the machine, so ordinary edits and shell commands heartbeat nothing. |
 | `SubagentStart` | none | command (`seam hook subagent-start`) | 10s | `/api/hooks/subagent-start` | Injects the child briefing - pinned constraints, up to three `RELEVANT:` memories matched from the child's spawn prompt, and a recall/memory_read footer - into every Task subagent and heartbeats the parent. It never creates, reactivates, or re-scopes an ambient session. |
@@ -344,6 +344,53 @@ computer (`409`). A session the caller may not act on answers `404`, as one
 that does not exist: one another principal started, one in a project locked to
 the caller, another tree's leased one. The caller's own pre-approval session
 in a locked project answers `403` with the locked notice.
+
+## Mid-session usage {#mid-session-usage}
+
+Claude Code reports a session's model tokens at `SessionEnd`, and a session
+can stay open for days. While the Diary
+[optional feature](/reference/console/#optional-features) is on,
+`UserPromptSubmit` keeps a live Claude Code session's usage ledger current
+too: by the time a prompt fires, its transcript holds every turn before it,
+and the session's rows are replaced with what that transcript (the transcripts
+of the subagents it launched included) holds, as a `SessionEnd` harvest
+replaces them. With the Diary off, the hook asks, reads and writes nothing it
+did not before.
+
+- **At most once every three minutes a conversation**, by the daemon's own
+  throttle, so the client keeps no state. A prompt sooner asks nothing, and so
+  does one while a read of its conversation is still running. Reading a 2.6 MB
+  transcript takes about 3 ms; the largest conversation measured, 139 MiB with
+  its 35 subagents' transcripts, about 150 ms.
+- **Never in the prompt's wait.** With peer_auth off, on the agent's own
+  computer, the daemon answers the prompt first and reads the transcript after,
+  in the background, two reads at most at once. On the peer_auth socket the
+  daemon opens no file a hook names: its answer carries
+  `X-Seamless-Usage-Wanted: 1`, and `seam hook` - only when `server_url` names
+  the socket - starts `seam hook-usage`, a process of its own in a session of
+  its own, which reads the transcript the prompt named and posts the rows to
+  `POST /api/hooks/usage` within a minute: a body naming `session_id` (the
+  agent client's own), with the rows and the totals they sum to under
+  `seamless_capture`, validated as a `SessionEnd` push is. An agent on another
+  computer, and the TCP key under peer_auth, are asked nothing: their
+  `SessionEnd` harvests them.
+- **The route takes a push only where its answer asked for one**: on the
+  socket, while the Diary is on, for a session the caller may act on, once for
+  each ask. Any other session answers `404`, in one text whatever it names;
+  off the socket the route answers `403`, and for a Codex session `400` (each
+  `Stop` already credits its counter). The answer is
+  `{"result": "written"}`, `"unchanged"` or `"behind"`.
+- **Idempotent, and never backwards.** A read replaces the conversation's rows,
+  so reading twice counts nothing twice, and the `SessionEnd` after it changes
+  only the turns since. A read that counts fewer messages than the ledger holds
+  (one a later harvest overtook, the end's included) writes nothing. A session
+  whose `SessionEnd` never comes keeps its usage up to the turn before the last
+  prompt that asked.
+- **A session in a locked project takes no counts** until the owner approves,
+  as at its end, and a session another account started is never asked.
+- **The write is the prompt's heartbeat.** It moves an active session's
+  `updated_at`, as every harvest does, a moment after the prompt that asked; it
+  never revives a session the agent or the idle reaper ended.
 
 ## Repo locks in the briefing {#repo-locks}
 

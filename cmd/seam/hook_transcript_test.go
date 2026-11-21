@@ -38,6 +38,7 @@ type socketDaemon struct {
 	svc     *transcripts.Service
 	cfg     config.Config
 	uploads atomic.Int32 // requests to the upload routes
+	pushes  atomic.Int32 // requests to the mid-session usage route
 }
 
 func newSocketDaemon(t *testing.T, f captureFixture, view access.View) *socketDaemon {
@@ -64,6 +65,9 @@ func newSocketDaemon(t *testing.T, f captureFixture, view access.View) *socketDa
 	sock := serveSocket(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, harvest.TranscriptEndpoint) {
 			d.uploads.Add(1)
+		}
+		if r.URL.Path == harvest.UsageEndpoint {
+			d.pushes.Add(1)
 		}
 		mux.ServeHTTP(w, r.WithContext(access.WithView(r.Context(), view)))
 	}))

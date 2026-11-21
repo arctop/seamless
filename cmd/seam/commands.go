@@ -96,6 +96,7 @@ func commands() []cmd {
 
 		hookCmd,
 		hookTranscriptCmd,
+		hookUsageCmd,
 
 		mcpProxyCmd,
 		mcpHeadersCmd,

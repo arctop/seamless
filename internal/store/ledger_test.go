@@ -340,4 +340,128 @@ func TestReplaceConversationUsage_RefusesRowsThatDoNotHold(t *testing.T) {
 	_, err = CreditConversationUsage(ctx, db, "claude-code", "led-bad",
 		UsageCredit{Cumulative: core.TokenUsage{Input: -1, Output: 2, Total: 1}, At: day})
 	require.ErrorIs(t, err, ErrInvalidUsage)
+	_, err = RefreshConversationUsage(ctx, db, "claude-code", "led-bad",
+		[]core.UsageBucket{good, ledgerRow(day, "claude-x", core.UsageThreadMain, -1, 1, 1, 1)}, day)
+	require.ErrorIs(t, err, ErrInvalidUsage)
+	rows, err = SessionUsage(ctx, db, s.ID)
+	require.NoError(t, err)
+	require.Empty(t, rows)
+}
+
+// ledgerUpdatedAt is a session's updated_at.
+func ledgerUpdatedAt(t *testing.T, db *sql.DB, id string) time.Time {
+	t.Helper()
+	sess, ok, err := SessionByID(context.Background(), db, id)
+	require.NoError(t, err)
+	require.True(t, ok, id)
+	return sess.UpdatedAt
+}
+
+// A mid-session refresh writes as Replace does, and its heartbeat with it;
+// rows the ledger already holds write nothing, not even the heartbeat; and a
+// read a later harvest overtook -- fewer messages than the ledger holds --
+// writes nothing, whether the later one was a refresh or the end's Replace.
+// So the ledger never moves back, whichever harvest lands last.
+func TestRefreshConversationUsage_NeverMovesTheLedgerBack(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDB(t)
+	day := time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC)
+	s := ledgerAmbient(t, db, "01LEDGERLIVE00000000000000", "claude-code", "led-live", "example-ops", day)
+	refresh := func(rows []core.UsageBucket, now time.Time) UsageRefresh {
+		t.Helper()
+		got, err := RefreshConversationUsage(ctx, db, "claude-code", "led-live", rows, now)
+		require.NoError(t, err)
+		return got
+	}
+	ledger := func() []core.UsageBucket {
+		t.Helper()
+		rows, err := SessionUsage(ctx, db, s.ID)
+		require.NoError(t, err)
+		return ledgerBuckets(rows)
+	}
+
+	// Two turns by the first prompt's read; the end reads a third.
+	mid := []core.UsageBucket{
+		ledgerRow(day, "claude-x", core.UsageThreadMain, 100, 10, 2, 0b11),
+		ledgerRow(day, "claude-x", core.UsageThreadSubagent, 40, 4, 1, 0b100),
+	}
+	full := append(append([]core.UsageBucket{}, mid...), ledgerRow(day.Add(15*time.Minute), "claude-x", core.UsageThreadMain, 7, 3, 1, 1))
+
+	require.Equal(t, RefreshWritten, refresh(mid, day.Add(time.Minute)))
+	require.Equal(t, mid, ledger())
+	requireTotalsAreTheLedger(t, db, s.ID)
+	require.True(t, day.Add(time.Minute).Equal(ledgerUpdatedAt(t, db, s.ID)), "an active row takes the write as a heartbeat")
+
+	require.Equal(t, RefreshUnchanged, refresh(mid, day.Add(2*time.Minute)))
+	require.True(t, day.Add(time.Minute).Equal(ledgerUpdatedAt(t, db, s.ID)), "rows it holds write nothing, the heartbeat included")
+
+	// The end harvests the whole transcript.
+	ok, err := ReplaceConversationUsage(ctx, db, "claude-code", "led-live", full, day.Add(20*time.Minute))
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, RefreshBehind, refresh(mid, day.Add(21*time.Minute)), "a read the end overtook")
+	require.Equal(t, full, ledger(), "the end's rows stand")
+	require.True(t, day.Add(20*time.Minute).Equal(ledgerUpdatedAt(t, db, s.ID)))
+	require.Equal(t, RefreshUnchanged, refresh(full, day.Add(22*time.Minute)), "the same transcript, read after the end")
+
+	// A later read of a grown transcript writes; one before it then does not.
+	grown := append(append([]core.UsageBucket{}, full...), ledgerRow(day.Add(30*time.Minute), "claude-y", core.UsageThreadMain, 1, 1, 1, 1))
+	require.Equal(t, RefreshWritten, refresh(grown, day.Add(31*time.Minute)))
+	require.Equal(t, RefreshBehind, refresh(full, day.Add(32*time.Minute)), "a refresh another refresh overtook")
+	require.Equal(t, grown, ledger())
+	requireTotalsAreTheLedger(t, db, s.ID)
+}
+
+// A refresh lands where Replace does: on a row the agent or the reaper ended,
+// without reviving it or moving its time; split at a move like Replace; and
+// nowhere for a conversation with no ambient row.
+func TestRefreshConversationUsage_LandsAsReplaceDoes(t *testing.T) {
+	ctx := context.Background()
+	db := openTestDB(t)
+	ended := time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC)
+	s := ledgerAmbient(t, db, "01LEDGERLIVEEND00000000000", "claude-code", "led-live-end", "example-ops", ended.Add(-time.Hour))
+	s.Status, s.UpdatedAt = core.SessionExpired, ended
+	require.NoError(t, UpdateSession(ctx, db, s))
+	rows := []core.UsageBucket{ledgerRow(ended.Add(-time.Hour), "claude-x", core.UsageThreadMain, 30, 3, 1, 1)}
+	got, err := RefreshConversationUsage(ctx, db, "claude-code", "led-live-end", rows, ended.Add(time.Hour))
+	require.NoError(t, err)
+	require.Equal(t, RefreshWritten, got)
+	sess, _, err := SessionByID(ctx, db, s.ID)
+	require.NoError(t, err)
+	require.Equal(t, 33, sess.Tokens.Total)
+	require.Equal(t, core.SessionExpired, sess.Status, "never revived")
+	require.True(t, ended.Equal(sess.UpdatedAt), "the time it ended at does not move")
+
+	start := time.Date(2026, 11, 20, 9, 30, 0, 0, time.UTC)
+	move := time.Date(2026, 11, 20, 10, 7, 0, 0, time.UTC)
+	parent := core.Session{ID: "01LEDGERLIVEPARENT00000000", Name: "cc/led-live-move", ProjectSlug: "example-ops",
+		Status: core.SessionCompleted, ExternalClient: "claude-code", ExternalSessionID: "led-live-move",
+		CreatedAt: start, UpdatedAt: move}
+	require.NoError(t, CreateSession(ctx, db, parent))
+	child := core.Session{ID: "01LEDGERLIVECHILD000000000", Name: "cc/led-live-move@example-finance", ProjectSlug: "example-finance",
+		Status: core.SessionActive, Ambient: true, ExternalClient: "claude-code", ExternalSessionID: "led-live-move",
+		ParentSessionID: parent.ID, CreatedAt: move, UpdatedAt: move}
+	require.NoError(t, CreateSession(ctx, db, child))
+	before := []core.UsageBucket{ledgerRow(start, "claude-x", core.UsageThreadMain, 100, 10, 3, 0b111)}
+	after := []core.UsageBucket{ledgerRow(move.Truncate(15*time.Minute), "claude-x", core.UsageThreadMain, 20, 2, 2, 0b10000001)}
+	got, err = RefreshConversationUsage(ctx, db, "claude-code", "led-live-move", append(append([]core.UsageBucket{}, before...), after...), move.Add(time.Minute))
+	require.NoError(t, err)
+	require.Equal(t, RefreshWritten, got)
+	parentRows, err := SessionUsage(ctx, db, parent.ID)
+	require.NoError(t, err)
+	require.Equal(t, before, ledgerBuckets(parentRows), "the parent keeps the buckets that ended by the move")
+	childRows, err := SessionUsage(ctx, db, child.ID)
+	require.NoError(t, err)
+	require.Equal(t, after, ledgerBuckets(childRows))
+	requireTotalsAreTheLedger(t, db, parent.ID)
+	requireTotalsAreTheLedger(t, db, child.ID)
+	require.True(t, move.Equal(ledgerUpdatedAt(t, db, parent.ID)), "the parent keeps the time the move ended it at")
+	require.True(t, move.Add(time.Minute).Equal(ledgerUpdatedAt(t, db, child.ID)), "the active child takes the heartbeat")
+
+	got, err = RefreshConversationUsage(ctx, db, "claude-code", "led-live-none", rows, ended)
+	require.NoError(t, err)
+	require.Equal(t, RefreshNoConversation, got)
+	got, err = RefreshConversationUsage(ctx, db, "claude-code", "led-live-end", nil, ended)
+	require.NoError(t, err)
+	require.Equal(t, RefreshNoConversation, got, "no rows write nothing")
 }

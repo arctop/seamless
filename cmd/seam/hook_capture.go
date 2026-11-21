@@ -33,6 +33,12 @@ package main
 // are never printed: the agent client reads the reply's body alone. The
 // upload itself runs in a detached process (hook_transcript.go), so the hook
 // returns at once whatever the transcript's size.
+//
+// A live Claude Code session's usage rides one too (usageJobs): while the
+// Diary is on, the daemon's answer to a prompt asks for it in a header
+// (harvest.UsageWantedHeader) at most once per its own throttle, and a
+// detached `seam hook-usage` reads the transcript and sends the rows
+// (hook_usage.go), so the prompt waits for none of it.
 
 import (
 	"context"
@@ -276,4 +282,30 @@ func transcriptJobs(o *hookOpts, event string, payload []byte, wanted string, pe
 		jobs = append(jobs, job("--named", "--session-id", id, "--path", path))
 	}
 	return jobs
+}
+
+// usageJobs are the `seam hook-usage` command lines for the usage the
+// daemon's answer to a Claude Code prompt asked for (wanted, the
+// harvest.UsageWantedHeader value): the session the payload names, read from
+// the transcript it names. None for any other event or client, an answer
+// that did not ask, or a payload naming no session or transcript.
+func usageJobs(o *hookOpts, event string, payload []byte, wanted string) [][]string {
+	if event != "user-prompt-submit" || wanted != harvest.UsageWanted || (o.client != "" && o.client != hookClientClaudeCode) {
+		return nil
+	}
+	var in struct {
+		SessionID      string `json:"session_id"`
+		TranscriptPath string `json:"transcript_path"`
+	}
+	if err := json.Unmarshal(payload, &in); err != nil || in.SessionID == "" || in.TranscriptPath == "" {
+		return nil
+	}
+	job := []string{"hook-usage"}
+	if o.config != "" {
+		job = append(job, "--config", o.config)
+	}
+	if o.client != "" {
+		job = append(job, "--client", o.client)
+	}
+	return [][]string{append(job, "--session-id", in.SessionID, "--path", in.TranscriptPath)}
 }

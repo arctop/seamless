@@ -42,7 +42,7 @@ func TestMain(m *testing.M) {
 	// A hook under test never starts a detached upload of its own: that
 	// would be this test binary, running every test again, each of which
 	// could start another. A test that wants the upload passes a spawner.
-	if len(os.Args) > 1 && os.Args[1] == "hook-transcript" {
+	if len(os.Args) > 1 && (os.Args[1] == "hook-transcript" || os.Args[1] == "hook-usage") {
 		os.Exit(3)
 	}
 	spawnTranscript = func([]string) error {

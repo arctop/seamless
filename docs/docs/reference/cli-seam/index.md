@@ -1222,6 +1222,7 @@ seam hook session-start|user-prompt-submit|session-end|stop
 seam hook subagent-start|subagent-stop|post-tool-use|permission-request
 seam hook session-taint
 seam hook-transcript --session-id ID --path PATH [--wanted BYTES] [--named] [--client CLIENT] [--config PATH]
+seam hook-usage --session-id ID --path PATH [--client CLIENT] [--config PATH]
 ```
 
 Invoked by Claude Code or Codex, not by hand. Each reads the hook payload from stdin,
@@ -1262,8 +1263,10 @@ Two behaviours matter if you are debugging a hook:
   Codex's `stop`) asks for it, or a later answer asks for a pending one whose
   end signal never sent it, the hook starts `seam hook-transcript` to send the
   whole transcript, gzip-compressed, in a request of its own, and returns at
-  once. On any other `server_url` the payload is forwarded exactly as the
-  client wrote it, and no transcript is sent.
+  once. With the Diary on, an answer to a Claude Code `user-prompt-submit` may
+  ask for the session's usage, and the hook starts `seam hook-usage` the same
+  way. On any other `server_url` the payload is forwarded exactly as the
+  client wrote it, and no transcript or usage is sent.
 
 Install these with `seamlessd install-hooks`. The one exception is
 `session-taint`, which no installer wires: an agent guard's own PostToolUse
@@ -1280,3 +1283,12 @@ kept). `--named` marks a path the daemon named for a pending session: it is
 read only when it is a regular `*.jsonl` file inside the agent client's own
 transcript folder, and any other is reported to the daemon unread
 ([transcript copies](https://thereisnospoon.org/docs/reference/hooks/#transcripts)).
+
+`seam hook-usage` is the same kind of helper, for a live Claude Code
+session's usage: `seam hook` starts it, detached, when the daemon's answer to
+a prompt asks for it (the Diary is on, and the daemon's own throttle says the
+session's usage ledger is due). It reads the transcript the prompt named, the
+transcripts of the subagents it launched included, and sends the session's
+usage ledger rows over the peer_auth socket, and only there. It gives up after
+a minute, and a transcript with no usage in it yet sends nothing
+([mid-session usage](https://thereisnospoon.org/docs/reference/hooks/#mid-session-usage)).

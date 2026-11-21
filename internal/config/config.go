@@ -353,9 +353,10 @@ type Features struct {
 	RepoLocks bool `yaml:"repo_locks" json:"repo_locks"`
 	// Diary enables the Diary console screen: one entry per local day saying
 	// what was worked on, which agents did it, and what it took in agent time
-	// and model tokens, with an Open in Diary link on a Sessions day view. It
-	// is presentation only: the usage ledger and the event log it reads are
-	// recorded whether it is on or off.
+	// and model tokens, with an Open in Diary link on a Sessions day view. The
+	// usage ledger and the event log it reads are recorded whether it is on or
+	// off; while it is on, a Claude Code prompt also keeps its session's
+	// ledger current (internal/hooks usage_live.go).
 	Diary bool `yaml:"diary" json:"diary"`
 }
 

@@ -298,8 +298,11 @@ is not retried. When the daemon's answer to a flagged session's session-end
 (or Codex's stop) asks for it, or a later answer asks for a pending one whose
 end signal never sent it, the hook starts seam hook-transcript, detached, to
 send the whole transcript, gzip-compressed, in a request of its own, and
-returns at once. On any other server_url the payload is sent as the client
-wrote it, and no transcript is sent.
+returns at once. With the Diary on, an answer to a Claude Code prompt may ask
+for the session's usage, and the hook starts seam hook-usage, detached, to
+read the transcript and send the rows the same way. On any other server_url
+the payload is sent as the client wrote it, and no transcript or usage is
+sent.
 
 A runtime failure (unreadable stdin, no config, server down) is reported on
 stderr and exits 0 -- a hook must never block the session it serves. A daemon
@@ -450,8 +453,9 @@ func runHook(ctx context.Context, e *env, o *hookOpts, pos []string) error {
 	resp, err := retry(h.dialBudgetFor(o.client)).do(client, req)
 	var reply []byte
 	// A flagged session's transcript the daemon asks for (hook_capture.go):
-	// this session's at its end signal, and pending ones of this caller's.
-	var wanted string
+	// this session's at its end signal, and pending ones of this caller's;
+	// and, while the Diary is on, a prompt's ask for the session's usage.
+	var wanted, usage string
 	var pending []string
 	if err == nil {
 		defer func() { _ = resp.Body.Close() }()
@@ -488,6 +492,7 @@ func runHook(ctx context.Context, e *env, o *hookOpts, pos []string) error {
 		}
 		wanted = resp.Header.Get(harvest.TranscriptWantedHeader)
 		pending = resp.Header.Values(harvest.TranscriptPendingHeader)
+		usage = resp.Header.Get(harvest.UsageWantedHeader)
 	}
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
@@ -502,9 +507,10 @@ func runHook(ctx context.Context, e *env, o *hookOpts, pos []string) error {
 	// One write of the whole reply; a failure means stdout is gone, and a hook
 	// must never block the agent by failing here.
 	_, _ = e.stdout.Write(reply) //nolint:errcheck // a hook must not fail on a broken stdout
-	// Under peer_auth the daemon asked for transcripts it may not read itself
-	// (hook_capture.go): each is sent by a detached process of its own, with
-	// its own deadline, so the hook returns now whatever their size.
+	// Under peer_auth the daemon asked for transcripts, or a live session's
+	// usage, that it may not read itself (hook_capture.go): each is sent by a
+	// detached process of its own, with its own deadline, so the hook returns
+	// now whatever their size.
 	if pushesCaptures(cfg) {
 		spawn := o.spawn
 		if spawn == nil {
@@ -513,6 +519,11 @@ func runHook(ctx context.Context, e *env, o *hookOpts, pos []string) error {
 		for _, args := range transcriptJobs(o, event, payload, wanted, pending) {
 			if err := spawn(args); err != nil {
 				fmt.Fprintln(e.stderr, "seam hook: transcript not sent:", err)
+			}
+		}
+		for _, args := range usageJobs(o, event, payload, usage) {
+			if err := spawn(args); err != nil {
+				fmt.Fprintln(e.stderr, "seam hook: usage not sent:", err)
 			}
 		}
 	}

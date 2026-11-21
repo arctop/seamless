@@ -29,6 +29,7 @@ import (
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/devices"
 	"github.com/arctop/seamless/internal/events"
+	"github.com/arctop/seamless/internal/features"
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/gitread"
 	"github.com/arctop/seamless/internal/harvest"
@@ -136,8 +137,11 @@ type Handler struct {
 	approvals     Approvals
 	readGrants    bool
 	transcripts   *transcripts.Service
-	now           func() time.Time
-	logger        *slog.Logger
+	// live is the Diary's mid-session usage harvest: its throttle, its open
+	// asks and its reads under way (usage_live.go).
+	live   *liveUsage
+	now    func() time.Time
+	logger *slog.Logger
 }
 
 // NewHandler builds a hook Handler from cfg.
@@ -159,6 +163,7 @@ func NewHandler(cfg Config) *Handler {
 		planCapture: cfg.PlanCapture, plansDir: cfg.PlansDir,
 		localHost: strings.ToLower(strings.TrimSpace(cfg.LocalHost)),
 		features:  cfg.Features, screening: cfg.Screening, revokeLeases: cfg.RevokeSessionLeases, approvals: cfg.Approvals, readGrants: cfg.ReadGrants, transcripts: cfg.Transcripts, now: cfg.Now, logger: cfg.Logger,
+		live: newLiveUsage(),
 	}
 }
 
@@ -177,6 +182,7 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST "+transcriptKeepPattern, h.transcriptKeep)
 	mux.HandleFunc("GET "+harvest.UsageBackfillEndpoint, h.usageBackfillList)
 	mux.HandleFunc("POST "+harvest.UsageBackfillEndpoint, h.usageBackfillFill)
+	mux.HandleFunc("POST "+harvest.UsageEndpoint, h.usagePush)
 }
 
 // hookPayload is the SessionStart request body (tolerant decode; unknown fields
@@ -1386,8 +1392,16 @@ func (h *Handler) userPromptSubmit(w http.ResponseWriter, r *http.Request) {
 	p := decodePrompt(client, body)
 	p.SessionID = namespacedExternalID(r, p.SessionID)
 	if p.UserPrompt == "" {
+		// The Diary's mid-session harvest needs no prompt text
+		// (askLiveUsageBare); with the Diary off it looks nothing up.
+		ctx, cancel := context.WithTimeout(r.Context(), hookTimeout)
+		defer cancel()
+		readUsage := h.askLiveUsageBare(ctx, w, client, p)
 		h.writeContextResponse(r.Context(), w, "UserPromptSubmit", "user-prompt-submit",
 			client, p.SessionID, "", "", false, nil)
+		if readUsage != nil {
+			readUsage()
+		}
 		return
 	}
 
@@ -1451,8 +1465,16 @@ func (h *Handler) userPromptSubmit(w http.ResponseWriter, r *http.Request) {
 		}
 		out = block
 	}
+	// The Diary's mid-session harvest (usage_live.go): while the feature is
+	// on, at most once per usageLiveInterval, the conversation's usage is kept
+	// current -- asked of `seam hook` in a header, or read by the daemon once
+	// it has answered. With the Diary off it asks, reads and writes nothing.
+	readUsage := h.askLiveUsage(ctx, w, client, p, amb, ambFound, reach)
 	h.writeContextResponse(ctx, w, "UserPromptSubmit", "user-prompt-submit", client,
 		p.SessionID, p.UserPrompt, out, recalled, injectedIDs)
+	if readUsage != nil {
+		readUsage()
+	}
 }
 
 // recordInjection logs a retrieval.injected event carrying the exact text that
@@ -1674,6 +1696,18 @@ func (h *Handler) hostOf(id hookIdentity) string {
 		return host
 	}
 	return h.localHost
+}
+
+// featureOn resolves an optional feature live, like every other surface: the
+// file/env base with the console's stored override over it, so a toggle needs
+// no restart. Failure-soft to the base.
+func (h *Handler) featureOn(ctx context.Context, key features.Key) bool {
+	cfg, _, err := store.FeaturesConfig(ctx, h.db, h.features)
+	if err != nil {
+		h.logger.Warn("hooks: features override unreadable; using the file/env config", "error", err)
+		cfg = h.features
+	}
+	return features.Enabled(cfg, key)
 }
 
 // identity builds the store's placement input from a SessionStart payload. The

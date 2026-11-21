@@ -1125,6 +1125,20 @@ any of it.
   (`sessionReachOf`), never in a live session, a Codex one or another
   computer's. A restricted account is refused at both halves, before anything
   is read. The daemon opens no file for it.
+  The Diary's mid-session usage harvest (`internal/hooks/usage_live.go`) is
+  the one hook cost an optional feature adds, and it runs only while
+  `features.Diary` is on, read live (`Handler.featureOn`): at most once per
+  `usageLiveInterval` for a conversation (the daemon's throttle; the client
+  keeps no state), a Claude Code prompt has its conversation's ledger
+  refreshed after the answer -- by the daemon's own read where
+  `localDiskOK`'s rule holds, never recording a skip once a prompt; on the
+  socket by an answer carrying `harvest.UsageWantedHeader` and a detached
+  `seam hook-usage` push to `POST harvest.UsageEndpoint`, taken only for an
+  open ask, once, from a `reachOK` session. Every write is
+  `store.RefreshConversationUsage`, which never moves a ledger back (rows
+  counting fewer messages than it holds write nothing). Off, there is no
+  header, read, write or throttle state, and every hook's answer and writes
+  are byte-identical.
 - **Prove it in the matrix.** The `TestPeerAuthMatrix_*` tests above drive
   every tool in `mcp.Catalog()` (a tool without a probe row fails the coverage
   check), every console route (read from console.go), the hooks, A2A and the

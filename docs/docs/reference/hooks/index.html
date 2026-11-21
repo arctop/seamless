@@ -246,7 +246,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#session-taint">The outside-text mark: session-taint</a></li><li class="lvl-2"><a href="#claim-notices">Claim notices</a></li><li class="lvl-2"><a href="#transcripts">Transcript copies</a></li><li class="lvl-2"><a href="#usage-backfill">The usage backfill</a></li><li class="lvl-2"><a href="#repo-locks">Repo locks in the briefing</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-claude-code-uses-two-transports">Why Claude Code uses two transports</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
+      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#session-taint">The outside-text mark: session-taint</a></li><li class="lvl-2"><a href="#claim-notices">Claim notices</a></li><li class="lvl-2"><a href="#transcripts">Transcript copies</a></li><li class="lvl-2"><a href="#usage-backfill">The usage backfill</a></li><li class="lvl-2"><a href="#mid-session-usage">Mid-session usage</a></li><li class="lvl-2"><a href="#repo-locks">Repo locks in the briefing</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-claude-code-uses-two-transports">Why Claude Code uses two transports</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
     </ul>
   </details>
   <p>Seamless installs hooks for two clients: seven for Claude Code (including
@@ -348,7 +348,7 @@ install order:</p>
 <td>http</td>
 <td>5s</td>
 <td><code>/api/hooks/user-prompt-submit</code></td>
-<td>Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a <a href="#claim-notices">claim the conversation lost</a> or a <a href="#repo-locks">repo lock whose holder changed</a> when there is one. A miss is logged as a <code>hook.prompt</code> event.</td>
+<td>Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a <a href="#claim-notices">claim the conversation lost</a> or a <a href="#repo-locks">repo lock whose holder changed</a> when there is one. A miss is logged as a <code>hook.prompt</code> event. With the Diary on, it also keeps the session's <a href="#mid-session-usage">usage ledger current</a>, at most once every three minutes.</td>
 </tr>
 <tr>
 <td><code>SessionEnd</code></td>
@@ -683,6 +683,52 @@ computer (<code>409</code>). A session the caller may not act on answers <code>4
 that does not exist: one another principal started, one in a project locked to
 the caller, another tree's leased one. The caller's own pre-approval session
 in a locked project answers <code>403</code> with the locked notice.</p>
+<h2 id="mid-session-usage">Mid-session usage</h2>
+<p>Claude Code reports a session's model tokens at <code>SessionEnd</code>, and a session
+can stay open for days. While the Diary
+<a href="../../reference/console/#optional-features">optional feature</a> is on,
+<code>UserPromptSubmit</code> keeps a live Claude Code session's usage ledger current
+too: by the time a prompt fires, its transcript holds every turn before it,
+and the session's rows are replaced with what that transcript (the transcripts
+of the subagents it launched included) holds, as a <code>SessionEnd</code> harvest
+replaces them. With the Diary off, the hook asks, reads and writes nothing it
+did not before.</p>
+<ul>
+<li><strong>At most once every three minutes a conversation</strong>, by the daemon's own
+throttle, so the client keeps no state. A prompt sooner asks nothing, and so
+does one while a read of its conversation is still running. Reading a 2.6 MB
+transcript takes about 3 ms; the largest conversation measured, 139 MiB with
+its 35 subagents' transcripts, about 150 ms.</li>
+<li><strong>Never in the prompt's wait.</strong> With peer_auth off, on the agent's own
+computer, the daemon answers the prompt first and reads the transcript after,
+in the background, two reads at most at once. On the peer_auth socket the
+daemon opens no file a hook names: its answer carries
+<code>X-Seamless-Usage-Wanted: 1</code>, and <code>seam hook</code> - only when <code>server_url</code> names
+the socket - starts <code>seam hook-usage</code>, a process of its own in a session of
+its own, which reads the transcript the prompt named and posts the rows to
+<code>POST /api/hooks/usage</code> within a minute: a body naming <code>session_id</code> (the
+agent client's own), with the rows and the totals they sum to under
+<code>seamless_capture</code>, validated as a <code>SessionEnd</code> push is. An agent on another
+computer, and the TCP key under peer_auth, are asked nothing: their
+<code>SessionEnd</code> harvests them.</li>
+<li><strong>The route takes a push only where its answer asked for one</strong>: on the
+socket, while the Diary is on, for a session the caller may act on, once for
+each ask. Any other session answers <code>404</code>, in one text whatever it names;
+off the socket the route answers <code>403</code>, and for a Codex session <code>400</code> (each
+<code>Stop</code> already credits its counter). The answer is
+<code>{&quot;result&quot;: &quot;written&quot;}</code>, <code>&quot;unchanged&quot;</code> or <code>&quot;behind&quot;</code>.</li>
+<li><strong>Idempotent, and never backwards.</strong> A read replaces the conversation's rows,
+so reading twice counts nothing twice, and the <code>SessionEnd</code> after it changes
+only the turns since. A read that counts fewer messages than the ledger holds
+(one a later harvest overtook, the end's included) writes nothing. A session
+whose <code>SessionEnd</code> never comes keeps its usage up to the turn before the last
+prompt that asked.</li>
+<li><strong>A session in a locked project takes no counts</strong> until the owner approves,
+as at its end, and a session another account started is never asked.</li>
+<li><strong>The write is the prompt's heartbeat.</strong> It moves an active session's
+<code>updated_at</code>, as every harvest does, a moment after the prompt that asked; it
+never revives a session the agent or the idle reaper ended.</li>
+</ul>
 <h2 id="repo-locks">Repo locks in the briefing</h2>
 <p>With <a href="../../concepts/repo-locks/">repo locks</a> on, a main session's <code>SessionStart</code>
 in a checkout of a repository with a declared lock - any checkout of it, or
@@ -1042,7 +1088,7 @@ live/schema evidence and the recapture procedure.</li>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#session-taint">The outside-text mark: session-taint</a></li><li class="lvl-2"><a href="#claim-notices">Claim notices</a></li><li class="lvl-2"><a href="#transcripts">Transcript copies</a></li><li class="lvl-2"><a href="#usage-backfill">The usage backfill</a></li><li class="lvl-2"><a href="#repo-locks">Repo locks in the briefing</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-claude-code-uses-two-transports">Why Claude Code uses two transports</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
+      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#session-taint">The outside-text mark: session-taint</a></li><li class="lvl-2"><a href="#claim-notices">Claim notices</a></li><li class="lvl-2"><a href="#transcripts">Transcript copies</a></li><li class="lvl-2"><a href="#usage-backfill">The usage backfill</a></li><li class="lvl-2"><a href="#mid-session-usage">Mid-session usage</a></li><li class="lvl-2"><a href="#repo-locks">Repo locks in the briefing</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-claude-code-uses-two-transports">Why Claude Code uses two transports</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
     </ul>
   </aside>
   

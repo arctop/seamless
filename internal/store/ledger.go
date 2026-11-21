@@ -5,12 +5,14 @@ package store
 // every install by the harvests that exist: Claude Code's SessionEnd replaces
 // a conversation's rows with its transcript's buckets
 // (ReplaceConversationUsage), and each Codex Stop credits what the cumulative
-// counter grew by to the bucket of the Stop (CreditConversationUsage). In the
-// same transaction every session a write touches has its token totals (the
-// sessions columns of migration 011) set to the sum of its rows, so every
-// surface that reads the totals reads the ledger's sum.
+// counter grew by to the bucket of the Stop (CreditConversationUsage). While
+// the Diary is on, a Claude Code prompt also keeps a live conversation's rows
+// current (RefreshConversationUsage, Replace's rule for a read that may land
+// after a later one). In the same transaction every session a write touches
+// has its token totals (the sessions columns of migration 011) set to the sum
+// of its rows, so every surface that reads the totals reads the ledger's sum.
 //
-// Both writers find the conversation by its client's external identity: its
+// Every writer finds the conversation by its client's external identity: its
 // ambient row, whatever its status, and the sessions its moves ended
 // (isolation.requests: the parent_session_id chain). A harvest lands on an
 // ambient row the agent already completed with session_end, or the idle reaper
@@ -30,6 +32,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -157,28 +160,139 @@ func ReplaceConversationUsage(
 	if len(chain) == 0 {
 		return false, nil
 	}
-	owned := make([][]core.UsageBucket, len(chain))
-	for _, r := range rows {
-		i := usageOwner(chain, r.Bucket)
-		owned[i] = append(owned[i], r)
-	}
-	for i, s := range chain {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM session_usage WHERE session_id = ?`, s.id); err != nil {
-			return false, fmt.Errorf("%s: clear session %s: %w", op, s.id, err)
-		}
-		for _, r := range owned[i] {
-			if err := insertUsageTx(ctx, tx, s.id, r); err != nil {
-				return false, fmt.Errorf("%s: %w", op, err)
-			}
-		}
-		if err := setUsageTotalsTx(ctx, tx, s.id, i == 0, now); err != nil {
-			return false, fmt.Errorf("%s: %w", op, err)
-		}
+	if err := replaceUsageTx(ctx, tx, chain, splitUsage(chain, rows), now); err != nil {
+		return false, fmt.Errorf("%s: %w", op, err)
 	}
 	if err := tx.Commit(); err != nil {
 		return false, fmt.Errorf("%s: commit: %w", op, err)
 	}
 	return true, nil
+}
+
+// UsageRefresh is what RefreshConversationUsage did.
+type UsageRefresh uint8
+
+// The UsageRefresh outcomes.
+const (
+	// RefreshNoConversation: no ambient row names the conversation (or no
+	// rows were given), and nothing is written.
+	RefreshNoConversation UsageRefresh = iota
+	// RefreshWritten: the conversation's rows are now the rows given.
+	RefreshWritten
+	// RefreshUnchanged: the ledger already holds exactly the rows given, each
+	// session's totals their sum, so nothing is written.
+	RefreshUnchanged
+	// RefreshBehind: the rows count fewer messages than the conversation's
+	// ledger holds -- a read that a later harvest overtook -- so nothing is
+	// written.
+	RefreshBehind
+)
+
+// RefreshConversationUsage is ReplaceConversationUsage for a harvest made
+// while the conversation is still going (the Diary's mid-session harvest,
+// internal/hooks usage_live.go), whose read may finish after a later harvest
+// has written. It writes rows exactly as Replace does -- the same split among
+// the conversation's sessions, the same totals, the same heartbeat of an
+// active ambient row -- except when they count fewer messages than the
+// ledger holds (RefreshBehind) or the ledger holds them already
+// (RefreshUnchanged), when it writes nothing. A transcript only grows, and a
+// message counts once in it, so a later read never counts fewer messages
+// than an earlier one: whichever of two harvests lands last, the ledger never
+// moves back. Rows that do not hold are ErrInvalidUsage.
+func RefreshConversationUsage(
+	ctx context.Context,
+	db *sql.DB,
+	externalClient, externalSessionID string,
+	rows []core.UsageBucket,
+	now time.Time,
+) (UsageRefresh, error) {
+	const op = "store.RefreshConversationUsage"
+	if externalClient == "" || externalSessionID == "" || len(rows) == 0 {
+		return RefreshNoConversation, nil
+	}
+	if err := validUsageRows(rows); err != nil {
+		return RefreshNoConversation, fmt.Errorf("%s: %w", op, err)
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return RefreshNoConversation, fmt.Errorf("%s: begin: %w", op, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	chain, err := conversationSessionsTx(ctx, tx, externalClient, externalSessionID)
+	if err != nil {
+		return RefreshNoConversation, fmt.Errorf("%s: %w", op, err)
+	}
+	if len(chain) == 0 {
+		return RefreshNoConversation, nil
+	}
+	owned := splitUsage(chain, rows)
+	holds, held := true, 0
+	for i, s := range chain {
+		have, err := sessionUsageTx(ctx, tx, s.id)
+		if err != nil {
+			return RefreshNoConversation, fmt.Errorf("%s: %w", op, err)
+		}
+		held += usageMessages(have)
+		want := slices.Clone(owned[i])
+		slices.SortFunc(want, compareUsageRows)
+		if !slices.EqualFunc(have, want, sameUsageRow) || s.totals != core.SumUsage(want) {
+			holds = false
+		}
+	}
+	switch {
+	case holds:
+		return RefreshUnchanged, nil
+	case usageMessages(rows) < held:
+		return RefreshBehind, nil
+	}
+	if err := replaceUsageTx(ctx, tx, chain, owned, now); err != nil {
+		return RefreshNoConversation, fmt.Errorf("%s: %w", op, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return RefreshNoConversation, fmt.Errorf("%s: commit: %w", op, err)
+	}
+	return RefreshWritten, nil
+}
+
+// splitUsage splits a conversation's rows among its sessions (chain, as
+// conversationSessionsTx reads it): each row goes to the session that owns its
+// bucket (usageOwner).
+func splitUsage(chain []usageSession, rows []core.UsageBucket) [][]core.UsageBucket {
+	owned := make([][]core.UsageBucket, len(chain))
+	for _, r := range rows {
+		i := usageOwner(chain, r.Bucket)
+		owned[i] = append(owned[i], r)
+	}
+	return owned
+}
+
+// replaceUsageTx gives each session of chain its owned rows (splitUsage) in
+// place of the rows it holds and sets its totals to their sum; the ambient
+// row, chain's first, takes now as its heartbeat while it is active.
+func replaceUsageTx(ctx context.Context, tx *sql.Tx, chain []usageSession, owned [][]core.UsageBucket, now time.Time) error {
+	for i, s := range chain {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM session_usage WHERE session_id = ?`, s.id); err != nil {
+			return fmt.Errorf("clear session %s: %w", s.id, err)
+		}
+		for _, r := range owned[i] {
+			if err := insertUsageTx(ctx, tx, s.id, r); err != nil {
+				return err
+			}
+		}
+		if err := setUsageTotalsTx(ctx, tx, s.id, i == 0, now); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// usageMessages is the number of messages rows count.
+func usageMessages(rows []core.UsageBucket) int {
+	n := 0
+	for _, r := range rows {
+		n += r.Messages
+	}
+	return n
 }
 
 // UsageCredit is one harvest that reads a running total instead of buckets:
