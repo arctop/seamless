@@ -460,10 +460,10 @@ The landing page and the health check. It carries:
 - **Projects at a glance** - the top projects by recent activity, drawn from the
   same batched query the Projects board uses, so a row here reconciles with a row
   there exactly.
-- **Agent-reported mishaps** - recent incidents agents explicitly supplied to
-  `session_end`, attributed through the reporting session's harness and model.
-  Warning tones appear only when reports exist; an empty rail is a positive
-  "No mishaps reported" state.
+- **Agent-reported mishaps** - while any report exists, the attention strip's
+  first card counts the mishaps agents reported at `session_end` (the newest
+  six) and names the latest one's type, age and project. With one report it
+  opens that report's event page; with more, the [Mishaps](#mishaps) screen.
 - **Knowledge sky** - a star chart of every active memory, with no cap. Each
   project scope (global included) owns a wedge sized by its share of memories,
   largest first. Distance from the centre is when the memory last surfaced to an
@@ -981,6 +981,37 @@ A locked project this browser has not unlocked shows its name, the request that
 reached it and an **Unlock** link back to the page, and nothing from inside. A
 conversation that never moved, asked for nothing and wrote nothing stamped shows
 no card.
+
+## Mishaps {#mishaps}
+
+`/console/mishaps`
+
+Every mishap agents reported at `session_end`, newest first, for a recurrence
+review: which kinds keep happening, and which memories fail to prevent them. It
+has no sidebar entry; the Overview's mishap card and the palette's Jump to open
+it.
+
+- **Type chips** - All, then each type with its count - `shell-trap`,
+  `wrong-target`, `live-state`, `ignored-warning`, `fabricated`, `other` - and
+  **untyped**: reports that named no type, among them every report written
+  before types existed. The counts cover the project and window in view
+  whatever type is selected; point at a chip for what its type means.
+- **Reports** - each with its type (or `untyped`), its text with the type
+  prefix taken off, its project (click it to keep only that scope's reports),
+  the session that reported it with its agent, and the memories it named.
+  Click a row to open its event beside the list.
+- **Memories named** - every memory the reports in view named, with how many
+  named it. A memory many reports name is one that is not preventing its
+  mishap.
+
+Filters: `?type=` (a type, or `untyped`), `?project=` (a slug, or `global`),
+and the window `?w=24h|7d|30d|all` (all time by default) or `?days=N`. A value
+the page cannot read is a 400 naming what it takes. `?format=json` answers
+`total`, `types` (each with its `count` and `meaning`), `shown` (the reports the
+filters select), `mishaps` (each with `type`, `text`, the recorded
+`description`, `project`, `sessionId`, `session` and `memories`), `memories`
+(each with its `count`), and `locked` while peer_auth leaves locked projects
+out. The list holds the newest 200.
 
 ## Memories
 

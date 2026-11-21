@@ -86,6 +86,7 @@ func commands() []cmd {
 
 		statusCmd,
 		sessionsCmd,
+		mishapsCmd,
 		favCmd,
 		projectIsolationCmd,
 		usageCmd,

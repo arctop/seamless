@@ -459,11 +459,14 @@ type Flag struct {
 }
 
 // Mishap is one self-reported mishap: the event (its page), and the session
-// that reported it.
+// that reported it. Type is the kind the report named (a core.MishapTypes
+// slug), "" for one that named none; a typed report's event title is its
+// text without the type prefix.
 type Mishap struct {
 	Event   Ref       `json:"event"`
 	Session Ref       `json:"session"`
 	At      time.Time `json:"at"`
+	Type    string    `json:"type,omitempty"`
 }
 
 // Reason is one fact that scored a thread.

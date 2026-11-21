@@ -105,7 +105,7 @@
               {{- range .Shipped}}<li class="is-shipped">{{icon .Icon}}<span class="dy-item-main">{{.Link}}<span class="badge ok">shipped</span></span></li>{{end}}
               {{- range .Commits}}<li>{{icon "git-commit-horizontal"}}<span class="dy-item-main dy-commit-id">{{.Link}}{{copyBtn .Full}}</span>{{with .Owner}}<span class="dy-item-sub">recorded by {{.}}</span>{{end}}</li>{{end}}
               {{- range .Flags}}<li>{{icon .Icon}}<span class="dy-item-main">{{.Link}}<span class="badge {{.Tone}}">{{.Mark}}</span></span>{{with .Sub}}<span class="dy-item-sub">{{.}}</span>{{end}}</li>{{end}}
-              {{- range .Mishaps}}<li class="is-mishap">{{icon .Icon}}<span class="dy-item-main">{{.Link}}</span>{{with .Sub}}<span class="dy-item-sub">reported by {{.}}</span>{{end}}</li>{{end}}
+              {{- range .Mishaps}}<li class="is-mishap">{{icon .Icon}}<span class="dy-item-main">{{.Link}}{{with .Mark}}<span class="badge mishap-type" data-mishap-type="{{.}}">{{.}}</span>{{end}}</span>{{with .Sub}}<span class="dy-item-sub">reported by {{.}}</span>{{end}}</li>{{end}}
             </ul>
           </section>{{end}}
           {{with .Tables}}<details class="chart-tables dy-tables"><summary>{{icon "table-2"}}Show as table</summary>{{.}}</details>{{end}}

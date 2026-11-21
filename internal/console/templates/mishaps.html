@@ -1,0 +1,87 @@
+{{define "content"}}
+{{with .Data}}
+<div class="ops-page" data-ops="mishaps">
+<header class="mv2-bar">
+  <h1>{{icon "triangle-alert"}}Mishaps</h1>{{about "What agents reported going wrong at session end, newest first and counted by type. A report names its type as a prefix (shell-trap: ...); one from before types reads untyped. A memory many reports name is one that is not preventing its mishap."}}
+  <span class="mv2-count" aria-label="{{.Total}} mishaps reported, {{.WindowLabel}}">
+    <strong>{{.Total}}</strong>reported<small>{{.WindowLabel}}</small>
+  </span>
+  {{with .Project}}<span class="lib-active-filter">{{icon "folder-tree"}}<span>Project <strong class="mono">{{.}}</strong></span><a href="{{$.Data.ClearProject}}" data-seam-query>Clear</a></span>{{end}}
+  <button type="button" class="mv2-filter-toggle" data-filters-toggle aria-expanded="false" aria-controls="mv2-controls">{{icon "sliders"}}<span>Filters</span></button>
+  <span class="mv2-spacer"></span>
+  <div class="mv2-controls" id="mv2-controls">
+  <div class="mv2-sort">
+    <span class="mv2-sort-label">Reported</span>
+    <div class="seg" data-seam-query>
+      {{range .Windows}}<a class="{{if .Active}}on{{end}}" href="{{.Href}}">{{.Label}}</a>{{end}}
+    </div>
+  </div>
+  </div>
+</header>
+
+<nav class="mishap-chips" aria-label="Filter by type" data-seam-query>
+  {{range .Chips}}<a class="mishap-chip{{if .Active}} on{{end}}" href="{{.Href}}" data-mishap-type="{{.Key}}" title="{{.Title}}"{{if .Active}} aria-current="true"{{end}}><span>{{.Label}}</span><strong>{{.Count}}</strong></a>{{end}}
+</nav>
+{{with .Locked}}<p class="mishap-locked">{{icon "lock"}}Mishaps in locked projects are not shown: {{joinAnd .}}</p>{{end}}
+
+<div class="list-detail-split ops-split sessions-split">
+  <div class="list-pane">
+<section class="ops-stage sessions-stage" aria-labelledby="mishaps-list-h">
+  <header class="ops-stage-head">
+    <div class="ops-stage-title">
+      <span class="ops-stage-eyebrow">Reports</span>
+      <strong id="mishaps-list-h">{{.ShownLabel}}{{with .TypeLabel}} <span class="badge mishap-type" data-mishap-type="{{.}}">{{.}}</span>{{end}}</strong>
+    </div>
+    <div class="ops-stage-meta">{{if .Limited}}newest {{len .Mishaps}} shown{{else}}newest first{{end}}</div>
+  </header>
+{{if .Mishaps}}
+  <div class="sess-list mishap-list">
+    {{range .Mishaps}}
+    <div id="{{.ID}}" class="sess-row row-link mishap-row" data-href="/console/events/{{.ID}}" data-peek>
+      <div class="sess-main">
+        {{if .Type}}<span class="badge mishap-type" data-mishap-type="{{.Type}}" title="{{.Meaning}}">{{.Type}}</span>{{else}}<span class="badge mishap-type is-untyped" data-mishap-type="untyped" title="This report named no type">untyped</span>{{end}}
+        <div class="sess-copy">
+          <a class="mishap-text" href="/console/events/{{.ID}}" data-peek>{{if .Text}}{{.Text}}{{else}}(no text){{end}}</a>
+          <div class="mishap-meta">{{if .SessionID}}<a class="mono-id" href="/console/sessions/{{.SessionID}}" data-peek title="The session that reported it">{{if .Session}}{{.Session}}{{else}}{{shortID .SessionID}}{{end}}</a>{{agentPill .Harness .Model}}{{end}}{{range .Memories}}<span class="mishap-named">{{icon "database"}}{{if .Missing}}<span title="This memory is no longer in the index">{{shortID .ID}}</span>{{else}}<a href="/console/memories/{{.ID}}" data-peek title="A memory this report named">{{.Name}}</a>{{end}}</span>{{end}}</div>
+        </div>
+      </div>
+      <span class="proj"><a href="{{.ProjectHref}}" data-seam-query title="Only this scope's mishaps">{{icon "folder-tree"}}{{if .Project}}{{.Project}}{{else}}global{{end}}</a></span>
+      <span class="when" title="{{ts .When}}">{{ago .When}}</span>
+    </div>
+    {{end}}
+  </div>
+{{else}}
+  <div class="empty dotgrid"><span class="empty-ico">{{icon "check"}}</span><div>No {{with .TypeLabel}}{{.}} {{end}}mishaps reported{{with .Project}} in {{.}}{{end}}{{if .Since.IsZero}} yet{{else}} in the {{.WindowLabel}}{{end}}. Agents self-report them at session end, one entry per incident.</div></div>
+{{end}}
+</section>
+
+<section class="ops-stage mishap-memories" aria-labelledby="mishaps-mem-h">
+  <header class="ops-stage-head">
+    <div class="ops-stage-title">
+      <span class="ops-stage-eyebrow">Recurrence</span>
+      <strong id="mishaps-mem-h">Memories named</strong>
+    </div>
+    <div class="ops-stage-meta">how many of these reports named each memory</div>
+  </header>
+  {{if .Memories}}
+  <ol class="mishap-mem-list">
+    {{range .Memories}}
+    <li><span class="mishap-mem-name">{{icon "database"}}{{if .Missing}}<span title="This memory is no longer in the index">{{shortID .ID}}</span>{{else}}<a href="/console/memories/{{.ID}}" data-peek>{{.Name}}</a>{{with .Kind}}<span class="kind faint">{{.}}</span>{{end}}{{end}}</span><span class="mishap-mem-scope">{{if .Missing}}removed{{else if .Project}}{{.Project}}{{else}}global{{end}}</span><strong title="Reports that named it">{{.Count}}</strong></li>
+    {{end}}
+  </ol>
+  {{else}}
+  <p class="mishap-none">No report here named a memory. A report that names the memory it violated, by its exact name, is counted here.</p>
+  {{end}}
+</section>
+  </div><!-- .list-pane -->
+  <section id="detail-pane" class="detail-pane" hidden aria-live="polite" aria-label="Mishap detail">
+    <div class="detail-pane-chrome">
+      <a class="detail-open btn small" href="#">open full &nearr;</a>
+      <button class="detail-close btn small" type="button" aria-label="Close detail">&times;</button>
+    </div>
+    <div class="detail-pane-body"></div>
+  </section>
+</div><!-- .list-detail-split -->
+</div><!-- .ops-page -->
+{{end}}
+{{end}}

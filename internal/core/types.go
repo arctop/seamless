@@ -772,7 +772,7 @@ const (
 	EventHookPrompt       EventKind = "hook.prompt"  // a UserPromptSubmit that matched no memory (recall miss)
 	EventRecallMiss       EventKind = "recall.miss"  // a recall tool call that returned zero hits (payload: query, scope, limit, source)
 	EventHookError        EventKind = "hook.error"   // a hook-stage failure swallowed fail-open (payload: stage, error, client)
-	EventAgentMishap      EventKind = "agent.mishap" // a mishap the agent self-reported at session_end (payload: description, plus item_ids of the memories the text names)
+	EventAgentMishap      EventKind = "agent.mishap" // a mishap the agent self-reported at session_end (payload: description, plus type when the entry opened with one (core.ParseMishap), and item_ids of the memories the text names)
 
 	// The session flag (session_update / session_end verdict) and the
 	// transcript copy it keeps (internal/transcripts).

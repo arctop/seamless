@@ -123,6 +123,9 @@ var screens = []screen{
 	// Real pages with no sidebar row.
 	{ID: "search", Label: "Search", Icon: "search", Href: "/console/search",
 		Min: levelBasic, Hint: "every filter and sort"},
+	// Basic, like the Overview's mishap card that links here (mishaps.go).
+	{ID: "mishaps", Label: "Mishaps", Icon: "triangle-alert", Href: "/console/mishaps",
+		Min: levelBasic, Hint: "what agents reported going wrong, by type"},
 	{ID: "context", Label: "Context", Icon: "share-2", Href: "/console/context",
 		Min: levelAdvanced, Hint: "briefing topology across projects"},
 }

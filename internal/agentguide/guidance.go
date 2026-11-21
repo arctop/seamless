@@ -9,7 +9,18 @@ package agentguide
 // call an individual tool. Keep the first paragraph self-contained and under
 // 512 characters; current Codex clients prioritize that prefix.
 const MCPInstructions = "Use Seamless as durable context. Recall before guessing: call recall before asking users to re-find knowledge. memory_write stores compact durable knowledge; notes_create stores long artifacts. Do not duplicate code, AGENTS.md/CLAUDE.md, or this conversation. If scope is ambiguous, pass project explicitly; project=global is only for cross-project knowledge. Use sessions/findings for handoff. Compose plans as notes + tasks with plan:<slug>. Trust each tool's inputSchema required fields and enums over prose.\n\n" +
-	"For non-trivial work, read injected briefing/recall context before searching again. Claude Code and Codex hooks start your session and bind your tool calls to it, so you rarely need session_start: call it only from a client without hooks (with cwd or project) or to move this connection to another project. Close with session_end and concise findings when the work needs a handoff. If this session caused any mishaps (an action a warning said not to take, live state touched by mistake), self-report them in session_end's mishaps field -- recurrence review is how they get fixed. Claim shared plan steps with tasks_claim before working them. When writing a memory, " + KindDiscriminator + "; " + StageContract + ". Task vs stage: " + TaskVsStage + ". " + EditVsSupersede
+	"For non-trivial work, read injected briefing/recall context before searching again. Claude Code and Codex hooks start your session and bind your tool calls to it, so you rarely need session_start: call it only from a client without hooks (with cwd or project) or to move this connection to another project. Close with session_end and concise findings when the work needs a handoff. If this session caused any mishaps (an action a warning said not to take, live state touched by mistake), self-report them in session_end's mishaps field -- recurrence review is how they get fixed. " + MishapPrefix + ". Claim shared plan steps with tasks_claim before working them. When writing a memory, " + KindDiscriminator + "; " + StageContract + ". Task vs stage: " + TaskVsStage + ". " + EditVsSupersede
+
+// MishapPrefix asks a session_end mishap entry to name its kind, so a
+// recurrence review can count the reports by kind. session_end's mishaps
+// argument and MCPInstructions both render it.
+const MishapPrefix = "Begin each mishap entry with its type and a colon (" + MishapTypeList + ")"
+
+// MishapTypeList is the mishap types as the guidance names them.
+// core.MishapTypes is the vocabulary; this package imports nothing, so
+// guidance_test holds this list to it, word for word and in order, and the
+// onboarding skill names it too (RequiredWorkflowTerms).
+const MishapTypeList = "shell-trap, wrong-target, live-state, ignored-warning, fabricated or other"
 
 // KindDiscriminator is the constraint-vs-convention call an agent makes at
 // memory_write time. The memory_write kind parameter and MCPInstructions both
@@ -60,6 +71,7 @@ func RequiredWorkflowTerms() []string {
 		"tasks_claim",
 		"inputSchema",
 		"mishaps",
+		MishapTypeList,
 		"constraint",
 		"convention",
 		"kind=stage",

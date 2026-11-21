@@ -3166,6 +3166,7 @@
         "text": {
           "claims_released": 0,
           "mishaps_recorded": 1,
+          "mishaps_untyped": 1,
           "session_id": "<id:27>",
           "status": "completed"
         }

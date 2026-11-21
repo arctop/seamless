@@ -114,6 +114,7 @@ func eventTrace(ev core.Event, sessOf func(string) core.Session) interactionRow 
 		row.IsError = true
 		row.Tone = "danger"
 	case core.EventAgentMishap:
+		row.Label = payloadStr(ev.Payload, "type")
 		row.Response = payloadStr(ev.Payload, "description")
 		row.Tone = "warn"
 	}

@@ -643,7 +643,7 @@ func sessionEndTool() mcp.Tool {
 	return mcp.NewTool("session_end", hintSet(),
 		mcp.WithDescription("Complete the current session, persisting its findings for future briefings, and optionally flag it with verdict. Uses the bound session unless you pass one."),
 		mcp.WithString("findings", mcp.Required(), mcp.Description("Final findings: what was learned, decided, or left open. Prefer a tight summary (briefings show a short preview), but long findings are stored in full -- they are not rejected.")),
-		mcp.WithArray("mishaps", mcp.WithStringItems(), mcp.Description("Self-report mishaps this session caused: an action a warning or convention said not to take, live state touched by mistake, a command that hit the wrong target. Pass an array with one short entry per incident; omit when none happened. When a mishap violated a stored memory, name that memory by its exact slug in the entry (e.g. \"violated chroma-boot-race by ...\") -- the report is then linked to it. Recorded for recurrence review, not blame -- report them even when fully recovered.")),
+		mcp.WithArray("mishaps", mcp.WithStringItems(), mcp.Description(mishapsArgDesc)),
 		mcp.WithString(verdictParam, enumOf(core.SessionVerdicts), mcp.Description(sessionVerdictArgDesc)),
 		mcp.WithString(verdictReasonParam, mcp.Description(sessionReasonArgDesc)),
 		mcp.WithString("session", mcp.Description(sessionArgDesc)),
@@ -768,18 +768,24 @@ func (s *Server) handleSessionEnd(ctx context.Context, req mcp.CallToolRequest) 
 	// memories it names (mishapMemoryIDs); matches persist in the payload as
 	// item_ids, so nothing ever re-matches against a corpus that has since
 	// changed. The linkage feeds the briefing's mishap promotion
-	// (store.RecentMishapItemIDs) and deliberately NOT the utility score.
+	// (store.RecentMishapItemIDs) and deliberately NOT the utility score. An
+	// entry that opens with its type adds it to the payload (mishapPayload);
+	// the description stays the entry as written.
 	corpus := s.mishapMatchCorpus(ctx, sess.ProjectSlug, len(mishaps))
+	untyped := 0
 	for _, m := range mishaps {
-		payload := map[string]any{"description": events.Truncate(m, s.cfg.ToolEventMaxChars)}
-		if ids := mishapMemoryIDs(m, corpus); len(ids) > 0 {
-			payload["item_ids"] = ids
+		payload := mishapPayload(m, s.cfg.ToolEventMaxChars, corpus)
+		if _, typed := payload["type"]; !typed {
+			untyped++
 		}
 		s.record(ctx, core.EventAgentMishap, sess.ID, sess.ProjectSlug, "", payload)
 	}
 	ended := map[string]any{"claims_released": released, "findings": events.Truncate(findings, s.cfg.ToolEventMaxChars)}
 	out := withAccount(map[string]any{"status": "completed", "session_id": sess.ID, "claims_released": released,
 		"mishaps_recorded": len(mishaps)}, sess.Account)
+	if untyped > 0 {
+		out["mishaps_untyped"] = untyped
+	}
 	if locksReleased > 0 {
 		ended["locks_released"] = locksReleased
 		out["locks_released"] = locksReleased

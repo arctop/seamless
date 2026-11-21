@@ -459,6 +459,23 @@ refreshes it at most once every three minutes, so a session still open, or one
 killed before its end, shows its usage up to then
 ([mid-session usage](https://thereisnospoon.org/docs/reference/hooks/#mid-session-usage)).
 
+## Reporting mishaps {#mishaps}
+
+`session_end` takes `mishaps`: one short entry per incident the session caused -
+an action a warning said not to take, live state touched by mistake, a command
+that hit the wrong target - reported even when fully recovered, for recurrence
+review, not blame. An entry begins with its type and a colon: `shell-trap` (a
+shell or tool quirk broke a command), `wrong-target` (the wrong file,
+repository, branch, project or host), `live-state` (a running daemon, its data
+or a service touched by mistake), `ignored-warning` (something a warning,
+memory, convention or gate said not to do), `fabricated` (a made-up id, path,
+flag or fact used as real), or `other`. An entry with no type, or a word that is
+not one, is recorded as it always was, untyped, and the answer counts those in
+`mishaps_untyped`. Name the memory a mishap violated by its exact slug and the
+report links to it. The [Mishaps](https://thereisnospoon.org/docs/reference/console/#mishaps) screen and
+[`seam mishaps`](https://thereisnospoon.org/docs/reference/cli-seam/#seam_mishaps) count reports by type and
+by the memories they named.
+
 ## Flagging a session {#flag}
 
 A session that stands out as a whole - a big win, a bad failure, a run worth

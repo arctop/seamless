@@ -1197,7 +1197,7 @@ func usagePanel(v *diaryView, e diary.Entry, rhythm rhythmSpec, slots map[string
 			Tone: verdictTone(core.SessionVerdict(f.Verdict)), Sub: f.Reason, At: f.At})
 	}
 	for _, m := range e.Moments.Mishaps {
-		v.Mishaps = append(v.Mishaps, dyItem{Icon: "triangle-alert", Link: refLink(m.Event, ""),
+		v.Mishaps = append(v.Mishaps, dyItem{Icon: "triangle-alert", Link: refLink(m.Event, ""), Mark: m.Type,
 			Sub: cmp.Or(abouts[m.Session.ID], refName(m.Session)), At: m.At})
 	}
 	v.Moments = len(v.Shipped)+len(v.Commits)+len(v.Flags)+len(v.Mishaps) > 0

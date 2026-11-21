@@ -427,6 +427,14 @@ func (d *cmDaemon) plant(t *testing.T, cli *mcpclient.Client, project, secret, p
 	})
 	require.NoError(t, err)
 	it.proposalID = p.ID
+	// A typed mishap that names the memory, as session_end records one: the
+	// Mishaps screen and seam mishaps must leave a locked project's out.
+	mid, err := core.NewID()
+	require.NoError(t, err)
+	_, err = d.db.ExecContext(ctx, `INSERT INTO events (id, ts, kind, session_id, project_slug, item_id, payload) VALUES (?, ?, 'agent.mishap', ?, ?, '', ?)`,
+		mid, core.FormatTime(time.Now().UTC()), it.sessID, project,
+		`{"description":"shell-trap: `+secret+` mishap","type":"shell-trap","item_ids":["`+it.memID+`"]}`)
+	require.NoError(t, err)
 	require.NoError(t, d.db.QueryRowContext(ctx, `SELECT id FROM events WHERE project_slug = ? AND payload LIKE ? ORDER BY id LIMIT 1`,
 		project, "%"+secret+"%").Scan(&it.eventID), "an event carries the project's content")
 	return it

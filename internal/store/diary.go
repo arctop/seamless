@@ -33,8 +33,9 @@ const diaryChunk = 500
 // memory.written carries name and one of updated, appended or edited;
 // note.written carries title, or slug for an append or a delete, and one of
 // updated, appended, edited or deleted; trial.recorded carries title and lab;
-// session.flagged verdict and reason; agent.mishap description. No
-// task.transition carries the task's title: a task's title is the task's.
+// session.flagged verdict and reason; agent.mishap description and, for a
+// report that named one, type (MishapType). No task.transition carries the
+// task's title: a task's title is the task's.
 type DiaryEvent struct {
 	ID        string
 	At        time.Time
@@ -49,6 +50,10 @@ type DiaryEvent struct {
 	Name, Title, Slug                  string
 	Updated, Appended, Edited, Deleted bool
 	Verdict, Reason, Description, Lab  string
+	// MishapType is an agent.mishap's recorded type, as stored ("" for a
+	// report that named none, and on every other kind): the reader holds it
+	// to core.MishapTypes.
+	MishapType string
 }
 
 // diaryEventCols is the column list DiaryEvents scans, in order. A boolean
@@ -64,7 +69,8 @@ const diaryEventCols = `id, ts, kind, session_id, project_slug, item_id,
 	json_extract(payload, '$.updated') IS 1, json_extract(payload, '$.appended') IS 1,
 	json_extract(payload, '$.edited') IS 1, json_extract(payload, '$.deleted') IS 1,
 	COALESCE(json_extract(payload, '$.verdict'), ''), COALESCE(json_extract(payload, '$.reason'), ''),
-	COALESCE(json_extract(payload, '$.description'), ''), COALESCE(json_extract(payload, '$.lab'), '')`
+	COALESCE(json_extract(payload, '$.description'), ''), COALESCE(json_extract(payload, '$.lab'), ''),
+	CASE WHEN kind = '` + string(core.EventAgentMishap) + `' THEN CAST(COALESCE(json_extract(payload, '$.type'), '') AS TEXT) ELSE '' END`
 
 // DiaryEvents returns the events of the given kinds recorded in [from, to),
 // oldest first (ties by id). Nothing is returned unless from is before to and
@@ -94,7 +100,7 @@ func DiaryEvents(ctx context.Context, db *sql.DB, from, to time.Time, kinds []co
 		if err := rows.Scan(&e.ID, &ts, &kind, &e.SessionID, &e.Project, &e.ItemID,
 			&e.To, &e.From, &e.ClaimedBy, &e.PlanSlug, &e.Created, &e.Released, &e.Commits,
 			&e.Name, &e.Title, &e.Slug, &e.Updated, &e.Appended, &e.Edited, &e.Deleted,
-			&e.Verdict, &e.Reason, &e.Description, &e.Lab); err != nil {
+			&e.Verdict, &e.Reason, &e.Description, &e.Lab, &e.MishapType); err != nil {
 			return nil, fmt.Errorf("store.DiaryEvents: scan: %w", err)
 		}
 		if e.At, err = core.ParseTime(ts); err != nil {

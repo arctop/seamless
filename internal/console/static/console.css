@@ -7886,3 +7886,43 @@ body:has(.build-notice-card:not([hidden])) .main { padding-bottom: calc(112px + 
   body:has(.build-notice-card:not([hidden])) .chord-hint { bottom: calc(104px + env(safe-area-inset-bottom, 0px)); }
   body:has(.build-notice-card:not([hidden])) .main { padding-bottom: calc(124px + env(safe-area-inset-bottom, 0px)); }
 }
+
+/* The Mishaps screen (mishaps.html): type chips with their counts, the
+   reports, and the memories they named. A type chip is data, so it reads
+   mono and lowercase wherever it appears (the Diary's moments too). */
+.ops-page[data-ops="mishaps"] { --lib-accent: var(--danger); }
+.badge.mishap-type { font-family: var(--font-mono); font-weight: 600; color: var(--danger); background: var(--danger-soft); border-color: color-mix(in oklab, var(--danger) 30%, transparent); }
+.badge.mishap-type.is-untyped { color: var(--muted); background: var(--surface-2); border-color: var(--border); }
+.dy-item-main .badge.mishap-type { margin-left: 6px; }
+.mishap-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.mishap-chip {
+  display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px; border-radius: var(--radius-pill);
+  border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+  font-family: var(--font-mono); font-size: var(--text-xs); white-space: nowrap;
+}
+.mishap-chip strong { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.mishap-chip:hover { text-decoration: none; border-color: color-mix(in oklab, var(--lib-accent) 45%, var(--border)); }
+.mishap-chip.on { color: var(--lib-accent); border-color: color-mix(in oklab, var(--lib-accent) 55%, var(--border)); background: color-mix(in oklab, var(--lib-accent) 10%, var(--surface)); }
+.mishap-chip.on strong { color: var(--lib-accent); }
+.mishap-locked { display: flex; align-items: center; gap: 6px; margin: 10px 0 0; color: var(--muted); font-size: var(--text-xs); }
+.mishap-locked .ico { width: 13px; height: 13px; }
+.mishap-row .sess-main { align-items: baseline; }
+.mishap-row .badge.mishap-type { flex: none; }
+.mishap-text { display: block; color: var(--ink-2); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.mishap-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 4px; color: var(--muted); font-size: var(--text-xs); }
+.mishap-named { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); }
+.mishap-named .ico, .mishap-mem-name .ico { width: 12px; height: 12px; color: var(--faint); }
+.mishap-mem-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); overflow: hidden; }
+.mishap-mem-list li {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto 3.5em; gap: 12px; align-items: center;
+  padding: 9px 15px; border-bottom: 1px solid var(--border); font-size: var(--text-xs);
+}
+.mishap-mem-list li:last-child { border-bottom: none; }
+.mishap-mem-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-family: var(--font-mono); overflow-wrap: anywhere; }
+.mishap-mem-scope { color: var(--muted); font-family: var(--font-mono); }
+.mishap-mem-list strong { justify-self: end; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.mishap-none { margin: 12px 4px 0; color: var(--muted); font-size: var(--text-xs); }
+@media (max-width: 720px) {
+  .mishap-mem-list li { grid-template-columns: minmax(0, 1fr) 3em; }
+  .mishap-mem-scope { display: none; }
+}

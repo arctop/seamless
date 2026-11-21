@@ -449,7 +449,7 @@ is surfaced instead of hidden - the two cases are deliberately not treated alike
 </tr>
 <tr>
 <td><code>session_end</code></td>
-<td>Confirmation of the close - <code>session_id</code>, <code>claims_released</code>, <code>mishaps_recorded</code>, and <code>commits_recorded</code> when it recorded commits; findings persist for the next briefing. With <code>isolation.requests</code> on, a session whose conversation holds content its project may not take still ends: its findings are not recorded, <code>findings_withheld</code> carries the line recorded in their place, and <code>mishaps_withheld</code> counts the mishaps not recorded</td>
+<td>Confirmation of the close - <code>session_id</code>, <code>claims_released</code>, <code>mishaps_recorded</code>, <code>mishaps_untyped</code> when some entries named no type, and <code>commits_recorded</code> when it recorded commits; findings persist for the next briefing. With <code>isolation.requests</code> on, a session whose conversation holds content its project may not take still ends: its findings are not recorded, <code>findings_withheld</code> carries the line recorded in their place, and <code>mishaps_withheld</code> counts the mishaps not recorded</td>
 <td>A missing/ambiguous session is an error rather than a fabricated successful close; so is a <code>commits</code> entry that is not a full commit id, which leaves the session open</td>
 </tr>
 </tbody>
@@ -594,7 +594,7 @@ is surfaced instead of hidden - the two cases are deliberately not treated alike
 <td><code>mishaps</code></td>
 <td>array</td>
 <td>no</td>
-<td>Self-report mishaps this session caused: an action a warning or convention said not to take, live state touched by mistake, a command that hit the wrong target. Pass an array with one short entry per incident; omit when none happened. When a mishap violated a stored memory, name that memory by its exact slug in the entry (e.g. &quot;violated chroma-boot-race by ...&quot;) -- the report is then linked to it. Recorded for recurrence review, not blame -- report them even when fully recovered.</td>
+<td>Self-report mishaps this session caused: an action a warning or convention said not to take, live state touched by mistake, a command that hit the wrong target. Pass an array with one short entry per incident; omit when none happened. Begin each mishap entry with its type and a colon (shell-trap, wrong-target, live-state, ignored-warning, fabricated or other). When a mishap violated a stored memory, name that memory by its exact slug in the entry (e.g. &quot;ignored-warning: violated chroma-boot-race by ...&quot;) -- the report is then linked to it. Recorded for recurrence review, not blame -- report them even when fully recovered.</td>
 </tr>
 <tr>
 <td><code>reason</code></td>

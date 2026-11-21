@@ -66,6 +66,7 @@ func (s *Service) recentMishaps(ctx context.Context, limit int) ([]mishapRow, er
 			When:        e.TS,
 			Project:     e.ProjectSlug,
 			SessionID:   e.SessionID,
+			Type:        string(mishapTypeOf(e.Payload)),
 			Description: snippet(payloadStr(e.Payload, "description"), 160),
 		}
 		if e.SessionID != "" {
@@ -75,6 +76,15 @@ func (s *Service) recentMishaps(ctx context.Context, limit int) ([]mishapRow, er
 		out = append(out, row)
 	}
 	return out, nil
+}
+
+// mishapTypeOf is an agent.mishap payload's recorded type, "" for a report
+// that named none (or a value outside core.MishapTypes).
+func mishapTypeOf(p map[string]any) core.MishapType {
+	if typ := core.MishapType(payloadStr(p, "type")); typ.Valid() {
+		return typ
+	}
+	return ""
 }
 
 // ledgerExcludedKinds is the exclusion set for the business ledgers (the
@@ -299,7 +309,11 @@ func eventSummary(e core.Event) string {
 	case core.EventHookPrompt:
 		return "prompt (no recall match)"
 	case core.EventAgentMishap:
-		return "mishap: " + snippet(payloadStr(p, "description"), 120)
+		desc := payloadStr(p, "description")
+		if typ := mishapTypeOf(p); typ != "" {
+			return "mishap (" + string(typ) + "): " + snippet(core.MishapText(desc, typ), 120)
+		}
+		return "mishap: " + snippet(desc, 120)
 	case core.EventPlanCaptured:
 		s := "captured plan " + payloadStr(p, "basename")
 		if it, ok := p["iteration"].(float64); ok {

@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -47,4 +48,31 @@ func TestMishapMemoryIDs(t *testing.T) {
 func TestMishapMemoryIDs_SkipsBlankRows(t *testing.T) {
 	corpus := []core.Memory{{ID: "M1", Name: ""}, {ID: "", Name: "chroma-boot"}}
 	require.Nil(t, mishapMemoryIDs("chroma-boot text", corpus))
+}
+
+// mishapPayload adds "type" only for an entry that opens with one, keeps the
+// description the entry as written, and scans the whole entry for slugs. The
+// untyped payloads are exactly the shape every report had before types.
+func TestMishapPayload(t *testing.T) {
+	corpus := []core.Memory{{ID: "M1", Name: "zsh-equals-expansion"}}
+	for _, tc := range []struct {
+		name, entry string
+		want        map[string]any
+	}{
+		{"typed", "shell-trap: a bare == died", map[string]any{"description": "shell-trap: a bare == died", "type": "shell-trap"}},
+		{"typed and linked", "ignored-warning: violated zsh-equals-expansion", map[string]any{
+			"description": "ignored-warning: violated zsh-equals-expansion", "type": "ignored-warning", "item_ids": []string{"M1"}}},
+		{"a slug as the prefix links, and is no type", "zsh-equals-expansion: bit again", map[string]any{
+			"description": "zsh-equals-expansion: bit again", "item_ids": []string{"M1"}}},
+		{"old free text", "pkill matched the live daemon", map[string]any{"description": "pkill matched the live daemon"}},
+		{"unknown word", "note: slow build", map[string]any{"description": "note: slow build"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, mishapPayload(tc.entry, 4000, corpus))
+		})
+	}
+	// Truncation trims the description, never the type read from the whole entry.
+	long := mishapPayload("live-state: "+strings.Repeat("x", 100), 20, nil)
+	require.Equal(t, "live-state", long["type"])
+	require.True(t, strings.HasPrefix(long["description"].(string), "live-state: xxxxxxxx\n"), long["description"])
 }

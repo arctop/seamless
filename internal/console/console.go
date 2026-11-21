@@ -333,6 +333,7 @@ func (s *Service) Register(mux *http.ServeMux) {
 	// The Diary (diary.go), behind its optional feature: one entry per day.
 	handle("GET /console/diary", s.auth(gated(features.Diary, s.diaryPage)))
 	handle("GET /console/sessions", s.auth(s.sessionsList))
+	handle("GET /console/mishaps", s.auth(s.mishapsPage))
 	handle("GET /console/sessions/{id}", s.auth(s.sessionDetail))
 	handle("GET /console/sessions/{id}/transcript", s.auth(s.sessionTranscript))
 	handle("GET /console/memories", s.auth(s.memoriesList))
@@ -958,6 +959,7 @@ type mishapRow struct {
 	SessionID   string
 	Harness     string // client discriminator (claude-code|codex), for the agent pill
 	Model       string // model powering the reporting session, verbatim
+	Type        string // the type the report named (core.MishapTypes), "" for none
 	Description string
 }
 
@@ -1253,11 +1255,21 @@ func (s *Service) attentionCards(ctx context.Context, d overviewData) []attnCard
 		if latest.Project != "" {
 			where = latest.Project
 		}
+		what := "latest "
+		if latest.Type != "" {
+			what += latest.Type + " "
+		}
+		// One report opens on its own page; several open the Mishaps screen,
+		// where the review counts them by type.
+		href := "/console/events/" + latest.ID
+		if n > 1 {
+			href = mishapsPath
+		}
 		out = append(out, attnCard{
 			Sev: "danger", Icon: "triangle-alert",
 			Title: plural(n, "agent-reported mishap", "agent-reported mishaps"),
-			Sub:   "latest " + ago(latest.When) + " in " + where + " · review recurrence",
-			Href:  "/console/events/" + latest.ID,
+			Sub:   what + ago(latest.When) + " in " + where + " · review recurrence",
+			Href:  href,
 		})
 	}
 	if d.Pending > 0 {

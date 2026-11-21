@@ -50,7 +50,7 @@ positionals (`ready`, `task list`, `task add`, `plan list`, `status`, `usage`,
 
 Every read command takes `--json`: `recall`, `memory read`, `memory list`,
 `note read`, `note list`, `ready`, `task list`, `plan list`, `plan show`,
-`status`, `sessions`, `project isolation`, `usage`, and `version`. With it, the
+`status`, `sessions`, `mishaps`, `project isolation`, `usage`, and `version`. With it, the
 command prints the daemon's own answer - the tool's result, or the console
 route's JSON - byte for byte, followed by a newline. It is not re-encoded from
 anything the CLI decoded, so a field this `seam` does not know about still
@@ -1043,6 +1043,19 @@ status is unchanged: an unconfirmed tighten still exits non-zero.
 A project with children refuses to tighten until they are re-parented; the
 refusal names them. Promise text is echoed from the server rather than
 transcribed here, so the console and the CLI cannot drift apart.
+
+### seam mishaps {#seam_mishaps}
+
+```
+seam mishaps [--days N] [--json] [--project SLUG] [--type TYPE]
+```
+
+Lists the mishaps agents reported at `session_end`, newest first, under a table
+of how many there are of each type and of the memories the reports named. All
+time unless `--days` narrows it; `--type` keeps one type's reports (`untyped`:
+those that named none) and `--project` one project's (`global`: the global
+scope's). The type table always counts every type in the scope and window. It
+reads `/console/mishaps?format=json`; `--json` prints that answer as-is.
 
 ### seam usage {#seam_usage}
 

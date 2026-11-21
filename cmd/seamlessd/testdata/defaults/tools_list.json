@@ -891,7 +891,7 @@
             "type": "string"
           },
           "mishaps": {
-            "description": "Self-report mishaps this session caused: an action a warning or convention said not to take, live state touched by mistake, a command that hit the wrong target. Pass an array with one short entry per incident; omit when none happened. When a mishap violated a stored memory, name that memory by its exact slug in the entry (e.g. \"violated chroma-boot-race by ...\") -- the report is then linked to it. Recorded for recurrence review, not blame -- report them even when fully recovered.",
+            "description": "Self-report mishaps this session caused: an action a warning or convention said not to take, live state touched by mistake, a command that hit the wrong target. Pass an array with one short entry per incident; omit when none happened. Begin each mishap entry with its type and a colon (shell-trap, wrong-target, live-state, ignored-warning, fabricated or other). When a mishap violated a stored memory, name that memory by its exact slug in the entry (e.g. \"ignored-warning: violated chroma-boot-race by ...\") -- the report is then linked to it. Recorded for recurrence review, not blame -- report them even when fully recovered.",
             "items": {
               "type": "string"
             },

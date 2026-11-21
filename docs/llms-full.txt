@@ -4243,6 +4243,23 @@ refreshes it at most once every three minutes, so a session still open, or one
 killed before its end, shows its usage up to then
 ([mid-session usage](/reference/hooks/#mid-session-usage)).
 
+## Reporting mishaps {#mishaps}
+
+`session_end` takes `mishaps`: one short entry per incident the session caused -
+an action a warning said not to take, live state touched by mistake, a command
+that hit the wrong target - reported even when fully recovered, for recurrence
+review, not blame. An entry begins with its type and a colon: `shell-trap` (a
+shell or tool quirk broke a command), `wrong-target` (the wrong file,
+repository, branch, project or host), `live-state` (a running daemon, its data
+or a service touched by mistake), `ignored-warning` (something a warning,
+memory, convention or gate said not to do), `fabricated` (a made-up id, path,
+flag or fact used as real), or `other`. An entry with no type, or a word that is
+not one, is recorded as it always was, untyped, and the answer counts those in
+`mishaps_untyped`. Name the memory a mishap violated by its exact slug and the
+report links to it. The [Mishaps](/reference/console/#mishaps) screen and
+[`seam mishaps`](/reference/cli-seam/#seam_mishaps) count reports by type and
+by the memories they named.
+
 ## Flagging a session {#flag}
 
 A session that stands out as a whole - a big win, a bad failure, a run worth
@@ -13058,7 +13075,7 @@ is surfaced instead of hidden - the two cases are deliberately not treated alike
 | `memory_write` | Stable `id`, canonical `name`, resolved `project`, `updated`, optional `similar`, and optional `superseded` | An occupied tombstone path is an error; if the new memory lands but supersession fails, the tool errors while naming the kept replacement and the still-active target |
 | `memory_edit` | `id`, `name`, `project`, the new `content_hash`, a unified `diff`, and a `stage_hint` when a `kind=stage` body still has no parseable `Status` | An `old_string` that matches zero or several places is an error naming the count, and **nothing** is written - the edits apply all-or-nothing. A stale `expect_hash` is refused rather than overwriting |
 | `recall` | `hits`, possibly empty; a kind listing adds `more` and `note` when matches lie past its limit | Remote embedder failures degrade to lexical-only; local request/config construction errors surface |
-| `session_end` | Confirmation of the close - `session_id`, `claims_released`, `mishaps_recorded`, and `commits_recorded` when it recorded commits; findings persist for the next briefing. With `isolation.requests` on, a session whose conversation holds content its project may not take still ends: its findings are not recorded, `findings_withheld` carries the line recorded in their place, and `mishaps_withheld` counts the mishaps not recorded | A missing/ambiguous session is an error rather than a fabricated successful close; so is a `commits` entry that is not a full commit id, which leaves the session open |
+| `session_end` | Confirmation of the close - `session_id`, `claims_released`, `mishaps_recorded`, `mishaps_untyped` when some entries named no type, and `commits_recorded` when it recorded commits; findings persist for the next briefing. With `isolation.requests` on, a session whose conversation holds content its project may not take still ends: its findings are not recorded, `findings_withheld` carries the line recorded in their place, and `mishaps_withheld` counts the mishaps not recorded | A missing/ambiguous session is an error rather than a fabricated successful close; so is a `commits` entry that is not a full commit id, which leaves the session open |
 
 ## session_start {#session_start}
 
@@ -13095,7 +13112,7 @@ Complete the current session, persisting its findings for future briefings, and 
 |---|---|---|---|
 | `findings` | string | **yes** | Final findings: what was learned, decided, or left open. Prefer a tight summary (briefings show a short preview), but long findings are stored in full -- they are not rejected. |
 | `commits` | array | no | Full ids of the commits this session made, recorded on the session for an integrity monitor that matches a branch's commits to the work that made them: the 40- or 64-character hex id git prints, never an abbreviation (git rev-parse &lt;short id&gt; expands one); a short id here refuses the whole call. At most 256 per call; repeats are ignored. Offered only while this server records commits (commits.record) |
-| `mishaps` | array | no | Self-report mishaps this session caused: an action a warning or convention said not to take, live state touched by mistake, a command that hit the wrong target. Pass an array with one short entry per incident; omit when none happened. When a mishap violated a stored memory, name that memory by its exact slug in the entry (e.g. "violated chroma-boot-race by ...") -- the report is then linked to it. Recorded for recurrence review, not blame -- report them even when fully recovered. |
+| `mishaps` | array | no | Self-report mishaps this session caused: an action a warning or convention said not to take, live state touched by mistake, a command that hit the wrong target. Pass an array with one short entry per incident; omit when none happened. Begin each mishap entry with its type and a colon (shell-trap, wrong-target, live-state, ignored-warning, fabricated or other). When a mishap violated a stored memory, name that memory by its exact slug in the entry (e.g. "ignored-warning: violated chroma-boot-race by ...") -- the report is then linked to it. Recorded for recurrence review, not blame -- report them even when fully recovered. |
 | `reason` | string | no | Why the verdict, one short line; only with a verdict other than none |
 | `session` | string | no | Session to operate on: a name (the cc/&lt;id&gt; or cx/&lt;id&gt; on your briefing's 'Seam session' line, or a sess/* name) or a session ULID. Defaults to this connection's session -- bound automatically for Claude Code and Codex agents -- so pass it only to act on another session, or when a call reports the session as ambiguous |
 | `session_id` | string | no | Session ULID to operate on; takes precedence over session and the bound session |
@@ -14126,7 +14143,7 @@ positionals (`ready`, `task list`, `task add`, `plan list`, `status`, `usage`,
 
 Every read command takes `--json`: `recall`, `memory read`, `memory list`,
 `note read`, `note list`, `ready`, `task list`, `plan list`, `plan show`,
-`status`, `sessions`, `project isolation`, `usage`, and `version`. With it, the
+`status`, `sessions`, `mishaps`, `project isolation`, `usage`, and `version`. With it, the
 command prints the daemon's own answer - the tool's result, or the console
 route's JSON - byte for byte, followed by a newline. It is not re-encoded from
 anything the CLI decoded, so a field this `seam` does not know about still
@@ -15119,6 +15136,19 @@ status is unchanged: an unconfirmed tighten still exits non-zero.
 A project with children refuses to tighten until they are re-parented; the
 refusal names them. Promise text is echoed from the server rather than
 transcribed here, so the console and the CLI cannot drift apart.
+
+### seam mishaps {#seam_mishaps}
+
+```
+seam mishaps [--days N] [--json] [--project SLUG] [--type TYPE]
+```
+
+Lists the mishaps agents reported at `session_end`, newest first, under a table
+of how many there are of each type and of the memories the reports named. All
+time unless `--days` narrows it; `--type` keeps one type's reports (`untyped`:
+those that named none) and `--project` one project's (`global`: the global
+scope's). The type table always counts every type in the scope and window. It
+reads `/console/mishaps?format=json`; `--json` prints that answer as-is.
 
 ### seam usage {#seam_usage}
 
@@ -19733,6 +19763,7 @@ What each level shows, generated from the console's own registries:
 | **Privacy** | - | shown | shown |
 | **Settings** | shown | shown | shown |
 | **Search** - no sidebar entry: the palette and links reach it | shown | shown | shown |
+| **Mishaps** - no sidebar entry: the palette and links reach it | shown | shown | shown |
 | **Context** - no sidebar entry: the palette and links reach it | - | - | shown |
 
 ### Settings sections
@@ -19821,10 +19852,10 @@ The landing page and the health check. It carries:
 - **Projects at a glance** - the top projects by recent activity, drawn from the
   same batched query the Projects board uses, so a row here reconciles with a row
   there exactly.
-- **Agent-reported mishaps** - recent incidents agents explicitly supplied to
-  `session_end`, attributed through the reporting session's harness and model.
-  Warning tones appear only when reports exist; an empty rail is a positive
-  "No mishaps reported" state.
+- **Agent-reported mishaps** - while any report exists, the attention strip's
+  first card counts the mishaps agents reported at `session_end` (the newest
+  six) and names the latest one's type, age and project. With one report it
+  opens that report's event page; with more, the [Mishaps](#mishaps) screen.
 - **Knowledge sky** - a star chart of every active memory, with no cap. Each
   project scope (global included) owns a wedge sized by its share of memories,
   largest first. Distance from the centre is when the memory last surfaced to an
@@ -20342,6 +20373,37 @@ A locked project this browser has not unlocked shows its name, the request that
 reached it and an **Unlock** link back to the page, and nothing from inside. A
 conversation that never moved, asked for nothing and wrote nothing stamped shows
 no card.
+
+## Mishaps {#mishaps}
+
+`/console/mishaps`
+
+Every mishap agents reported at `session_end`, newest first, for a recurrence
+review: which kinds keep happening, and which memories fail to prevent them. It
+has no sidebar entry; the Overview's mishap card and the palette's Jump to open
+it.
+
+- **Type chips** - All, then each type with its count - `shell-trap`,
+  `wrong-target`, `live-state`, `ignored-warning`, `fabricated`, `other` - and
+  **untyped**: reports that named no type, among them every report written
+  before types existed. The counts cover the project and window in view
+  whatever type is selected; point at a chip for what its type means.
+- **Reports** - each with its type (or `untyped`), its text with the type
+  prefix taken off, its project (click it to keep only that scope's reports),
+  the session that reported it with its agent, and the memories it named.
+  Click a row to open its event beside the list.
+- **Memories named** - every memory the reports in view named, with how many
+  named it. A memory many reports name is one that is not preventing its
+  mishap.
+
+Filters: `?type=` (a type, or `untyped`), `?project=` (a slug, or `global`),
+and the window `?w=24h|7d|30d|all` (all time by default) or `?days=N`. A value
+the page cannot read is a 400 naming what it takes. `?format=json` answers
+`total`, `types` (each with its `count` and `meaning`), `shown` (the reports the
+filters select), `mishaps` (each with `type`, `text`, the recorded
+`description`, `project`, `sessionId`, `session` and `memories`), `memories`
+(each with its `count`), and `locked` while peer_auth leaves locked projects
+out. The list holds the newest 200.
 
 ## Memories
 

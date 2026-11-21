@@ -145,7 +145,7 @@ func TestScreenRegistry_VisibleSetsNest(t *testing.T) {
 	for _, sc := range visibleScreens(featuresAll(true), levelBasic) {
 		basic = append(basic, sc.ID)
 	}
-	require.Equal(t, []string{"overview", "memories", "notes", "gardener", "held", "diary", "sessions", "settings", "search"}, basic,
+	require.Equal(t, []string{"overview", "memories", "notes", "gardener", "held", "diary", "sessions", "settings", "search", "mishaps"}, basic,
 		"held is a basic screen while write screening is on: whoever turns it on must reach what it holds; "+
 			"the Diary is a basic screen while its feature is on")
 	require.Len(t, visibleScreens(featuresAll(true), levelAdvanced), len(screenRegistry()))
@@ -446,14 +446,14 @@ func TestLevels_PaletteJumpsFollowTheLevel(t *testing.T) {
 	}
 
 	require.Equal(t, []string{
-		"/console/search",
+		"/console/search", "/console/mishaps",
 		"/console/settings?s=experience", "/console/settings?s=features", "/console/settings?s=setup",
 		"/console/settings?s=updates", "/console/settings?s=backups",
 	}, jumps(), "basic: no Context, no Standard or Advanced sections")
 
 	setLevel(t, db, "advanced")
 	require.Equal(t, []string{
-		"/console/search", "/console/context",
+		"/console/search", "/console/mishaps", "/console/context",
 		"/console/settings?s=experience", "/console/settings?s=features", "/console/settings?s=setup",
 		"/console/settings?s=updates", "/console/settings?s=backups",
 		"/console/settings?s=briefing", "/console/settings?s=workspaces", "/console/settings?s=engine",

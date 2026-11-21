@@ -6,6 +6,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/arctop/seamless/internal/core"
 )
 
 func TestMCPInstructions_FirstParagraphIsSelfContained(t *testing.T) {
@@ -39,4 +41,17 @@ func TestMCPInstructions_ContainsCanonicalWorkflowTerms(t *testing.T) {
 	for _, tool := range RequiredToolNames() {
 		require.Contains(t, MCPInstructions, tool)
 	}
+}
+
+// The mishap sentence lists core's vocabulary word for word and in order: this
+// package imports nothing, so the list is written out here, and this is what
+// keeps it from drifting from the types a listing filters by.
+func TestMishapPrefix_ListsTheVocabulary(t *testing.T) {
+	slugs := make([]string, 0, len(core.MishapTypes))
+	for _, typ := range core.MishapTypes {
+		slugs = append(slugs, string(typ))
+	}
+	require.Equal(t, strings.Join(slugs[:len(slugs)-1], ", ")+" or "+slugs[len(slugs)-1], MishapTypeList)
+	require.Contains(t, MishapPrefix, "type and a colon ("+MishapTypeList+")")
+	require.Contains(t, MCPInstructions, MishapPrefix, "the server-wide guidance asks for the prefix too")
 }

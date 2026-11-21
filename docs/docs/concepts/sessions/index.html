@@ -246,7 +246,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#ambient-vs-explicit-sessions">Ambient vs. explicit sessions</a></li><li class="lvl-2"><a href="#process-binding">How tool calls find their session</a></li><li class="lvl-3"><a href="#home">Home versus binding</a></li><li class="lvl-3"><a href="#when-to-call-session-start">When to call session_start</a></li><li class="lvl-3"><a href="#moved-record">Where a moved conversation&#39;s record goes</a></li><li class="lvl-3"><a href="#home-record">With isolation.requests on, the record follows the home</a></li><li class="lvl-2"><a href="#an-actual-briefing-annotated">An actual briefing, annotated</a></li><li class="lvl-2"><a href="#the-budget-and-what-survives-it">The budget, and what survives it</a></li><li class="lvl-2"><a href="#liveness">Liveness</a></li><li class="lvl-2"><a href="#flag">Flagging a session</a></li>
+      <li class="lvl-2"><a href="#ambient-vs-explicit-sessions">Ambient vs. explicit sessions</a></li><li class="lvl-2"><a href="#process-binding">How tool calls find their session</a></li><li class="lvl-3"><a href="#home">Home versus binding</a></li><li class="lvl-3"><a href="#when-to-call-session-start">When to call session_start</a></li><li class="lvl-3"><a href="#moved-record">Where a moved conversation&#39;s record goes</a></li><li class="lvl-3"><a href="#home-record">With isolation.requests on, the record follows the home</a></li><li class="lvl-2"><a href="#an-actual-briefing-annotated">An actual briefing, annotated</a></li><li class="lvl-2"><a href="#the-budget-and-what-survives-it">The budget, and what survives it</a></li><li class="lvl-2"><a href="#liveness">Liveness</a></li><li class="lvl-2"><a href="#mishaps">Reporting mishaps</a></li><li class="lvl-2"><a href="#flag">Flagging a session</a></li>
     </ul>
   </details>
   <p>A Seamless <strong>session</strong> is one agent's stretch of work. A <strong>briefing</strong> is what
@@ -696,6 +696,21 @@ Claude Code session's usage is kept current while it runs as well: a prompt
 refreshes it at most once every three minutes, so a session still open, or one
 killed before its end, shows its usage up to then
 (<a href="../../reference/hooks/#mid-session-usage">mid-session usage</a>).</p>
+<h2 id="mishaps">Reporting mishaps</h2>
+<p><code>session_end</code> takes <code>mishaps</code>: one short entry per incident the session caused -
+an action a warning said not to take, live state touched by mistake, a command
+that hit the wrong target - reported even when fully recovered, for recurrence
+review, not blame. An entry begins with its type and a colon: <code>shell-trap</code> (a
+shell or tool quirk broke a command), <code>wrong-target</code> (the wrong file,
+repository, branch, project or host), <code>live-state</code> (a running daemon, its data
+or a service touched by mistake), <code>ignored-warning</code> (something a warning,
+memory, convention or gate said not to do), <code>fabricated</code> (a made-up id, path,
+flag or fact used as real), or <code>other</code>. An entry with no type, or a word that is
+not one, is recorded as it always was, untyped, and the answer counts those in
+<code>mishaps_untyped</code>. Name the memory a mishap violated by its exact slug and the
+report links to it. The <a href="../../reference/console/#mishaps">Mishaps</a> screen and
+<a href="../../reference/cli-seam/#seam_mishaps"><code>seam mishaps</code></a> count reports by type and
+by the memories they named.</p>
 <h2 id="flag">Flagging a session</h2>
 <p>A session that stands out as a whole - a big win, a bad failure, a run worth
 re-reading for another reason - can be flagged: <code>session_update</code> or
@@ -721,7 +736,7 @@ nothing. It keeps the session's whole transcript for the owner to come back to;
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#ambient-vs-explicit-sessions">Ambient vs. explicit sessions</a></li><li class="lvl-2"><a href="#process-binding">How tool calls find their session</a></li><li class="lvl-3"><a href="#home">Home versus binding</a></li><li class="lvl-3"><a href="#when-to-call-session-start">When to call session_start</a></li><li class="lvl-3"><a href="#moved-record">Where a moved conversation&#39;s record goes</a></li><li class="lvl-3"><a href="#home-record">With isolation.requests on, the record follows the home</a></li><li class="lvl-2"><a href="#an-actual-briefing-annotated">An actual briefing, annotated</a></li><li class="lvl-2"><a href="#the-budget-and-what-survives-it">The budget, and what survives it</a></li><li class="lvl-2"><a href="#liveness">Liveness</a></li><li class="lvl-2"><a href="#flag">Flagging a session</a></li>
+      <li class="lvl-2"><a href="#ambient-vs-explicit-sessions">Ambient vs. explicit sessions</a></li><li class="lvl-2"><a href="#process-binding">How tool calls find their session</a></li><li class="lvl-3"><a href="#home">Home versus binding</a></li><li class="lvl-3"><a href="#when-to-call-session-start">When to call session_start</a></li><li class="lvl-3"><a href="#moved-record">Where a moved conversation&#39;s record goes</a></li><li class="lvl-3"><a href="#home-record">With isolation.requests on, the record follows the home</a></li><li class="lvl-2"><a href="#an-actual-briefing-annotated">An actual briefing, annotated</a></li><li class="lvl-2"><a href="#the-budget-and-what-survives-it">The budget, and what survives it</a></li><li class="lvl-2"><a href="#liveness">Liveness</a></li><li class="lvl-2"><a href="#mishaps">Reporting mishaps</a></li><li class="lvl-2"><a href="#flag">Flagging a session</a></li>
     </ul>
   </aside>
   

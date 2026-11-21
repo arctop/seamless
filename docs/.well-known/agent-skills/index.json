@@ -6,7 +6,7 @@
       "type": "skill-md",
       "description": "Install Seamless awareness for the current agent client. Use only when the user explicitly asks to onboard Seamless or invokes this skill. Configure the client's hooks and MCP server if needed, ask whether guidance belongs globally or in this project, append a marker-wrapped block to AGENTS.md for Codex or CLAUDE.md for Claude Code, then self-remove.",
       "url": "https://thereisnospoon.org/.well-known/agent-skills/seam-onboard/SKILL.md",
-      "digest": "sha256:c108f420bdde4ed573744cf427634d8736f10a0dc70c649a30a4b1d10cdd38c7"
+      "digest": "sha256:001c4266c5a39a4cf6be5215207049808eecae0efde7f22bcd653295e3c6fda5"
     },
     {
       "name": "seam-research",

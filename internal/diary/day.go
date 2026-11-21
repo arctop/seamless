@@ -786,9 +786,14 @@ func (b *builder) moments() Moments {
 			m.Flags = append(m.Flags, Flag{Session: b.sessionRef(e.SessionID), Verdict: e.Verdict, Reason: e.Reason, At: e.At})
 		case core.EventAgentMishap:
 			b.name(e.Project)
+			typ := core.MishapType(e.MishapType)
+			if !typ.Valid() {
+				typ = ""
+			}
 			m.Mishaps = append(m.Mishaps, Mishap{
-				Event:   Ref{Kind: RefEvent, ID: e.ID, Title: firstLine(e.Description), Project: e.Project, Resolved: true},
-				Session: b.sessionRef(e.SessionID), At: e.At,
+				Event: Ref{Kind: RefEvent, ID: e.ID, Title: firstLine(core.MishapText(e.Description, typ)),
+					Project: e.Project, Resolved: true},
+				Session: b.sessionRef(e.SessionID), At: e.At, Type: string(typ),
 			})
 		}
 	}
