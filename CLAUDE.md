@@ -28,7 +28,8 @@ cmd/seamlessd/     server daemon: serve, doctor, export, import, backups, restor
 cmd/seam/          headless CLI (agents + owner observability)  [P2/P5]
 cmd/docsgen/       docs site generator: docs-src/ -> docs/docs/ (see SITE.md)
 cmd/demoseed/      thin CLI over internal/demokit: the console-fleet seed
-                   (branding screenshots) and `-scenes` (the shared fixture)
+                   (branding screenshots), `-scenes` (the shared fixture) and
+                   `-diary` (the Diary's three weeks around now, plan:diary)
 cmd/seambench/     agent-scenario benchmark: `run` (headless scenario x condition
                    matrix) + `report` (grade, uplift, version deltas). Driven by
                    `make seambench`; see cmd/seambench/README.md
