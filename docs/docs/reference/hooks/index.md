@@ -43,7 +43,7 @@ install order:
 |---|---|---|---|---|---|
 | `SessionStart` | `startup\|resume\|clear\|compact` | command (`seam hook session-start`) | 10s | `/api/hooks/session-start` | Registers the agent's cwd in the repo→project map, assembles the `<seam-briefing>`, and creates or resumes an opaque `cc/<prefix>-<digest>` ambient handle keyed by the full external ID, stamped with the [agent process](#what-rides-on-the-query-string) that ran the hook. A [claim the conversation lost](#claim-notices) leads the briefing. With repo locks on, the briefing shows the checkout's [locks and live peers](#repo-locks). |
 | `UserPromptSubmit` | none | http | 5s | `/api/hooks/user-prompt-submit` | Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a [claim the conversation lost](#claim-notices) or a [repo lock whose holder changed](#repo-locks) when there is one. A miss is logged as a `hook.prompt` event. |
-| `SessionEnd` | none | command (`seam hook session-end`) | 10s | `/api/hooks/session-end` | Harvests findings and completes the agent's sessions. Bare ack - Claude Code's schema has no `hookSpecificOutput` for `SessionEnd`. |
+| `SessionEnd` | none | command (`seam hook session-end`) | 10s | `/api/hooks/session-end` | Harvests findings and the session's model token usage, and completes the agent's sessions. The usage counts the transcripts of the subagents it launched too, which Claude Code keeps beside the session's (`<session>/subagents/agent-*.jsonl`). Bare ack - Claude Code's schema has no `hookSpecificOutput` for `SessionEnd`. |
 | `PostToolUse` | `Write\|Edit\|MultiEdit\|ExitPlanMode` | command (`seam hook post-tool-use`) | 10s | `/api/hooks/post-tool-use` | Captures plan-file iterations (`Write`/`Edit`/`MultiEdit` under the plans dir) and plan approvals (`ExitPlanMode`), and heartbeats the ambient session for those calls only: `seam hook` drops every other file's write before it leaves the machine, so ordinary edits and shell commands heartbeat nothing. |
 | `SubagentStart` | none | command (`seam hook subagent-start`) | 10s | `/api/hooks/subagent-start` | Injects the child briefing - pinned constraints, up to three `RELEVANT:` memories matched from the child's spawn prompt, and a recall/memory_read footer - into every Task subagent and heartbeats the parent. It never creates, reactivates, or re-scopes an ambient session. |
 | `SubagentStop` | none | command (`seam hook subagent-stop`) | 10s | `/api/hooks/subagent-stop` | Caches a planning subagent's prompt and final report as a `cc-agent-<agent_id>` note in the plan composition. |
@@ -306,6 +306,43 @@ computer), while the request waits. Under peer_auth, on the socket, a request
 without a body is answered with the path, computer and agent client to send
 (`{"send": {"path": ..., "host": ..., "client": ...}}`), and the owner's own
 account then posts the gzip body there, checked as any upload.
+
+## The usage backfill {#usage-backfill}
+
+`seam usage backfill` fills the usage ledger (each session's model tokens by
+quarter-hour, model and thread) of the owner's sessions whose Claude Code
+transcripts are still on the computer it runs on. It reads the files, as the
+owner, with the parser the `SessionEnd` harvest uses (the subagents'
+transcripts included), and sends the rows; the daemon opens no file for it, on
+any transport. One route, two requests:
+
+- `GET /api/hooks/usage-backfill?host=<computer>` lists the caller's
+  conversations (their ambient rows) recorded on that computer, oldest first,
+  each with the agent client's own session id, the transcript path its hooks
+  recorded (none before they recorded one), its status and its token totals:
+  `{"host": ..., "sessions": [...], "otherHosts": <n>, "locked": [...]}`. A
+  session in a locked project the request does not read is left out, its
+  project named in `locked`, never counted. A paired device or relay speaks
+  for its own enrolled name, whatever host it sends.
+- `POST /api/hooks/usage-backfill?client=claude-code&host=<computer>` fills
+  one: a body naming `session_id` (the agent client's own) and `dry_run`, with
+  the rows and the totals they sum to under `seamless_capture` (`{"version":
+  1, "tokens": ..., "usage": [...]}`, validated as a `SessionEnd` push is). The
+  answer is `{"result": ..., "before": ..., "after": ...}`, its result
+  `written`, `would_write` (a dry run), `unchanged` (the ledger already holds
+  exactly those rows, so a second run writes nothing) or `active` (a live
+  session: its own end harvests it, and nothing is written, not even a
+  heartbeat). The rows replace the conversation's, as a `SessionEnd` harvest's
+  do, and an ended session stays ended, at the time it ended.
+
+Both are the owner's: a restricted local account is refused (`403`) at both,
+before anything is read, with one text whatever it names. A fill is refused
+for a Codex session (`400`: its rollout keeps one running total, which each
+`Stop` already credits as it grows) and for a session recorded on another
+computer (`409`). A session the caller may not act on answers `404`, as one
+that does not exist: one another principal started, one in a project locked to
+the caller, another tree's leased one. The caller's own pre-approval session
+in a locked project answers `403` with the locked notice.
 
 ## Repo locks in the briefing {#repo-locks}
 

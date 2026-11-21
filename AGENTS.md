@@ -1098,6 +1098,15 @@ any of it.
   the daemon named is read only inside the agent client's own transcript
   folder (`openNamedTranscript`). Never put a wanted or pending marker in a
   default answer.
+  The usage backfill (`seam usage backfill`, `internal/hooks/usage_backfill.go`)
+  is the owner's one command that reads agent files on the client on every
+  transport: its listing (`GET /api/hooks/usage-backfill`: the caller's own
+  conversations recorded on the host the request speaks for, in projects it
+  reads, locked ones named) is the probe, so it needs no hook-time guess, and
+  each fill (`POST`) lands only where a SessionEnd push would
+  (`sessionReachOf`), never in a live session, a Codex one or another
+  computer's. A restricted account is refused at both halves, before anything
+  is read. The daemon opens no file for it.
 - **Prove it in the matrix.** The `TestPeerAuthMatrix_*` tests above drive
   every tool in `mcp.Catalog()` (a tool without a probe row fails the coverage
   check), every console route (read from console.go), the hooks, A2A and the

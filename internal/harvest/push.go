@@ -68,7 +68,8 @@ type Push struct {
 	// (CodexStopFindings).
 	Findings string `json:"findings,omitempty"`
 	// Tokens is the session's absolute token totals (ClaudeTokens at
-	// session-end, CodexTokens at stop), normalized.
+	// session-end, its subagents' transcripts included; CodexTokens at stop),
+	// normalized.
 	Tokens *core.TokenUsage `json:"tokens,omitempty"`
 	// Usage is the session's usage ledger rows (ClaudeUsage at session-end),
 	// at most MaxUsageRows, which sum to Tokens. Absent, the daemon credits

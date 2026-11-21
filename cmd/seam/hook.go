@@ -290,7 +290,8 @@ the session's hooks.
 
 With server_url naming the peer_auth Unix socket, the daemon reads none of the
 agent's files, so the hook reads them itself -- the transcript's findings, token
-totals and model, a plan file, a subagent's prompt and report, the git head --
+totals (its subagents' transcripts included) and model, a plan file, a
+subagent's prompt and report, the git head --
 and sends what it found beside the payload. A capture the daemon refuses (a
 locked project the owner has not approved) is named in one line on stderr and
 is not retried. When the daemon's answer to a flagged session's session-end

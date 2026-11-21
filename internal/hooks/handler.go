@@ -175,6 +175,8 @@ func (h *Handler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/hooks/session-taint", h.sessionTaint)
 	mux.HandleFunc("POST "+harvest.TranscriptEndpoint, h.transcriptUpload)
 	mux.HandleFunc("POST "+transcriptKeepPattern, h.transcriptKeep)
+	mux.HandleFunc("GET "+harvest.UsageBackfillEndpoint, h.usageBackfillList)
+	mux.HandleFunc("POST "+harvest.UsageBackfillEndpoint, h.usageBackfillFill)
 }
 
 // hookPayload is the SessionStart request body (tolerant decode; unknown fields

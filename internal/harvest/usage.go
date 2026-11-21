@@ -42,31 +42,43 @@ type usageEntry struct {
 	} `json:"message"`
 }
 
-// ClaudeUsage reads a Claude Code transcript once and returns its token totals
-// and its usage ledger rows, the totals being the rows' sum. Every assistant
-// message counts ONCE, by message.id: one message is written as several lines
-// that share an id and repeat the same usage block (not a per-line delta), so
-// the first line for an id contributes and the rest are skipped.
+// ClaudeUsage reads a Claude Code transcript once, with the transcripts of the
+// subagents it launched, and returns the session's token totals and its usage
+// ledger rows, the totals being the rows' sum. Every assistant message counts
+// ONCE, by message.id: one message is written as several lines that share an
+// id and repeat the same usage block (not a per-line delta), so the first line
+// for an id contributes and the rest are skipped.
 //
 // A message lands in the quarter-hour (UTC) of its line's timestamp, under
 // message.model ("" when the line names none) and its thread: a sidechain
 // line (isSidechain) is a subagent's turn, every other line the agent's own.
 // Its minute sets that minute's bit in the row's mask. A message whose line
-// has no timestamp lands with the last earlier one that had a timestamp (or,
-// before any, the first later one; in a file with none, the file's
-// modification time) and sets no minute: the mask holds only minutes a
+// has no timestamp lands with the last earlier one in its file that had a
+// timestamp (or, before any, the first later one; in a file with none, the
+// file's modification time) and sets no minute: the mask holds only minutes a
 // message is known to have landed in. A synthetic entry (Claude Code's
 // placeholder, model <synthetic>) is no model call and is skipped; its usage
 // is zero.
 //
-// The whole file is read because the rows are the session's usage to date and
-// the store replaces the session's rows with them: re-parsing a resumed or
-// compacted session's grown transcript yields its new rows, never a double
+// A subagent's burn counts against the session that launched it. Claude Code
+// releases that kept subagent turns in the session's transcript wrote them as
+// sidechain lines; current ones keep each subagent in a transcript of its own
+// beside it (SubagentTranscripts), and every message read there is a
+// subagent's, sidechain line or not. One set of message ids spans the session's
+// transcript and all of its subagents', so a message that appears in two of
+// them (a forked subagent opens with a copy of its parent's last message)
+// counts once, where it was read first: the session's own transcript, then the
+// subagents' in name order. A subagent transcript that is missing, unreadable
+// or not a regular file is skipped, never an error.
+//
+// Every file is read whole because the rows are the session's usage to date
+// and the store replaces the session's rows with them: re-parsing a resumed or
+// compacted session's grown transcripts yields its new rows, never a double
 // count (store.ReplaceConversationUsage).
 //
-// ok is false when nothing was harvested (blank path, unreadable file, no
-// assistant usage). It never errors: the SessionEnd hook must always
-// complete.
+// ok is false when nothing was harvested (blank path, unreadable transcript,
+// no assistant usage in it or its subagents'). It never errors: the SessionEnd
+// hook must always complete.
 func ClaudeUsage(path string) (totals core.TokenUsage, rows []core.UsageBucket, ok bool) {
 	if strings.TrimSpace(path) == "" {
 		return core.TokenUsage{}, nil, false
@@ -77,11 +89,56 @@ func ClaudeUsage(path string) (totals core.TokenUsage, rows []core.UsageBucket, 
 	}
 	defer func() { _ = f.Close() }()
 
+	fold := usageFold{rows: map[usageKey]*core.UsageBucket{}, seen: map[string]struct{}{}}
+	fold.file(f, false)
+	for _, sub := range SubagentTranscripts(path) {
+		fold.subagent(sub)
+	}
+	if len(fold.rows) == 0 {
+		return core.TokenUsage{}, nil, false
+	}
+	rows = make([]core.UsageBucket, 0, len(fold.rows))
+	for _, r := range fold.rows {
+		rows = append(rows, *r)
+	}
+	slices.SortFunc(rows, func(a, b core.UsageBucket) int {
+		return cmp.Or(a.Bucket.Compare(b.Bucket), cmp.Compare(a.Model, b.Model), cmp.Compare(a.Thread, b.Thread))
+	})
+	return core.SumUsage(rows), rows, true
+}
+
+// usageFold is one session's usage as ClaudeUsage reads it: the ledger rows
+// and the message ids counted so far, across every file it folds in.
+type usageFold struct {
+	rows map[usageKey]*core.UsageBucket
+	seen map[string]struct{}
+}
+
+// subagent folds in the subagent transcript SubagentTranscripts listed, when
+// the file opened is still that regular file (it was not swapped for a link
+// since it was listed).
+func (u usageFold) subagent(entry SubagentFile) {
+	f, err := os.Open(entry.Path)
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+	if opened, err := f.Stat(); err != nil || !os.SameFile(entry.Info, opened) {
+		return
+	}
+	u.file(f, true)
+}
+
+// file folds in one transcript file. subagent counts every message in it as a
+// subagent's turn. A line longer than maxScanLine ends the file's read there,
+// as it always has; what was read before it counts.
+func (u usageFold) file(f *os.File, subagent bool) {
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), maxScanLine)
 
-	acc := usageAccumulator{rows: map[usageKey]*core.UsageBucket{}}
-	seen := map[string]struct{}{}
+	// The clock is the file's own: an unstamped line takes a time from its
+	// own file, never from another transcript.
+	acc := usageAccumulator{rows: u.rows}
 	for sc.Scan() {
 		line := sc.Bytes()
 		if !bytes.Contains(line, []byte(`"assistant"`)) {
@@ -96,14 +153,14 @@ func ClaudeUsage(path string) (totals core.TokenUsage, rows []core.UsageBucket, 
 		if e.Type != "assistant" || e.Message.ID == "" || e.Message.Usage == nil || e.Message.Model == syntheticModel {
 			continue
 		}
-		if _, dup := seen[e.Message.ID]; dup {
-			continue // same message split across lines -- its usage is repeated, not additive
+		if _, dup := u.seen[e.Message.ID]; dup {
+			continue // same message split across lines, or files -- its usage is repeated, not additive
 		}
-		seen[e.Message.ID] = struct{}{}
-		u := e.Message.Usage
+		u.seen[e.Message.ID] = struct{}{}
 		msg := core.UsageBucket{Model: strings.TrimSpace(e.Message.Model), Thread: core.UsageThreadMain,
-			Input: u.Input, Cached: u.CacheRead, CacheCreation: u.CacheCreation, Output: u.Output, Messages: 1}
-		if e.IsSidechain {
+			Input: e.Message.Usage.Input, Cached: e.Message.Usage.CacheRead,
+			CacheCreation: e.Message.Usage.CacheCreation, Output: e.Message.Usage.Output, Messages: 1}
+		if e.IsSidechain || subagent {
 			msg.Thread = core.UsageThreadSubagent
 		}
 		at, err := time.Parse(time.RFC3339Nano, e.Timestamp)
@@ -117,17 +174,6 @@ func ClaudeUsage(path string) (totals core.TokenUsage, rows []core.UsageBucket, 
 		}
 		acc.flush(at)
 	}
-	if len(acc.rows) == 0 {
-		return core.TokenUsage{}, nil, false
-	}
-	rows = make([]core.UsageBucket, 0, len(acc.rows))
-	for _, r := range acc.rows {
-		rows = append(rows, *r)
-	}
-	slices.SortFunc(rows, func(a, b core.UsageBucket) int {
-		return cmp.Or(a.Bucket.Compare(b.Bucket), cmp.Compare(a.Model, b.Model), cmp.Compare(a.Thread, b.Thread))
-	})
-	return core.SumUsage(rows), rows, true
 }
 
 // usageKey is a ledger row's key within one session.
@@ -137,11 +183,11 @@ type usageKey struct {
 	thread core.UsageThread
 }
 
-// usageAccumulator folds messages into ledger rows.
+// usageAccumulator folds one file's messages into ledger rows.
 type usageAccumulator struct {
 	rows map[usageKey]*core.UsageBucket
-	// last is the latest timestamp a message line carried; pending, the
-	// messages read before any line carried one.
+	// last is the latest timestamp a message line of the file carried;
+	// pending, the messages read before any line carried one.
 	last    time.Time
 	pending []core.UsageBucket
 }

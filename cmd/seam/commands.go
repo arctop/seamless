@@ -88,6 +88,7 @@ func commands() []cmd {
 		favCmd,
 		projectIsolationCmd,
 		usageCmd,
+		usageBackfillCmd,
 		doctorCmd,
 		versionCmd,
 

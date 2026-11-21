@@ -52,8 +52,58 @@ func SubagentTranscriptPath(agentTranscriptPath, transcriptPath, agentID string)
 	if strings.ContainsAny(agentID, `/\`) || strings.Contains(agentID, "..") {
 		return ""
 	}
-	return filepath.Join(strings.TrimSuffix(transcriptPath, ".jsonl"),
-		"subagents", "agent-"+agentID+".jsonl")
+	return filepath.Join(subagentsDir(transcriptPath), "agent-"+agentID+".jsonl")
+}
+
+// subagentsDir is the folder Claude Code keeps a session's subagent
+// transcripts in: <transcript minus .jsonl>/subagents.
+func subagentsDir(transcriptPath string) string {
+	return filepath.Join(strings.TrimSuffix(transcriptPath, ".jsonl"), "subagents")
+}
+
+// SubagentFile is one subagent transcript SubagentTranscripts listed: its path
+// and what Lstat said of it, which the reader holds the file it opens to.
+type SubagentFile struct {
+	Path string
+	Info os.FileInfo
+}
+
+// SubagentTranscripts lists the subagent transcripts Claude Code keeps beside
+// the session transcript at transcriptPath (a *.jsonl file): the
+// agent-*.jsonl files in its subagents folder, in name order. Nothing is
+// followed: the session's folder and its subagents folder must be folders,
+// not links, and an entry is listed only when Lstat finds a regular file, so
+// a link, a folder or a device of that name is skipped. The other files there
+// (agent-*.meta.json and the like) are not transcripts. A folder that is
+// missing or unreadable lists nothing; it never errors.
+func SubagentTranscripts(transcriptPath string) []SubagentFile {
+	if !strings.HasSuffix(transcriptPath, ".jsonl") {
+		return nil
+	}
+	dir := subagentsDir(transcriptPath)
+	for _, d := range []string{filepath.Dir(dir), dir} {
+		if fi, err := os.Lstat(d); err != nil || !fi.IsDir() {
+			return nil
+		}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var out []SubagentFile
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasPrefix(name, "agent-") || !strings.HasSuffix(name, ".jsonl") {
+			continue
+		}
+		// os.ReadDir's Info is Lstat's: a link reports itself, not its target.
+		fi, err := e.Info()
+		if err != nil || !fi.Mode().IsRegular() {
+			continue
+		}
+		out = append(out, SubagentFile{Path: filepath.Join(dir, name), Info: fi})
+	}
+	return out
 }
 
 // AwaitSubagentReport parses the transcript, waiting up to SubagentReportSettle

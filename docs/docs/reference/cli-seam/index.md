@@ -1039,6 +1039,51 @@ count, session and task counts by status, retrieval injections and reads with a
 read-after-inject percentage, the most-injected items, the highest-utility
 memories by decayed demand, and pending gardener proposals.
 
+### seam usage backfill {#seam_usage_backfill}
+
+```bash
+seam usage backfill [--dry-run] [--json]
+```
+
+Fills the usage ledger - each session's model tokens by quarter-hour, model and
+thread - for your sessions recorded on this computer whose Claude Code
+transcript is still here: the sessions from before the ledger existed, and
+those whose end never harvested them. Each session's rows come from its whole
+transcript and the transcripts of the subagents it launched, read by this
+command, as you, and sent to the daemon, which opens no file for it. It works
+over any `server_url`: the key over TCP, or the peer_auth socket.
+
+A session's transcript is the one its hooks recorded, read only when it is a
+regular `*.jsonl` file inside Claude Code's own transcript folder
+(`$CLAUDE_CONFIG_DIR/projects`, else `~/.claude/projects`), else the file
+there named after the session's id: that is how sessions from before the daemon
+recorded transcript paths are found. A session whose transcript is gone is left
+as it is.
+
+Nothing is written for a session that is still live (its own end harvests it),
+a Codex session (each `Stop` already credits its rollout's running total), or
+one whose ledger already holds exactly what its transcript says, so a second
+run writes nothing. A session recorded on another computer is only counted:
+run the command there. It is the owner's alone: a restricted account is
+refused. `--dry-run` writes nothing and prints what a run would write:
+
+```text
+usage backfill on example-host (dry run: nothing written)
+  sessions on this computer: 41 (3 more recorded on other computers)
+  with a transcript here:    37 (2 missing)
+  skipped:                   1 live, 1 Codex
+  already filled:            8
+  would fill:                29
+  model tokens of those:     1200000 before, 5400000 after
+  would fill cc/3f9a2b1c-5d0e8f7a6b4c3d2e 0 -> 182934 tokens
+```
+
+`--json` prints every session with what became of it (`written`,
+`would_write`, `unchanged`, `active`, `codex`, `missing`, `no_usage`,
+`too_many_rows`, `refused`) and its token totals before and after. A session the
+daemon refused, or a daemon that did not answer, makes the command exit 1. The
+route it uses is in the [hooks reference](https://thereisnospoon.org/docs/reference/hooks/#usage-backfill).
+
 ### seam doctor {#seam_doctor}
 
 ```bash
@@ -1208,8 +1253,9 @@ Two behaviours matter if you are debugging a hook:
 - **On the peer_auth socket the hook makes the captures.** With `server_url`
   naming the socket the daemon opens none of the agent's files, so `seam hook`
   reads them and sends what it found beside the payload: the transcript's
-  findings, token totals and model, the plan file, a subagent's prompt and
-  report (waiting up to 3s for its final message), and the git head. A capture
+  findings, token totals (its subagents' transcripts beside it included) and
+  model, the plan file, a subagent's prompt and report (waiting up to 3s for
+  its final message), and the git head. A capture
   the daemon refuses (a locked project the owner has not approved) is named in
   one line on stderr and not retried. When the daemon's answer to a
   [flagged session's](https://thereisnospoon.org/docs/guides/data/#flagged-transcripts) `session-end` (or

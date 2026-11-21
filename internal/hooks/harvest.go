@@ -40,7 +40,8 @@ func harvestFindings(path string) string { return harvest.Findings(path) }
 func claudeTranscriptTokens(path string) (core.TokenUsage, bool) { return harvest.ClaudeTokens(path) }
 
 // claudeTranscriptUsage is a Claude Code transcript's token totals and usage
-// ledger rows, from one pass (harvest.ClaudeUsage).
+// ledger rows, its subagents' transcripts included, from one pass
+// (harvest.ClaudeUsage).
 func claudeTranscriptUsage(path string) (core.TokenUsage, []core.UsageBucket, bool) {
 	return harvest.ClaudeUsage(path)
 }

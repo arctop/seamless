@@ -16,11 +16,11 @@ import (
 // two can never disagree; see ClaudeUsage for the rules (the dedup by
 // message.id, the synthetic entries skipped).
 //
-// Sidechain (subagent) turns are INCLUDED -- unlike model attribution, which
-// skips them, real token spend counts a subagent's burn against the session
-// that launched it. (Claude Code writes them to the transcript only in the
-// releases that kept subagent turns there; newer ones keep each subagent in a
-// transcript of its own, beside the session's.)
+// Subagent turns are INCLUDED -- unlike model attribution, which skips them,
+// real token spend counts a subagent's burn against the session that launched
+// it: the sidechain lines of the releases that kept subagent turns in the
+// session's transcript, and the transcripts newer ones keep beside it, one per
+// subagent (SubagentTranscripts).
 //
 // ok is false when nothing was harvested (blank path, unreadable file, no assistant
 // usage). It never errors: the SessionEnd hook must always complete.

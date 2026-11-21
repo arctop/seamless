@@ -680,9 +680,12 @@ earns it.</li>
 </ul>
 <p>The end of a session also harvests <strong>real model token usage</strong> - input, cached,
 cache-creation, and output counts read from the client's own transcript
-(Claude Code) or rollout file (Codex), not estimated from injected bytes. The
-session's console page shows them as its &quot;Model tokens&quot; panel; a session whose
-client exposes no transcript simply records none.</p>
+(Claude Code, the transcripts of the subagents it launched included) or rollout
+file (Codex), not estimated from injected bytes. The session's console page
+shows them as its &quot;Model tokens&quot; panel; a session whose client exposes no
+transcript simply records none. A session whose Claude Code transcript is still
+on its computer but was never harvested is filled by
+<a href="../../reference/cli-seam/#seam_usage_backfill"><code>seam usage backfill</code></a>.</p>
 <h2 id="flag">Flagging a session</h2>
 <p>A session that stands out as a whole - a big win, a bad failure, a run worth
 re-reading for another reason - can be flagged: <code>session_update</code> or

@@ -4226,9 +4226,12 @@ earns it.
 
 The end of a session also harvests **real model token usage** - input, cached,
 cache-creation, and output counts read from the client's own transcript
-(Claude Code) or rollout file (Codex), not estimated from injected bytes. The
-session's console page shows them as its "Model tokens" panel; a session whose
-client exposes no transcript simply records none.
+(Claude Code, the transcripts of the subagents it launched included) or rollout
+file (Codex), not estimated from injected bytes. The session's console page
+shows them as its "Model tokens" panel; a session whose client exposes no
+transcript simply records none. A session whose Claude Code transcript is still
+on its computer but was never harvested is filled by
+[`seam usage backfill`](/reference/cli-seam/#seam_usage_backfill).
 
 ## Flagging a session {#flag}
 
@@ -15062,6 +15065,51 @@ count, session and task counts by status, retrieval injections and reads with a
 read-after-inject percentage, the most-injected items, the highest-utility
 memories by decayed demand, and pending gardener proposals.
 
+### seam usage backfill {#seam_usage_backfill}
+
+```bash
+seam usage backfill [--dry-run] [--json]
+```
+
+Fills the usage ledger - each session's model tokens by quarter-hour, model and
+thread - for your sessions recorded on this computer whose Claude Code
+transcript is still here: the sessions from before the ledger existed, and
+those whose end never harvested them. Each session's rows come from its whole
+transcript and the transcripts of the subagents it launched, read by this
+command, as you, and sent to the daemon, which opens no file for it. It works
+over any `server_url`: the key over TCP, or the peer_auth socket.
+
+A session's transcript is the one its hooks recorded, read only when it is a
+regular `*.jsonl` file inside Claude Code's own transcript folder
+(`$CLAUDE_CONFIG_DIR/projects`, else `~/.claude/projects`), else the file
+there named after the session's id: that is how sessions from before the daemon
+recorded transcript paths are found. A session whose transcript is gone is left
+as it is.
+
+Nothing is written for a session that is still live (its own end harvests it),
+a Codex session (each `Stop` already credits its rollout's running total), or
+one whose ledger already holds exactly what its transcript says, so a second
+run writes nothing. A session recorded on another computer is only counted:
+run the command there. It is the owner's alone: a restricted account is
+refused. `--dry-run` writes nothing and prints what a run would write:
+
+```text
+usage backfill on example-host (dry run: nothing written)
+  sessions on this computer: 41 (3 more recorded on other computers)
+  with a transcript here:    37 (2 missing)
+  skipped:                   1 live, 1 Codex
+  already filled:            8
+  would fill:                29
+  model tokens of those:     1200000 before, 5400000 after
+  would fill cc/3f9a2b1c-5d0e8f7a6b4c3d2e 0 -> 182934 tokens
+```
+
+`--json` prints every session with what became of it (`written`,
+`would_write`, `unchanged`, `active`, `codex`, `missing`, `no_usage`,
+`too_many_rows`, `refused`) and its token totals before and after. A session the
+daemon refused, or a daemon that did not answer, makes the command exit 1. The
+route it uses is in the [hooks reference](/reference/hooks/#usage-backfill).
+
 ### seam doctor {#seam_doctor}
 
 ```bash
@@ -15231,8 +15279,9 @@ Two behaviours matter if you are debugging a hook:
 - **On the peer_auth socket the hook makes the captures.** With `server_url`
   naming the socket the daemon opens none of the agent's files, so `seam hook`
   reads them and sends what it found beside the payload: the transcript's
-  findings, token totals and model, the plan file, a subagent's prompt and
-  report (waiting up to 3s for its final message), and the git head. A capture
+  findings, token totals (its subagents' transcripts beside it included) and
+  model, the plan file, a subagent's prompt and report (waiting up to 3s for
+  its final message), and the git head. A capture
   the daemon refuses (a locked project the owner has not approved) is named in
   one line on stderr and not retried. When the daemon's answer to a
   [flagged session's](/guides/data/#flagged-transcripts) `session-end` (or
@@ -17835,7 +17884,7 @@ install order:
 |---|---|---|---|---|---|
 | `SessionStart` | `startup\|resume\|clear\|compact` | command (`seam hook session-start`) | 10s | `/api/hooks/session-start` | Registers the agent's cwd in the repo→project map, assembles the `<seam-briefing>`, and creates or resumes an opaque `cc/<prefix>-<digest>` ambient handle keyed by the full external ID, stamped with the [agent process](#what-rides-on-the-query-string) that ran the hook. A [claim the conversation lost](#claim-notices) leads the briefing. With repo locks on, the briefing shows the checkout's [locks and live peers](#repo-locks). |
 | `UserPromptSubmit` | none | http | 5s | `/api/hooks/user-prompt-submit` | Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a [claim the conversation lost](#claim-notices) or a [repo lock whose holder changed](#repo-locks) when there is one. A miss is logged as a `hook.prompt` event. |
-| `SessionEnd` | none | command (`seam hook session-end`) | 10s | `/api/hooks/session-end` | Harvests findings and completes the agent's sessions. Bare ack - Claude Code's schema has no `hookSpecificOutput` for `SessionEnd`. |
+| `SessionEnd` | none | command (`seam hook session-end`) | 10s | `/api/hooks/session-end` | Harvests findings and the session's model token usage, and completes the agent's sessions. The usage counts the transcripts of the subagents it launched too, which Claude Code keeps beside the session's (`<session>/subagents/agent-*.jsonl`). Bare ack - Claude Code's schema has no `hookSpecificOutput` for `SessionEnd`. |
 | `PostToolUse` | `Write\|Edit\|MultiEdit\|ExitPlanMode` | command (`seam hook post-tool-use`) | 10s | `/api/hooks/post-tool-use` | Captures plan-file iterations (`Write`/`Edit`/`MultiEdit` under the plans dir) and plan approvals (`ExitPlanMode`), and heartbeats the ambient session for those calls only: `seam hook` drops every other file's write before it leaves the machine, so ordinary edits and shell commands heartbeat nothing. |
 | `SubagentStart` | none | command (`seam hook subagent-start`) | 10s | `/api/hooks/subagent-start` | Injects the child briefing - pinned constraints, up to three `RELEVANT:` memories matched from the child's spawn prompt, and a recall/memory_read footer - into every Task subagent and heartbeats the parent. It never creates, reactivates, or re-scopes an ambient session. |
 | `SubagentStop` | none | command (`seam hook subagent-stop`) | 10s | `/api/hooks/subagent-stop` | Caches a planning subagent's prompt and final report as a `cc-agent-<agent_id>` note in the plan composition. |
@@ -18098,6 +18147,43 @@ computer), while the request waits. Under peer_auth, on the socket, a request
 without a body is answered with the path, computer and agent client to send
 (`{"send": {"path": ..., "host": ..., "client": ...}}`), and the owner's own
 account then posts the gzip body there, checked as any upload.
+
+## The usage backfill {#usage-backfill}
+
+`seam usage backfill` fills the usage ledger (each session's model tokens by
+quarter-hour, model and thread) of the owner's sessions whose Claude Code
+transcripts are still on the computer it runs on. It reads the files, as the
+owner, with the parser the `SessionEnd` harvest uses (the subagents'
+transcripts included), and sends the rows; the daemon opens no file for it, on
+any transport. One route, two requests:
+
+- `GET /api/hooks/usage-backfill?host=<computer>` lists the caller's
+  conversations (their ambient rows) recorded on that computer, oldest first,
+  each with the agent client's own session id, the transcript path its hooks
+  recorded (none before they recorded one), its status and its token totals:
+  `{"host": ..., "sessions": [...], "otherHosts": <n>, "locked": [...]}`. A
+  session in a locked project the request does not read is left out, its
+  project named in `locked`, never counted. A paired device or relay speaks
+  for its own enrolled name, whatever host it sends.
+- `POST /api/hooks/usage-backfill?client=claude-code&host=<computer>` fills
+  one: a body naming `session_id` (the agent client's own) and `dry_run`, with
+  the rows and the totals they sum to under `seamless_capture` (`{"version":
+  1, "tokens": ..., "usage": [...]}`, validated as a `SessionEnd` push is). The
+  answer is `{"result": ..., "before": ..., "after": ...}`, its result
+  `written`, `would_write` (a dry run), `unchanged` (the ledger already holds
+  exactly those rows, so a second run writes nothing) or `active` (a live
+  session: its own end harvests it, and nothing is written, not even a
+  heartbeat). The rows replace the conversation's, as a `SessionEnd` harvest's
+  do, and an ended session stays ended, at the time it ended.
+
+Both are the owner's: a restricted local account is refused (`403`) at both,
+before anything is read, with one text whatever it names. A fill is refused
+for a Codex session (`400`: its rollout keeps one running total, which each
+`Stop` already credits as it grows) and for a session recorded on another
+computer (`409`). A session the caller may not act on answers `404`, as one
+that does not exist: one another principal started, one in a project locked to
+the caller, another tree's leased one. The caller's own pre-approval session
+in a locked project answers `403` with the locked notice.
 
 ## Repo locks in the briefing {#repo-locks}
 

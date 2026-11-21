@@ -69,6 +69,12 @@ func newCaptureFixture(t *testing.T) captureFixture {
 	agent, err := os.ReadFile(filepath.Join("..", "..", "internal", "hooks", "testdata", "agent-transcript.jsonl"))
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(f.agent, agent, 0o600))
+	// A second subagent, whose transcript carries usage: the session's token
+	// harvest counts it, and the fork's copy of the parent's m1 only once.
+	require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(f.agent), "agent-b2.jsonl"), []byte(strings.Join([]string{
+		`{"type":"assistant","timestamp":"2026-11-20T09:03:00Z","isSidechain":true,"message":{"id":"b1","role":"assistant","model":"claude-sub","content":[{"type":"text","text":"Found it."}],"usage":{"input_tokens":6,"output_tokens":1,"cache_read_input_tokens":40}}}`,
+		`{"type":"assistant","timestamp":"2026-11-20T09:04:00Z","isSidechain":true,"message":{"id":"m1","role":"assistant","model":"claude-early","content":[{"type":"text","text":"Looking."}],"usage":{"input_tokens":10,"output_tokens":4,"cache_read_input_tokens":100,"cache_creation_input_tokens":20}}}`,
+	}, "\n")+"\n"), 0o600))
 
 	f.rollout, err = filepath.Abs(filepath.Join("..", "..", "internal", "hooks", "testdata", "codex", "v0.144.5", "rollout.jsonl"))
 	require.NoError(t, err)
@@ -225,12 +231,14 @@ func TestRunHook_OnTheSocketPushesTheCaptures(t *testing.T) {
 	cfg := socketConfig(serveSocket(t, rh))
 	require.True(t, pushesCaptures(cfg))
 
-	ccTokens := core.TokenUsage{Input: 18, Cached: 100, CacheCreation: 20, Output: 15, Total: 153} // m1 once, s1, m2
+	// m1 once (the subagent's copy of it too), s1, m2, and the second subagent's b1.
+	ccTokens := core.TokenUsage{Input: 24, Cached: 140, CacheCreation: 20, Output: 16, Total: 200}
 	nine := time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC)
 	ccUsage := []core.UsageBucket{ // the same messages, by quarter-hour, model and thread
 		{Bucket: nine, Model: "claude-early", Thread: core.UsageThreadMain, Input: 10, Cached: 100, CacheCreation: 20, Output: 4,
 			Messages: 1, MinuteMask: 1 << 1},
-		{Bucket: nine, Model: "claude-sub", Thread: core.UsageThreadSubagent, Input: 3, Output: 2, Messages: 1, MinuteMask: 1 << 2},
+		{Bucket: nine, Model: "claude-sub", Thread: core.UsageThreadSubagent, Input: 9, Cached: 40, Output: 3, Messages: 2,
+			MinuteMask: 1<<2 | 1<<3},
 		{Bucket: nine.Add(15 * time.Minute), Model: "claude-late", Thread: core.UsageThreadMain, Input: 5, Output: 9,
 			Messages: 1, MinuteMask: 1 << 5},
 	}
@@ -348,6 +356,12 @@ func TestHookCaptures_ThePushMatchesTheDaemonsOwnRead(t *testing.T) {
 		require.Equal(t, core.SumUsage(readRows), read.Tokens, id.external)
 		if id.client == "codex" {
 			readRows, pushedRows = untimed(readRows), untimed(pushedRows)
+		} else {
+			// Both sides fold the subagent transcript beside the session's.
+			require.Equal(t, 200, read.Tokens.Total, "the subagents' burn is the session's")
+			require.Contains(t, readRows, core.UsageBucket{Bucket: time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC),
+				Model: "claude-sub", Thread: core.UsageThreadSubagent, Input: 9, Cached: 40, Output: 3, Messages: 2,
+				MinuteMask: 1<<2 | 1<<3})
 		}
 		require.Equal(t, readRows, pushedRows, id.external)
 	}

@@ -226,6 +226,10 @@ func devicePlaces() []devicePlace {
 		out = append(out, devicePlace{"hooks " + route, http.MethodPost, "/api/hooks/" + route + "?client=claude-code",
 			`{"session_id":"device-test-session","cwd":"/tmp/device-test"}`, jsonHdr})
 	}
+	// The usage backfill's listing (internal/hooks usage_backfill.go): the
+	// owner's, which a paired device is.
+	out = append(out, devicePlace{"hooks usage-backfill", http.MethodGet, "/api/hooks/usage-backfill", "",
+		http.Header{"Accept": {"application/json"}}})
 	return out
 }
 
