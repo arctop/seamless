@@ -417,8 +417,12 @@ release from before signed checksums.
 What the pin guards against is a release the owner did not sign, whatever
 GitHub's settings allowed. On an install that runs as your own account it does
 not guard against that account: anything that can edit your config can remove
-the key. Keep the file writable by you (or root) and no one else; under
-[peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/#owner-signed-releases) it must be root's.
+the key. Keep the file, and every directory above it, writable by you (or root)
+and no one else. On Linux a group's write bit counts as yours when the group
+holds no account but yours by `/etc/passwd` and `/etc/group`: the private group
+a default umask of 002 leaves `~/.config` writable by. Under
+[peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/#owner-signed-releases) it must be root's,
+through directories only root can write.
 
 The key is new after v0.8.3, and releases up to v0.8.3 refuse config keys they
 do not know, so set it only once the install runs a newer release. Every

@@ -140,6 +140,19 @@ func l4Renderers(t *testing.T) map[string]string {
 			return fileFacts{uid: 0, mode: 0o755 | os.ModeDir, isDir: true}, nil
 		}})
 
+	// Root's group-writable directory above the file, under peer_auth.
+	out["release signers chmod"] = releaseSignersFileProblem(signers, true, signersFS{euid: daemon,
+		resolve: func(p string) (string, error) { return p, nil },
+		inspect: func(p string) (fileFacts, error) {
+			if p == signers {
+				return fileFacts{uid: 0, mode: 0o644}, nil
+			}
+			if p == "/opt/seamless/etc" {
+				return fileFacts{uid: 0, mode: 0o775 | os.ModeDir, isDir: true}, nil
+			}
+			return fileFacts{uid: 0, mode: 0o755 | os.ModeDir, isDir: true}, nil
+		}})
+
 	// A restore as root, and as an account that is not the daemon's.
 	cfg := config.Defaults()
 	cfg.DataDir = "/opt/seamless/data"

@@ -671,8 +671,12 @@ release from before signed checksums.</p>
 <p>What the pin guards against is a release the owner did not sign, whatever
 GitHub's settings allowed. On an install that runs as your own account it does
 not guard against that account: anything that can edit your config can remove
-the key. Keep the file writable by you (or root) and no one else; under
-<a href="../guides/peer-auth/#owner-signed-releases">peer_auth</a> it must be root's.</p>
+the key. Keep the file, and every directory above it, writable by you (or root)
+and no one else. On Linux a group's write bit counts as yours when the group
+holds no account but yours by <code>/etc/passwd</code> and <code>/etc/group</code>: the private group
+a default umask of 002 leaves <code>~/.config</code> writable by. Under
+<a href="../guides/peer-auth/#owner-signed-releases">peer_auth</a> it must be root's,
+through directories only root can write.</p>
 <p>The key is new after v0.8.3, and releases up to v0.8.3 refuse config keys they
 do not know, so set it only once the install runs a newer release. Every
 release the pinned updater installs or rolls back to is signed, so each of

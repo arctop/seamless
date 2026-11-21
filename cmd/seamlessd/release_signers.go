@@ -19,6 +19,9 @@ package main
 //     file may be that account's or root's, and no one else may write it or a
 //     directory above it. The pin then guards against a release the owner did
 //     not sign, not against the account itself, which can edit its own config.
+//     On Linux a group's write bit is no one else's when the group holds no
+//     account but this one (groupHoldsOnly): the user private group a default
+//     umask of 002 leaves a home's directories writable by.
 
 import (
 	"errors"
@@ -48,6 +51,17 @@ type signersFS struct {
 	open    func(string) (io.ReadCloser, error)
 	// resolve is filepath.EvalSymlinks; nil is that.
 	resolve func(string) (string, error)
+	// ownGroup reports whether a group holds no account but this one
+	// (groupHoldsOnly); nil is no such group. Only a per-user install's pin
+	// asks it: under peer_auth a group's write bit is always refused.
+	ownGroup func(gid uint32) bool
+}
+
+// groupWriteIsMine reports whether facts' group write bit lets no other
+// account write: not rootOnly, not world-writable, and a group that holds this
+// account alone.
+func (fsys signersFS) groupWriteIsMine(facts fileFacts, rootOnly bool) bool {
+	return !rootOnly && facts.mode.Perm()&0o002 == 0 && fsys.ownGroup != nil && fsys.ownGroup(facts.gid)
 }
 
 func (fsys signersFS) evalSymlinks(p string) (string, error) {
@@ -62,6 +76,12 @@ func hostSignersFS() signersFS {
 	fsys := signersFS{euid: os.Geteuid(), open: func(p string) (io.ReadCloser, error) { return os.Open(p) }}
 	if runtime.GOOS == "darwin" || runtime.GOOS == "linux" {
 		fsys.inspect = inspectPath
+	}
+	// macOS has no user private groups (an account's primary group is staff),
+	// and its accounts are not in /etc's files.
+	if runtime.GOOS == "linux" {
+		etc, euid := os.DirFS("/etc"), fsys.euid
+		fsys.ownGroup = func(gid uint32) bool { return groupHoldsOnly(etc, euid, gid) }
 	}
 	return fsys
 }
@@ -98,8 +118,9 @@ func loadReleaseSigners(path string, rootOnly bool, fsys signersFS) ([]sshsig.Si
 
 // releaseSignersFileProblem says why the pin's file would not hold, "" when
 // it would: not absolute, not a regular file, or writable by an account it
-// must not be (see loadReleaseSigners). Without inspect it checks only that
-// the path is absolute.
+// must not be (see loadReleaseSigners; on a per-user install a group write bit
+// passes when the group is this account's alone, groupWriteIsMine). Without
+// inspect it checks only that the path is absolute.
 func releaseSignersFileProblem(path string, rootOnly bool, fsys signersFS) string {
 	if !filepath.IsAbs(path) {
 		return fmt.Sprintf("%s %q is not an absolute path", releaseSignersWhat, path)
@@ -136,12 +157,18 @@ func releaseSignersFileProblem(path string, rootOnly bool, fsys signersFS) strin
 			case !trusted(facts.uid):
 				return fmt.Sprintf("%s: directory %s above %s is owned by uid %d, who could replace the file: keep it under directories owned by %s",
 					releaseSignersWhat, dir, path, facts.uid, who)
-			case facts.mode.Perm()&0o022 != 0 && (rootOnly || facts.mode&os.ModeSticky == 0):
-				// The fix named outright: on Linux a default umask of 002 leaves a
-				// home's directories group-writable (0775), which the check cannot
-				// tell from a group other accounts are in.
-				return fmt.Sprintf("%s: directory %s above %s is mode %04o, writable by other accounts: chmod go-w %s, or keep the file under directories only you can write",
-					releaseSignersWhat, dir, path, facts.mode.Perm(), shellcmd.PosixArg(dir))
+			case facts.mode.Perm()&0o022 != 0 && (rootOnly || facts.mode&os.ModeSticky == 0) && !fsys.groupWriteIsMine(facts, rootOnly):
+				// The fix named outright: a group the local account files do not
+				// show to be this account's alone (or any group, under peer_auth)
+				// could hold another account. Root's directory needs root to
+				// change it.
+				fix := "chmod go-w " + shellcmd.PosixArg(dir)
+				if facts.uid == 0 {
+					t := shellcmd.ToolsFor(runtime.GOOS)
+					fix = t.AsRoot(t.Chmod, "go-w", shellcmd.PosixArg(dir))
+				}
+				return fmt.Sprintf("%s: directory %s above %s is mode %04o, writable by other accounts: %s, or keep the file under directories only %s can write",
+					releaseSignersWhat, dir, path, facts.mode.Perm(), fix, who)
 			}
 			if next := filepath.Dir(dir); next == dir {
 				break
@@ -162,7 +189,7 @@ func releaseSignersFileProblem(path string, rootOnly bool, fsys signersFS) strin
 				"which keys sign a release -- %s", releaseSignersWhat, real, facts.uid, t.AsRoot(t.Chown, "root", shellcmd.PosixArg(real)))
 		}
 		return fmt.Sprintf("%s %s is owned by uid %d: it must be root's or this account's", releaseSignersWhat, real, facts.uid)
-	case facts.mode.Perm()&0o022 != 0:
+	case facts.mode.Perm()&0o022 != 0 && !fsys.groupWriteIsMine(facts, rootOnly):
 		return fmt.Sprintf("%s %s is mode %04o: it must not be group- or world-writable (0644)", releaseSignersWhat, real, facts.mode.Perm())
 	}
 	return ""

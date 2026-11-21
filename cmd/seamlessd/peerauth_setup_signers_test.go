@@ -227,14 +227,22 @@ func TestPasReadSigners_TheUpdatersRules(t *testing.T) {
 		require.ErrorContains(t, err, "group- or world-writable")
 		require.NoError(t, os.Chmod(path, 0o644))
 
-		// A group-writable directory above it -- a Linux home under umask 002
-		// -- is refused with the fix named, found in a live run on Ubuntu.
+		// A group-writable directory above it -- a Linux home under umask 002,
+		// found in a live run on Ubuntu -- passes when its group holds this
+		// account alone (Linux's local account files say so), and is refused
+		// with the fix named otherwise.
 		require.NoError(t, os.Chmod(dir, 0o775))
-		_, err = pasReadSigners(path)
-		require.ErrorIs(t, err, errReleaseSigners)
 		real, rerr := filepath.EvalSymlinks(dir) // the check names the directory it inspected
 		require.NoError(t, rerr)
-		require.ErrorContains(t, err, "is mode 0775, writable by other accounts: chmod go-w "+shellcmd.PosixArg(real))
+		facts, ierr := inspectPath(real)
+		require.NoError(t, ierr)
+		_, err = pasReadSigners(path)
+		if own := hostSignersFS().ownGroup; own != nil && own(facts.gid) {
+			require.NoError(t, err, "the directory's group %d holds this account alone", facts.gid)
+		} else {
+			require.ErrorIs(t, err, errReleaseSigners)
+			require.ErrorContains(t, err, "is mode 0775, writable by other accounts: chmod go-w "+shellcmd.PosixArg(real))
+		}
 		require.NoError(t, os.Chmod(dir, 0o700))
 	}
 
