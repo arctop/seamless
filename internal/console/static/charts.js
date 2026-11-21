@@ -1,10 +1,12 @@
-/* Seamless console -- the interaction layer for the server-rendered SVG charts
-   in charts.go. It adds exactly one thing: a hover/focus readout of the value at
-   a given point in time, on any .area[data-hover] chart (the injection trend and
-   the coverage trend). Deliberately not a chart library: every number, label and
-   unit it shows was formatted server-side and handed over in the data-hover
-   payload, so this file only picks the point nearest the pointer and places the
-   crosshair and tooltip.
+/* Seamless console -- the interaction layer for the server-rendered charts in
+   charts.go and charts_marks.go: hover/focus readouts, and nothing else. Three
+   parts, in this order: the trend readout of the value at a point in time on
+   any .area[data-hover] chart (the injection trend and the coverage trend), the
+   capture calendar's day readout, and the per-mark readouts on any
+   .chart[data-hover] chart. Deliberately not a chart library: every number,
+   label and unit it shows was formatted server-side and handed over in the
+   data-hover payload, so this file only picks the point or mark under the
+   pointer and places the crosshair and tooltip.
 
    The layer is rebuilt on demand from the payload rather than mounted once at
    load. The SSE live client morphs .main in place and strips any node absent
@@ -336,5 +338,251 @@
     }
     e.preventDefault();
     cursor(t, cells, next);
+  });
+})();
+
+/* Per-mark readouts (charts_marks.go): the ring, the day rhythm, ranked bars,
+   the segmented bar, the month grid and the presence strip. The contract is
+   the trend readout's -- every string was formatted server-side, and goes in
+   with textContent -- but each mark is its own hit target rather than the
+   point nearest the pointer. A chart root (.chart[data-hover]) carries one
+   readout per mark as JSON. Every element of a mark names it with data-i (the
+   mark and its larger, transparent hit area); a legend row, which is already
+   its mark's readout, names the mark it lights with data-lit.
+
+   - Hover, or a tap, shows the readout and lifts the mark: the mark's elements
+     take .chart-on and the root .chart-lit, and the stylesheet quiets the rest.
+   - Keyboard: a .chart-walk element (the ring and rhythm svgs, the segmented
+     bar, the presence track) is one tab stop; the arrows walk its marks, Home
+     and End jump, Escape rests. A mark that is a link (a ranked bar's name, a
+     month cell) answers its own focus. The month grid is one tab stop too:
+     this file gives its days a roving tabindex, and the arrows move focus a
+     day or a week. Without this file every day is a plain Tab stop.
+   - The live morph strips what this file adds (the tooltip, the classes, the
+     roving tabindex). Each comes back on the next event, and the roving
+     tabindex on seam:content-updated. */
+(function () {
+  var state = new WeakMap(); // chart root -> { raw, data, i }
+  var current = null;        // the root showing a readout
+  var TONE = /^(series-[1-5]|series-other|mix-[1-4])$/;
+
+  function div(cls, text) {
+    var e = document.createElement('div');
+    e.className = cls;
+    if (text) e.textContent = text;
+    return e;
+  }
+
+  function rootOf(t) { return t && t.closest ? t.closest('.chart[data-hover]') : null; }
+
+  // stateOf parses the root's payload once per version of it: the morph
+  // rewrites data-hover in place when the numbers change.
+  function stateOf(root) {
+    var raw = root.getAttribute('data-hover') || '';
+    var s = state.get(root);
+    if (s && s.raw === raw) return s;
+    var data = null;
+    try { data = JSON.parse(raw); } catch (e) { data = null; }
+    if (!data || !data.marks || !data.marks.length) data = null;
+    s = { raw: raw, data: data, i: -1 };
+    state.set(root, s);
+    return s;
+  }
+
+  function tipOf(root) {
+    var tip = root.querySelector(':scope > .hov-tip');
+    if (!tip) {
+      tip = div('hov-tip');
+      tip.hidden = true;
+      tip.setAttribute('aria-hidden', 'true');
+      root.appendChild(tip);
+    }
+    return tip;
+  }
+
+  function light(root, i) {
+    root.querySelectorAll('.chart-on').forEach(function (el) { el.classList.remove('chart-on'); });
+    if (i < 0) { root.classList.remove('chart-lit'); return; }
+    root.querySelectorAll('[data-i="' + i + '"], [data-lit="' + i + '"]').forEach(function (el) { el.classList.add('chart-on'); });
+    root.classList.add('chart-lit');
+  }
+
+  function fill(tip, m) {
+    tip.textContent = '';
+    tip.appendChild(div('hov-t', m.label));
+    tip.appendChild(div('hov-v', m.value));
+    if (m.sub) tip.appendChild(div('hov-s', m.sub));
+    if (m.rows && m.rows.length) {
+      var rows = div('hov-rows');
+      m.rows.forEach(function (r) {
+        rows.appendChild(div('hov-key' + (TONE.test(r.tone) ? ' ' + r.tone : '')));
+        rows.appendChild(div('hov-row-v', r.value));
+        rows.appendChild(div('hov-row-n', r.name));
+      });
+      tip.appendChild(rows);
+    }
+  }
+
+  // place sets the tooltip above the mark: over its At point on an svg chart
+  // (viewBox units, scaled by the svg's rendered box), else over the mark's
+  // own box. Centered and clamped inside the chart; below the mark only when
+  // above would leave the window.
+  function place(root, tip, data, m, el) {
+    var rr = root.getBoundingClientRect(), cx, top, bottom;
+    var svg = root.querySelector('svg.chart-svg');
+    if (m.at && svg && data.w && data.h) {
+      var sr = svg.getBoundingClientRect();
+      cx = sr.left - rr.left + m.at[0] * (sr.width / data.w);
+      top = bottom = sr.top - rr.top + m.at[1] * (sr.height / data.h);
+    } else if (el) {
+      var er = el.getBoundingClientRect();
+      cx = er.left - rr.left + er.width / 2;
+      top = er.top - rr.top;
+      bottom = er.bottom - rr.top;
+    } else {
+      return;
+    }
+    var w = tip.offsetWidth, h = tip.offsetHeight;
+    var left = Math.max(0, Math.min(cx - w / 2, root.clientWidth - w));
+    var y = top - h - 10;
+    if (rr.top + y < 0) y = bottom + 10;
+    tip.style.left = Math.round(left) + 'px';
+    tip.style.top = Math.round(y) + 'px';
+  }
+
+  function hide(root) {
+    var tip = root.querySelector(':scope > .hov-tip');
+    if (tip) tip.hidden = true;
+    light(root, -1);
+    var s = state.get(root);
+    if (s) s.i = -1;
+    if (current === root) current = null;
+  }
+
+  function show(root, i, el) {
+    var s = stateOf(root);
+    var m = s.data && s.data.marks[i];
+    if (!m) return;
+    if (current && current !== root) hide(current);
+    current = root;
+    var tip = tipOf(root);
+    if (s.i !== i || tip.hidden) {
+      fill(tip, m);
+      tip.hidden = false; // before placing: the clamp needs the tooltip's real box
+      light(root, i);
+      s.i = i;
+    }
+    // From the keyboard there is no element under the pointer: anchor on the
+    // mark's first element, or its legend row for a part the bar cannot draw.
+    place(root, tip, s.data, m, el || root.querySelector('[data-i="' + i + '"], [data-lit="' + i + '"]'));
+  }
+
+  function markOf(t, root) {
+    var el = t && t.closest ? t.closest('[data-i], [data-lit]') : null;
+    return el && root.contains(el) ? el : null;
+  }
+
+  // Delegated from the document: the charts are server-rendered and the live
+  // morph can replace them wholesale, so nothing may hold a node reference.
+  function point(e) {
+    var root = rootOf(e.target);
+    if (!root) { if (current) hide(current); return; }
+    var el = markOf(e.target, root);
+    if (!el) { hide(root); return; }
+    if (el.hasAttribute('data-lit')) {
+      if (current && current !== root) hide(current);
+      current = root;
+      var tip = root.querySelector(':scope > .hov-tip');
+      if (tip) tip.hidden = true;
+      stateOf(root).i = -1;
+      light(root, +el.getAttribute('data-lit'));
+      return;
+    }
+    show(root, +el.getAttribute('data-i'), el);
+  }
+  document.addEventListener('pointerover', point, { passive: true });
+  document.addEventListener('pointerdown', point, { passive: true }); // touch: tap to read
+  document.addEventListener('pointerout', function (e) {
+    var root = rootOf(e.target);
+    if (root && !(e.relatedTarget && root.contains(e.relatedTarget))) hide(root);
+  }, { passive: true });
+
+  function walker(t) { return !!(t && t.classList && t.classList.contains('chart-walk')); }
+
+  document.addEventListener('focusin', function (e) {
+    var root = rootOf(e.target);
+    if (!root) { if (current) hide(current); return; }
+    var s = stateOf(root);
+    if (!s.data) return;
+    if (walker(e.target)) { show(root, s.i >= 0 ? s.i : (s.data.start || 0)); return; }
+    var el = markOf(e.target, root);
+    if (el && el.hasAttribute('data-i')) show(root, +el.getAttribute('data-i'), el);
+  });
+  document.addEventListener('focusout', function (e) {
+    var root = rootOf(e.target);
+    if (root && !(e.relatedTarget && root.contains(e.relatedTarget))) hide(root);
+  });
+
+  function walk(e, root, s) {
+    var n = s.data.marks.length;
+    var i = s.i >= 0 ? s.i : (s.data.start || 0);
+    var next;
+    switch (e.key) {
+      case 'ArrowLeft': next = Math.max(0, i - 1); break;
+      case 'ArrowRight': next = Math.min(n - 1, i + 1); break;
+      case 'Home': next = 0; break;
+      case 'End': next = n - 1; break;
+      case 'Escape': hide(root); return;
+      default: return;
+    }
+    e.preventDefault();
+    show(root, next);
+  }
+
+  // The month grid's roving tabindex: one day is the tab stop (the selected
+  // day, else today, else the last day that links), and the arrows move it.
+  function days(root) { return root.querySelectorAll('a.chart-month-cell'); }
+  function rest(root) {
+    var links = days(root);
+    if (!links.length) return;
+    var home = root.querySelector('a.chart-month-cell.sel') || root.querySelector('a.chart-month-cell.today') || links[links.length - 1];
+    links.forEach(function (a) { a.setAttribute('tabindex', a === home ? '0' : '-1'); });
+  }
+  function restAll() { document.querySelectorAll('.chart-month').forEach(rest); }
+  restAll();
+  document.addEventListener('seam:content-updated', restAll);
+
+  function rove(e, root, s) {
+    var links = days(root);
+    var i = +e.target.getAttribute('data-i');
+    var n = s.data.marks.length;
+    var day = function (j) { return root.querySelector('a.chart-month-cell[data-i="' + j + '"]'); };
+    var target = null;
+    switch (e.key) {
+      case 'ArrowLeft':
+      case 'ArrowRight':
+        // A day that does not link is skipped, to the next one that does.
+        var step = e.key === 'ArrowLeft' ? -1 : 1;
+        for (var j = i + step; j >= 0 && j < n && !target; j += step) target = day(j);
+        break;
+      case 'ArrowUp': target = day(i - 7); break;
+      case 'ArrowDown': target = day(i + 7); break;
+      case 'Home': target = links[0]; break;
+      case 'End': target = links[links.length - 1]; break;
+      default: return;
+    }
+    e.preventDefault();
+    if (!target) return;
+    links.forEach(function (a) { a.setAttribute('tabindex', a === target ? '0' : '-1'); });
+    target.focus();
+  }
+
+  document.addEventListener('keydown', function (e) {
+    var root = rootOf(e.target);
+    if (!root) return;
+    var s = stateOf(root);
+    if (!s.data) return;
+    if (walker(e.target)) walk(e, root, s);
+    else if (e.target.matches && e.target.matches('.chart-month a.chart-month-cell')) rove(e, root, s);
   });
 })();

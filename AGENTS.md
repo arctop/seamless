@@ -1858,3 +1858,14 @@ result, and -- with write screening on -- release or discard a held write,
 clear a session's mark, switch lockdown, re-run the review, mark a flagged item
 safe and accept a file changed outside Seamless. Keep pages self-contained and dependency-free so an agent can edit
 them without a toolchain.
+
+Chart color does one job per chart (`internal/console/charts_marks.go`). A
+series -- an agent -- wears a slot the caller picks once for the whole span it
+shows (`assignSlots`: the span's five busiest, in order), never its position
+on the day, so it keeps one color everywhere; the tail folds into Other's
+neutral. The slots are the `--series-1..5` tokens, declared in all three theme
+blocks and checked with the dataviz palette validator on both surfaces: change
+one only by re-running it. No series wears a status color, the single-hue
+charts wear brand or ink and never a series color, and text is always ink.
+Every href a chart primitive renders goes through `safeHref` (a same-origin
+path or an in-page `#anchor`, escaped; anything else renders as text).

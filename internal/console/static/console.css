@@ -77,6 +77,18 @@
   --k-stage:      #0b86c4;
   --k-refuted:    #7a7c8e;
 
+  /* chart series -- the categorical slots a chart's series wear (charts_marks.go),
+     in a fixed order: the existing non-status hues, stepped only in lightness
+     until the dataviz palette check passed on --surface (and the dark steps on
+     --surface-solid). Never a status hue. Other is the neutral the tail folds
+     into, lighter than every slot so it recedes. */
+  --series-1:     #0e9b8c; /* teal, the --k-reference hue */
+  --series-2:     #7a4fe0; /* violet, --violet */
+  --series-3:     #d9542b; /* coral, --k-gotcha */
+  --series-4:     #0f97dc; /* sky, the --k-stage hue */
+  --series-5:     #a81f7a; /* magenta, the --k-convention hue */
+  --series-other: #aeb0bb; /* neutral, the --k-refuted hue */
+
   /* the aurora behind everything, and the Seam's light */
   --aurora-a: rgba(108, 99, 255, 0.10);
   --aurora-b: rgba(20, 184, 206, 0.09);
@@ -174,6 +186,12 @@
   --k-protocol:    #ff7c8c;
   --k-stage:       #5ec8ff;
   --k-refuted:     #8b91ad;
+  --series-1:      #0fa291;
+  --series-2:      #8460cd;
+  --series-3:      #d75d35;
+  --series-4:      #109ed8;
+  --series-5:      #a23b84;
+  --series-other:  #464750;
   --aurora-a:      rgba(118, 100, 255, 0.34);
   --aurora-b:      rgba(40, 200, 230, 0.20);
   --aurora-c:      rgba(255, 110, 150, 0.12);
@@ -201,6 +219,7 @@
     --danger:#ff7486; --danger-soft:rgba(255,116,134,0.14); --danger-ink:#2b0a10; --live:#4fdc9e;
     --k-gotcha:#ff8a66; --k-constraint:#8e96ff; --k-convention:#f07acb; --k-reference:#45d8c4; --k-decision:#b99bff;
     --k-runbook:#f7c065; --k-protocol:#ff7c8c; --k-stage:#5ec8ff; --k-refuted:#8b91ad;
+    --series-1:#0fa291; --series-2:#8460cd; --series-3:#d75d35; --series-4:#109ed8; --series-5:#a23b84; --series-other:#464750;
     --aurora-a:rgba(118,100,255,0.34); --aurora-b:rgba(40,200,230,0.20); --aurora-c:rgba(255,110,150,0.12);
     --seam:linear-gradient(to bottom, transparent, rgba(142,150,255,0.55) 18%, rgba(95,227,246,0.5) 55%, rgba(185,155,255,0.4) 85%, transparent);
     --grain-opacity:0.05; --stars-opacity:0.32; --scrim:rgba(2,3,8,0.62);
@@ -7260,4 +7279,203 @@ a.pv-fnode:focus-visible { outline: none; }
 @media (max-width: 640px) {
   .conversation-card { padding: 15px; }
   .conv-reach-row { grid-template-columns: 1fr; }
+}
+
+/* ===========================================================================
+   CHART PRIMITIVES (charts_marks.go)
+
+   The ring split by series, the day's rhythm, ranked bars, the thin segmented
+   bar, the month heat grid, the presence strip, the stat tile, and the table
+   each one can be read as. Color does one job per chart: a series mark wears
+   --chart-c from its series class (--series-1..5, or Other's neutral), and the
+   single-hue charts never wear a series color -- the month grid and the
+   presence strip are brand light, the ranked bars and the segmented bar ink.
+   Text is always ink. A hovered or focused mark lifts and the rest go quiet
+   (opacity only); the ring and the columns draw on once on arrival and hold
+   still under reduced motion. Nothing here loops.
+   =========================================================================== */
+.series-1 { --chart-c: var(--series-1); }
+.series-2 { --chart-c: var(--series-2); }
+.series-3 { --chart-c: var(--series-3); }
+.series-4 { --chart-c: var(--series-4); }
+.series-5 { --chart-c: var(--series-5); }
+.series-other { --chart-c: var(--series-other); }
+/* The segmented bar's ordinal ramp: ink at four strengths, strongest first.
+   Checked as an ordinal ramp on both surfaces: one hue, lightness monotone
+   and at least 0.06 apart, the light end at 2.1:1. */
+.mix-1 { --chart-c: color-mix(in oklab, var(--ink) 84%, var(--surface-solid)); }
+.mix-2 { --chart-c: color-mix(in oklab, var(--ink) 64%, var(--surface-solid)); }
+.mix-3 { --chart-c: color-mix(in oklab, var(--ink) 46%, var(--surface-solid)); }
+.mix-4 { --chart-c: color-mix(in oklab, var(--ink) 30%, var(--surface-solid)); }
+
+.chart { position: relative; min-width: 0; }
+.chart-walk:focus { outline: none; }
+.chart-walk:focus-visible { outline: 2px solid var(--brand); outline-offset: 4px; border-radius: var(--radius-xs); box-shadow: none; }
+
+/* The readout: charts.js fills the shared .hov-tip; a series line is keyed by
+   a short stroke of its color, the value leading and the name after it. */
+.hov-rows {
+  display: grid; grid-template-columns: 12px auto auto; align-items: center; gap: 3px 8px;
+  margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--border);
+}
+.hov-key { display: block; width: 12px; height: 2px; border-radius: 1px; background: var(--chart-c, var(--muted)); }
+.hov-row-v { font-size: var(--text-xs); font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; text-align: right; }
+.hov-row-n { max-width: 24ch; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--muted); }
+
+/* Legend rows (the ring, the segmented bar): swatch, name, share, figure. */
+.chart-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; flex: 1 1 168px; min-width: 0; }
+.chart-legend-row {
+  display: grid; grid-template-columns: 10px minmax(0, 1fr) auto auto; align-items: center; gap: 9px;
+  font-size: var(--text-sm); transition: opacity var(--dur-fast) var(--ease-out);
+}
+.chart-swatch { display: block; flex: none; width: 10px; height: 10px; border-radius: 3px; background: var(--chart-c); }
+.chart-legend-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-secondary); }
+.chart-legend-share { min-width: 4ch; text-align: right; font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.chart-legend-fig { min-width: 4ch; text-align: right; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.chart-lit .chart-legend-row:not(.chart-on) { opacity: .45; }
+
+/* Ring */
+.chart-ring { display: flex; align-items: center; flex-wrap: wrap; gap: 14px 22px; }
+.chart-ring.single .chart-legend-row { grid-template-columns: 10px minmax(0, 1fr) auto; }
+.chart-ring-dial { position: relative; flex: none; width: 136px; height: 136px; }
+.chart-ring-svg { display: block; overflow: visible; }
+.chart-ring-seg {
+  stroke: var(--chart-c); stroke-width: 12;
+  transition: opacity var(--dur-fast) var(--ease-out);
+  animation: chart-sweep var(--t, 1ms) linear var(--d, 0ms) backwards;
+}
+@keyframes chart-sweep { from { stroke-dasharray: 0 var(--c); } }
+.chart-ring-hits .chart-hit { stroke: transparent; stroke-width: 28; }
+.chart-ring.chart-lit .chart-ring-seg:not(.chart-on) { opacity: .28; }
+.chart-ring-core {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; pointer-events: none; text-align: center;
+}
+.chart-ring-core strong {
+  font-family: var(--font-serif); font-weight: 540; font-size: 25px; line-height: 1;
+  font-variation-settings: "SOFT" 30, "opsz" 96; font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: -0.02em; color: var(--text-primary);
+}
+.chart-ring-core span { font-family: var(--font-mono); font-size: 9.5px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+
+/* Day rhythm */
+.chart-plot { position: relative; }
+.chart-rhythm-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart-base { stroke: var(--border-strong); stroke-width: 1; }
+.chart-seg { fill: var(--chart-c); }
+.chart-col {
+  transform-box: fill-box; transform-origin: 50% 100%;
+  transition: opacity var(--dur-fast) var(--ease-out);
+  animation: chart-rise .55s var(--ease-out) var(--d, 0ms) backwards;
+}
+@keyframes chart-rise { from { transform: scaleY(0); } }
+.chart-hits .chart-hit { fill: transparent; }
+.chart-rhythm.chart-lit .chart-col:not(.chart-on) { opacity: .35; }
+.chart-cap {
+  position: absolute; transform: translate(-50%, calc(-100% - 4px)); pointer-events: none; white-space: nowrap;
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 500; color: var(--text-muted); font-variant-numeric: tabular-nums;
+  animation: seam-fade .4s var(--ease-out) .45s both;
+}
+.chart-cap.start { transform: translate(-8px, calc(-100% - 4px)); }
+.chart-cap.end { transform: translate(calc(-100% + 8px), calc(-100% - 4px)); }
+/* The readout says the figure while one shows. Visibility, not opacity: the
+   entry fade's fill holds opacity. */
+.chart-rhythm.chart-lit .chart-cap { visibility: hidden; }
+.chart-ticks {
+  position: relative; height: 14px; margin-top: 7px;
+  font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-muted); font-variant-numeric: tabular-nums;
+}
+.chart-ticks span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.chart-ticks span.first { transform: none; }
+.chart-key { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 5px 14px; }
+.chart-key li { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-secondary); }
+.chart-key .chart-swatch { width: 8px; height: 8px; border-radius: 2px; }
+
+/* Ranked bars: one ink tone from a shared baseline, the data end rounded. */
+.chart-rank-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.chart-rank-row {
+  display: grid; grid-template-columns: minmax(0, 36%) minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  margin: 0 -8px; padding: 6px 8px; border-radius: var(--radius-xs);
+}
+.chart-rank-row.chart-on { background: color-mix(in oklab, var(--ink) 5%, transparent); }
+.chart-rank-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-secondary); }
+a.chart-rank-name { color: var(--text-primary); text-decoration: none; }
+a.chart-rank-name:hover { color: var(--brand); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: color-mix(in oklab, var(--brand) 45%, transparent); }
+.chart-rank-track { display: block; min-width: 0; }
+.chart-rank-bar { display: block; height: 8px; min-width: 2px; border-radius: 0 4px 4px 0; background: color-mix(in oklab, var(--ink) 46%, var(--surface-solid)); }
+.chart-rank-row.chart-on .chart-rank-bar { background: color-mix(in oklab, var(--ink) 62%, var(--surface-solid)); }
+.chart-rank-fig { text-align: right; font-size: var(--text-xs); font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+
+/* Thin segmented bar: 8px, fully rounded ends, a 2px surface gap, no text. */
+.chart-mix-bar { display: flex; gap: 2px; height: 8px; }
+.chart-mix-seg {
+  position: relative; display: block; flex: 1 1 0; min-width: 2px; background: var(--chart-c);
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.chart-mix-seg:first-child { border-radius: 4px 0 0 4px; }
+.chart-mix-seg:last-child { border-radius: 0 4px 4px 0; }
+.chart-mix-seg:only-child { border-radius: 4px; }
+.chart-mix-seg::after { content: ""; position: absolute; inset: -8px -1px; } /* the hit area, taller than the mark */
+.chart-mix.chart-lit .chart-mix-seg:not(.chart-on) { opacity: .35; }
+.chart-mix-bar.chart-walk:focus-visible { outline-offset: 6px; }
+.chart-mix-legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 7px 18px; margin-top: 14px; }
+
+/* Month heat grid: one hue in five steps; the day's number in ink. */
+.chart-month { display: flex; flex-direction: column; gap: 5px; }
+.chart-month-wd, .chart-month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.chart-month-wd span { text-align: center; font-family: var(--font-mono); font-size: 9.5px; font-weight: 500; letter-spacing: 0.06em; color: var(--faint); }
+.chart-month-cell {
+  position: relative; display: flex; align-items: center; justify-content: center; min-width: 0; aspect-ratio: 1;
+  border-radius: 7px; font-family: var(--font-mono); font-size: var(--text-2xs); font-weight: 500; line-height: 1;
+  font-variant-numeric: tabular-nums; color: var(--ink); text-decoration: none;
+}
+a.chart-month-cell:hover { text-decoration: none; }
+.chart-month-cell.l0 { color: var(--text-muted); box-shadow: inset 0 0 0 1px var(--border); }
+.chart-month-cell.l1 { background: color-mix(in oklab, var(--brand) 30%, transparent); }
+.chart-month-cell.l2 { background: color-mix(in oklab, var(--brand) 55%, transparent); }
+.chart-month-cell.l3 { background: color-mix(in oklab, var(--brand) 85%, transparent); color: var(--brand-ink); }
+.chart-month-cell.l4 { background: var(--brand); color: var(--brand-ink); }
+.chart-month-cell.future { color: var(--faint); box-shadow: none; }
+.chart-month-cell.today { box-shadow: inset 0 0 0 1.5px var(--pop); }
+.chart-month-cell.chart-on { outline: 1.5px solid color-mix(in oklab, var(--ink) 55%, transparent); outline-offset: 1px; }
+.chart-month-cell.sel, .chart-month-cell.sel.chart-on { outline: 2px solid var(--text-primary); outline-offset: 1px; }
+.chart-month-cell:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; box-shadow: none; }
+.chart-month-cell.today:focus-visible { box-shadow: inset 0 0 0 1.5px var(--pop); }
+
+/* Presence strip: a quiet track, notches at 06, 12 and 18, lit stretches. */
+.chart-presence-track { position: relative; height: 6px; border-radius: 3px; background: color-mix(in oklab, var(--ink) 7%, transparent); }
+.chart-presence-notch { position: absolute; top: -3px; bottom: -3px; width: 1px; margin-left: -0.5px; background: var(--border-strong); }
+.chart-presence-seg {
+  position: absolute; top: 0; bottom: 0; min-width: 3px; border-radius: 3px;
+  background: var(--brand); box-shadow: 0 0 8px color-mix(in oklab, var(--brand) 45%, transparent);
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.chart-presence-seg::after { content: ""; position: absolute; inset: -9px -3px; } /* the hit area */
+.chart-presence.chart-lit .chart-presence-seg:not(.chart-on) { opacity: .4; }
+.chart-presence-track.chart-walk:focus-visible { outline-offset: 5px; }
+
+/* Stat tile: the Overview vital. Only a tile that links lifts on hover. */
+div.ov2-vital.chart-tile:hover { transform: none; box-shadow: inset 0 1px 0 var(--sheen), var(--shadow-sm); }
+.chart-tile .ov2-vital-label .ico-arrow-down { margin-left: auto; color: var(--faint); transition: transform var(--dur-fast) var(--ease-out); }
+a.chart-tile:hover .ov2-vital-label .ico-arrow-down { transform: translateY(2px); color: var(--text-muted); }
+
+/* Table view: the "show as table" disclosure under a set of charts. */
+.chart-tables { margin-top: 14px; }
+.chart-tables > summary {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer; list-style: none;
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 500; letter-spacing: 0.13em; text-transform: uppercase; color: var(--faint);
+}
+.chart-tables > summary::-webkit-details-marker { display: none; }
+.chart-tables > summary .ico { width: 13px; height: 13px; }
+.chart-tables > summary:hover, .chart-tables[open] > summary { color: var(--text-secondary); }
+.chart-table { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: var(--text-xs); }
+.chart-table caption { caption-side: top; padding: 0 0 6px; text-align: left; font-family: var(--font-display); font-size: var(--text-sm); font-weight: 600; color: var(--text-primary); }
+.chart-table th, .chart-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); text-align: left; }
+.chart-table tbody th { font-family: var(--font-mono); font-size: var(--text-xs); font-weight: 500; letter-spacing: 0; color: var(--text-secondary); }
+.chart-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.chart-table tfoot th, .chart-table tfoot td { font-weight: 600; color: var(--text-primary); border-bottom: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .chart-ring-seg, .chart-col, .chart-cap { animation: none; }
+  .chart-ring-seg, .chart-col, .chart-legend-row, .chart-mix-seg, .chart-presence-seg { transition: none; }
 }
