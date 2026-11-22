@@ -6171,11 +6171,11 @@ window.SEAM_NO_LIVE_REFRESH = true;
       
       <a class="active" href="/console/search?scope=all&amp;w=all&amp;sort=relevance&amp;q=example%20deploy" aria-current="page">All</a>
       
-      <a class="" href="/console/search?scope=memories&amp;w=all&amp;sort=relevance&amp;q=example%20deploy">Memories</a>
+      <a class="" href="/console/search?scope=memories&amp;w=all&amp;sort=relevance&amp;q=example%20deploy" data-search-kind="memory">Memories</a>
       
-      <a class="" href="/console/search?scope=notes&amp;w=all&amp;sort=relevance&amp;q=example%20deploy">Notes</a>
+      <a class="" href="/console/search?scope=notes&amp;w=all&amp;sort=relevance&amp;q=example%20deploy" data-search-kind="note">Notes</a>
       
-      <a class="" href="/console/search?scope=sessions&amp;w=all&amp;sort=relevance&amp;q=example%20deploy">Sessions</a>
+      <a class="" href="/console/search?scope=sessions&amp;w=all&amp;sort=relevance&amp;q=example%20deploy" data-search-kind="session">Sessions</a>
       
     </div>
   </div>
@@ -6202,7 +6202,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
 
     <div class="search-results-head">
       <div class="search-breakdown" aria-label="Result counts by type" data-seam-query>
-        <span data-search-kind="memories"><b>6</b> Memories</span><span data-search-kind="notes"><b>3</b> Notes</span><span data-search-kind="sessions"><b>2</b> Sessions</span>
+        <span data-search-kind="memory"><b>6</b> Memories</span><span data-search-kind="note"><b>3</b> Notes</span><span data-search-kind="session"><b>2</b> Sessions</span>
       </div>
       <span class="search-order-note">Best matches first</span>
     </div>

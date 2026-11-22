@@ -107,6 +107,17 @@ const (
 // and its own Show more.
 const searchRetiredKind = "retired"
 
+// searchAccents is the accent each group kind (and the scope that names it)
+// wears: the singular kind its rows carry, which is what console.css keys
+// --search-accent on (data-search-kind). A breakdown chip, a type pill, the
+// palette's group head and every row of the kind then wear one color, so a
+// chip reads as the legend for its rows. The retired memories wear the memory
+// accent, muted by their data-retired mark: retired knowledge, not a new kind.
+var searchAccents = map[string]string{
+	"memories": "memory", searchRetiredKind: "memory", "notes": "note", "tasks": "task",
+	"plans": "plan", "trials": "trial", "projects": "project", "sessions": "session",
+}
+
 // searchRow is one result, already resolved to the URL it links to. Href is
 // always an in-console path; Peek marks the rows the detail pane can load as a
 // fragment (every kind here can, but the flag keeps the template honest).
@@ -159,6 +170,12 @@ type searchRef struct {
 type searchGroup struct {
 	Kind  string `json:"kind"`
 	Label string `json:"label"`
+	// Accent is the singular kind the group's rows carry (searchAccents): the
+	// data-search-kind its chip and the palette's group head wear.
+	Accent string `json:"accent"`
+	// Retired marks the superseded and archived memories' group, which wears
+	// the memory accent muted.
+	Retired bool `json:"retired,omitempty"`
 	// Scope is the search scope the group belongs to: its own kind, except
 	// the retired memories, which are memories.
 	Scope string `json:"scope"`
@@ -225,10 +242,11 @@ type searchData struct {
 }
 
 // searchChip is one active restriction on an empty page: what it is, and the
-// page without it.
+// page without it. Accent is the kind's accent for a scope chip, "" otherwise.
 type searchChip struct {
-	Label string
-	Href  string
+	Label  string
+	Href   string
+	Accent string
 }
 
 // searchLink is the state a search URL carries. href writes it in one fixed
@@ -578,7 +596,7 @@ func (s *Service) searchEmptyState(ctx context.Context, d *searchData) error {
 	if d.Scope != "all" {
 		l := d.link()
 		l.scope = "all"
-		d.Chips = append(d.Chips, searchChip{Label: searchScopeLabel(d.Scope), Href: l.href()})
+		d.Chips = append(d.Chips, searchChip{Label: searchScopeLabel(d.Scope), Href: l.href(), Accent: searchAccents[d.Scope]})
 	}
 	if d.Window != "all" {
 		l := d.link()
@@ -619,7 +637,12 @@ func (s *Service) searchEmptyState(ctx context.Context, d *searchData) error {
 // filters it by the request's View, which hides every locked project. A
 // browser's console unlock opens some (it is a console cookie, never part of
 // the View), so for that browser the reads run with no View, and their hits
-// are filtered by exactly what this request's handle hides.
+// are filtered by exactly what this request's handle hides: inside the fused
+// search, before each kind's cap (retrieve.SearchInput.Exclude), so a locked
+// project's matches no longer take a kind's slots. They can still fill the
+// candidate legs' depth: at least 60 per kind on the page, the cap itself in
+// the palette (see Exclude). The retired memories need no list: they read the
+// request's handle, where the hidden projects do not exist.
 func (s *Service) searchReach(ctx context.Context) (context.Context, []string) {
 	if rc := reachOf(ctx); rc != nil && len(rc.unlocked) > 0 && s.cfg.Views != nil {
 		return access.WithView(ctx, access.View{}), s.cfg.Views.Hidden(rc.open)
@@ -635,7 +658,7 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 		if len(rows) == 0 {
 			return
 		}
-		g := searchGroup{Kind: kind, Label: label, Scope: scope}
+		g := searchGroup{Kind: kind, Label: label, Scope: scope, Accent: searchAccents[kind], Retired: kind == searchRetiredKind}
 		if len(rows) > shown {
 			rows, g.More = rows[:shown], true
 		}
@@ -658,13 +681,15 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 		hits, err := s.cfg.Retrieve.Search(searchCtx, retrieve.SearchInput{
 			Query: data.Query, Scope: scope, Semantic: !data.Fast, Since: data.Since,
 			PerKind: map[string]int{core.ItemKindMemory: memLimit + 1, core.ItemKindNote: noteLimit + 1},
-			Starred: data.starred(),
+			Starred: data.starred(), Exclude: hidden,
 		})
 		if err != nil {
 			return nil, err
 		}
 		var mems []searchRow
 		for _, h := range hits {
+			// A belt: Exclude already left the hidden projects out, before
+			// the cap.
 			if slices.Contains(hidden, h.Project) {
 				continue
 			}
@@ -1041,6 +1066,7 @@ func searchSortOptions(active string) []searchSortOption {
 type searchScope struct {
 	Key    string
 	Label  string
+	Accent string // the kind's accent (searchAccents); "" for "all"
 	Active bool
 	Href   string // this page in that scope (searchData.decorate)
 }
@@ -1059,7 +1085,7 @@ func searchScopeOptions(active string, scopes []string) []searchScope {
 	}
 	out := make([]searchScope, 0, len(scopes))
 	for _, k := range scopes {
-		out = append(out, searchScope{Key: k, Label: searchScopeLabel(k), Active: k == active})
+		out = append(out, searchScope{Key: k, Label: searchScopeLabel(k), Accent: searchAccents[k], Active: k == active})
 	}
 	return out
 }

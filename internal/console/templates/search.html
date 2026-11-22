@@ -26,7 +26,7 @@
     <span class="search-control-label">Type</span>
     <div class="search-pills" role="list" aria-label="Result type" data-seam-query>
       {{range .Scopes}}
-      <a class="{{if .Active}}active{{end}}" href="{{.Href}}"{{if .Active}} aria-current="page"{{end}}>{{.Label}}</a>
+      <a class="{{if .Active}}active{{end}}" href="{{.Href}}"{{if .Active}} aria-current="page"{{end}}{{with .Accent}} data-search-kind="{{.}}"{{end}}>{{.Label}}</a>
       {{end}}
     </div>
   </div>
@@ -76,7 +76,7 @@
 {{if .Rows}}
     <div class="search-results-head">
       <div class="search-breakdown" aria-label="Result counts by type" data-seam-query>
-        {{range .Groups}}<span data-search-kind="{{.Kind}}"><b>{{.Count}}{{if .More}}+{{end}}</b> {{.Label}}{{with .MoreHref}} <a class="search-more" href="{{.}}">Show more</a>{{end}}</span>{{end}}
+        {{range .Groups}}<span data-search-kind="{{.Accent}}"{{if .Retired}} data-retired{{end}}><b>{{.Count}}{{if .More}}+{{end}}</b> {{.Label}}{{with .MoreHref}} <a class="search-more" href="{{.}}">Show more</a>{{end}}</span>{{end}}
       </div>
       <span class="search-order-note">{{if eq .Sort "relevance"}}Best matches first{{else}}Sorted by {{.Sort}}{{end}}</span>
     </div>
@@ -126,7 +126,7 @@
     <div class="empty dotgrid search-empty"><span class="empty-ico">{{icon "search"}}</span>
       <div>Nothing matches &ldquo;{{.Query}}&rdquo;{{if .Chips}} with {{if gt (len .Chips) 1}}these filters{{else}}this filter{{end}}{{end}}.</div>
       {{if .Chips}}<div class="search-chips" aria-label="Active filters" data-seam-query>
-        {{range .Chips}}<a class="search-chip" href="{{.Href}}" aria-label="Remove the filter: {{.Label}}" title="Remove this filter">{{.Label}}{{icon "x"}}</a>{{end}}
+        {{range .Chips}}<a class="search-chip" href="{{.Href}}" aria-label="Remove the filter: {{.Label}}" title="Remove this filter"{{with .Accent}} data-search-kind="{{.}}"{{end}}>{{.Label}}{{icon "x"}}</a>{{end}}
         {{with .ClearHref}}<a class="search-chip-clear" href="{{.}}">Clear all filters</a>{{end}}
       </div>{{end}}
       {{with .RetiredHint}}<div class="search-empty-retired" data-seam-query>{{.}} <a href="{{$.Data.ArchivedHref}}">Include archived</a></div>{{end}}

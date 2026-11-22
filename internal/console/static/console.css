@@ -8180,3 +8180,18 @@ a.project-global-line:focus-visible { outline: none; box-shadow: var(--shadow-fo
    danger tone, and the sentence it asks about sits beside it. */
 .btn[data-armed] { color: var(--danger-ink); background: var(--danger); border-color: var(--danger); }
 .confirm-note { display: inline-block; max-width: 100%; margin-left: 8px; font-size: var(--text-xs); color: var(--danger); vertical-align: middle; }
+
+/* UX 19 follow-up: one accent per search kind */
+/* A group carries the singular kind its rows carry (searchGroup.Accent), so a
+   breakdown chip is the legend for its rows; the type pills, an empty page's
+   scope chip and the palette's group heads wear the same accent as a dot. The
+   archived and superseded memories wear a muted take of the memory accent,
+   never a hue of their own. Chip and label text lean a fifth toward ink, so
+   every accent reads AA on its tint in the light theme. */
+[data-search-kind="memory"][data-retired] { --search-accent: color-mix(in oklab, var(--brand) 50%, var(--muted)); }
+.search-breakdown span, .search-kind { color: color-mix(in oklab, var(--search-accent) 80%, var(--ink)); }
+.search-pills a[data-search-kind]::before, .search-chip[data-search-kind]::before, .cmdk-group[data-search-kind]::before {
+  content: ""; flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--search-accent);
+}
+.search-pills a[data-search-kind]::before { margin-right: 6px; }
+.cmdk-group[data-search-kind]::before { display: inline-block; margin-right: 7px; vertical-align: 1px; }

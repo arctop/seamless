@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -14,9 +15,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/arctop/seamless/internal/access"
+	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/console/browserproof"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
+	"github.com/arctop/seamless/internal/files"
+	"github.com/arctop/seamless/internal/passkey"
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/store/storetest"
@@ -740,6 +746,151 @@ func TestSxSearch_LockedProjectRetiredMemoryStaysAbsent(t *testing.T) {
 	require.Equal(t, []string{open.ID}, sxIDs(sxGroup(t, answer("/console/search?format=json&q=ops-retired"), searchRetiredKind)),
 		"the open project's retired memory is found")
 	require.Equal(t, []string{open.ID}, sxIDs(sxGroup(t, answer("/console/search?format=json&archived=1&q="+openMarker), searchRetiredKind)))
+}
+
+// skTwoLockedConsole is newLockedConsole's fixture (lockedSlug locked,
+// openSlug open) with a second locked project, skSealedSlug, which no browser
+// in these tests unlocks.
+const (
+	skSealedSlug   = "example-hr"
+	skSealedSecret = "SEALED-SECRET-4K"
+)
+
+func skTwoLockedConsole(t *testing.T) *lockedConsole {
+	t.Helper()
+	ctx := context.Background()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "seam.db")
+	db, err := storetest.OpenFresh(t, path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	mgr, err := files.NewManager(filepath.Join(dir, "data"), db, slog.Default())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mgr.Close() })
+	locked := []string{lockedSlug, skSealedSlug}
+	for _, slug := range []string{lockedSlug, skSealedSlug, openSlug} {
+		_, err := store.EnsureProject(ctx, db, slug, slug)
+		require.NoError(t, err)
+	}
+	for _, slug := range locked {
+		require.NoError(t, store.SetProjectIsolation(ctx, db, slug, core.IsolationConfidential))
+	}
+	key, err := browserproof.NewKey()
+	require.NoError(t, err)
+	lc := &lockedConsole{db: db, mgr: mgr, key: key}
+	lc.policy, err = access.New(config.PeerAuth{Owner: "owner", ForceLocked: locked}, func(n string) (access.Account, error) {
+		if n == "owner" {
+			return access.Account{UID: 501, Name: "owner"}, nil
+		}
+		return access.Account{}, fmt.Errorf("no %s", n)
+	})
+	require.NoError(t, err)
+	views, err := store.OpenViews(path, lc.policy.OwnerLocked())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = views.Close() })
+	base, err := views.For(nil)
+	require.NoError(t, err)
+	v, err := passkey.New(passkey.Config{RPID: "localhost", Origins: []string{approverOrigin}})
+	require.NoError(t, err)
+	lc.rec = events.NewRecorder(db)
+	lc.svc = approval.New(approval.Config{DB: db, Passkeys: v, Origins: []string{approverOrigin}, Events: lc.rec, ForceLocked: locked})
+	lc.cs, err = New(Config{
+		DB: base, WriteDB: db, Files: mgr, Events: lc.rec.ReadingFrom(base),
+		Retrieve: retrieve.New(db, nil, config.Defaults().Budgets, nil), DataDir: filepath.Join(dir, "data"),
+		APIKey: testKey, Level: "advanced", Approvals: lc.svc, Views: views, ForceLocked: locked,
+		Terminal: &TerminalApprover{Account: "_seamless", Seamlessd: "/opt/seamless/bin/seamlessd", Config: "/opt/seamless/etc/seamless.yaml"},
+	})
+	require.NoError(t, err)
+	mux := http.NewServeMux()
+	lc.cs.Register(mux)
+	owner := lc.policy.OwnerView()
+	lc.mux = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, ok := access.FromContext(r.Context()); !ok {
+			r = r.WithContext(access.WithView(r.Context(), owner))
+		}
+		mux.ServeHTTP(w, r)
+	})
+	return lc
+}
+
+// A browser that unlocked one locked project counts each kind whole while
+// another locked project's matches outrank everything: the knowledge search
+// leaves the still-locked project out before each kind's cap. It used to drop
+// those hits after the cap, so a kind came out short, lost its More, or
+// vanished.
+func TestSkSearch_UnlockedBrowserCountsPastAStillLockedProject(t *testing.T) {
+	lc := skTwoLockedConsole(t)
+	now := time.Now().UTC()
+	for i := range 25 { // the still-locked project: the term three times, every one
+		seedSearchMemory(t, lc.db, fmt.Sprintf("01SKLM%02d", i), fmt.Sprintf("sk-sealed-%02d", i), "harbor harbor harbor", skSealedSlug, "harbor harbor harbor "+skSealedSecret)
+		seedSearchNote(t, lc.db, fmt.Sprintf("01SKLN%02d", i), fmt.Sprintf("sk-sealed-note-%02d", i), "Sealed note", "harbor harbor harbor", skSealedSlug, "harbor harbor harbor "+skSealedSecret, now)
+	}
+	for i := range 2 { // the unlocked project
+		seedSearchMemory(t, lc.db, fmt.Sprintf("01SKUM%02d", i), fmt.Sprintf("sk-unlocked-%02d", i), "the harbor and the long way round it", lockedSlug, "the harbor and the long way round it, by the old road")
+	}
+	seedSearchNote(t, lc.db, "01SKUN00", "sk-unlocked-note", "Unlocked note", "d", lockedSlug, "the harbor and the long way round it, by the old road", now)
+	for i := range 22 { // the open project
+		seedSearchMemory(t, lc.db, fmt.Sprintf("01SKOM%02d", i), fmt.Sprintf("sk-open-%02d", i), "the harbor and the long way round it", openSlug, "the harbor and the long way round it, by the old road")
+	}
+	for i := range 2 {
+		seedSearchNote(t, lc.db, fmt.Sprintf("01SKON%02d", i), fmt.Sprintf("sk-open-note-%02d", i), "Open note", "d", openSlug, "the harbor and the long way round it, by the old road", now)
+	}
+	cookie := lc.unlockByTerminal(t)
+	answer := func(target, unlock string) (searchData, string) {
+		t.Helper()
+		code, body := lc.get(t, target, unlock)
+		require.Equal(t, http.StatusOK, code, target)
+		var data searchData
+		require.NoError(t, json.Unmarshal([]byte(body), &data), target)
+		return data, body
+	}
+	projects := func(g searchGroup) map[string]int {
+		out := map[string]int{}
+		for _, r := range g.Rows {
+			out[r.Project]++
+		}
+		return out
+	}
+
+	data, raw := answer("/console/search?format=json&q=harbor", cookie)
+	mems, notes := sxGroup(t, data, "memories"), sxGroup(t, data, "notes")
+	require.Equal(t, 20, mems.Count)
+	require.True(t, mems.More, "24 visible memories behind a 20-row page")
+	require.Equal(t, 3, notes.Count, "every visible note, the unlocked project's included")
+	require.False(t, notes.More)
+	require.Equal(t, map[string]int{lockedSlug: 1, openSlug: 2}, projects(notes))
+	require.True(t, data.Partial)
+	require.NotContains(t, raw, skSealedSecret)
+	require.NotContains(t, raw, skSealedSlug)
+
+	more, _ := answer(mems.MoreHref+"&format=json", cookie)
+	all := sxGroup(t, more, "memories")
+	require.Equal(t, 24, all.Count, "Show more reveals every visible memory")
+	require.False(t, all.More)
+	require.Equal(t, map[string]int{lockedSlug: 2, openSlug: 22}, projects(all))
+
+	_, page := lc.get(t, "/console/search?q=harbor", cookie)
+	require.Contains(t, page, "<b>20+</b> Memories")
+	require.Contains(t, page, "<b>3</b> Notes")
+	require.NotContains(t, page, skSealedSecret)
+
+	// Another browser reads neither locked project, and counts the same way.
+	plain, _ := answer("/console/search?format=json&q=harbor", "")
+	require.Equal(t, 20, sxGroup(t, plain, "memories").Count)
+	require.Equal(t, map[string]int{openSlug: 2}, projects(sxGroup(t, plain, "notes")))
+
+	// The retired memories read the request's handle, on which the still-locked
+	// project does not exist: by name and by text, only the unlocked project's.
+	sxRetire(t, lc.db, "01SKLM00", "")
+	sxRetire(t, lc.db, "01SKUM00", "")
+	gone, raw := answer("/console/search?format=json&q=sk-sealed-00", cookie)
+	require.False(t, sxHasGroup(gone, searchRetiredKind))
+	require.NotContains(t, raw, skSealedSecret)
+	byName, _ := answer("/console/search?format=json&q=sk-unlocked-00", cookie)
+	require.Equal(t, []string{"01SKUM00"}, sxIDs(sxGroup(t, byName, searchRetiredKind)))
+	byText, raw := answer("/console/search?format=json&archived=1&q=harbor", cookie)
+	require.Equal(t, []string{"01SKUM00"}, sxIDs(sxGroup(t, byText, searchRetiredKind)))
+	require.NotContains(t, raw, skSealedSecret)
 }
 
 // An empty page lists each active restriction as a chip that removes it, and

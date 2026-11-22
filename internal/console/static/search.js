@@ -12,6 +12,8 @@
    what it shows, starred matches take their slots first, and a cut kind says
    so (group.more) with the page that shows the rest (group.moreHref). The
    palette shows the count as "5+" and ends the group with "More in Search".
+   Each group head wears its kind's accent (group.accent, muted for the
+   retired memories), the same one the Search page's chips and rows wear.
 
    Inert when #cmdk is absent (the login page has no palette). */
 (function () {
@@ -222,18 +224,20 @@
         // A cut kind: its count is a floor, and its last row opens the page
         // that shows the rest.
         if (g.more && g.moreHref) items.push({ title: 'More in Search', meta: g.label, href: g.moreHref, more: true });
-        group(g.label, g.count + (g.more ? '+' : ''), items, 'remote');
+        group(g.label, g.count + (g.more ? '+' : ''), items, 'remote', g);
       });
     }
     if (status) note(status.cls, status.text);
     if (rows.length) setSelected(0);
   }
 
-  function group(label, count, items, source) {
+  function group(label, count, items, source, g) {
     if (!items.length) return;
     var head = document.createElement('li');
     head.className = 'cmdk-group' + (source === 'local' ? ' local' : '');
     head.setAttribute('role', 'presentation');
+    if (g && g.accent) head.setAttribute('data-search-kind', g.accent);
+    if (g && g.retired) head.setAttribute('data-retired', '');
     head.textContent = label + ' ';
     if (source !== 'local') {
       var n = document.createElement('span');

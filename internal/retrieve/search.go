@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"time"
 
@@ -45,6 +46,15 @@ type SearchInput struct {
 	// cap can never cut a starred match in favor of an unstarred one. It needs
 	// PerKind; the shared-Limit ranking keeps its own order.
 	Starred store.SearchStarred
+	// Exclude are projects whose hits are left out before any cap, the way a
+	// hit the caller's view may not read is (access.Visible): a caller that
+	// reads with a wider view than its answer may show -- the console, for a
+	// browser whose unlock opens some locked projects but not all -- names
+	// the ones still hidden, so their matches never take a kind's slots and
+	// leave its count short. The candidate legs still read them, so they can
+	// fill a leg's depth: the caller's view is what keeps a project out of
+	// the legs themselves.
+	Exclude []string
 }
 
 // Search finds memories and notes for a human searching the console. It shares
@@ -91,7 +101,7 @@ func (s *Service) Search(ctx context.Context, in SearchInput) ([]Hit, error) {
 	if err != nil {
 		return nil, err
 	}
-	out, err := s.takeHits(ctx, rankSearch(acc), acc, limit)
+	out, err := s.takeHits(ctx, rankSearch(acc), acc, limit, in.Exclude)
 	if err != nil {
 		return nil, err
 	}
@@ -128,8 +138,9 @@ func (s *Service) searchCandidates(ctx context.Context, in SearchInput, kinds []
 
 // takeHits walks ordered (rankSearch's order) and keeps up to limit hits: a
 // semantic-only hit below the floor drops, and so does one the caller may not
-// read.
-func (s *Service) takeHits(ctx context.Context, ordered []string, acc map[string]*fusedItem, limit int) ([]Hit, error) {
+// read or one in a project it excludes (SearchInput.Exclude) -- before it
+// counts toward limit.
+func (s *Service) takeHits(ctx context.Context, ordered []string, acc map[string]*fusedItem, limit int, exclude []string) ([]Hit, error) {
 	hyd, err := s.hydrate(ctx, ordered, acc)
 	if err != nil {
 		return nil, err
@@ -151,7 +162,7 @@ func (s *Service) takeHits(ctx context.Context, ordered []string, acc map[string
 		// peer_auth: the identifier leg reads every project, so the caller's
 		// reach is applied to the hydrated hit -- the console owner's search must
 		// not surface a locked project without a lease.
-		if !ok || !access.Visible(ctx, h.Project) {
+		if !ok || !access.Visible(ctx, h.Project) || slices.Contains(exclude, h.Project) {
 			continue
 		}
 		if f.identifierMatch != "" {
@@ -185,7 +196,7 @@ func (s *Service) searchPerKind(ctx context.Context, in SearchInput, limit int) 
 	if s.embedder != nil && in.Semantic {
 		// One embedding per search, however many kinds and lanes ask for it.
 		cp := *s
-		cp.embedder = &onceEmbedder{inner: s.embedder}
+		cp.embedder = &onceEmbedder{inner: s.embedder, slot: &cp.embedder}
 		run = &cp
 	}
 	var out []Hit
@@ -215,7 +226,7 @@ func (s *Service) searchPerKind(ctx context.Context, in SearchInput, limit int) 
 			for id := range starred {
 				delete(acc, id)
 			}
-			rest, err := run.takeHits(ctx, rankSearch(acc), acc, kindLimit-len(hits))
+			rest, err := run.takeHits(ctx, rankSearch(acc), acc, kindLimit-len(hits), in.Exclude)
 			if err != nil {
 				return nil, err
 			}
@@ -332,7 +343,7 @@ func (s *Service) searchStarred(ctx context.Context, in SearchInput, kind string
 		}
 	}
 
-	hits, err := s.takeHits(ctx, rankSearch(acc), acc, limit)
+	hits, err := s.takeHits(ctx, rankSearch(acc), acc, limit, in.Exclude)
 	return hits, starred, err
 }
 
@@ -356,9 +367,12 @@ func (s *Service) searchVector(ctx context.Context, query string) ([]float32, er
 
 // onceEmbedder remembers one query's embedding (or its failure), so the
 // several lanes of one search cost one provider round-trip. It lives for one
-// Search call, on one goroutine.
+// Search call, on one goroutine. slot is that search's own embedder field: a
+// provider failure empties it, so the lane that asked warns about it and the
+// lanes after it run lexical-only without asking again (and warning again).
 type onceEmbedder struct {
 	inner llm.Embedder
+	slot  *llm.Embedder
 	text  string
 	vec   []float32
 	err   error
@@ -372,7 +386,9 @@ func (e *onceEmbedder) Embed(ctx context.Context, text string) ([]float32, error
 		return e.vec, e.err
 	}
 	e.text, e.done = text, true
-	e.vec, e.err = e.inner.Embed(ctx, text)
+	if e.vec, e.err = e.inner.Embed(ctx, text); e.err != nil && !errors.Is(e.err, llm.ErrConfig) {
+		*e.slot = nil
+	}
 	return e.vec, e.err
 }
 

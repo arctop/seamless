@@ -614,6 +614,11 @@ for a narrower search. The header's total carries the same **+** when any kind
 was cut. Memories and notes are counted apart, so many matching memories never
 squeeze the notes out.
 
+Each kind wears one color wherever Search names it: its count in the results
+header is the legend for its rows, and the Type filter, the palette's group
+heads and an empty page's type chip carry the same color as a dot. Archived
+and superseded memories wear a quieter take of the memory color.
+
 **Starred only** (`?fav=1`) runs inside each query, before the cut, so a starred
 match ranked past the first 20 still appears. Without it, a kind's starred
 matches take its first slots, then the best of the rest.
