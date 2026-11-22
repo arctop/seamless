@@ -757,8 +757,8 @@ is for.</p>
 <p>A plain click on a link to a memory, a note, a task, a plan, a session, an
 event or a trial opens it in a wide panel over the page. The page stays as it
 was behind it: never reloaded, its scroll and open folds kept, its live
-updates going on. A click on a row of Sessions, Search, Mishaps or a project's
-tabs does the same. A project link still opens the project.</p>
+updates going on. A click on a row of Sessions, Search, Mishaps, the Tasks
+list or a project's tabs does the same. A project link still opens the project.</p>
 <ul>
 <li>The panel's header says where the item lives (its project, then Memories,
 Notes, Tasks and so on, or a task's <code>plan:&lt;slug&gt;</code>), with <strong>k</strong> and <strong>j</strong>
@@ -849,15 +849,15 @@ a superseded or archived memory finds it here too, with its status.</p>
 </tr>
 <tr>
 <td><code>j</code> / <code>k</code></td>
-<td>Next / previous item in a library rail, the Memories list or the Notes list, or, on <a href="#item-page">an item's own page</a>, in the list it is in</td>
+<td>Next / previous item in a library rail, the Memories list, the Notes list or the Tasks list, or, on <a href="#item-page">an item's own page</a>, in the list it is in</td>
 </tr>
 <tr>
 <td><code>Enter</code></td>
-<td>On the Memories or the Notes list, open the focused row's own page</td>
+<td>On the Memories, Notes or Tasks list, open the focused row's own page</td>
 </tr>
 <tr>
 <td><code>p</code></td>
-<td>Open the project switcher on Memories, Notes and Plans</td>
+<td>Open the project switcher on Memories, Notes, Tasks and Plans</td>
 </tr>
 <tr>
 <td><code>a</code> / <code>x</code></td>
@@ -1336,8 +1336,7 @@ JSON and not HTML. This is how <code>seam</code> reads the console's data.</li>
 <li><strong>An HTML fragment</strong> for entity details when the caller passes <code>?peek=1</code> - the
 <a href="#read-in-place">reading panel</a> (or the Diary's or Interactions' pane) loads
 it without a page navigation - or <code>?reader=1</code>, the richer
-reader fragment the library screens (tasks, plans, labs, trials) swap in
-place.</li>
+reader fragment the library screens (plans, labs, trials) swap in place.</li>
 </ul>
 <p>The event page composes its full page from the same <code>detail-body</code> block its
 peek fragment renders, so the two cannot drift. Session and project
@@ -2033,8 +2032,8 @@ stalled), then the knowledge base and its reach, judged against its 55% target.<
 2 waiting on people&quot; - then its open tasks, its last activity (the later of its
 last session update and its last task change; hover it for the moment in your
 own time) and its reach as a small figure. The whole row opens the project.
-Blocked and waiting on people count exactly what the Tasks page's rails count
-with its plan steps shown (<code>?steps=1</code>): blocked waits on unfinished work
+Blocked and waiting on people count exactly what the Tasks page's JSON rails
+and <code>counts</code> count with its plan steps shown (<code>?steps=1</code>): blocked waits on unfinished work
 alone, and waiting on people is a gate or a step an open gate holds.</p>
 <p><strong>Needs attention</strong> means something waits on you or is stuck: a lapsed claim, a
 task marked in progress that no claim holds, an open gate, a captured plan
@@ -2454,35 +2453,64 @@ holds the note, the page says why instead.</p>
 note's page, <code>/</code> focuses the filter and <code>p</code> opens the switcher.</p>
 <h2 id="tasks">Tasks</h2>
 <p><code>/console/tasks</code>, <code>/console/tasks/{id}</code></p>
-<p>The backlog. By default it lists every project's tasks outside a plan, which
-is what <code>tasks_ready</code> means for an agent; <strong>Plan steps</strong> adds the plan steps,
-each with its <code>plan:&lt;slug&gt;</code> chip, and the header's counts follow it. The rail
-groups the tasks in the words below: <strong>in progress</strong> (held by a live claim),
-<strong>no live claim</strong> (in progress, but its holder's lease lapsed or nobody
-claimed it), <strong>ready</strong>, <strong>blocked</strong>, <strong>waiting on people</strong> (the gates) and
-<strong>waiting on a gate</strong> (the steps an open gate holds), then <strong>recently closed</strong>
-(done and dropped, newest first, the newest 25, folded). The header counts
-them as the <a href="#projects">project board</a> does: in progress is a live claim's
-alone, lapsed claims and unclaimed starts are counted apart, and waiting on
-people is the gates and the steps they hold together.</p>
-<p>Each row names its project, its plan, and how long it has been in its state
-(<code>ready 12d</code>, <code>in progress 2h</code>): an in progress row names its holder and its
-lease, in the lapsed tone once the lease ran out; a blocked row names its
-first blocker; a waiting row names who it waits on. A ready task nothing
-changed on for 30 days says <strong>untouched</strong>.</p>
+<p>The backlog, as one list, full width, with no rail and no reader. By default
+it lists every project's tasks outside a plan, which is what <code>tasks_ready</code>
+means for an agent; <strong>Plan steps too</strong> adds the plan steps, each with its
+<code>plan:&lt;slug&gt;</code> chip, and the header's count follows it. The list draws its
+groups in this order, each heading saying how many it holds, and the pills
+under the bar jump to them:</p>
+<ul>
+<li><strong>Needs you</strong>: a gate waiting on you, a claim whose lease lapsed, and a
+task marked in progress that no claim holds, the tasks the Overview's
+<strong>Needs you</strong> cards and the sidebar's Tasks badge count. A plan step that
+waits on you is here whatever <strong>Plan steps too</strong> says.</li>
+<li><strong>In progress</strong>: held by a live claim.</li>
+<li><strong>Ready</strong>: the first 10 in the sort's order, then &quot;N more ready - show
+them&quot;, which draws every one (<code>?ready=all</code>).</li>
+<li><strong>Blocked</strong>: waiting on unfinished work, a step that only your own gates
+hold among them.</li>
+<li><strong>Waiting on others</strong>: the gates on anyone else, then the steps such a
+gate holds, or whose own gate waits on someone else.</li>
+<li><strong>Recently closed</strong>: done and dropped in the last 7 days, newest first (the
+newest 25 of them), folded; <strong>All N closed tasks</strong> pages through every
+closed task.</li>
+</ul>
+<p>A row is the task's state mark and title, with one line that says what holds
+it: a gate's who and what, and how many tasks it holds; when a claim lapsed
+and whose it was; a live claim's holder, its lease and when it started; how
+long a task has been ready, or <strong>untouched</strong> once nothing changed on it for
+30 days; its first blocker, linked, and how many more; who it waits on; when
+it closed. Then the last 8 characters of its id, which copy the whole id,
+its project, its plan, and the one action the row needs: <strong>Mark as handled</strong>
+on a gate waiting on you, <strong>Release claim</strong> on a lapsed claim (it asks in the
+page first), and <strong>Mark done</strong> on a ready task or one in progress that no
+live claim holds. A row a live claim holds offers no action. Each posts to
+the route the task's own page posts to, and lands back on the list at the
+row, wherever its new group puts it, with the filters kept and a line that
+says what it did. The title, or a click on the row, opens the task in the
+<a href="#read-in-place">reading panel</a>; <code>j</code> and <code>k</code> move a focus ring through the
+titles, <code>Enter</code> opens the focused task's own page, <code>/</code> focuses the filter and
+<code>p</code> opens the switcher.</p>
 <p>The URL holds the filters, so a link keeps them: <code>?project=&lt;slug&gt;</code> (<code>global</code>
-for the global scope; the <strong>Project</strong> menu lists the projects with open tasks
-and their counts), <code>?plan=&lt;slug&gt;</code> (one plan's steps; <code>plan:&lt;slug&gt;</code> works too),
-<code>?q=&lt;text&gt;</code> (title, body or id; a pasted short id finds its task), <code>?steps=1</code>
-(plan steps too), <code>?closed=all</code> (every closed task, 25 to a page, with
-<code>&amp;page=N</code>) and <code>?sort=oldest|newest</code> (oldest first, the order agents claim
-in, is the default). A value the page cannot read, or a project or plan it
-holds no task of (a locked one's included), is a 400 that names what it
-takes. The JSON model (<code>?format=json</code>) carries the rails with <code>counts</code>,
-<code>projects</code> and <code>filter</code>.</p>
-<p>The reader carries the task's body, claim and lease state, both dependency
-directions, its <strong>History</strong>, and the owner's actions on the task, the same in
-the reader and in the peek (the step dossier on a project's Plans &amp; tasks tab):
+for the global scope; the project switcher, the same one as on
+<a href="#memories">Memories</a>, lists the projects with open tasks and their counts),
+<code>?plan=&lt;slug&gt;</code> (one plan's steps; <code>plan:&lt;slug&gt;</code> works too), <code>?q=&lt;text&gt;</code>
+(title, body or id; a pasted short id finds its task), <code>?steps=1</code> (plan steps
+too), <code>?ready=all</code> (every ready task), <code>?closed=all</code> (every closed task, 25 to
+a page, with <code>&amp;page=N</code>) and <code>?sort=oldest|newest</code> (oldest first, the order
+agents claim in, is the default). A value the page cannot read, or a project
+or plan it holds no task of (a locked one's included), is a 400 that names
+what it takes. The JSON model (<code>?format=json</code>) carries the rails as before
+(<code>ready</code>, <code>inProgress</code>, <code>blocked</code>, <code>gates</code>, <code>gated</code>, and <code>closed</code>, a page of
+the newest closed tasks) with <code>projects</code>, <code>filter</code> and <code>counts</code>, which count
+as the <a href="#projects">project board</a> does: in progress is a live claim's alone,
+lapsed claims and unclaimed starts are counted apart, and waiting on people is
+the gates and the steps they hold together. It adds the list's <code>needsYou</code>
+(the Needs you group, in its order) and <code>closedRecent</code> (the tasks closed in
+the last 7 days).</p>
+<p>A task's own page and the panel carry the task's body, claim and lease state,
+both dependency directions, its <strong>History</strong>, and the owner's actions on the
+task, the same as the peek (the step dossier on a project's Plans &amp; tasks tab):
 <strong>Mark done</strong> and <strong>Drop</strong> on an open or in-progress task, <strong>Reopen</strong> on a
 closed one, <strong>Mark as handled</strong> with a note on an open gate, <strong>Waits on
 someone</strong> on an open or in-progress task whose own gate is not open (who must
@@ -2544,11 +2572,12 @@ the project workspace and Plans:</p>
 <p>A task's holder and creator are named by their session and link to its page
 when the console can read it. The lease reads <code>lease live, 12m left</code> while the
 claim holds and <code>lapsed 3m ago</code> once it runs out.</p>
-<p>Each task row - a rail row, a plan step, an off-plan row, a dependency -
-shows the last 8 characters of the task's id with a copy button beside it that
-copies the whole id, the form you hand an agent (<code>run &lt;id&gt;</code>). In a list the
-button stays quiet until you hover or focus the row; on a touch screen it is
-always there. A plan copies as <code>plan:&lt;slug&gt;</code>.</p>
+<p>Each task row - a row of the Tasks list, a plan step, an off-plan row, a
+dependency - shows the last 8 characters of the task's id and copies the
+whole id, the form you hand an agent (<code>run &lt;id&gt;</code>): on the Tasks list the
+short id is the copy button itself; elsewhere a copy button beside it stays
+quiet until you hover or focus the row, and on a touch screen it is always
+there. A plan copies as <code>plan:&lt;slug&gt;</code>.</p>
 <p>Hover a relative time (<code>3d</code>) to see the moment it names, in your browser's own
 time; without JavaScript the hover shows it in UTC.</p>
 <p>Under a lock, a task blocked by a task in a locked project you
@@ -2661,7 +2690,7 @@ tasks tab at the plan when it has a workspace. A plan whose steps exist with
 no note tagged <code>plan:&lt;slug&gt;</code> in its project still opens: its page says it has
 no narrative note yet, and has nothing to star. Every plan
 link the console renders names its project (the board, the project tab, the
-plan's page, Overview, Now, the Diary, Search, the Tasks reader, notes and the
+plan's page, Overview, Now, the Diary, Search, a task's own page, notes and the
 Gardener); a slug that is a plan in more than one project, opened without <code>?project=</code>,
 answers a chooser naming each project's plan (with <code>?format=json</code>, a 409 that
 names them), never one page holding both. A plan's source reads &quot;captured from

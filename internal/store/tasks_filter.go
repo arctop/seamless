@@ -1,7 +1,8 @@
 // The console Tasks page's filtered reads (plan:console-ux-pass UX 08): the
 // queue's groups narrowed by project, plan and text, the closed tasks a page at
 // a time, the open tasks per project for its menu, when each task's state
-// began, and a task's history. They build on the queue's predicates
+// began, and a task's history. UX 30's list adds the week's closes, what each
+// gate holds, and the open tasks a locked project blocks. They build on the queue's predicates
 // (tasks_gates.go) and add none of their own, so the page's groups stay the
 // partition the board counts (TaskCountsByProject).
 package store
@@ -39,6 +40,20 @@ type TaskFilter struct {
 
 // where renders the filter's conditions over alias, each led by AND.
 func (f TaskFilter) where(alias string) (string, []any) {
+	where, args := f.whereScope(alias)
+	if f.offPlanOnly() {
+		where += " AND " + alias + ".plan_slug = ''"
+	}
+	return where, args
+}
+
+// offPlanOnly reports a filter that keeps the plan steps out: no plan named,
+// and the steps not asked for.
+func (f TaskFilter) offPlanOnly() bool { return f.Plan == "" && !f.Steps }
+
+// whereScope renders every condition of the filter but the one that keeps
+// the plan steps out (offPlanOnly): the project, the plan it names, the text.
+func (f TaskFilter) whereScope(alias string) (string, []any) {
 	var (
 		b    strings.Builder
 		args []any
@@ -47,12 +62,9 @@ func (f TaskFilter) where(alias string) (string, []any) {
 		b.WriteString(" AND " + alias + ".project_slug = ?")
 		args = append(args, f.Project)
 	}
-	switch {
-	case f.Plan != "":
+	if f.Plan != "" {
 		b.WriteString(" AND " + alias + ".plan_slug = ?")
 		args = append(args, f.Plan)
-	case !f.Steps:
-		b.WriteString(" AND " + alias + ".plan_slug = ''")
 	}
 	if q := strings.TrimSpace(f.Query); q != "" {
 		pred, qargs := taskTextPredicate(alias, q)
@@ -60,6 +72,18 @@ func (f TaskFilter) where(alias string) (string, []any) {
 		args = append(args, qargs...)
 	}
 	return b.String(), args
+}
+
+// WithOwnerQueue is f widened, when it keeps the plan steps out, to the plan
+// steps too: the Tasks list reads the people's queue and the work in
+// progress this way, because what waits on the owner (a gate on the owner, a
+// lapsed claim, a claimless start) shows whether or not it is a plan's step.
+// The console keeps the steps that wait on the owner and leaves the rest.
+func (f TaskFilter) WithOwnerQueue() TaskFilter {
+	if f.offPlanOnly() {
+		f.Steps = true
+	}
+	return f
 }
 
 // taskTextPredicate matches q in a task's title or body, as its whole id, or
@@ -178,6 +202,100 @@ func FilteredClosedTasks(ctx context.Context, db *sql.DB, f TaskFilter, limit, o
 		return nil, 0, fmt.Errorf("store.FilteredClosedTasks: %w", err)
 	}
 	return tasks, total, nil
+}
+
+// CountClosedSince counts the done and dropped tasks under f that closed at
+// or after since (a row with no closed_at by its last update): the Tasks
+// list's recently closed.
+func CountClosedSince(ctx context.Context, db *sql.DB, f TaskFilter, since time.Time) (int, error) {
+	where, args := f.where("t")
+	var n int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tasks t
+		WHERE t.status IN ('done','dropped') AND COALESCE(t.closed_at, t.updated_at) >= ?`+where,
+		append([]any{core.FormatTime(since.UTC())}, args...)...).Scan(&n); err != nil {
+		return 0, fmt.Errorf("store.CountClosedSince: %w", err)
+	}
+	return n, nil
+}
+
+// LockedBlockedTasks is the open tasks with an unfinished blocker in one of
+// projects, by id. The console asks it on the main handle for the locked
+// projects a request does not read (OpenBlockerProjects' rule): the
+// request's handle hides those blockers and their edges, so such a task
+// reads as ready there, and the Tasks list counts it as blocked.
+func LockedBlockedTasks(ctx context.Context, db *sql.DB, projects []string) ([]string, error) {
+	projects = dedupeStrings(projects)
+	if len(projects) == 0 {
+		return nil, nil
+	}
+	args := make([]any, len(projects))
+	for i, p := range projects {
+		args[i] = p
+	}
+	rows, err := db.QueryContext(ctx, `SELECT DISTINCT d.task_id FROM task_deps d
+		JOIN tasks b ON b.id = d.depends_on
+		JOIN tasks t ON t.id = d.task_id
+		WHERE t.status = 'open' AND b.status IN ('open','in_progress')
+		  AND b.project_slug IN (`+placeholders(len(args))+`)
+		ORDER BY d.task_id`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("store.LockedBlockedTasks: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("store.LockedBlockedTasks: scan: %w", err)
+		}
+		out = append(out, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store.LockedBlockedTasks: %w", err)
+	}
+	return out, nil
+}
+
+// OpenDependentCounts counts, for each of ids, the unfinished tasks (open or
+// in progress) that depend on it: what a gate holds. An id nothing
+// unfinished depends on is absent.
+func OpenDependentCounts(ctx context.Context, db *sql.DB, ids []string) (map[string]int, error) {
+	ids = dedupeStrings(ids)
+	out := map[string]int{}
+	for start := 0; start < len(ids); start += depsBatchSize {
+		batch := ids[start:min(start+depsBatchSize, len(ids))]
+		args := make([]any, len(batch))
+		for i, id := range batch {
+			args[i] = id
+		}
+		if err := countDependents(ctx, db, args, out); err != nil {
+			return nil, fmt.Errorf("store.OpenDependentCounts: %w", err)
+		}
+	}
+	return out, nil
+}
+
+// countDependents runs one batch of OpenDependentCounts into out.
+func countDependents(ctx context.Context, db *sql.DB, ids []any, out map[string]int) error {
+	rows, err := db.QueryContext(ctx, `SELECT d.depends_on, COUNT(*) FROM task_deps d
+		JOIN tasks t ON t.id = d.task_id
+		WHERE d.depends_on IN (`+placeholders(len(ids))+`) AND t.status IN ('open','in_progress')
+		GROUP BY d.depends_on`, ids...)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var (
+			id string
+			n  int
+		)
+		if err := rows.Scan(&id, &n); err != nil {
+			return err
+		}
+		out[id] = n
+	}
+	return rows.Err()
 }
 
 // OpenTaskCountsByProject counts the unfinished tasks (open or in progress)

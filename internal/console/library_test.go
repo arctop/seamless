@@ -174,7 +174,10 @@ func TestMemoriesLibrary_DetailAndReaderFragment(t *testing.T) {
 	require.Contains(t, frag.Body.String(), "archive", "the reader carries the archive action")
 }
 
-func TestTasksLibrary_AutoSelectPrefersInProgress(t *testing.T) {
+// The Tasks screen is one list (plan:console-ux-pass UX 30): no reader
+// beside it and no task opened on the list URL. A task's ?reader=1 fragment
+// still answers.
+func TestTlTasksScreenHasNoReader(t *testing.T) {
 	db, mux := newConsole(t)
 	ctx := context.Background()
 	base := time.Date(2026, 7, 10, 12, 0, 0, 0, time.UTC)
@@ -190,9 +193,10 @@ func TestTasksLibrary_AutoSelectPrefersInProgress(t *testing.T) {
 	html := getPeek(t, mux, "/console/tasks")
 	require.Equal(t, http.StatusOK, html.Code)
 	body := html.Body.String()
-	require.Contains(t, body, `id="lib-reader"`)
-	require.Contains(t, body, "do active-task")
-	require.NotContains(t, body, "do ready-task")
+	require.NotContains(t, body, `id="lib-reader"`)
+	require.Contains(t, body, "data-ml-list")
+	require.Contains(t, body, ">active-task<")
+	require.NotContains(t, body, "do active-task", "the list draws no task's body")
 
 	frag := getPeek(t, mux, "/console/tasks/TR?reader=1")
 	require.Equal(t, http.StatusOK, frag.Code)

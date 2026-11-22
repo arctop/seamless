@@ -82,8 +82,9 @@ func bkError(t *testing.T, body string) string {
 	return answer["error"]
 }
 
-// The default list holds no plan step; the toggle adds them, each with its
-// plan chip, and the header's counts follow it.
+// The default list holds no plan step but the ones waiting on the owner,
+// which Needs you draws whatever the toggle says; the toggle adds the rest,
+// each with its plan chip, and the header's counts follow it.
 func TestBkDefaultListIsOffPlan_StepsToggleAddsThem(t *testing.T) {
 	db, mux := newConsole(t)
 	bkTask(t, db, "example-ops", "", "loose task", nil)
@@ -100,7 +101,9 @@ func TestBkDefaultListIsOffPlan_StepsToggleAddsThem(t *testing.T) {
 	require.Equal(t, taskCounts{Open: 1, Ready: 1}, data.Counts)
 	page := getHTMLBody(t, mux, "/console/tasks")
 	require.NotContains(t, page, "plan step one")
-	require.NotContains(t, page, `data-plan="ship-plan"`)
+	require.NotContains(t, page, "plan step behind the gate")
+	require.Equal(t, []string{gate}, tlGroupIDs(page, "needs"), "the plan's gate on the owner needs the owner")
+	require.Contains(t, tlRow(t, page, gate), `data-plan="ship-plan"`)
 	require.Contains(t, page, `href="/console/tasks?steps=1" data-task-steps`)
 
 	data = bkPage(t, mux, "/console/tasks?format=json&steps=1")
@@ -108,10 +111,11 @@ func TestBkDefaultListIsOffPlan_StepsToggleAddsThem(t *testing.T) {
 	require.Equal(t, "ship-plan", data.Ready[1].Plan)
 	require.Equal(t, taskCounts{Open: 4, Ready: 2, Waiting: 2}, data.Counts, "the counts follow the toggle")
 	page = getHTMLBody(t, mux, "/console/tasks?steps=1")
-	row := between(t, page, "plan step one", `<a class="rail-item`, "</a>")
-	require.Contains(t, row, `<span class="ri-chip" data-plan="ship-plan">plan:ship-plan</span>`)
+	row := tlRowNamed(t, page, "plan step one")
+	require.Contains(t, row, `<a class="tl-plan" href="/console/tasks?plan=ship-plan" data-plan="ship-plan" data-seam-query title="Show this plan's steps">plan:ship-plan</a>`)
 	require.Contains(t, page, `class="lib-flag on" href="/console/tasks" data-task-steps`, "the toggle turns them off again")
-	require.Contains(t, page, "2 waiting on people", "one gate and the step it holds")
+	require.Contains(t, page, `>1 needs you</a>`, "the gate")
+	require.Contains(t, page, `>1 blocked</a>`, "the step it holds")
 	require.Contains(t, page, `href="/console/tasks/`+data.Ready[1].ID+`?steps=1"`, "each row keeps the state")
 
 	// With only plan steps, the default list offers them, not "no tasks".
@@ -160,18 +164,19 @@ func TestBkFiltersNarrow(t *testing.T) {
 	require.Equal(t, []taskProjectCount{{"", 1}, {"example-docs", 1}, {"example-ops", 2}}, data.Projects,
 		"the menu counts every project under the other filters, global first")
 	page := getHTMLBody(t, mux, "/console/tasks?project=example-docs")
-	menu := page[strings.Index(page, "data-task-projects"):]
+	menu := page[strings.Index(page, "data-scope "):]
 	menu = menu[:strings.Index(menu, "</details>")]
 	require.Contains(t, menu, `<strong>example-docs</strong>`)
-	require.Contains(t, menu, `<a class="" href="/console/tasks" title="4 open">All projects<span class="n">4</span></a>`)
-	require.Contains(t, menu, `<a class="on" href="/console/tasks?project=example-docs" title="1 open">example-docs<span class="n">1</span></a>`)
+	require.Contains(t, menu, `<a class="scope-o" id="sc-o-all" data-scope-v="" data-seam-query href="/console/tasks">All projects<span class="n">4</span></a>`)
+	require.Contains(t, menu, `<a class="scope-o on" id="sc-o-example-docs" data-scope-v="example-docs" data-seam-query href="/console/tasks?project=example-docs">example-docs<span class="n">1</span>`)
 	require.Contains(t, menu, `href="/console/tasks?project=global"`)
 	require.Contains(t, page, `class="lib-clear" href="/console/tasks"`)
 	require.Contains(t, page, `<input type="hidden" name="project" value="example-docs">`, "typing keeps the project")
 
 	short := getHTMLBody(t, mux, "/console/tasks?q="+widget[len(widget)-8:])
-	require.Contains(t, short, `id="ri-`+widget+`"`, "a pasted short id finds its task")
-	require.Contains(t, short, `data-auto-url="/console/tasks/`+widget+`?q=`+widget[len(widget)-8:]+`"`)
+	require.Contains(t, short, `id="tl-`+widget+`"`, "a pasted short id finds its task")
+	require.Contains(t, tlRow(t, short, widget), `href="/console/tasks/`+widget+`?q=`+widget[len(widget)-8:]+`"`)
+	require.NotContains(t, short, `data-auto-url`, "the list opens no task")
 
 	none := getHTMLBody(t, mux, "/console/tasks?q=nothing-like-this")
 	require.Contains(t, none, "No task matches &ldquo;nothing-like-this&rdquo;")
@@ -214,8 +219,9 @@ func TestBkStrictParameters(t *testing.T) {
 	require.Equal(t, http.StatusOK, code)
 }
 
-// The rail shows the newest 25 closed tasks and links to the rest; closed=all
-// pages through every one, 25 at a time, newest first.
+// The list folds the tasks closed in the last week, the newest 25 of them,
+// and links to the rest; closed=all pages through every one, 25 at a time,
+// newest first.
 func TestBkClosedTasksPagePast25(t *testing.T) {
 	db, mux := newConsole(t)
 	base := time.Now().UTC().Add(-48 * time.Hour)
@@ -228,9 +234,11 @@ func TestBkClosedTasksPagePast25(t *testing.T) {
 	require.Equal(t, 30, data.ClosedTotal)
 	require.Equal(t, 5, data.ClosedMore)
 	require.Equal(t, "closed "+string(rune('A'+29)), data.Closed[0].Title)
+	require.Equal(t, 30, data.ClosedRecent)
 	page := getHTMLBody(t, mux, "/console/tasks")
-	require.Contains(t, page, `<a href="/console/tasks?closed=all#rg-closed">All 30 closed tasks`)
-	require.Contains(t, page, `recently closed <span class="n">25 of 30</span>`)
+	require.Contains(t, page, `<a class="ml-more" href="/console/tasks?closed=all#tl-g-closed">All 30 closed tasks`)
+	require.Contains(t, tlGroup(page, "closed"), `<span class="ml-note">25 of 30</span>`)
+	require.Contains(t, page, `<details class="ml-group tl-group tl-fold" id="tl-g-closed" data-group="closed">`, "folded")
 
 	data = bkPage(t, mux, "/console/tasks?format=json&closed=all&page=2")
 	require.Len(t, data.Closed, 5)
@@ -239,20 +247,21 @@ func TestBkClosedTasksPagePast25(t *testing.T) {
 	require.Equal(t, "closed E", data.Closed[0].Title)
 	require.Equal(t, "closed A", data.Closed[4].Title)
 	page = getHTMLBody(t, mux, "/console/tasks?closed=all&page=2")
-	require.Contains(t, page, `<details class="rail-group rail-collapse" id="rg-closed" open>`)
-	require.Contains(t, page, `<a href="/console/tasks?closed=all#rg-closed" rel="prev">`)
+	require.Contains(t, page, `<details class="ml-group tl-group tl-fold" id="tl-g-closed" data-group="closed" open>`)
+	require.Contains(t, page, `<a class="ml-more" href="/console/tasks?closed=all#tl-g-closed" rel="prev">`)
 	require.NotContains(t, page, `rel="next"`)
-	require.Contains(t, page, `page 2 of 2 &middot; 30`)
+	require.Contains(t, page, `closed, page 2 of 2`)
+	require.Contains(t, tlGroup(page, "closed"), `<span class="ml-note">5 of 30</span>`)
 	require.Contains(t, page, `href="/console/tasks/`+data.Closed[0].ID+`?closed=all&amp;page=2"`, "a row keeps its page")
 	page = getHTMLBody(t, mux, "/console/tasks?closed=all")
-	require.Contains(t, page, `<a href="/console/tasks?closed=all&amp;page=2#rg-closed" rel="next">`)
+	require.Contains(t, page, `<a class="ml-more" href="/console/tasks?closed=all&amp;page=2#tl-g-closed" rel="next">`)
 }
 
-// A rail row says where its task stands: the holder and the lease of a claim,
-// in the lapsed tone once it ran out; the first blocker's title; who a step
-// waits on; how long it has been in its state; and a ready task nothing
-// changed on for 30 days says so.
-func TestBkRailRowsSayWhereEachTaskStands(t *testing.T) {
+// A row says where its task stands: the holder and the lease of a claim and
+// when it started; a lapsed claim, in the lapsed tone, and whose it was; the
+// first blocker's title; who a step waits on; how long a task has been
+// ready; and a ready task nothing changed on for 30 days says so.
+func TestBkRowsSayWhereEachTaskStands(t *testing.T) {
 	db, mux := newConsole(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -285,35 +294,33 @@ func TestBkRailRowsSayWhereEachTaskStands(t *testing.T) {
 	require.Equal(t, taskCounts{Open: 7, InProgress: 1, Lapsed: 1, Ready: 3, Blocked: 1, Waiting: 1}, data.Counts)
 	page := getHTMLBody(t, mux, "/console/tasks")
 
-	row := between(t, page, "bk held", `<a class="rail-item`, "</a>")
-	require.Contains(t, row, `<span class="ri-holder" title="The session that holds the claim">cc/bk-holder</span>`)
-	require.Contains(t, row, `<span class="ri-lease task-lease"><time `)
-	require.Contains(t, row, `>lease live, 2h left</time>`)
-	require.Contains(t, row, `>in progress 2h</time>`, "in progress since its first claim, the heartbeat continuing it")
-	require.Contains(t, between(t, page, "bk held", `<section class="rail-group"`, `<header`), `id="rg-inprogress"`)
+	row := tlRow(t, page, held)
+	require.Contains(t, row, `cc/bk-holder &middot; <time `)
+	require.Contains(t, row, `>lease 2h left</time>`)
+	require.Contains(t, row, `>started 2h ago</time>`, "in progress since its first claim, the heartbeat continuing it")
+	require.Equal(t, []string{held}, tlGroupIDs(page, "inprogress"))
 
-	row = between(t, page, "bk lapsed", `<a class="rail-item`, "</a>")
+	row = tlRow(t, page, lapsed)
 	require.Contains(t, row, `data-word="claim-lapsed"`)
-	require.Contains(t, row, `class="ri-lease task-lease is-lapsed"`)
-	require.Contains(t, row, `>lapsed 59m ago</time>`)
-	require.Contains(t, between(t, page, "bk lapsed", `<section class="rail-group"`, `<header`), `id="rg-unheld"`,
-		"no live claim holds it: not in progress")
-	require.Contains(t, page, `data-word="claim-lapsed" title="In progress, but its holder's lease ran out: any agent can claim it">1 lapsed claim</a>`)
+	require.Contains(t, row, `data-tone="danger"`)
+	require.Contains(t, row, `>claim lapsed 59m ago</time> &middot; was cc/bk-holder`)
+	require.Equal(t, []string{lapsed}, tlGroupIDs(page, "needs"), "no live claim holds it: not in progress")
+	require.Contains(t, page, `>1 needs you</a>`)
 	require.Contains(t, page, `<span class="live-dot"></span>1 in progress</a>`, "in progress counts the live claim alone")
 
-	row = between(t, page, "bk blocked twice", `<a class="rail-item`, "</a>")
-	require.Contains(t, row, `data-first-blocker="`+first+`">after bk the first blocker and 1 more</span>`, "the oldest blocker first")
-	require.Contains(t, row, "blocked by 2")
+	row = tlRowNamed(t, page, "bk blocked twice")
+	require.Contains(t, row, `blocked by <a href="/console/tasks/`+first+`" data-first-blocker="`+first+`">bk the first blocker</a> (+1)`,
+		"the oldest blocker first")
 
-	row = between(t, page, "bk waits on hardware", `<a class="rail-item`, "</a>")
-	require.Contains(t, row, "waits on hardware")
-	require.Contains(t, row, `>waiting just now</time>`)
+	row = tlRowNamed(t, page, "bk waits on hardware")
+	require.Contains(t, row, `waits on hardware: the board arrives`)
+	require.Contains(t, tlGroup(page, "waiting"), "bk waits on hardware")
 
-	row = between(t, page, "bk old ready", `<a class="rail-item`, "</a>")
-	require.Contains(t, row, `data-untouched`)
+	row = tlRowNamed(t, page, "bk old ready")
+	require.Contains(t, row, `data-tone="warn"`)
 	require.Contains(t, row, `>untouched 1mo</time>`, "nothing changed on it for 45 days")
-	require.Contains(t, row, `>ready 1mo</time>`)
-	require.NotContains(t, between(t, page, "bk the second blocker", `<a class="rail-item`, "</a>"), "data-untouched")
+	require.NotContains(t, tlRowNamed(t, page, "bk the second blocker"), "untouched")
+	require.Contains(t, tlRowNamed(t, page, "bk the second blocker"), `>ready just now</time>`)
 	require.Contains(t, page, "Oldest first, as agents claim")
 	require.Less(t, strings.Index(page, "bk old ready"), strings.Index(page, "bk the second blocker"), "the queue's order")
 }
@@ -523,7 +530,7 @@ func TestBkGateSet_OriginFollowAndCallers(t *testing.T) {
 }
 
 // The reader's actions and the star return to the task with the page's
-// filters, and the sort menu stays on the task being read.
+// filters, and the list's sort keeps them.
 func TestBkReaderKeepsTheFilters(t *testing.T) {
 	db, mux := newConsole(t)
 	id := bkTask(t, db, "example-ops", "", "bk kept", nil)
@@ -539,8 +546,8 @@ func TestBkReaderKeepsTheFilters(t *testing.T) {
 	require.Contains(t, between(t, reader, "star-form", "<form", "</form>"), next+" data-lib-next")
 	// The list's sort keeps its filters.
 	list := getHTMLBody(t, mux, "/console/tasks?project=example-ops")
-	require.Contains(t, list, `<a class="" href="/console/tasks?project=example-ops&amp;sort=newest" data-lib-here>Newest first</a>`)
-	require.Contains(t, list, `<a class="on" href="/console/tasks?project=example-ops" data-lib-here>Oldest first</a>`)
+	require.Contains(t, list, `<a class="" href="/console/tasks?project=example-ops&amp;sort=newest">Newest first</a>`)
+	require.Contains(t, list, `<a class="on" href="/console/tasks?project=example-ops">Oldest first</a>`)
 	// The default list carries no state, so the actions keep their own way back.
 	page := getHTMLBody(t, mux, "/console/tasks/"+id)
 	require.NotContains(t, between(t, page, `data-task-act="done"`, "<form", "</form>"), `name="next"`)

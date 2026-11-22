@@ -306,3 +306,106 @@ func TestBkTaskFilter_HiddenProjectIsAbsent(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, evs, 1)
 }
+
+// The Tasks list's reads (plan:console-ux-pass UX 30): the week's closes
+// under a filter, the open tasks a locked project blocks (on the main
+// handle), what each gate holds, and the filter widened to the owner's
+// queue; through a view that hides a project, its tasks are absent from
+// each read.
+func TestTlTaskListReads(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "seam.db")
+	db, err := OpenFresh(t, path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	recent, old := bkBase.Add(-24*time.Hour), bkBase.Add(-9*24*time.Hour)
+	bkTask(t, db, "example-ops", "", "closed recently", 1, func(k *core.Task) { k.Status, k.ClosedAt = core.TaskDone, &recent })
+	bkTask(t, db, "example-ops", "", "closed long ago", 2, func(k *core.Task) { k.Status, k.ClosedAt = core.TaskDone, &old })
+	bkTask(t, db, "example-ops", "ops-plan", "closed step", 3, func(k *core.Task) { k.Status, k.ClosedAt = core.TaskDropped, &recent })
+	bkTask(t, db, "example-finance", "", "finance closed", 4, func(k *core.Task) { k.Status, k.ClosedAt = core.TaskDone, &recent })
+	secret := bkTask(t, db, "example-finance", "", "finance secret", 5, nil)
+	gate := bkTask(t, db, "example-ops", "", "ops gate", 6, func(k *core.Task) {
+		k.Kind, k.Gate = core.TaskKindGate, core.TaskGate{Who: "owner", What: "sign"}
+	})
+	behind := bkTask(t, db, "example-ops", "", "ops behind the gate", 7, func(k *core.Task) { k.DependsOn = []string{gate} })
+	bkTask(t, db, "example-finance", "", "finance behind the gate", 8, func(k *core.Task) { k.DependsOn = []string{gate} })
+	bkTask(t, db, "example-ops", "", "ops done behind the gate", 9, func(k *core.Task) {
+		k.DependsOn, k.Status, k.ClosedAt = []string{gate}, core.TaskDone, &old
+	})
+	waits := bkTask(t, db, "example-ops", "", "ops waits on finance", 10, func(k *core.Task) { k.DependsOn = []string{secret} })
+	bkTask(t, db, "example-ops", "", "ops started, waits on finance", 11, func(k *core.Task) {
+		k.DependsOn, k.Status = []string{secret}, core.TaskInProgress
+	})
+
+	since := bkBase.Add(-7 * 24 * time.Hour)
+	for _, tc := range []struct {
+		f    TaskFilter
+		want int
+	}{
+		{TaskFilter{}, 2}, {TaskFilter{Steps: true}, 3}, {TaskFilter{Plan: "ops-plan"}, 1},
+		{TaskFilter{ByProject: true, Project: "example-ops"}, 1}, {TaskFilter{Query: "recently"}, 1},
+	} {
+		n, err := CountClosedSince(ctx, db, tc.f, since)
+		require.NoError(t, err)
+		require.Equal(t, tc.want, n, "%+v", tc.f)
+	}
+	locked, err := LockedBlockedTasks(ctx, db, []string{"example-finance", "example-finance"})
+	require.NoError(t, err)
+	require.Equal(t, []string{waits}, locked, "open tasks only, each once")
+	none, err := LockedBlockedTasks(ctx, db, nil)
+	require.NoError(t, err)
+	require.Empty(t, none)
+	holds, err := OpenDependentCounts(ctx, db, []string{gate, behind, gate})
+	require.NoError(t, err)
+	require.Equal(t, map[string]int{gate: 2}, holds, "the unfinished tasks behind the gate")
+
+	require.Equal(t, TaskFilter{Steps: true}, TaskFilter{}.WithOwnerQueue())
+	require.Equal(t, TaskFilter{Plan: "p"}, TaskFilter{Plan: "p"}.WithOwnerQueue())
+	require.Equal(t, TaskFilter{ByProject: true, Project: "x", Query: "q", Steps: true},
+		TaskFilter{ByProject: true, Project: "x", Query: "q"}.WithOwnerQueue())
+
+	view, err := OpenView(path, []string{"example-finance"})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = view.Close() })
+	n, err := CountClosedSince(ctx, view, TaskFilter{}, since)
+	require.NoError(t, err)
+	require.Equal(t, 1, n, "the hidden project's close is absent")
+	holds, err = OpenDependentCounts(ctx, view, []string{gate})
+	require.NoError(t, err)
+	require.Equal(t, map[string]int{gate: 1}, holds, "the hidden project's dependent is absent")
+}
+
+// The place query's owner predicate is core.GateWhoMatches(who, "owner"):
+// the whole value or its class before a colon, trimmed, in any case; and a
+// step waits only on the owner's gates when no unfinished gate on anyone
+// else blocks it.
+func TestTlOwnerGateSQLIsGateWhoMatches(t *testing.T) {
+	ctx := context.Background()
+	db := newTaskDB(t)
+	for i, who := range []string{"owner", "OWNER", " Owner ", "owner:legal", "Owner : the release", "owner\t",
+		"ownerx", "owners:x", "alice:owner", "co-owner", "own", "reviewer:owner"} {
+		id := bkTask(t, db, "example-ops", "", "gate "+who, i, func(k *core.Task) {
+			k.Kind, k.Gate = core.TaskKindGate, core.TaskGate{Who: who, What: "x"}
+		})
+		var got bool
+		require.NoError(t, db.QueryRowContext(ctx, `SELECT `+sqlGateOnOwner("t")+` FROM tasks t WHERE t.id = ?`, id).Scan(&got))
+		task, err := TaskByID(ctx, db, id)
+		require.NoError(t, err)
+		require.Equal(t, core.GateWhoMatches(task.Gate.Who, "owner"), got, "who %q (stored %q)", who, task.Gate.Who)
+	}
+	owner := bkTask(t, db, "example-ops", "", "the owner's gate", 20, func(k *core.Task) {
+		k.Kind, k.Gate = core.TaskKindGate, core.TaskGate{Who: "owner", What: "sign"}
+	})
+	bob := bkTask(t, db, "example-ops", "", "bob's gate", 21, func(k *core.Task) {
+		k.Kind, k.Gate = core.TaskKindGate, core.TaskGate{Who: "bob", What: "sign"}
+	})
+	for _, tc := range []struct {
+		deps   []string
+		others bool
+	}{{[]string{owner}, false}, {[]string{bob}, true}, {[]string{owner, bob}, true}} {
+		id := bkTask(t, db, "example-ops", "", "behind", 30, func(k *core.Task) { k.DependsOn = tc.deps })
+		var got bool
+		require.NoError(t, db.QueryRowContext(ctx, `SELECT `+sqlGateBlockerOnOthers("t")+` FROM tasks t WHERE t.id = ?`, id).Scan(&got))
+		require.Equal(t, tc.others, got, "%v", tc.deps)
+	}
+}

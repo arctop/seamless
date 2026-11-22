@@ -324,32 +324,27 @@ func rwSeedFleet(t *testing.T, db *sql.DB, plan string) rwFleet {
 	return f
 }
 
-// TestRwTasksPage_EveryRowCopiesItsWholeID: every rail row on Tasks, the
-// closed ones included, carries a copy button with the 26-character id
-// beside the short id it shows, and the in progress rows name their holder.
+// TestRwTasksPage_EveryRowCopiesItsWholeID: every row of the Tasks list, the
+// closed ones included, shows its short id as a button that copies the
+// 26-character id, and the in progress rows name their holder.
 func TestRwTasksPage_EveryRowCopiesItsWholeID(t *testing.T) {
 	db, mux := newConsole(t)
 	f := rwSeedFleet(t, db, "")
 	page := getHTMLBody(t, mux, "/console/tasks")
 	for _, id := range f.all {
 		require.Len(t, id, 26)
-		item := page[strings.Index(page, `id="ri-`+id+`"`):]
-		item = item[:strings.Index(item, "</a>")]
-		require.Contains(t, item, `<span class="mono">`+shortID(id)+`</span><button type="button" class="copy-btn" data-copy="`+id+`"`,
-			"row %s copies its whole id beside its short one", id)
+		require.Contains(t, tlRow(t, page, id),
+			`<button type="button" class="copy-btn tl-id" data-copy="`+id+`" title="Copies the whole id" aria-label="Copy the whole id"><span class="mono">`+shortID(id)+`</span></button>`,
+			"row %s copies its whole id from its short one", id)
 	}
-	held := between(t, page, "rw held", `<a class="rail-item`, "</a>")
-	require.Contains(t, held, `class="ri-holder"`)
+	held := tlRow(t, page, f.held)
+	require.Contains(t, held, `data-mark="live"`)
 	require.Contains(t, held, f.sessName, "the holder by name")
-	require.NotContains(t, held, `data-word=`, "a live claim is the group's own word")
-	lapsed := between(t, page, "rw lapsed", `<a class="rail-item`, "</a>")
-	require.Contains(t, lapsed, `data-word="claim-lapsed"`)
-	claimless := between(t, page, "rw claimless", `<a class="rail-item`, "</a>")
-	require.Contains(t, claimless, `data-word="unclaimed"`)
-	done := between(t, page, "rw done", `<a class="rail-item`, "</a>")
-	require.Contains(t, done, "&middot; done &middot;")
+	require.Contains(t, tlRow(t, page, f.lapsed), `data-word="claim-lapsed"`)
+	require.Contains(t, tlRow(t, page, f.claimless), `data-word="unclaimed"`)
+	require.Contains(t, tlRow(t, page, f.done), `>done `)
 	require.NotContains(t, page, ">in_progress<")
-	require.Contains(t, page, `data-clock="title"`, "rail times carry their instant for a local-time title")
+	require.Contains(t, page, `data-clock="title"`, "row times carry their instant for a local-time title")
 }
 
 // TestRwTaskReader_WordsHolderLease covers the reader and the peek: the

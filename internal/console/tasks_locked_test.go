@@ -20,8 +20,9 @@ import (
 // console's handle hides the locked project's tasks and their dependency
 // edges, so before this the owner's Tasks screen listed such a task as READY
 // -- claimable -- with no word of what blocks it. Now it sits in the blocked
-// rail, its locked blockers recorded by project: the owner's surface lists
-// locked projects by name, and their content stays out.
+// rail and the list's Blocked group, its locked blockers recorded by
+// project: the owner's surface lists locked projects by name, and their
+// content stays out.
 func TestTasks_LockedBlockersNamed(t *testing.T) {
 	lc := newLockedConsole(t)
 	ctx := context.Background()
@@ -76,11 +77,15 @@ func TestTasks_LockedBlockersNamed(t *testing.T) {
 	require.Equal(t, http.StatusOK, hrr.Code)
 	page := hrr.Body.String()
 	require.NotContains(t, page, lockedSecret)
-	item := between(t, page, "ops waits on ledger", `<a class="rail-item`, "</a>")
-	require.Contains(t, item, "blocked by 1")
+	require.Equal(t, []string{waits, both}, tlGroupIDs(page, "blocked"))
+	item := tlRow(t, page, waits)
+	require.NotContains(t, item, "blocked by <a", "no readable blocker to name")
 	require.Contains(t, item, `data-locked-blocker="`+lockedSlug+`"`)
 	require.Contains(t, item, "a task in locked project "+lockedSlug+" blocks this one")
-	require.Contains(t, between(t, page, "ops waits on both", `<a class="rail-item`, "</a>"), "blocked by 2")
+	item = tlRow(t, page, both)
+	require.Contains(t, item, `blocked by <a href="/console/tasks/`+prep+`" data-first-blocker="`+prep+`">ops prep</a> &middot; <span data-locked-blocker="`+lockedSlug+`"`,
+		"the readable blocker first, then the locked one")
+	require.NotContains(t, item, "(+", "the locked blocker is named, not counted again")
 
 	// A browser that unlocked the project reads the blocker itself.
 	cookie := lc.unlockByTerminal(t)
@@ -105,7 +110,7 @@ func TestTasks_NoLockedBlockersWithoutLocks(t *testing.T) {
 		Status: core.TaskOpen, DependsOn: []string{a}, CreatedAt: now, UpdatedAt: now}))
 	require.NotContains(t, getPeek(t, mux, "/console/tasks?format=json").Body.String(), "lockedBlockers")
 	page := getHTMLBody(t, mux, "/console/tasks")
-	require.Contains(t, page, "blocked by 1")
+	require.Contains(t, tlRowNamed(t, page, "waits"), `blocked by <a href="/console/tasks/`+a+`" data-first-blocker="`+a+`">prep</a>`)
 	require.NotContains(t, page, "data-locked-blocker")
 }
 
@@ -163,9 +168,8 @@ func TestProjectTasksTab_LockedBlockersNamed(t *testing.T) {
 }
 
 // The task's own reader and peek name the locked blocker under "Depends on"
-// (D7), as the Tasks rail does; the rail gives it a line of its own, so the
-// truncated meta line never hides it. Unlocked, the browser reads the
-// blocker itself.
+// (D7), as the Tasks list does on the task's row. Unlocked, the browser
+// reads the blocker itself.
 func TestTaskDetail_LockedBlockerNamed(t *testing.T) {
 	lc := newLockedConsole(t)
 	ctx := context.Background()
@@ -202,8 +206,8 @@ func TestTaskDetail_LockedBlockerNamed(t *testing.T) {
 	require.Equal(t, []string{lockedSlug}, d.LockedBlockers)
 	require.Empty(t, d.Deps)
 
-	item := between(t, get("/console/tasks"), "ops waits on ledger", `<a class="rail-item`, "</a>")
-	require.Contains(t, item, `<span class="ri-desc" data-locked-blocker="`+lockedSlug+`"`, "a line of its own")
+	item := tlRow(t, get("/console/tasks"), id)
+	require.Contains(t, item, `<span data-locked-blocker="`+lockedSlug+`" title="Unlock `+lockedSlug+` in the console to see the task">`)
 
 	cookie := lc.unlockByTerminal(t)
 	rr := lc.do(lc.browser(http.MethodGet, "/console/tasks/"+id+"?reader=1", cookie, nil))

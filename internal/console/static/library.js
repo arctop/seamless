@@ -1,16 +1,21 @@
-/* Library-style screens (Notes / Tasks / Plans / Labs / Trials / Gardener):
-   a grouped rail on the left and a document reader on the right. Every rail
-   item is a real server-rendered link; this module upgrades clicks to an
-   in-place reader swap (?reader=1 fragment + history.pushState of the item's
-   canonical URL) so the document and rail keep their scroll positions and
-   the switch is instant. j / k move the selection; on the Gardener, a
-   applies the open proposal and x dismisses it. The delegated handlers stay
-   inert without #lib-reader, but can enhance one inserted by an in-place
-   mutation response later.
+/* Library-style screens (the Gardener, Labs and Trials, and any screen that
+   keeps the rail): a grouped rail on the left and a document reader on the
+   right. Every rail item is a real server-rendered link; this module
+   upgrades clicks to an in-place reader swap (?reader=1 fragment +
+   history.pushState of the item's canonical URL) so the document and rail
+   keep their scroll positions and the switch is instant. j / k move the
+   selection; on the Gardener, a applies the open proposal and x dismisses
+   it. The delegated handlers stay inert without #lib-reader, but can
+   enhance one inserted by an in-place mutation response later.
 
    The Memories list (memories.html, [data-ml-list]: one full-width list, no
    rail and no reader) takes j and k to move a focus ring through its rows,
-   and Enter to open the focused row's own page.
+   and Enter to open the focused row's own page. The Notes list draws the
+   same rows. The Tasks list's rows (tasks.html) are no link themselves, so
+   each can hold its action's form: j, k and Enter take the row's title link
+   (a[data-list-row]) the same way. An action that lands on a row inside a
+   folded group (the Tasks list's Recently closed) opens the fold, so the
+   row it moved to shows.
 
    On an item's own page (item_shared.html: a memory, a note or a task alone,
    no rail), k and j open the previous and next item of the list it is in by
@@ -238,12 +243,17 @@
     return false;
   }
 
-  // The Memories list's rows, in the order the page draws them.
+  // The Memories list's rows, in the order the page draws them: each row a
+  // link (a.ml-row), or, on a list whose rows are no links (the Tasks
+  // list), each row's title link (a[data-list-row]). A page draws one kind.
+  var LIST_ROW = 'a.ml-row, a[data-list-row]';
   function listRows() {
-    return Array.prototype.slice.call(document.querySelectorAll('.main [data-ml-list] a.ml-row'));
+    var rows = Array.prototype.slice.call(document.querySelectorAll('.main [data-ml-list] a.ml-row'));
+    if (rows.length) return rows;
+    return Array.prototype.slice.call(document.querySelectorAll('.main [data-ml-list] a[data-list-row]'));
   }
   function listRowOf(el) {
-    var row = el && el.closest ? el.closest('a.ml-row') : null;
+    var row = el && el.closest ? el.closest(LIST_ROW) : null;
     return row && row.closest('[data-ml-list]') ? row : null;
   }
   // The row the focus ring was last on: a live refresh that replaces its
@@ -257,8 +267,8 @@
     row.focus({ preventScroll: true });
     row.scrollIntoView({ block: 'nearest' });
   }
-  // j / k on the Memories list: the next or previous row from the focused
-  // one, or the first row when none is. false when the page has no list.
+  // j / k on a list: the next or previous row from the focused one, or the
+  // first row when none is. false when the page has no list.
   function stepList(e) {
     var rows = listRows();
     if (!rows.length) return false;
@@ -268,7 +278,7 @@
     if (next >= 0 && next < rows.length) focusRow(rows[next]);
     return true;
   }
-  // Enter on a focused row opens the memory's own page, never the read-in-
+  // Enter on a focused row opens the item's own page, never the read-in-
   // place panel a click opens (static/panel.js). SeamPanel is asked at the
   // moment of the key: panel.js loads after this file. Its leave records
   // this list as the page's way back.
@@ -289,12 +299,29 @@
     var row = document.getElementById(listFocus);
     if (row && listRowOf(row)) row.focus({ preventScroll: true });
   });
+  // An action posted from a list lands on its row's #anchor (navigation.js
+  // scrolls to it once the page is patched and the address set). A row in
+  // a folded group has no box to scroll to: open the fold, then show the
+  // row. Only a mutation's landing does this; a live refresh leaves the
+  // owner's folds as they are.
+  document.addEventListener('seam:content-updated', function (e) {
+    if (!e.detail || e.detail.source !== 'mutation') return;
+    setTimeout(function () {
+      var id;
+      try { id = decodeURIComponent(location.hash.slice(1)); } catch (err) { return; }
+      var row = id ? document.getElementById(id) : null;
+      var fold = row && row.closest ? row.closest('.main [data-ml-list] details:not([open])') : null;
+      if (!fold) return;
+      fold.open = true;
+      row.scrollIntoView({ block: 'start' });
+    }, 0);
+  });
 
   // j / k step the selection through the rail (list order, across groups),
-  // Gmail-style, or the focus ring through the Memories list. ("/" -> the
-  // page-local filter is search.js's, which owns the key so the palette and
-  // the filter never both answer it; "p" -> the project switcher is
-  // scope.js's.) Arrow keys are left alone so they keep scrolling the
+  // Gmail-style, or the focus ring through a list (Memories, Notes, Tasks).
+  // ("/" -> the page-local filter is search.js's, which owns the key so the
+  // palette and the filter never both answer it; "p" -> the project switcher
+  // is scope.js's.) Arrow keys are left alone so they keep scrolling the
   // document. While the read-in-place panel is open it takes j and k first
   // (a capture listener that prevents their default), so they return here.
   //

@@ -13,9 +13,12 @@ import (
 	"github.com/arctop/seamless/internal/store"
 )
 
-// The Tasks page shows who and what on each task that waits on people: gates
-// in their own rail (the people's queue), gated steps in theirs, never in
-// ready or blocked, and the reader and the peek name the gate.
+// The Tasks page shows who and what on each task that waits on people: the
+// JSON keeps the gates in their own rail (the people's queue) and the gated
+// steps in theirs, never in ready or blocked. The list draws a gate on the
+// owner in Needs you, a step only it holds as blocked by it, and a gate or
+// a step on anyone else in Waiting on others; the reader and the peek name
+// the gate.
 func TestTasksPage_GatesAndGatedSteps(t *testing.T) {
 	db, mux := newConsole(t)
 	ctx := context.Background()
@@ -51,11 +54,14 @@ func TestTasksPage_GatesAndGatedSteps(t *testing.T) {
 	require.Equal(t, []string{"owner"}, whoWaits["ship the release"], "a step behind a gate waits on the gate's who")
 	require.Equal(t, []string{"sitting:security"}, whoWaits["run the drill"])
 
+	require.Equal(t, 3, data.Counts.Waiting, "the counts keep the gates and the steps they hold, as the board does")
 	list := getHTMLBody(t, mux, "/console/tasks")
-	require.Contains(t, list, `id="rg-gates"`)
-	require.Contains(t, list, `id="rg-gated"`)
-	require.Contains(t, list, "3 waiting on people", "the header counts the gates and the steps they hold, as the board does")
-	require.Contains(t, list, "waits on owner: sign the release")
+	require.Equal(t, []string{gate.ID}, tlGroupIDs(list, "needs"))
+	require.Contains(t, tlRow(t, list, gate.ID), "gate &middot; waits on you: sign the release &middot; holds 1 task")
+	require.Equal(t, []string{behind.ID}, tlGroupIDs(list, "blocked"), "a step only the owner's gate holds is blocked by it")
+	require.Contains(t, tlRow(t, list, behind.ID), `blocked by <a href="/console/tasks/`+gate.ID+`" data-first-blocker="`+gate.ID+`">GATE sign-off</a>`)
+	require.Equal(t, []string{own.ID}, tlGroupIDs(list, "waiting"))
+	require.Contains(t, tlRow(t, list, own.ID), `<span data-gate-who="sitting:security">waits on sitting:security: the sitting runs it</span>`)
 	for _, path := range []string{"/console/tasks/" + behind.ID, "/console/tasks/" + behind.ID + "?reader=1"} {
 		require.Contains(t, getHTMLBody(t, mux, path), "gate &middot; waits on owner: sign the release",
 			"%s: the task marks a dependency that is a gate", path)

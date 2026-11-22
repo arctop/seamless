@@ -83,6 +83,30 @@ func (r taskRow) Word() taskWord {
 // lease line in the lapsed tone.
 func (r taskRow) LeaseLapsed() bool { return r.Lease != "" && !r.ClaimLive }
 
+// LeaseLeft is what a live claim's lease has left ("12m left"), "" for a
+// row no live claim holds.
+func (r taskRow) LeaseLeft() string {
+	if !r.ClaimLive || r.LeaseExpiry == nil {
+		return ""
+	}
+	return leaseLeft(*r.LeaseExpiry, time.Now())
+}
+
+// task is the row as the task facts the owner's queue reads (ownerGateOpen,
+// looseClaim): its kind, status, gate and claim.
+func (r taskRow) task() core.Task {
+	t := core.Task{ID: r.ID, Status: core.TaskStatus(r.Status), Kind: core.TaskKind(r.Kind),
+		ClaimedBy: r.ClaimedBy, LeaseExpiresAt: r.LeaseExpiry, PlanSlug: r.Plan, ProjectSlug: r.Project}
+	if r.Kind == "" {
+		t.Kind = core.TaskKindStep
+	}
+	if g := r.Gate; g != nil {
+		t.Gate = core.TaskGate{Who: g.Who, What: g.What, Decision: g.Decision, ReadyWhen: g.ReadyWhen,
+			ClearedAt: g.ClearedAt, ClearedBy: g.ClearedBy, Note: g.Note}
+	}
+	return t
+}
+
 // FirstBlocker is the row's oldest unfinished blocker it names, nil for none.
 func (r taskRow) FirstBlocker() *blocker {
 	if len(r.Blockers) == 0 {
@@ -175,8 +199,8 @@ func (r taskRow) WaitsOn() []string {
 	return who
 }
 
-// tasksData is the payload for the Tasks library screen. Selected and View
-// drive the HTML page only.
+// tasksData is the payload for the Tasks screen. List and View drive the
+// HTML page only.
 //
 // The rails are the queue's groups (store/tasks_gates.go) under the page's
 // filters: Ready, InProgress (every step in progress: held by a live claim,
@@ -186,6 +210,12 @@ func (r taskRow) WaitsOn() []string {
 // of the done and dropped tasks, newest first, with ClosedMore the closed
 // tasks this page does not show and ClosedTotal all of them. Counts counts
 // them in the board's words (taskCounts).
+//
+// The page draws them as one list (plan:console-ux-pass UX 30, taskList):
+// NeedsYou first, the tasks waiting on the owner as the needs model counts
+// them (needs.go: a gate on the owner, a lapsed claim, a claimless start),
+// plan steps included whatever the steps toggle says, then the rest by
+// state. ClosedRecent is how many tasks closed in the last week.
 type tasksData struct {
 	Ready      []taskRow `json:"ready"`
 	InProgress []taskRow `json:"inProgress"`
@@ -205,34 +235,27 @@ type tasksData struct {
 	Projects []taskProjectCount `json:"projects"`
 	// Filter is the state the page was read with, as its URL names it.
 	Filter taskFilterJSON `json:"filter"`
-	// Selected is the task open in the reader: the most relevant one on the
-	// list URL (SelectedAuto, which the client pins into the URL). A task's
-	// own URL draws its item page instead (Item).
-	Selected     *taskDetail `json:"-"`
-	SelectedAuto bool        `json:"-"`
+	// ClosedRecent is how many tasks under the filters closed in the last
+	// recentlyClosed: the list's Recently closed.
+	ClosedRecent int `json:"closedRecent"`
+	// NeedsYou is the list's first group, in its order: the tasks waiting on
+	// the owner (taskList's Needs you).
+	NeedsYou []taskRow `json:"needsYou"`
+	// List is the page's one list, its groups in order. HTML only.
+	List *taskList `json:"-"`
 	// View is the page's controls (taskView). HTML only.
 	View *taskView `json:"-"`
 	// Item is a task's own page (itempage.go): set, the screen draws it
-	// instead of the library. HTML only.
+	// instead of the list. HTML only.
 	Item *itemPage `json:"-"`
+	// needSteps are the plan steps that wait on the owner while the list
+	// keeps the plan steps out: the Needs you group holds them, no rail does.
+	needSteps []taskRow
 }
 
 // listsAny reports a row in any rail.
 func (d tasksData) listsAny() bool {
-	return len(d.Ready)+len(d.InProgress)+len(d.Blocked)+len(d.Gates)+len(d.Gated)+len(d.Closed) > 0
-}
-
-// Live is the in progress rows a live claim holds: the rail's in progress
-// group.
-func (d tasksData) Live() []taskRow {
-	return slices.DeleteFunc(slices.Clone(d.InProgress), func(r taskRow) bool { return !r.ClaimLive })
-}
-
-// Unheld is the in progress rows no live claim holds (a lapsed lease, a
-// start with no claim): any agent may claim them, so they are not in
-// progress in the owner's words.
-func (d tasksData) Unheld() []taskRow {
-	return slices.DeleteFunc(slices.Clone(d.InProgress), func(r taskRow) bool { return r.ClaimLive })
+	return len(d.Ready)+len(d.InProgress)+len(d.Blocked)+len(d.Gates)+len(d.Gated)+len(d.Closed)+len(d.needSteps) > 0
 }
 
 // taskCounts is the Tasks header's tally, in the words the project board
@@ -265,9 +288,17 @@ type taskFilterJSON struct {
 	Closed  string `json:"closed,omitempty"`
 	Page    int    `json:"page,omitempty"`
 	Sort    string `json:"sort"`
+	// Ready is "all" while the list draws every ready task (?ready=all).
+	Ready string `json:"ready,omitempty"`
 }
 
 const closedLimit = 25
+
+// recentlyClosed is how far back the list's Recently closed reaches.
+const recentlyClosed = 7 * 24 * time.Hour
+
+// readyShown is how many ready tasks the list draws before "N more ready".
+const readyShown = 10
 
 // untouchedAfter is how long a ready task sits with nothing changed on it
 // before its rail row says so.
@@ -295,6 +326,9 @@ type taskQuery struct {
 	// Sort orders the open groups: taskSortOldest, the default, is the order
 	// agents claim in; taskSortNewest the newest-created first.
 	Sort string
+	// ReadyAll draws every ready task (?ready=all); without it the list draws
+	// the first readyShown and says how many more there are.
+	ReadyAll bool
 }
 
 // The Tasks page's sort keys.
@@ -357,6 +391,13 @@ func parseTaskQuery(v url.Values) (taskQuery, error) {
 		}
 		q.Sort = sortKey
 	}
+	switch ready := v.Get("ready"); ready {
+	case "":
+	case "all":
+		q.ReadyAll = true
+	default:
+		return q, fmt.Errorf("invalid ready %q: valid values are all (or omit)", ready)
+	}
 	return q, nil
 }
 
@@ -383,6 +424,9 @@ func (q taskQuery) values() url.Values {
 	}
 	if q.Sort != taskSortOldest {
 		v.Set("sort", q.Sort)
+	}
+	if q.ReadyAll {
+		v.Set("ready", "all")
 	}
 	return v
 }
@@ -416,7 +460,33 @@ func (q taskQuery) json() taskFilterJSON {
 	if q.ClosedAll {
 		out.Closed, out.Page = "all", q.Page
 	}
+	if q.ReadyAll {
+		out.Ready = "all"
+	}
 	return out
+}
+
+// placeList is the list q names as the place query reads it
+// (store.TaskList) at now: its closed tasks the last recentlyClosed's, or
+// every one with closed=all, and lockedBlocked the open tasks a locked
+// project blocks (lockedBlockedIDs).
+func (q taskQuery) placeList(now time.Time, lockedBlocked []string) store.TaskList {
+	l := store.TaskList{Filter: q.filter(), Newest: q.Sort == taskSortNewest, LockedBlocked: lockedBlocked}
+	if !q.ClosedAll {
+		l.ClosedSince = now.Add(-recentlyClosed)
+	}
+	return l
+}
+
+// lockedBlockedIDs is the open tasks an unfinished task in a locked project
+// this request does not read blocks, from the main handle by project only
+// (markLockedBlockers' rule); nil while nothing is locked.
+func (s *Service) lockedBlockedIDs(ctx context.Context) ([]string, error) {
+	locked := lockedProjects(ctx)
+	if len(locked) == 0 {
+		return nil, nil
+	}
+	return store.LockedBlockedTasks(ctx, s.writeDB(), locked)
 }
 
 // taskQueryOf reads the request's Tasks state and checks the project and
@@ -480,19 +550,23 @@ func (s *Service) tasksPage(ctx context.Context, q taskQuery) (tasksData, error)
 	if err != nil {
 		return tasksData{}, err
 	}
-	started, err := store.FilteredStartedTasks(ctx, db, f)
-	if err != nil {
-		return tasksData{}, err
-	}
 	blocked, err := store.FilteredBlockedTasks(ctx, db, f)
 	if err != nil {
 		return tasksData{}, err
 	}
-	gated, err := store.FilteredGatedTasks(ctx, db, f)
+	// The people's queue and the work in progress are read with the plan
+	// steps too (WithOwnerQueue): a step that waits on the owner joins Needs
+	// you, and the rest of the steps stay out of the rails as the filter says.
+	wide := f.WithOwnerQueue()
+	started, err := store.FilteredStartedTasks(ctx, db, wide)
 	if err != nil {
 		return tasksData{}, err
 	}
-	gates, err := store.FilteredGateTasks(ctx, db, f)
+	gated, err := store.FilteredGatedTasks(ctx, db, wide)
+	if err != nil {
+		return tasksData{}, err
+	}
+	gates, err := store.FilteredGateTasks(ctx, db, wide)
 	if err != nil {
 		return tasksData{}, err
 	}
@@ -508,21 +582,38 @@ func (s *Service) tasksPage(ctx context.Context, q taskQuery) (tasksData, error)
 	if page > pages {
 		return tasksData{}, &closedPageError{page: page, pages: pages}
 	}
+	now := time.Now().UTC()
 	namer := s.sessionNamer(ctx)
 	data := tasksData{
 		Ready:      taskRows(ready),
-		InProgress: heldRows(taskRows(started), namer),
 		Blocked:    blockedRows(blocked),
-		Gates:      blockedRows(gates),
-		Gated:      blockedRows(gated),
 		Closed:     taskRows(closed),
 		ClosedMore: total - len(closed), ClosedTotal: total, ClosedPage: page, ClosedPages: pages,
 		Filter: q.json(),
 	}
+	// A plan step read only for the owner's queue joins Needs you when it
+	// waits on the owner, and is left out otherwise.
+	split := func(rows []taskRow) []taskRow {
+		if wide == f {
+			return rows
+		}
+		kept := rows[:0]
+		for _, r := range rows {
+			switch {
+			case r.Plan == "":
+				kept = append(kept, r)
+			case taskNeed(r, now) != "":
+				data.needSteps = append(data.needSteps, r)
+			}
+		}
+		return kept
+	}
+	data.InProgress = split(heldRows(taskRows(started), namer))
+	data.Gates = split(blockedRows(gates))
+	data.Gated = split(blockedRows(gated))
 	if err := s.markLockedBlockers(ctx, &data); err != nil {
 		return tasksData{}, err
 	}
-	now := time.Now().UTC()
 	if err := s.stampTaskTimes(ctx, &data, now); err != nil {
 		return tasksData{}, err
 	}
@@ -538,6 +629,12 @@ func (s *Service) tasksPage(ctx context.Context, q taskQuery) (tasksData, error)
 		}
 	}
 	data.Counts = countTaskRows(data)
+	if data.ClosedRecent, err = store.CountClosedSince(ctx, db, f, now.Add(-recentlyClosed)); err != nil {
+		return tasksData{}, err
+	}
+	if err := s.buildTaskList(ctx, &data, q, now); err != nil {
+		return tasksData{}, err
+	}
 	counts, err := store.OpenTaskCountsByProject(ctx, db, f)
 	if err != nil {
 		return tasksData{}, err
@@ -554,6 +651,333 @@ func (s *Service) tasksPage(ctx context.Context, q taskQuery) (tasksData, error)
 		return a < b
 	})
 	return data, nil
+}
+
+// --- The list (plan:console-ux-pass UX 30) ----------------------------------
+
+// The list's groups, by key, in its order. Each one's element id is
+// taskGroupID(key): the pills and the pager link to it.
+const (
+	taskGroupNeeds      = "needs"
+	taskGroupInProgress = "inprogress"
+	taskGroupReady      = "ready"
+	taskGroupBlocked    = "blocked"
+	taskGroupWaiting    = "waiting"
+	taskGroupClosed     = "closed"
+)
+
+// taskGroupID is a group's element id.
+func taskGroupID(key string) string { return "tl-g-" + key }
+
+// Why a row of Needs you waits on the owner (taskNeed).
+const (
+	rowNeedGate      = "gate"      // a gate on the owner
+	rowNeedLapsed    = "lapsed"    // a claim whose lease ran out
+	rowNeedClaimless = "claimless" // in progress with no claim
+)
+
+// taskNeed is why r waits on the owner as the needs model counts it
+// (needs.go's needOpenGates and needClaims, through ownerGateOpen and
+// looseClaim, the predicates the sidebar's Tasks badge counts by too) as of
+// now; "" when it does not.
+func taskNeed(r taskRow, now time.Time) string {
+	t := r.task()
+	if ownerGateOpen(t) {
+		return rowNeedGate
+	}
+	switch looseClaim(t, now) {
+	case "lapsed":
+		return rowNeedLapsed
+	case "claimless":
+		return rowNeedClaimless
+	}
+	return ""
+}
+
+// heldByOwnersGates reports a step of the people's queue that waits only on
+// the owner's gates: its own gate is not open, and every gate among its
+// unfinished blockers waits on the owner. Those gates are in Needs you, so
+// the list draws the step as blocked by them, not as waiting on others
+// (store.TaskPlace's rank says the same).
+func heldByOwnersGates(r taskRow) bool {
+	if r.Gate != nil && r.Gate.Open {
+		return false
+	}
+	held := false
+	for _, b := range r.Blockers {
+		if b.Kind != string(core.TaskKindGate) {
+			continue
+		}
+		if b.Gate == nil || !core.GateWhoMatches(b.Gate.Who, gateClearedByOwner) {
+			return false
+		}
+		held = true
+	}
+	return held
+}
+
+// The one action a row offers, each posting to the route the task's own
+// page posts it to (task_shared.html).
+const (
+	rowActHandle  = "handle"  // Mark as handled: POST /console/tasks/{id}/gate/clear
+	rowActRelease = "release" // Release claim: POST /console/tasks/{id}/release
+	rowActDone    = "done"    // Mark done: POST /console/tasks/{id}/status, to=done
+)
+
+// rowAction is the one action a row of group needs, need being why it waits
+// on the owner: Mark as handled on a gate on the owner, Release claim on a
+// lapsed claim, Mark done on a ready task and on one in progress that no
+// live claim holds. A live claim, a closed task, and everything else offer
+// none here (the task's own page offers the rest). Each is one actionsFor
+// offers the task too.
+func rowAction(r taskRow, need, group string) string {
+	switch {
+	case r.ClaimLive || core.TaskStatus(r.Status).Closed():
+		return ""
+	case need == rowNeedGate && r.Gate != nil && r.Gate.Open:
+		return rowActHandle
+	case need == rowNeedLapsed:
+		return rowActRelease
+	case need != "" || group == taskGroupReady:
+		return rowActDone
+	}
+	return ""
+}
+
+// taskList is the Tasks page as one list: its groups in order, the empty
+// ones left out (Ready stays while the list holds anything). HTML only;
+// the JSON carries the Needs you group as needsYou.
+type taskList struct {
+	Groups []taskGroup
+}
+
+// group is the list's group of key, nil when it draws none.
+func (l *taskList) group(key string) *taskGroup {
+	if l == nil {
+		return nil
+	}
+	for i := range l.Groups {
+		if l.Groups[i].Key == key {
+			return &l.Groups[i]
+		}
+	}
+	return nil
+}
+
+// taskGroup is one group of the list.
+type taskGroup struct {
+	Key, Label, Gloss string
+	// Pill is the group's pill under the bar: its words after the count,
+	// and its status class.
+	Pill, PillClass string
+	// Rows are the rows the page draws; Total is how many the group holds
+	// (Ready and the closed tasks draw fewer).
+	Rows  []taskListRow
+	Total int
+	// More is how many ready tasks are past the ones drawn; MoreHref draws
+	// every one, landing on the first of them.
+	More     int
+	MoreHref string
+	// Fold draws the group folded (the closed tasks); Open unfolds it, as
+	// closed=all does.
+	Fold, Open bool
+}
+
+// taskListRow is one row of the list: the task, why it waits on the owner
+// (Need, in Needs you), the mark its state draws, the tone of the line that
+// says what holds it, the one action it needs, and its links.
+type taskListRow struct {
+	taskRow
+	Need string
+	// Mark is the state mark's key; Tone the line's tone, "" for quiet.
+	Mark, Tone string
+	Act        string
+	// Holds is how many unfinished tasks a gate holds.
+	Holds int
+	// Href opens the task with the list's state, which its page places it
+	// in. Next is where the row's action returns: the list, at the row,
+	// wherever its new group puts it. PlanHref narrows the list to its plan.
+	Href, Next, PlanHref string
+}
+
+// MoreBlockers is how many unfinished blockers the row has past the first
+// it names.
+func (r taskListRow) MoreBlockers() int { return max(0, len(r.Blockers)-1) }
+
+// buildTaskList draws data's rails as the list q names, at now: Needs you
+// (the gates on the owner, the lapsed claims, the claimless starts, each
+// part in the sort's order), In progress (a live claim's), Ready, Blocked,
+// Waiting on others (the gates on anyone else, by who must act, then the
+// steps an open gate holds), and the closed tasks: those of the last
+// recentlyClosed from the newest page, folded, or the closed=all page. It
+// reads what each gate holds through the request's handle, and sets
+// NeedsYou for the JSON.
+func (s *Service) buildTaskList(ctx context.Context, data *tasksData, q taskQuery, now time.Time) error {
+	order := sortTaskRowsOldest
+	if q.Sort == taskSortNewest {
+		order = sortTaskRowsNewest
+	}
+	var gates, lapsed, claimless, live, waitGates, waitGated []taskRow
+	need := func(r taskRow) {
+		switch taskNeed(r, now) {
+		case rowNeedGate:
+			gates = append(gates, r)
+		case rowNeedLapsed:
+			lapsed = append(lapsed, r)
+		case rowNeedClaimless:
+			claimless = append(claimless, r)
+		}
+	}
+	for _, r := range data.Gates {
+		if taskNeed(r, now) == rowNeedGate {
+			gates = append(gates, r)
+		} else {
+			waitGates = append(waitGates, r)
+		}
+	}
+	blocked := data.Blocked
+	for _, r := range data.Gated {
+		switch {
+		case taskNeed(r, now) == rowNeedGate:
+			gates = append(gates, r)
+		case heldByOwnersGates(r):
+			blocked = append(slices.Clip(blocked), r)
+		default:
+			waitGated = append(waitGated, r)
+		}
+	}
+	if len(blocked) > len(data.Blocked) {
+		order(blocked)
+	}
+	for _, r := range data.InProgress {
+		if taskNeed(r, now) == "" {
+			live = append(live, r)
+		} else {
+			need(r)
+		}
+	}
+	for _, r := range data.needSteps {
+		need(r)
+	}
+	for _, part := range [][]taskRow{gates, lapsed, claimless} {
+		order(part)
+	}
+	needs := slices.Concat(gates, lapsed, claimless)
+
+	var gateIDs []string
+	for _, r := range slices.Concat(gates, waitGates) {
+		if r.Kind == string(core.TaskKindGate) {
+			gateIDs = append(gateIDs, r.ID)
+		}
+	}
+	holds, err := store.OpenDependentCounts(ctx, s.db(ctx), gateIDs)
+	if err != nil {
+		return err
+	}
+
+	const list = "/console/tasks"
+	listHref := q.href(list)
+	row := func(r taskRow, need, group string) taskListRow {
+		out := taskListRow{taskRow: r, Need: need, Act: rowAction(r, need, group), Holds: holds[r.ID],
+			Href: "/console/tasks/" + r.ID + q.QS(), Next: listHref + "#tl-" + r.ID}
+		switch need {
+		case rowNeedGate:
+			out.Mark, out.Tone = "gate", "warn"
+		case rowNeedLapsed, rowNeedClaimless:
+			out.Mark, out.Tone = need, "danger"
+		default:
+			out.Mark = group
+		}
+		switch group {
+		case taskGroupInProgress:
+			out.Mark = "live"
+		case taskGroupReady:
+			if r.Untouched {
+				out.Tone = "warn"
+			}
+		case taskGroupClosed:
+			out.Mark = r.Word().Key
+		}
+		if r.Plan != "" {
+			o := q
+			o.Plan, o.Steps, o.Page, o.ClosedAll, o.ReadyAll = r.Plan, false, 1, false, false
+			out.PlanHref = o.href(list)
+		}
+		return out
+	}
+	rows := func(src []taskRow, group string) []taskListRow {
+		out := make([]taskListRow, 0, len(src))
+		for _, r := range src {
+			out = append(out, row(r, taskNeed(r, now), group))
+		}
+		return out
+	}
+
+	l := &taskList{}
+	add := func(g taskGroup) {
+		if g.Total > 0 || len(g.Rows) > 0 {
+			l.Groups = append(l.Groups, g)
+		}
+	}
+	needsPill := "need you"
+	if len(needs) == 1 {
+		needsPill = "needs you"
+	}
+	add(taskGroup{Key: taskGroupNeeds, Label: "Needs you", Gloss: "a gate waits on you, or a claim went stale",
+		Pill: needsPill, PillClass: "status-blocked", Rows: rows(needs, taskGroupNeeds), Total: len(needs)})
+	add(taskGroup{Key: taskGroupInProgress, Label: "In progress", Gloss: "held by a live claim",
+		Pill: "in progress", PillClass: "status-live", Rows: rows(live, taskGroupInProgress), Total: len(live)})
+	ready := taskGroup{Key: taskGroupReady, Label: "Ready", Gloss: "an agent can claim it now",
+		Pill: "ready", PillClass: "status-ready", Total: len(data.Ready)}
+	shown := data.Ready
+	if !q.ReadyAll && len(shown) > readyShown {
+		shown = shown[:readyShown]
+		o := q
+		o.ReadyAll = true
+		ready.More, ready.MoreHref = len(data.Ready)-readyShown, o.href(list)+"#tl-"+data.Ready[readyShown].ID
+	}
+	ready.Rows = rows(shown, taskGroupReady)
+	readyAt := len(l.Groups)
+	add(ready)
+	add(taskGroup{Key: taskGroupBlocked, Label: "Blocked", Gloss: "waits for unfinished work",
+		Pill: "blocked", PillClass: "status-blocked", Rows: rows(blocked, taskGroupBlocked), Total: len(blocked)})
+	waiting := slices.Concat(waitGates, waitGated)
+	add(taskGroup{Key: taskGroupWaiting, Label: "Waiting on others",
+		Gloss: "a person, or an event outside Seamless, must act first",
+		Pill:  "waiting on others", PillClass: "status-blocked", Rows: rows(waiting, taskGroupWaiting), Total: len(waiting)})
+	closed := taskGroup{Key: taskGroupClosed, Fold: true, Pill: "closed this week"}
+	if q.ClosedAll {
+		closed.Label, closed.Gloss, closed.Open, closed.Pill = "Closed", "every closed task, newest closed first", true, "closed"
+		closed.Rows, closed.Total = rows(data.Closed, taskGroupClosed), data.ClosedTotal
+	} else {
+		since := now.Add(-recentlyClosed)
+		var recent []taskRow
+		for _, r := range data.Closed {
+			at := r.Updated
+			if r.Closed != nil {
+				at = *r.Closed
+			}
+			if !at.Before(since) {
+				recent = append(recent, r)
+			}
+		}
+		closed.Label, closed.Gloss = "Recently closed", "closed in the last 7 days"
+		closed.Rows, closed.Total = rows(recent, taskGroupClosed), data.ClosedRecent
+		if len(recent) == 0 {
+			closed.Total = 0
+		}
+	}
+	add(closed)
+	if len(l.Groups) > 0 && (len(l.Groups) == readyAt || l.Groups[readyAt].Key != taskGroupReady) {
+		// The list holds something, but nothing ready: Ready still says so.
+		l.Groups = slices.Insert(l.Groups, readyAt, ready)
+	}
+	data.List = l
+	data.NeedsYou = needs
+	if data.NeedsYou == nil {
+		data.NeedsYou = []taskRow{}
+	}
+	return nil
 }
 
 // countTaskRows tallies the rails in the board's words (taskCounts).
@@ -579,7 +1003,7 @@ func countTaskRows(d tasksData) taskCounts {
 // when each task's state began, through the request's handle, and marks the
 // ready rows nothing changed on for untouchedAfter.
 func (s *Service) stampTaskTimes(ctx context.Context, data *tasksData, now time.Time) error {
-	buckets := []*[]taskRow{&data.Ready, &data.InProgress, &data.Blocked, &data.Gates, &data.Gated, &data.Closed}
+	buckets := []*[]taskRow{&data.Ready, &data.InProgress, &data.Blocked, &data.Gates, &data.Gated, &data.Closed, &data.needSteps}
 	var tasks []core.Task
 	for _, b := range buckets {
 		for _, r := range *b {
@@ -666,8 +1090,8 @@ func (s *Service) markLockedBlockers(ctx context.Context, data *tasksData) error
 	if len(locked) == 0 {
 		return nil
 	}
-	ids := make([]string, 0, len(data.Ready)+len(data.Blocked)+len(data.Gated)+len(data.Gates))
-	for _, bucket := range [][]taskRow{data.Ready, data.Blocked, data.Gated, data.Gates} {
+	ids := make([]string, 0, len(data.Ready)+len(data.Blocked)+len(data.Gated)+len(data.Gates)+len(data.needSteps))
+	for _, bucket := range [][]taskRow{data.Ready, data.Blocked, data.Gated, data.Gates, data.needSteps} {
 		for _, row := range bucket {
 			ids = append(ids, row.ID)
 		}
@@ -676,7 +1100,7 @@ func (s *Service) markLockedBlockers(ctx context.Context, data *tasksData) error
 	if err != nil || len(by) == 0 {
 		return err
 	}
-	for _, bucket := range [][]taskRow{data.Blocked, data.Gated, data.Gates} {
+	for _, bucket := range [][]taskRow{data.Blocked, data.Gated, data.Gates, data.needSteps} {
 		for i := range bucket {
 			bucket[i].LockedBlockers = by[bucket[i].ID]
 		}
@@ -704,21 +1128,20 @@ func (s *Service) tasks(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	// The HTML library auto-opens the most relevant task in the reader.
+	// The page is one list (taskList), with no reader beside it: a row's
+	// title reads the task in place (the read-in-place panel) or opens its
+	// own page.
 	if !wantsJSON(r) {
-		if id := defaultTaskID(data); id != "" {
-			d, found, derr := s.taskDetailByID(ctx, id)
-			if derr != nil {
-				s.serverError(w, r, derr)
-				return
-			}
-			if found {
-				d.Next = q.listNext(d.ID)
-				data.Selected = &d
-				data.SelectedAuto = true
-			}
+		names, err := s.projectNames(ctx)
+		if err != nil {
+			s.serverError(w, r, err)
+			return
 		}
-		data.View = newTaskView(q, data, "/console/tasks")
+		data.View = newTaskView(q, data, names)
+		if data.View.Scope, err = s.projectSwitcher(ctx, data.View.Projects); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
 		if !data.listsAny() && !q.narrowed() && !q.Steps {
 			steps, err := store.AnyPlanStep(ctx, s.db(ctx))
 			if err != nil {
@@ -759,25 +1182,12 @@ func (q taskQuery) listNext(id string) string {
 	return q.href("/console/tasks/" + id)
 }
 
-// defaultTaskID picks the reader's default selection on the list URL: the work
-// happening now first -- held by a live claim, then started with none -- then
-// the ready queue, then blocked, then the work waiting on people, then the
-// newest closed ("" when the page lists no task at all).
-func defaultTaskID(data tasksData) string {
-	for _, bucket := range [][]taskRow{data.Live(), data.Unheld(), data.Ready, data.Blocked, data.Gates, data.Gated, data.Closed} {
-		if len(bucket) > 0 {
-			return bucket[0].ID
-		}
-	}
-	return ""
-}
-
 // taskView is the Tasks page's controls under its state: the text filter's
-// hidden fields, the project menu, the plan steps toggle, the sort menu and
-// the closed pager. HTML only.
+// hidden fields, the project switcher, the plan steps toggle, the sort menu
+// and the closed pager. HTML only.
 type taskView struct {
 	Query taskQuery
-	// QS is the state as a ?query suffix: every rail row's link carries it.
+	// QS is the state as a ?query suffix: every row's link carries it.
 	QS string
 	// Filtered is a filter that keeps tasks out (narrowed); ClearHref goes
 	// back to the default list, the sort kept; SearchHref looks for the
@@ -786,37 +1196,31 @@ type taskView struct {
 	ClearHref, SearchHref string
 	// Keep is the text filter's hidden inputs.
 	Keep []libField
-	// Projects is the project menu, ProjectLabel its current choice.
+	// Projects is the project menu the switcher is built from (Scope),
+	// ProjectLabel its current choice.
 	Projects     []libLink
 	ProjectLabel string
-	// Steps is the Plan steps toggle; PlanClear drops the plan filter.
+	Scope        projectSwitcher
+	// Steps is the Plan steps too toggle; PlanClear drops the plan filter.
 	Steps     libLink
 	PlanClear string
-	// Sorts is the sort menu, on the task being read; SortLabel its choice.
+	// Sorts is the sort menu; SortLabel its choice.
 	Sorts     []libLink
 	SortLabel string
 	// ClosedAllHref pages through every closed task; ClosedNewer and
 	// ClosedOlder step a page of them.
 	ClosedAllHref, ClosedNewer, ClosedOlder string
-	// WaitingHref is where the waiting on people chip points: the gates,
-	// else the steps waiting on people.
-	WaitingHref string
 	// StepsOnly says the default list is empty while plan steps exist, so
 	// the page offers them rather than saying there are no tasks.
 	StepsOnly bool
 }
 
-// newTaskView draws the controls for state q over data, on a page whose
-// reader shows base (/console/tasks when nothing is asked for). A choice that
-// changes what the list holds goes to the list, which opens its first task; a
-// sort stays on the task being read.
-func newTaskView(q taskQuery, data tasksData, base string) *taskView {
-	v := &taskView{Query: q, QS: q.QS(), Filtered: q.narrowed(), WaitingHref: "#rg-gates"}
-	if len(data.Gates) == 0 {
-		v.WaitingHref = "#rg-gated"
-	}
+// newTaskView draws the controls for state q over data; names are the
+// projects' display names, for the switcher to match by typing. A choice
+// that changes what the list holds starts its closed pages over.
+func newTaskView(q taskQuery, data tasksData, names map[string]string) *taskView {
+	v := &taskView{Query: q, QS: q.QS(), Filtered: q.narrowed()}
 	const list = "/console/tasks"
-	// A choice that changes the list starts its closed pages over.
 	fresh := func(mut func(*taskQuery)) string {
 		o := q
 		o.Page = 1
@@ -830,12 +1234,12 @@ func newTaskView(q taskQuery, data tasksData, base string) *taskView {
 	keep := q.values()
 	keep.Del("q")
 	keep.Del("page")
-	names := make([]string, 0, len(keep))
+	keys := make([]string, 0, len(keep))
 	for name := range keep {
-		names = append(names, name)
+		keys = append(keys, name)
 	}
-	sort.Strings(names)
-	for _, name := range names {
+	sort.Strings(keys)
+	for _, name := range keys {
 		v.Keep = append(v.Keep, libField{Name: name, Value: keep.Get(name)})
 	}
 
@@ -859,19 +1263,22 @@ func newTaskView(q taskQuery, data tasksData, base string) *taskView {
 		entries = append(slices.Clone(entries), taskProjectCount{Project: chosen})
 	}
 	for _, p := range entries {
-		slug, label := p.Project, p.Project
+		slug, label, title := p.Project, p.Project, names[p.Project]
 		if slug == "" {
-			slug, label = validate.GlobalProject, "global"
+			slug, label, title = validate.GlobalProject, "global", ""
+		}
+		if title == label {
+			title = ""
 		}
 		on := q.Project != "" && p.Project == chosen
 		if on {
 			v.ProjectLabel = label
 		}
 		v.Projects = append(v.Projects, libLink{Label: label, Href: fresh(func(o *taskQuery) { o.Project = slug }),
-			Count: p.Open, On: on})
+			Title: title, Count: p.Open, On: on, Value: slug})
 	}
 
-	v.Steps = libLink{Label: "Plan steps", On: q.Steps || q.Plan != "",
+	v.Steps = libLink{Label: "Plan steps too", On: q.Steps || q.Plan != "",
 		Href: fresh(func(o *taskQuery) { o.Steps, o.Plan = !(q.Steps || q.Plan != ""), "" })}
 	if q.Plan != "" {
 		v.PlanClear = fresh(func(o *taskQuery) { o.Plan = "" })
@@ -886,23 +1293,28 @@ func newTaskView(q taskQuery, data tasksData, base string) *taskView {
 		if key == q.Sort {
 			v.SortLabel = label
 		}
-		v.Sorts = append(v.Sorts, libLink{Label: label, Href: o.href(base), On: key == q.Sort})
+		v.Sorts = append(v.Sorts, libLink{Label: label, Href: o.href(list), On: key == q.Sort})
 	}
+	closedAt := "#" + taskGroupID(taskGroupClosed)
 	if !q.ClosedAll {
-		if data.ClosedMore > 0 {
-			v.ClosedAllHref = fresh(func(o *taskQuery) { o.ClosedAll = true }) + "#rg-closed"
+		shown := 0
+		if g := data.List.group(taskGroupClosed); g != nil {
+			shown = len(g.Rows)
+		}
+		if data.ClosedTotal > shown {
+			v.ClosedAllHref = fresh(func(o *taskQuery) { o.ClosedAll = true }) + closedAt
 		}
 		return v
 	}
 	if data.ClosedPage > 1 {
 		o := q
 		o.Page = data.ClosedPage - 1
-		v.ClosedNewer = o.href(list) + "#rg-closed"
+		v.ClosedNewer = o.href(list) + closedAt
 	}
 	if data.ClosedPage < data.ClosedPages {
 		o := q
 		o.Page = data.ClosedPage + 1
-		v.ClosedOlder = o.href(list) + "#rg-closed"
+		v.ClosedOlder = o.href(list) + closedAt
 	}
 	return v
 }

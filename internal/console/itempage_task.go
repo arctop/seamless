@@ -47,8 +47,13 @@ func (s *Service) taskItemPage(w http.ResponseWriter, r *http.Request, t core.Ta
 		}
 		item.Plan = card
 	}
+	lockedBlocked, err := s.lockedBlockedIDs(ctx)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	if listed {
-		place, found, err := store.TaskPlace(ctx, s.db(ctx), q.filter(), q.Sort == taskSortNewest, now, d.ID)
+		place, found, err := store.TaskPlace(ctx, s.db(ctx), q.placeList(now, lockedBlocked), now, d.ID)
 		if err != nil {
 			s.serverError(w, r, err)
 			return
@@ -64,8 +69,9 @@ func (s *Service) taskItemPage(w http.ResponseWriter, r *http.Request, t core.Ta
 	case item.Plan != nil && item.Plan.current >= 0:
 		page.Place = item.Plan.place()
 	case t.PlanSlug == "":
-		f := store.TaskFilter{ByProject: true, Project: t.ProjectSlug}
-		place, found, err := store.TaskPlace(ctx, s.db(ctx), f, false, now, d.ID)
+		// The task's project's list, as its way back names it.
+		project := taskQuery{Project: scopeParam(t.ProjectSlug), Sort: taskSortOldest, Page: 1}
+		place, found, err := store.TaskPlace(ctx, s.db(ctx), project.placeList(now, lockedBlocked), now, d.ID)
 		if err != nil {
 			s.serverError(w, r, err)
 			return

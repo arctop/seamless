@@ -217,11 +217,12 @@ func seedOwnerWork(t *testing.T, db *sql.DB, now time.Time) {
 }
 
 // rowTags are the tags a list row opens with -- a library rail item, a
-// Memories row, a session row, a live agent card's head -- and the tag that
-// closes it.
+// Memories row, a Tasks row, a session row, a live agent card's head --
+// and the tag that closes it.
 var rowTags = [][2]string{
 	{`<a class="rail-item`, "</a>"},
 	{`<a class="ml-row`, "</a>"},
+	{`<div class="tl-row`, "</div>"},
 	{`<div class="id-line"`, "</div>"},
 	{`<article class="now-agent"`, "</header>"},
 }

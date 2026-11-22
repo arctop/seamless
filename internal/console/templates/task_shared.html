@@ -1,5 +1,6 @@
-{{/* Shared by the tasks page (tasks.html) and the task peek fragment
-     (peek_task.html), which parse it beside them (render.go). */}}
+{{/* Shared by the tasks page (tasks.html: the list's rows and a task's own
+     page) and the task peek fragment (peek_task.html), which parse it beside
+     them (render.go). */}}
 {{/* task-gate renders a task's gate (the taskDetail's Gate, nil for none):
      who and what, the optional lines, its clearance once cleared, and --
      while it is open and the task offers it -- Mark as handled, with a note. */}}
@@ -33,10 +34,7 @@
      post at once. The gate's Mark as handled sits with the gate (task-gate). */}}
 {{define "task-actions"}}{{with .Actions}}
   {{- if .Done}}
-  <form method="post" action="/console/tasks/{{$.ID}}/status">
-    {{- template "task-next" $}}<input type="hidden" name="to" value="done">
-    <button class="ract" type="submit" data-task-act="done" title="Close the task as done: the tasks waiting on it go ahead">{{icon "check"}}Mark done</button>
-  </form>
+  {{template "task-act-done" $}}
   {{- end}}
   {{- if .Drop}}
   <form method="post" action="/console/tasks/{{$.ID}}/status">
@@ -51,12 +49,31 @@
   </form>
   {{- end}}
   {{- if .Release}}
-  <form method="post" action="/console/tasks/{{$.ID}}/release">
-    {{- template "task-next" $}}
-    <button class="ract danger" type="submit" data-task-act="release" data-confirm="Release the claim on this task? It reopens for any agent to claim." data-confirm-label="Release it" title="Owner override: takes the claim from whoever holds it">{{icon "undo-2"}}Release claim</button>
-  </form>
+  {{template "task-act-release" $}}
   {{- end}}
 {{end}}{{end}}
+
+{{/* The actions a task's own page, its peek and a row of the Tasks list
+     share: each a form back to the surface's Next (task-next), called with
+     anything that has the task's ID, Next and Kind. Release claim asks in
+     the page first; Mark done is undone by Reopen, so it does not. */}}
+{{define "task-act-done"}}<form method="post" action="/console/tasks/{{.ID}}/status">
+    {{- template "task-next" .}}<input type="hidden" name="to" value="done">
+    <button class="ract" type="submit" data-task-act="done" title="Close the task as done: the tasks waiting on it go ahead">{{icon "check"}}Mark done</button>
+  </form>{{end}}
+
+{{define "task-act-release"}}<form method="post" action="/console/tasks/{{.ID}}/release">
+    {{- template "task-next" .}}
+    <button class="ract danger" type="submit" data-task-act="release" data-confirm="Release the claim on this task? It reopens for any agent to claim." data-confirm-label="Release it" title="Owner override: takes the claim from whoever holds it">{{icon "undo-2"}}Release claim</button>
+  </form>{{end}}
+
+{{/* task-act-handle is Mark as handled without a note, for a row: the
+     task's own page and its peek offer it with the gate (task-gate), where a
+     note can go with it. */}}
+{{define "task-act-handle"}}<form method="post" action="/console/tasks/{{.ID}}/gate/clear">
+    {{- template "task-next" .}}
+    <button class="ract" type="submit" data-task-act="handle" title="{{if eq .Kind "gate"}}The gate is done: the tasks waiting on it go ahead{{else}}The gate is cleared: the step goes ahead once nothing else blocks it{{end}}">{{icon "check"}}Mark as handled</button>
+  </form>{{end}}
 
 {{/* task-held says, while a live claim holds the task, who holds it and that
      the claim is released before the task closes: the console never closes a

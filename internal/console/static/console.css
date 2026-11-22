@@ -9065,6 +9065,98 @@ tbody tr.row-link[data-panel-current] td:first-child { box-shadow: inset 2px 0 0
 .item-card-title.mono { font-family: var(--font-mono); font-size: var(--text-sm); }
 
 
+/* UX 30: the Tasks list (templates/tasks.html). One list, full width, in the
+   Memories list's frame (.ml-list, .ml-group, .ml-group-hd): Needs you
+   first, then In progress, Ready, Blocked, Waiting on others and the
+   recently closed, folded. A row is no link, so its one action's form
+   stands beside the title's link: the state mark, the title with the line
+   that says what holds the task, the short id that copies the whole one,
+   the project, the plan chip, the action. A click on the row's blank space
+   reads it in place (.row-link); j and k move the focus ring through the
+   titles (library.js). The pills under the bar jump to the groups. */
+.tl-pills { margin: 0 0 12px; }
+.tl-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; min-height: 56px; padding: 8px 16px;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 70%, transparent); color: var(--ink-2);
+  cursor: pointer; scroll-margin-block: 12px;
+}
+.ml-group .tl-row:last-child { border-bottom: 0; }
+.tl-row:hover { background: color-mix(in oklab, var(--ink) 4%, var(--surface)); }
+.tl-row:has(.tl-title:focus-visible), .tl-row[data-panel-current] { background: var(--brand-soft); box-shadow: inset 3px 0 0 var(--brand); }
+.tl-mark {
+  flex: none; box-sizing: border-box; width: 9px; height: 9px; border: 2px solid var(--muted); border-radius: 50%;
+}
+.tl-row[data-mark="gate"] .tl-mark { border-color: var(--warn); border-radius: 3px; }
+.tl-row[data-mark="lapsed"] .tl-mark, .tl-row[data-mark="claimless"] .tl-mark { border-color: var(--danger); background: var(--danger); }
+.tl-row[data-mark="live"] .tl-mark { border-color: var(--brand); background: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.tl-row[data-mark="ready"] .tl-mark { border-color: var(--ok); }
+.tl-row[data-mark="blocked"] .tl-mark { border-style: dashed; }
+.tl-row[data-mark="waiting"] .tl-mark { border-radius: 3px; }
+.tl-row[data-mark="done"] .tl-mark { border-color: var(--ok); background: var(--ok); }
+.tl-row[data-mark="dropped"] .tl-mark { border-color: var(--faint); }
+.tl-main { display: flex; flex: 999 1 300px; flex-direction: column; gap: 1px; min-width: 0; }
+.tl-title { color: var(--ink); font-size: var(--text-base); font-weight: 600; overflow-wrap: anywhere; }
+.tl-title:hover { color: var(--ink); }
+.tl-title:focus { outline: none; }
+.tl-line { color: var(--muted); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.tl-line[data-tone="warn"] { color: var(--warn); }
+.tl-line[data-tone="danger"] { color: var(--danger); }
+.tl-line a { color: var(--brand-strong); }
+.tl-line .ico { width: 12px; height: 12px; vertical-align: -1px; }
+.tl-row[data-mark="dropped"] .tl-title, .tl-row[data-mark="done"] .tl-title { color: var(--ink-2); font-weight: 500; }
+.tl-id.copy-btn {
+  gap: 6px; margin: 0; padding: 3px 8px; border: 1px solid var(--border); border-radius: var(--radius-xs);
+  background: var(--surface-2); color: var(--ink-2); font-size: var(--text-xs);
+}
+.tl-id.copy-btn .mono { font-family: var(--font-mono); }
+/* The row's copy glyph is drawn here, once, not in every row's markup: the
+   copy mark, then the check while .copied flashes (layout.html's handler). */
+.tl-id.copy-btn::after {
+  content: ""; flex: none; width: 12px; height: 12px; background: currentColor;
+  -webkit-mask: var(--tl-copy-glyph) center / contain no-repeat; mask: var(--tl-copy-glyph) center / contain no-repeat;
+}
+.tl-id.copy-btn { --tl-copy-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect width='14' height='14' x='8' y='8' rx='2'/%3E%3Cpath d='M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'/%3E%3C/svg%3E"); }
+.tl-id.copy-btn.copied { --tl-copy-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E"); }
+.tl-id.copy-btn:hover { border-color: var(--border-strong); color: var(--ink); }
+.tl-id.copy-btn.copied { border-color: color-mix(in oklab, var(--ok) 45%, transparent); color: var(--ok); }
+.tl-plan {
+  flex: none; max-width: 28ch; overflow: hidden; padding: 1px 8px; border: 1px solid color-mix(in oklab, var(--brand) 40%, transparent);
+  border-radius: var(--radius-pill); color: var(--brand-strong); font-family: var(--font-mono); font-size: var(--text-2xs);
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.tl-plan:hover { border-color: var(--brand); text-decoration: none; }
+.tl-row .kind[data-account] { flex: none; }
+.tl-act { display: inline-flex; flex: none; justify-content: flex-end; min-width: 118px; }
+.tl-act:empty { visibility: hidden; }
+.tl-act form { display: inline-flex; margin: 0; }
+.tl-act .ract.danger { color: var(--danger); }
+.tl-more, .tl-none {
+  margin: 0; padding: 10px 16px; border-top: 1px solid color-mix(in oklab, var(--border) 70%, transparent);
+  color: var(--muted); font-size: var(--text-sm);
+}
+.tl-none { border-top: 0; }
+.tl-fold > summary { cursor: pointer; list-style: none; }
+.tl-fold > summary::-webkit-details-marker { display: none; }
+.tl-fold > summary::after {
+  content: ""; flex: none; align-self: center; width: 6px; height: 6px; margin-left: 4px;
+  border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg);
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.tl-fold[open] > summary::after { transform: rotate(45deg); }
+.tl-fold:not([open]) > summary { border-bottom: 0; }
+.tl-pager { display: inline-flex; flex-wrap: wrap; gap: 8px; }
+.tl-pager .ico { width: 14px; height: 14px; }
+@media (max-width: 720px) {
+  /* A phone reads the title and its line first, then one row of the id,
+     the project, the plan and the action. */
+  .tl-row { gap: 6px 10px; padding: 10px 14px; scroll-margin-top: 64px; }
+  .tl-main { order: -1; flex-basis: calc(100% - 20px); }
+  .tl-mark { order: -2; align-self: flex-start; margin-top: 6px; }
+  .tl-act { min-width: 0; margin-left: auto; }
+  .tl-act:empty { display: none; }
+}
+
+
 /* UX 41: Access requests and one request (templates/access.html and
    access_one.html). The list: each waiting request as a card (who asks for
    what, the agent's reason on one line, its chips, its time left, Review),
