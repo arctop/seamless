@@ -306,10 +306,11 @@ func sqlClaimLive(alias string) string {
 // A step in progress counts once, in the console's status words
 // (internal/console/taskwords.go): InProgress while a live claim holds it,
 // Lapsed when its holder's lease ran out, Unclaimed when no claim names a
-// holder at all; a step an open gate holds reads as waiting instead, so it is
-// in neither of the last two. GatesOpen is a plan rollup's GatesOpen
-// (sqlGatesOpen) over the whole project: the gates, and the unfinished steps
-// whose own gate is open.
+// holder at all. A step no live claim holds that an open gate holds (its own,
+// or a gate it depends on) reads as waiting instead, so it counts in Waiting
+// and in neither of the last two. Every unfinished task counts in exactly one
+// of the six. GatesOpen is a plan rollup's GatesOpen (sqlGatesOpen) over the
+// whole project: the gates, and the unfinished steps whose own gate is open.
 type TaskCounts struct {
 	Ready      int `json:"ready"`
 	InProgress int `json:"inProgress"`
@@ -326,8 +327,9 @@ type TaskCounts struct {
 // instant a claim is judged live at.
 func TaskCountsByProject(ctx context.Context, db *sql.DB, now time.Time) (map[string]TaskCounts, error) {
 	at := core.FormatTime(now.UTC())
-	notWaiting := "NOT " + sqlHeldByGate("t") + " AND NOT " + sqlOpenBlocker("t", true)
-	stale := "t.status = 'in_progress' AND t.kind <> 'gate' AND " + notWaiting + " AND NOT " + sqlClaimLive("t")
+	gateHeld := "(" + sqlHeldByGate("t") + " OR " + sqlOpenBlocker("t", true) + ")"
+	started := "t.status = 'in_progress' AND t.kind <> 'gate' AND NOT " + sqlClaimLive("t")
+	stale := started + " AND NOT " + gateHeld
 	rows, err := db.QueryContext(ctx, `
 		SELECT t.project_slug,
 		       SUM(CASE WHEN `+sqlReady("t")+` THEN 1 ELSE 0 END),
@@ -335,11 +337,11 @@ func TaskCountsByProject(ctx context.Context, db *sql.DB, now time.Time) (map[st
 		       SUM(CASE WHEN `+stale+` AND t.claimed_by <> '' THEN 1 ELSE 0 END),
 		       SUM(CASE WHEN `+stale+` AND t.claimed_by = '' THEN 1 ELSE 0 END),
 		       SUM(CASE WHEN `+sqlBlocked("t")+` THEN 1 ELSE 0 END),
-		       SUM(CASE WHEN (`+sqlGates("t")+`) OR (`+sqlGated("t")+`) THEN 1 ELSE 0 END),
+		       SUM(CASE WHEN (`+sqlGates("t")+`) OR (`+sqlGated("t")+`) OR (`+started+` AND `+gateHeld+`) THEN 1 ELSE 0 END),
 		       SUM(CASE WHEN `+sqlGatesOpen("t")+` THEN 1 ELSE 0 END)
 		  FROM tasks t
 		 WHERE t.status IN ('open','in_progress')
-		 GROUP BY t.project_slug`, at, at, at)
+		 GROUP BY t.project_slug`, at, at, at, at)
 	if err != nil {
 		return nil, fmt.Errorf("store.TaskCountsByProject: %w", err)
 	}

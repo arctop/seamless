@@ -341,14 +341,17 @@ func bdLease(t *testing.T, db *sql.DB, id, holder string, expires time.Time) {
 // equals the length of the rail the Tasks page draws it from, per project,
 // and a step in progress counts once, in the status words: in progress
 // (ClaimLive), lapsed (a holder whose lease ended, at exactly now included),
-// unclaimed (no holder), or waiting when an open gate holds it.
+// unclaimed (no holder), or waiting when an open gate holds it and no live
+// claim does (the Tasks page words it so), and every unfinished task counts
+// exactly once.
 func TestBdTaskCounts_TheTasksPageRails(t *testing.T) {
 	ctx := context.Background()
 	db := newTaskDB(t)
 	now := time.Date(2026, 7, 11, 9, 0, 0, 0, time.UTC)
 
 	// demo: a ready task, one blocked by work, a gate with a step behind it,
-	// a step with its own gate, and five steps in progress.
+	// a step with its own gate, and seven steps in progress, two of which a
+	// gate holds.
 	free := addTask(t, db, "demo", "free", 1)
 	addTask(t, db, "demo", "after-free", 2, free)
 	gate := addGated(t, db, "", "GATE", 3, core.TaskKindGate, "owner", "sign")
@@ -360,6 +363,7 @@ func TestBdTaskCounts_TheTasksPageRails(t *testing.T) {
 	bdLease(t, db, addTask(t, db, "demo", "claimless", 9), "", time.Time{})
 	bdLease(t, db, addTask(t, db, "demo", "held-no-lease", 10), "sessD", time.Time{})
 	bdLease(t, db, addTask(t, db, "demo", "behind-gate", 11, gate), "", time.Time{})
+	bdLease(t, db, addGated(t, db, "", "lapsed-own-gate", 14, core.TaskKindStep, "owner", "review"), "sessE", now.Add(-time.Minute))
 	// A plan step counts too, in another project.
 	addPlanTask(t, db, "other", "p", "step", 12)
 	done := addTask(t, db, "other", "done", 13)
@@ -369,8 +373,11 @@ func TestBdTaskCounts_TheTasksPageRails(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, TaskCounts{
 		Ready: 1, InProgress: 1, Lapsed: 3, Unclaimed: 1,
-		Blocked: 1, Waiting: 3, GatesOpen: 2,
-	}, counts["demo"], "held-no-lease and a lease ending at now are lapsed; behind-gate waits")
+		Blocked: 1, Waiting: 5, GatesOpen: 3,
+	}, counts["demo"], "held-no-lease and a lease ending at now are lapsed; behind-gate and lapsed-own-gate wait")
+	c := counts["demo"]
+	require.Equal(t, 12, c.Ready+c.InProgress+c.Lapsed+c.Unclaimed+c.Blocked+c.Waiting,
+		"each of demo's 12 unfinished tasks counts in exactly one group")
 	require.Equal(t, TaskCounts{Ready: 1}, counts["other"], "plan steps count; closed tasks do not")
 
 	// The rails the Tasks page draws: the same numbers.
@@ -386,7 +393,9 @@ func TestBdTaskCounts_TheTasksPageRails(t *testing.T) {
 	require.Len(t, blocked, counts["demo"].Blocked)
 	require.Len(t, gates, 1)
 	require.Len(t, gated, 2)
-	require.Equal(t, len(gates)+len(gated), counts["demo"].Waiting)
+	// The people's two rails, plus the two started steps a gate holds, which
+	// the Tasks page lists with the started ones and words as waiting.
+	require.Equal(t, len(gates)+len(gated)+2, counts["demo"].Waiting)
 
 	// ClaimLive is the authority: each in-progress task reads as the SQL does.
 	all, err := AllTasksByStatus(ctx, db, core.TaskInProgress)
