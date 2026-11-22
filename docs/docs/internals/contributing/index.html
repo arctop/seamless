@@ -262,7 +262,7 @@ handful of rules that are worth knowing before you write a line.</p>
 </span></span><span class="line"><span class="cl">make fmt-check  <span class="c1"># report gofmt drift instead of fixing it</span>
 </span></span><span class="line"><span class="cl">make docs       <span class="c1"># regenerate docs-src/ -&gt; docs/docs/ (committed)</span>
 </span></span><span class="line"><span class="cl">make docs-check <span class="c1"># fail if the committed site is stale</span>
-</span></span><span class="line"><span class="cl">make check      <span class="c1"># the gate - everything above, in order</span>
+</span></span><span class="line"><span class="cl">make check      <span class="c1"># the gate - everything above</span>
 </span></span></code></pre></div>
 <p><code>make help</code> prints the full list, including the launchd dev-loop and prod-install
 targets.</p>
@@ -293,14 +293,15 @@ which makes a stale running daemon invisible.</p>
 <h2 id="the-check-gate">The <code>check</code> gate</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">make check
 </span></span></code></pre></div>
-<p>That is the one command that must be green before work is done. It runs ten steps
-sequentially - as separate <code>$(MAKE)</code> invocations rather than prerequisites, so it
-stops at the first red step and stays ordered under <code>make -j</code>:</p>
+<p>That is the one command that must be green before work is done. It runs in two
+stages. The nine static steps run at the same time, so the stage takes as long as
+its slowest step and reports every red step rather than only the first; then,
+once all of them are green, <code>test-race</code>:</p>
 <div class="table-wrap">
 <table>
 <thead>
 <tr>
-<th>Order</th>
+<th>Stage</th>
 <th>Step</th>
 <th>Catches</th>
 </tr>
@@ -312,56 +313,70 @@ stops at the first red step and stays ordered under <code>make -j</code>:</p>
 <td>It compiles.</td>
 </tr>
 <tr>
-<td>2</td>
+<td>1</td>
 <td><code>vet</code></td>
 <td>The stdlib's own suspicious-construct checks.</td>
 </tr>
 <tr>
-<td>3</td>
+<td>1</td>
 <td><code>cross-check</code></td>
-<td><code>go vet</code> for darwin/arm64 and windows/amd64, so code behind an OS build tag type-checks before a release has to build it.</td>
+<td><code>go vet</code> for darwin/arm64, linux/amd64 and windows/amd64, so code behind an OS build tag type-checks before a release has to build it.</td>
 </tr>
 <tr>
-<td>4</td>
+<td>1</td>
 <td><code>fmt-check</code></td>
 <td>gofmt drift in tracked files.</td>
 </tr>
 <tr>
-<td>5</td>
+<td>1</td>
 <td><code>docs-check</code></td>
 <td>A committed docs site that no longer matches <code>docs-src/</code>.</td>
 </tr>
 <tr>
-<td>6</td>
+<td>1</td>
 <td><code>installer-check</code></td>
 <td>An installer script that does not parse (<code>sh -n</code>, and PowerShell's parser when <code>pwsh</code> is installed).</td>
 </tr>
 <tr>
-<td>7</td>
+<td>1</td>
 <td><code>site-check</code></td>
 <td>A hand-written landing page that drifted from the installer or the CLI.</td>
 </tr>
 <tr>
-<td>8</td>
+<td>1</td>
 <td><code>lint</code></td>
 <td>golangci-lint, including the repo's custom bans.</td>
 </tr>
 <tr>
-<td>9</td>
+<td>1</td>
 <td><code>vulncheck</code></td>
 <td>A known vulnerability in code this repo actually calls (govulncheck).</td>
 </tr>
 <tr>
-<td>10</td>
+<td>2</td>
 <td><code>test-race</code></td>
-<td>Everything, under the race detector.</td>
+<td>Everything, under the race detector, with <code>-count=1</code>: every test runs, and none is answered from the test cache.</td>
 </tr>
 </tbody>
 </table>
 </div>
-<p>The cheap, likely-to-fail steps run first, and <code>test-race</code> is last because it is
-by far the slowest. The individual targets exist for iterating; <code>check</code> is the
-thing you run before you claim to be done.</p>
+<p>The individual targets exist for iterating; <code>check</code> is the thing you run before
+you claim to be done.</p>
+<p><code>test</code> and <code>test-race</code> run through <code>cmd/testshard</code>. Go runs packages in parallel
+but the tests inside one package one after another, so a plain <code>go test ./...</code>
+ends with a few big packages each grinding on one core. The runner splits each
+package's top-level tests across several <code>go test</code> processes, packs them by the
+durations it recorded on its last run (a times file in the user cache directory,
+shared by every checkout), and starts the longest first. Each shard is its own
+process, so a test keeps its own globals and environment; two tests of one
+package can now run at the same moment, though, so a test that reads something
+outside <code>t.TempDir()</code> must not depend on it holding still. <code>TESTSHARD=0</code> runs
+plain <code>go test</code>.</p>
+<p>Every go command the Makefile starts builds with <code>-trimpath</code>, as the release
+builds do. Without it Go's build cache keys each package by its directory, and a
+fresh checkout at a new path (a detached worktree, a landing tree) compiles the
+whole module again; with it, a checkout reuses whatever another tree with the
+same sources already built.</p>
 <p><code>docs-check</code> regenerates into a temp dir and diffs, rather than rewriting your
 working tree and running <code>git diff</code>. That means it never mutates the file you are
 editing, and <code>diff -r</code> catches untracked drift that <code>git diff</code> cannot see - a page

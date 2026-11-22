@@ -1,8 +1,8 @@
 #!/bin/sh
 # Pre-commit gate: `make check-fast` -- the fast half of `make check`.
 #
-# test-race is deliberately excluded: it is ~37s against ~3s for this subset,
-# which is too much to charge every commit. CI runs the full `make check` on
+# test-race is deliberately excluded: it takes minutes against seconds for
+# this subset, which is too much to charge every commit. CI runs the full `make check` on
 # every push and pull request, and that remains the authority.
 #
 # SCOPE CAVEAT: git runs hooks against the WORKING TREE, not the index. Under

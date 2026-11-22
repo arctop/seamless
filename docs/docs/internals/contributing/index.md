@@ -18,7 +18,7 @@ make fmt        # gofmt, over tracked files
 make fmt-check  # report gofmt drift instead of fixing it
 make docs       # regenerate docs-src/ -> docs/docs/ (committed)
 make docs-check # fail if the committed site is stale
-make check      # the gate - everything above, in order
+make check      # the gate - everything above
 ```
 
 `make help` prints the full list, including the launchd dev-loop and prod-install
@@ -61,26 +61,43 @@ which makes a stale running daemon invisible.
 make check
 ```
 
-That is the one command that must be green before work is done. It runs ten steps
-sequentially - as separate `$(MAKE)` invocations rather than prerequisites, so it
-stops at the first red step and stays ordered under `make -j`:
+That is the one command that must be green before work is done. It runs in two
+stages. The nine static steps run at the same time, so the stage takes as long as
+its slowest step and reports every red step rather than only the first; then,
+once all of them are green, `test-race`:
 
-| Order | Step | Catches |
+| Stage | Step | Catches |
 |---|---|---|
 | 1 | `build` | It compiles. |
-| 2 | `vet` | The stdlib's own suspicious-construct checks. |
-| 3 | `cross-check` | `go vet` for darwin/arm64 and windows/amd64, so code behind an OS build tag type-checks before a release has to build it. |
-| 4 | `fmt-check` | gofmt drift in tracked files. |
-| 5 | `docs-check` | A committed docs site that no longer matches `docs-src/`. |
-| 6 | `installer-check` | An installer script that does not parse (`sh -n`, and PowerShell's parser when `pwsh` is installed). |
-| 7 | `site-check` | A hand-written landing page that drifted from the installer or the CLI. |
-| 8 | `lint` | golangci-lint, including the repo's custom bans. |
-| 9 | `vulncheck` | A known vulnerability in code this repo actually calls (govulncheck). |
-| 10 | `test-race` | Everything, under the race detector. |
+| 1 | `vet` | The stdlib's own suspicious-construct checks. |
+| 1 | `cross-check` | `go vet` for darwin/arm64, linux/amd64 and windows/amd64, so code behind an OS build tag type-checks before a release has to build it. |
+| 1 | `fmt-check` | gofmt drift in tracked files. |
+| 1 | `docs-check` | A committed docs site that no longer matches `docs-src/`. |
+| 1 | `installer-check` | An installer script that does not parse (`sh -n`, and PowerShell's parser when `pwsh` is installed). |
+| 1 | `site-check` | A hand-written landing page that drifted from the installer or the CLI. |
+| 1 | `lint` | golangci-lint, including the repo's custom bans. |
+| 1 | `vulncheck` | A known vulnerability in code this repo actually calls (govulncheck). |
+| 2 | `test-race` | Everything, under the race detector, with `-count=1`: every test runs, and none is answered from the test cache. |
 
-The cheap, likely-to-fail steps run first, and `test-race` is last because it is
-by far the slowest. The individual targets exist for iterating; `check` is the
-thing you run before you claim to be done.
+The individual targets exist for iterating; `check` is the thing you run before
+you claim to be done.
+
+`test` and `test-race` run through `cmd/testshard`. Go runs packages in parallel
+but the tests inside one package one after another, so a plain `go test ./...`
+ends with a few big packages each grinding on one core. The runner splits each
+package's top-level tests across several `go test` processes, packs them by the
+durations it recorded on its last run (a times file in the user cache directory,
+shared by every checkout), and starts the longest first. Each shard is its own
+process, so a test keeps its own globals and environment; two tests of one
+package can now run at the same moment, though, so a test that reads something
+outside `t.TempDir()` must not depend on it holding still. `TESTSHARD=0` runs
+plain `go test`.
+
+Every go command the Makefile starts builds with `-trimpath`, as the release
+builds do. Without it Go's build cache keys each package by its directory, and a
+fresh checkout at a new path (a detached worktree, a landing tree) compiles the
+whole module again; with it, a checkout reuses whatever another tree with the
+same sources already built.
 
 `docs-check` regenerates into a temp dir and diffs, rather than rewriting your
 working tree and running `git diff`. That means it never mutates the file you are

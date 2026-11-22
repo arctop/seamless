@@ -35,6 +35,10 @@ cmd/demoseed/      thin CLI over internal/demokit: the console-fleet seed
 cmd/seambench/     agent-scenario benchmark: `run` (headless scenario x condition
                    matrix) + `report` (grade, uplift, version deltas). Driven by
                    `make seambench`; see cmd/seambench/README.md
+cmd/testshard/     make test/test-race's runner: each package's tests split across
+                   go test processes, packed by the durations it recorded last
+                   time (<user cache dir>/seamless/testshard-*.tsv, shared by
+                   every checkout), longest first
 cmd/releasekit/    the release's macOS half: builds and packs the darwin binaries
                    from .goreleaser.yaml's builds and archive, the tag's sha256
                    manifest and release.yml's check of the draft against it,
@@ -181,11 +185,14 @@ make install    # build + snapshot binaries/config to ~/.local/bin +
                 # ~/.config/seamless, repoint the service and hooks, restart.
                 # Refuses on a machine the curl installer set up (its service
                 # file carries the installer's marker) unless FORCE=1
-make test       # unit tests
-make test-race  # unit tests with the race detector
-make check      # the full gate: build + vet + cross-check (darwin/linux/windows
-                # vet) + fmt-check + docs-check + installer-check +
-                # site-check + lint + vulncheck + test-race
+make test       # unit tests, sharded across processes (cmd/testshard;
+                # TESTSHARD=0 runs plain go test)
+make test-race  # unit tests with the race detector, sharded the same way
+make check      # the full gate: build, vet, cross-check (darwin/linux/windows
+                # vet), fmt-check, docs-check, installer-check, site-check,
+                # lint and vulncheck at once, then test-race -count=1.
+                # Every go command builds with -trimpath, so a fresh
+                # worktree reuses the build cache of the trees before it
 make check-fast # the pre-commit subset (no build/vulncheck/test-race);
                 # .githooks/pre-commit runs it
 make lint       # golangci-lint

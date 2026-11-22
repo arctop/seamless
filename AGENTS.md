@@ -106,6 +106,14 @@ cmd/seamlessd, cmd/seam, cmd/seambench, cmd/demoseed, cmd/docsgen
   hit a real network service in a unit test.
 - No `time.Sleep` for synchronization. Use channels, `sync.WaitGroup`, or polling
   with a deadline.
+- `make test` and `make test-race` shard each package's top-level tests across
+  several processes (`cmd/testshard`), so two tests of one package can run at
+  the same moment. Each still has its own process, globals and environment,
+  so `t.Setenv`, `t.Chdir` and swapped package hooks stay safe; what is shared
+  is everything outside `t.TempDir()`. A test that reads or counts something
+  in the machine's temp dir, home or a fixed path gives itself its own first
+  (`t.Setenv("TMPDIR", t.TempDir())`, as
+  `TestConsoleOpen_PasskeySignInOpensTheSignInPage` does).
 - `cmd/seamlessd`, `internal/update` and `internal/agentproc` also run on macOS
   and Windows in CI (`os-smoke`), so keep their tests portable: a test that
   fakes a home sets `USERPROFILE` beside `HOME` (`os.UserHomeDir` reads it on
@@ -1897,8 +1905,10 @@ months. Workflow and flags: `cmd/seambench/README.md`. (`make seambench`, not
 
 ## Verification before declaring done
 
-1. **`make check`** -- build + vet + cross-check + fmt-check + docs-check +
-   installer-check + site-check + lint + vulncheck + test-race, in that order. This is the gate;
+1. **`make check`** -- build, vet, cross-check, fmt-check, docs-check,
+   installer-check, site-check, lint and vulncheck, all at once, then (once
+   they are green) test-race with `-count=1`, its packages' tests sharded
+   across processes by `cmd/testshard`. This is the gate;
    the individual targets exist for iterating. `make seambench` is NOT part of
    it and must never be added: it spends real API tokens (see the benchmark
    section above).
@@ -1915,8 +1925,8 @@ lands), and `config-lint` runs actionlint and `goreleaser check` with the
 release workflow's goreleaser range.
 
 `make install-git-hooks` (once per clone) enables `.githooks/pre-commit`, which
-runs **`make check-fast`** -- `check` minus build, vulncheck, and test-race (~3s
-against ~39s). It is a
+runs **`make check-fast`** -- `check` minus build, vulncheck, and test-race
+(seconds against minutes). It is a
 convenience, not the gate: git runs hooks against the working tree rather than
 the index, so under partial staging it describes the tree you are in and not the
 commit you are making. It catches gofmt/docs/lint drift early; `make check` and

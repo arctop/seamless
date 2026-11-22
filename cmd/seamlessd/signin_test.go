@@ -273,6 +273,11 @@ func TestApprovers_ListRemoveResetAndSignIns(t *testing.T) {
 // it dials does. With the key's sign-in it is not handled here, and the
 // pre-signed key page works as before.
 func TestConsoleOpen_PasskeySignInOpensTheSignInPage(t *testing.T) {
+	// Its own temp dir: the machine's is shared with every other test process
+	// (another shard of this package, another worktree's gate, a live
+	// `seamlessd console-open`), any of which can add or sweep a login page
+	// between the two globs below.
+	t.Setenv("TMPDIR", t.TempDir())
 	before, err := filepath.Glob(filepath.Join(os.TempDir(), consoleLoginPattern))
 	require.NoError(t, err)
 	var opened []string

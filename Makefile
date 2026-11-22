@@ -5,6 +5,19 @@ BIN_DIR := bin
 PKG     := ./...
 GO      ?= go
 
+# Every go command this Makefile starts (and every one a test starts, since
+# the environment carries it) builds with -trimpath. Without it the build
+# cache keys each package by its directory, so a checkout at a new path -- a
+# detached worktree, a landing tree, an APFS copy -- shares nothing with the
+# trees before it and compiles the whole module again for each of build, vet,
+# the three cross-vets and the race tests (about 20 s of a fresh tree's gate
+# for the race test binaries alone, against about 1 s with -trimpath once any
+# tree has built the same sources). The release builds already use it
+# (.goreleaser.yaml), so the gate now also tests what ships. A GOFLAGS of your
+# own is kept and -trimpath is added to it.
+GOFLAGS := $(strip $(GOFLAGS) $(if $(filter -trimpath,$(GOFLAGS)),,-trimpath))
+export GOFLAGS
+
 # golangci-lint major line. .golangci.yml declares `version: "2"`, and the two
 # schema generations are mutually unreadable, so a v1 binary does not lint badly
 # here -- it refuses to start. The `lint` target checks for that rather than
@@ -133,15 +146,16 @@ PS_INSTALLER := docs/install.ps1
 help:
 	@echo "Seamless targets:"
 	@echo "  build      compile ./bin/$(BINARY) and ./bin/$(CLI) (touches nothing live)"
-	@echo "  test       run unit tests"
-	@echo "  test-race  run unit tests with the race detector"
+	@echo "  test       run unit tests (sharded across processes by cmd/testshard; TESTSHARD=0 for plain go test)"
+	@echo "  test-race  run unit tests with the race detector (sharded the same way)"
 	@echo "  bench      run hot-path Go micro-benchmarks, ns/op (BENCHTIME=1x for a quick smoke run)"
 	@echo "  seambench  the AGENT-SCENARIO benchmark: runs a real agent over seeded fixtures and"
 	@echo "             prints with-vs-without uplift. SPENDS REAL API TOKENS; needs a 'claude'"
 	@echo "             binary + credentials. MANUAL ONLY -- not in check, CI, or any schedule."
 	@echo "             Unrelated to 'bench' above (see cmd/seambench/README.md)"
-	@echo "  check      the full gate: build + vet + cross-check + fmt + docs + installer + site + lint + vulncheck + test-race"
-	@echo "  check-fast the pre-commit subset: same minus build and test-race"
+	@echo "  check      the full gate: build, vet, cross-check, fmt, docs, installer, site, lint and vulncheck at once,"
+	@echo "             then test-race with -count=1"
+	@echo "  check-fast the pre-commit subset: same minus build, vulncheck and test-race"
 	@echo "  lint       run golangci-lint"
 	@echo "  vet        run go vet"
 	@echo "  cross-check  go vet for $(CROSS_TARGETS) (part of check; CI tests only three packages on macOS/Windows)"
@@ -199,13 +213,21 @@ build:
 	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) ./cmd/seamlessd
 	$(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(CLI) ./cmd/seam
 
+# Both test targets go through cmd/testshard, which splits each big package's
+# tests across several go test processes, packed by their last durations (see
+# its doc comment): the tests inside one package run one after another, so a
+# plain `go test ./...` ends with a few big packages each on one core.
+# TESTSHARD=0 runs plain go test instead; TESTSHARD_JOBS caps the shards
+# running at once.
 test:
-	$(GO) test $(PKG)
+	@GO='$(GO)' $(GO) run ./cmd/testshard -- $(PKG)
 
-# go test's default limit is 10 minutes per package; internal/console alone has
-# taken about 9 under the race detector in CI.
+# go test's default limit is 10 minutes per package, and it is per shard here;
+# internal/console alone took about 9 under the race detector in CI before
+# its tests were sharded. TESTFLAGS adds go test flags (check passes -count=1).
+TESTFLAGS ?=
 test-race:
-	$(GO) test -race -timeout 20m $(PKG)
+	@GO='$(GO)' $(GO) run ./cmd/testshard -race -timeout 20m $(TESTFLAGS) -- $(PKG)
 
 # The defaults row of plan seamless-sealed-unlock: with peer_auth and
 # isolation.requests off, every agent surface must match the golden written on
@@ -280,7 +302,7 @@ lint:
 	    || { echo "ERROR: .golangci.yml is schema v2 and needs golangci-lint v2; found:"; \
 	         golangci-lint version 2>&1 | head -1 | sed 's/^/  /'; \
 	         echo "  go install $(GOLANGCI_INSTALL)   (note the /v2 in the path)"; exit 1; }
-	golangci-lint run
+	golangci-lint run --allow-parallel-runners
 
 vet:
 	$(GO) vet $(PKG)
@@ -294,14 +316,16 @@ vet:
 # in CI. vet type-checks test files too, which a plain cross-build would not.
 # CGO off matches the release builds (.goreleaser.yaml) and keeps a missing
 # cross C toolchain out of it.
+# The three vets run at the same time (cross-vet-<os>-<arch>, one per target).
 CROSS_TARGETS := darwin/arm64 linux/amd64 windows/amd64
 
 cross-check:
-	@for t in $(CROSS_TARGETS); do \
-	    os=$${t%/*}; arch=$${t#*/}; \
+	@MAKE='$(MAKE)' scripts/parallel-make.sh $(foreach t,$(CROSS_TARGETS),cross-vet-$(subst /,-,$(t)))
+
+cross-vet-%:
+	@os=$(word 1,$(subst -, ,$*)); arch=$(word 2,$(subst -, ,$*)); \
 	    echo "cross-check: go vet for $$os/$$arch"; \
-	    GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 $(GO) vet $(PKG) || exit 1; \
-	done
+	    GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 $(GO) vet $(PKG)
 
 # Known-vulnerability gate. Reachability-based (govulncheck reports only vulns
 # whose vulnerable symbols this code actually calls), so it stays quiet about
@@ -368,35 +392,32 @@ changelog:
 	@$(MAKE) docs
 
 # The full gate: everything that must be green before declaring work done
-# (AGENTS.md > "Verification before declaring done"). Sequential $(MAKE) calls
-# rather than prerequisites so it fails at the first red step and stays ordered
-# under `make -j`. Cheapest and most-likely-to-fail steps come first; test-race
-# is last because it is the slowest by far.
+# (AGENTS.md > "Verification before declaring done"). Two stages. The static
+# steps run at the same time (scripts/parallel-make.sh): none reads what
+# another writes, so the stage takes as long as its slowest step, and it
+# reports every red step rather than only the first. test-race runs only once
+# all of them are green, because it is the slowest by far.
+#
+# The gate's tests run with -count=1: every test runs on this tree, and no
+# result comes from the test cache. With -trimpath (top of this file) a result
+# cached in another tree with the same sources could otherwise stand in for
+# this one, and the cache cannot see what a test reads through a child
+# process (a test here builds ./cmd/seam with `go build`, which no cache key of
+# cmd/seamlessd's covers). `make test-race` on its own still uses the cache.
+CHECK_STATIC := build vet cross-check fmt-check docs-check installer-check site-check lint vulncheck
+
 check:
-	@$(MAKE) build
-	@$(MAKE) vet
-	@$(MAKE) cross-check
-	@$(MAKE) fmt-check
-	@$(MAKE) docs-check
-	@$(MAKE) installer-check
-	@$(MAKE) site-check
-	@$(MAKE) lint
-	@$(MAKE) vulncheck
-	@$(MAKE) test-race
+	@MAKE='$(MAKE)' scripts/parallel-make.sh $(CHECK_STATIC)
+	@$(MAKE) --no-print-directory test-race TESTFLAGS=-count=1
 	@echo "check: all green"
 
-# The fast half of `check`: everything except test-race, which is ~37s against
-# ~3s for these six combined. This is what .githooks/pre-commit runs, and it is
-# the quick iterate loop by hand. `build` is omitted as redundant -- vet
-# type-checks, so it already fails on anything that would not compile.
-# Cheapest-first, same as `check`. NOT a substitute for the full gate.
+# The fast half of `check`: everything except build, vulncheck and test-race,
+# run at the same time like check's static stage. This is what
+# .githooks/pre-commit runs, and it is the quick iterate loop by hand. `build`
+# is omitted as redundant -- vet type-checks, so it already fails on anything
+# that would not compile. NOT a substitute for the full gate.
 check-fast:
-	@$(MAKE) fmt-check
-	@$(MAKE) vet
-	@$(MAKE) docs-check
-	@$(MAKE) installer-check
-	@$(MAKE) site-check
-	@$(MAKE) lint
+	@MAKE='$(MAKE)' scripts/parallel-make.sh fmt-check vet docs-check installer-check site-check lint
 	@echo "check-fast: all green (test-race not run -- 'make check' is the full gate)"
 
 # $(INSTALLER) is served verbatim at https://thereisnospoon.org/install and is
