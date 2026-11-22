@@ -11,11 +11,10 @@
 <section class="settings-zone settings-section bk-section" id="backups" data-restore-state="{{.Backups.State}}" data-restore-restart="{{.Backups.Restart}}"{{if .Backups.BackingUp}} data-backup-running{{end}}>
   <header class="settings-section-head">
     <div>
-      <div class="settings-zone-kicker">Keeping your knowledge safe</div>
-      <h2>Backups</h2>
-      <p>Seamless copies everything &mdash; every memory and note, with the database that holds your sessions, tasks and projects, and the whole conversations of flagged sessions &mdash; into one folder, on a schedule. Restore any copy here: replace everything with it, or bring back only what is missing. A restore saves today&rsquo;s data first, so it can be undone.</p>
+      <h2>Backups{{hintFor "Backups" "Seamless copies every memory and note, the database that holds your sessions, tasks and projects, and the whole conversations of flagged sessions into one folder, on a schedule. Restore any copy here: replace everything with it, or bring back only what is missing. A restore saves today’s data first, so it can be undone."}}</h2>
+      <p>Copies of everything, on a schedule.</p>
     </div>
-    {{if .Backups.Running}}<span class="settings-access editable">{{icon "settings"}} Editable here</span>{{else}}<span class="settings-access">{{icon "lock"}} Read only</span>{{end}}
+    {{if .Backups.Running}}{{with .Backups.Form}}{{template "source-chip" (sourceChip .ChipSource .SourceNote "backups-reset")}}{{end}}{{end}}
   </header>
   {{with .Backups}}{{if .Running}}
   {{if .Stopped}}<p class="updates-alert" role="alert">{{icon "triangle-alert"}}<span><strong>The backup service stopped after an internal error.</strong> Seamless keeps serving; restart it to revive backups.</span></p>{{end}}
@@ -86,11 +85,6 @@
   {{with .Form}}
   <article class="card bk-card bk-schedule" id="backup-schedule" aria-labelledby="bk-schedule-title">
     <h2 id="bk-schedule-title">{{icon "clock"}}Schedule and folder</h2>
-    <div class="settings-precedence{{if .Overridden}} is-override{{end}}">
-      <span class="state-dot"></span>
-      <span><strong>{{.SourceLabel}}</strong> &mdash; {{.SourceNote}}</span>
-      {{if .Overridden}}<button class="btn small" type="submit" form="backups-reset">Reset to the config file</button>{{end}}
-    </div>
     <form method="post" action="/console/settings/backups" class="bk-form" data-backups-form>
       <label class="brief-toggle bk-toggle">
         <input type="checkbox" name="auto" value="on"{{if .Auto}} checked{{end}}>

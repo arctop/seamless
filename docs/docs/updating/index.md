@@ -143,12 +143,12 @@ update:
 ```
 
 `false` means no update traffic at all - and so no automatic update either -
-and it is final: the console shows its toggle locked. With the key left out,
+and it is final: the console says **Config file decides** and its toggle is disabled. With the key left out,
 **Settings -> Updates** turns checks on and off at runtime, and
 `SEAMLESS_UPDATE_CHECK=false` does the same from the service's environment.
 Turning checks off there is your decision alone: an agent's process on the
 [peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/) socket, and a paired device, may turn them on
-but are refused off, and so is a **Reset to the config file** that would turn
+but are refused off, and so is a **Reset** that would turn
 them off ([what the console can change](https://thereisnospoon.org/docs/reference/console/#what-the-console-can-change)).
 `seamlessd update --check` and `seamlessd update` work either way - running
 them is you asking. The `update:` keys are new in v0.7.0: a seamlessd release

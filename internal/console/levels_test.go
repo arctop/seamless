@@ -275,6 +275,11 @@ func rawJSON(t *testing.T, mux *http.ServeMux, path string) map[string]any {
 	for _, k := range levelFields {
 		delete(out, k)
 	}
+	// Experience's sub-nav state names the level in force, like the level
+	// fields; every other section's state is level-blind.
+	if st, ok := out["sectionStatus"].(map[string]any); ok {
+		delete(st, "experience")
+	}
 	return out
 }
 
@@ -658,7 +663,8 @@ func TestExperienceSection_CardsAreGenerated(t *testing.T) {
 		require.Contains(t, advanced, "<li>"+item+"</li>")
 	}
 	require.NotContains(t, standard, "<li>Interactions</li>", "each card lists what IT adds")
-	require.Contains(t, page, "Following file + env")
+	require.Contains(t, page, `<span class="src-chip is-file">`, "the source chip names who set the level")
+	require.Contains(t, page, "From the config file or its environment variables (console.level).")
 	require.Contains(t, page, `data-theme-choice`)
 	require.Contains(t, page, `data-keys-open`)
 
@@ -670,13 +676,17 @@ func TestExperienceSection_CardsAreGenerated(t *testing.T) {
 	setLevel(t, db, "standard")
 	page = getPeek(t, mux, "/console/settings?s=experience").Body.String()
 	require.Contains(t, card("standard"), "is-current")
-	require.Contains(t, page, "Chosen in the console")
+	require.Contains(t, page, `<span class="src-chip is-override">`)
+	require.Contains(t, page, "Chosen in this console, so it wins over the config file")
+	require.Contains(t, page, `<button class="btn small src-chip-reset" type="submit" form="level-reset">Reset</button>`)
 	require.Contains(t, page, `action="/console/settings/level/reset"`)
 
 	require.NoError(t, store.SetSetting(context.Background(), db, store.SettingConsoleLevel,
 		`{"level":"advanced","source":"seeded","welcomed":true}`))
 	page = getPeek(t, mux, "/console/settings?s=experience").Body.String()
-	require.Contains(t, page, "Set by the upgrade")
+	require.Contains(t, page, `<span class="src-chip is-override">`, "a seeded level is a stored one, with Reset")
+	require.Contains(t, page, "Set by the upgrade: this installation was in use before levels existed, so it kept every screen.",
+		"the upgrade's sentence is the chip's hint")
 }
 
 // The sidebar's account row names the level as a link to the picker, stays one

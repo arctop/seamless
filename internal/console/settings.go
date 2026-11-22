@@ -204,11 +204,17 @@ type settingsData struct {
 	FamilyOptions      []familyProjectOption `json:"familyOptions"`
 	// ConsoleLevel is the level in force (presentation only), with whether a
 	// stored row sets it and who wrote that row ("chosen" by the owner or
-	// "seeded" by the upgrade). They are the ONLY fields that differ by level:
-	// everything above is the full payload at every level and every section.
+	// "seeded" by the upgrade). They and SectionStatus's "experience" entry
+	// are the ONLY values that differ by level: everything above is the full
+	// payload at every level and every section.
 	ConsoleLevel           string `json:"consoleLevel"`
 	ConsoleLevelOverridden bool   `json:"consoleLevelOverridden"`
 	ConsoleLevelSource     string `json:"consoleLevelSource,omitempty"`
+	// SectionStatus is each section's state in a word and a tone, by section
+	// id: the sub-nav's chips (settingsSectionStates), every section at every
+	// level. Its "experience" entry names the level in force, so it differs by
+	// level as the three fields above do; the rest is level-blind.
+	SectionStatus map[string]sectionState `json:"sectionStatus"`
 
 	// Section is the ?s= section the page shows and Subnav its menu; page
 	// state only, so JSON callers get the same payload whatever s says.
@@ -434,48 +440,49 @@ func (s *Service) settings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	lvl := s.consoleLevel(ctx)
-	pd := pageData{
+	data := settingsData{
+		DataDir:            s.cfg.DataDir,
+		Embeddings:         embeddings,
+		Database:           s.databasePanel(),
+		Budgets:            s.cfg.Budgets,
+		Gardener:           s.cfg.GardenerCfg,
+		GardenerSwitches:   s.gardenerPanelFor(ctx),
+		Briefing:           briefing,
+		BriefingOverridden: overridden,
+		Features:           featureCardsFor(featuresCfg, navCounts{Labs: rawCounts.Labs, Trials: rawCounts.Trials, Held: heldCount}, s.cfg.RestrictedAccounts),
+		FeaturesConfig:     featuresCfg,
+		FeaturesOverridden: featuresOverridden,
+		UtilityRows:        utilityRows,
+		UtilityReady:       [3]int{store.UtilityReadyMinEvents, store.UtilityReadyMinMemories, store.UtilityReadyMinAgeDays},
+		Projects:           projects,
+		RepoMap:            sortedRepoMap(repoRows),
+		Families:           sortedFamilies(families),
+		Workspaces:         workspaces,
+		UnboundRepos:       unboundRepos,
+		FamilyEditors:      familyEditors,
+		FamilyOptions:      familyOptions,
+
+		ConsoleLevel:           lvl.Level.String(),
+		ConsoleLevelOverridden: lvl.Overridden,
+		ConsoleLevelSource:     lvl.Source,
+		Section:                section.ID,
+		LevelCards:             levelCards(featuresCfg, lvl.Level),
+		BriefingPresets:        briefingPresetCards(briefing),
+		CustomizeOpen:          lvl.Level >= levelAdvanced,
+		Setup:                  s.setupData(ctx),
+		Updates:                updates,
+		Backups:                backups,
+		PreviewProjects:        previewProjects,
+		PreviewProject:         previewProject,
+	}
+	data.SectionStatus = s.settingsSectionStates(&data, lvl.Level, time.Now())
+	data.Subnav = settingsSubnav(lvl.Level, section.ID, data.SectionStatus)
+	s.render(w, r, "settings", pageData{
 		Title:       "Settings \u00b7 " + section.Label,
 		Active:      "settings",
 		LevelBanner: sectionBanner(section, lvl.Level),
-		Data: settingsData{
-			DataDir:            s.cfg.DataDir,
-			Embeddings:         embeddings,
-			Database:           s.databasePanel(),
-			Budgets:            s.cfg.Budgets,
-			Gardener:           s.cfg.GardenerCfg,
-			GardenerSwitches:   s.gardenerPanelFor(ctx),
-			Briefing:           briefing,
-			BriefingOverridden: overridden,
-			Features:           featureCardsFor(featuresCfg, navCounts{Labs: rawCounts.Labs, Trials: rawCounts.Trials, Held: heldCount}, s.cfg.RestrictedAccounts),
-			FeaturesConfig:     featuresCfg,
-			FeaturesOverridden: featuresOverridden,
-			UtilityRows:        utilityRows,
-			UtilityReady:       [3]int{store.UtilityReadyMinEvents, store.UtilityReadyMinMemories, store.UtilityReadyMinAgeDays},
-			Projects:           projects,
-			RepoMap:            sortedRepoMap(repoRows),
-			Families:           sortedFamilies(families),
-			Workspaces:         workspaces,
-			UnboundRepos:       unboundRepos,
-			FamilyEditors:      familyEditors,
-			FamilyOptions:      familyOptions,
-
-			ConsoleLevel:           lvl.Level.String(),
-			ConsoleLevelOverridden: lvl.Overridden,
-			ConsoleLevelSource:     lvl.Source,
-			Section:                section.ID,
-			Subnav:                 settingsSubnav(lvl.Level, section.ID),
-			LevelCards:             levelCards(featuresCfg, lvl.Level),
-			BriefingPresets:        briefingPresetCards(briefing),
-			CustomizeOpen:          lvl.Level >= levelAdvanced,
-			Setup:                  s.setupData(ctx),
-			Updates:                updates,
-			Backups:                backups,
-			PreviewProjects:        previewProjects,
-			PreviewProject:         previewProject,
-		},
-	}
-	s.render(w, r, "settings", pd)
+		Data:        data,
+	})
 }
 
 // previewChoices lists the live projects the briefing preview can be for and

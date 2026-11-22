@@ -82,7 +82,8 @@ func TestSettingsPage(t *testing.T) {
 	}
 
 	page := section("briefing")
-	require.Contains(t, page, "Briefing injection")
+	require.Contains(t, page, `<h2>Briefing<span class="hint">`, "one head: the title and its hint")
+	require.NotContains(t, page, "Briefing injection", "no second header")
 	require.Contains(t, page, `id="briefing-recipe"`)
 	require.Contains(t, page, `class="brief-group memory-group"`)
 	require.Contains(t, page, `class="brief-group family-group"`)

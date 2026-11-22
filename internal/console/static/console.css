@@ -3133,15 +3133,8 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
   display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border: 1px solid var(--border-strong);
   border-radius: 50%; color: var(--brand); background: var(--surface); font-family: var(--font-display); font-size: var(--text-sm); font-weight: 700;
 }
-.settings-zone-kicker { color: var(--brand); font-size: var(--text-2xs); font-weight: 750; letter-spacing: var(--tracking-wider); text-transform: uppercase; }
 .settings-zone-head h2 { margin: 1px 0 0; font-family: var(--font-display); font-size: var(--text-xl); line-height: 1.15; letter-spacing: var(--tracking-tight); }
 .settings-zone-head p { margin: 3px 0 0; color: var(--muted); font-size: var(--text-sm); }
-.settings-access {
-  display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border: 1px solid var(--border); border-radius: var(--radius-pill);
-  color: var(--muted); background: var(--surface); font-size: var(--text-2xs); font-weight: 650; white-space: nowrap;
-}
-.settings-access .ico { width: 12px; height: 12px; }
-.settings-access.editable { color: var(--brand); background: var(--brand-soft); border-color: transparent; }
 
 .runtime-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; }
 .runtime-card {
@@ -3242,11 +3235,6 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
   overflow: clip; border: 1px solid color-mix(in oklab, var(--k-decision) 28%, var(--border)); border-radius: var(--radius-lg);
   background: var(--surface); box-shadow: var(--shadow-md);
 }
-.features-workbench-head {
-  display: flex; align-items: center; justify-content: space-between; gap: 22px; padding: 18px 20px;
-  border-bottom: 1px solid var(--border); background: linear-gradient(120deg, color-mix(in oklab, var(--k-decision) 8%, var(--surface)), var(--surface));
-}
-.features-workbench-head p { max-width: 680px; margin: 8px 0 0; color: var(--muted); font-size: var(--text-xs); }
 .features-workbench form[data-features-form] { padding: 14px; }
 .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
 .feature-card {
@@ -3282,12 +3270,7 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
   overflow: clip; border: 1px solid color-mix(in oklab, var(--brand) 28%, var(--border)); border-radius: var(--radius-lg);
   background: var(--surface); box-shadow: var(--shadow-md);
 }
-.briefing-workbench-head {
-  display: flex; align-items: center; justify-content: space-between; gap: 22px; padding: 18px 20px;
-  border-bottom: 1px solid var(--border); background: linear-gradient(120deg, color-mix(in oklab, var(--brand) 8%, var(--surface)), var(--surface));
-}
 .briefing-title { display: flex; align-items: center; gap: 10px; }
-.briefing-workbench-head p { max-width: 680px; margin: 8px 0 0; color: var(--muted); font-size: var(--text-xs); }
 .config-flow { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; flex: none; }
 .config-flow > .ico { width: 13px; height: 13px; color: var(--faint); }
 .config-node { padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius-pill); color: var(--faint); background: var(--surface); font-size: var(--text-2xs); font-weight: 650; white-space: nowrap; }
@@ -3522,7 +3505,6 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
 @media (max-width: 1120px) {
   .settings-jump-key { display: none; }
   .settings-jumpbar { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-  .briefing-workbench-head, .features-workbench-head { align-items: flex-start; flex-direction: column; }
   .config-flow { justify-content: flex-start; }
   .brief-group.memory-group, .brief-group.activity-group,
   .brief-group.planning-group, .brief-group.family-group { grid-column: 1 / -1; }
@@ -5892,7 +5874,7 @@ a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex]:focus-v
 .retrieval-memory-metrics span, .retrieval-panel-head > div > span, .retrieval-reach-core span, .retrieval-zone-kicker,
 .runtime-card-head > div > span, .search-control-label, .search-sort label, .session-card-eyebrow, .session-detail-eyebrow,
 .session-peek-facts small, .session-peek-section-head > div > span, .session-work-section h3, .settings-mode > span,
-.settings-zone-kicker, .sky-card-facts dt, .sky-eyebrow, .stale-strip .lab, .stat .label, .workspace-cell-label, .workspace-columns span {
+.sky-card-facts dt, .sky-eyebrow, .stale-strip .lab, .stat .label, .workspace-cell-label, .workspace-columns span {
   font-family: var(--font-mono); font-size: 10.5px; font-weight: 500; letter-spacing: 0.13em;
 }
 .ov2-evt .kindchip, .now-evt .kindchip { font-family: var(--font-sans); letter-spacing: 0; text-transform: none; }
@@ -6138,9 +6120,6 @@ a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex]:focus-v
 .settings-subnav-ico { display: inline-flex; flex: none; margin-top: 1px; color: var(--muted); }
 .settings-subnav-ico .ico { width: 16px; height: 16px; }
 .settings-subnav a.active .settings-subnav-ico { color: var(--brand); }
-.settings-subnav-copy { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
-.settings-subnav-copy strong { font-size: var(--text-sm); font-weight: 650; }
-.settings-subnav-copy small { margin-top: 2px; color: var(--faint); font-size: var(--text-2xs); line-height: 1.35; }
 .settings-body { min-width: 0; }
 .settings-section { margin-bottom: 28px; scroll-margin-top: 20px; }
 .settings-section-head {
@@ -6157,16 +6136,6 @@ a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex]:focus-v
 }
 .settings-section-head p { margin: 4px 0 0; color: var(--muted); font-size: var(--text-sm); max-width: 72ch; }
 .settings-lede { color: var(--ink-2); font-size: var(--text-sm); }
-.settings-precedence {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin: 0 0 14px; padding: 9px 12px;
-  border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--muted); font-size: var(--text-xs);
-  background: color-mix(in oklab, var(--ink) 3%, transparent);
-}
-.settings-precedence > span:not(.state-dot) { flex: 1 1 260px; min-width: 0; }
-.settings-precedence strong { color: var(--ink-2); }
-.settings-precedence.is-override { border-color: color-mix(in oklab, var(--pop) 32%, var(--border)); background: color-mix(in oklab, var(--pop) 7%, transparent); }
-.settings-precedence.is-override .state-dot { background: var(--pop); box-shadow: 0 0 0 4px var(--pop-soft); }
-.settings-precedence.is-override strong { color: var(--pop-strong); }
 .js form:not(.is-dirty) > .settings-savebar { display: none; }
 html:not(.js) [data-form-discard] { display: none; }
 .settings-savebar { animation: rise-in var(--dur-med) var(--ease-out) both; }
@@ -6184,7 +6153,6 @@ html:not(.js) [data-form-discard] { display: none; }
 }
 .engine-group-head h3 { margin: 0; font-family: var(--font-display); font-size: var(--text-lg); font-weight: 650; }
 .engine-group-head p { grid-column: 1; margin: 0; color: var(--muted); font-size: var(--text-xs); max-width: 72ch; }
-.engine-group-head .settings-access { grid-column: 2; grid-row: 1 / span 2; }
 .setup-facts { display: grid; gap: 8px; margin: 0; }
 .setup-facts > div {
   display: grid; grid-template-columns: minmax(120px, 180px) minmax(0, 1fr); align-items: center; gap: 12px;
@@ -6195,7 +6163,6 @@ html:not(.js) [data-form-discard] { display: none; }
 .setup-facts dd { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; margin: 0; min-width: 0; color: var(--ink-2); font-size: var(--text-sm); overflow-wrap: anywhere; }
 @media (max-width: 1100px) {
   .settings-layout { grid-template-columns: 200px minmax(0, 1fr); gap: 16px; }
-  .settings-subnav-copy small { display: none; }
 }
 @media (max-width: 720px) {
   .settings-layout { grid-template-columns: minmax(0, 1fr); gap: 12px; }
@@ -6208,10 +6175,7 @@ html:not(.js) [data-form-discard] { display: none; }
     flex: none; align-items: center; gap: 6px; padding: 6px 11px; border: 1px solid var(--border);
     border-radius: var(--radius-pill); background: color-mix(in oklab, var(--ink) 4%, var(--surface-solid));
   }
-  .settings-subnav-copy small { display: none; }
-  .settings-subnav-copy strong { font-size: var(--text-xs); white-space: nowrap; }
   .settings-section-head, .engine-group-head { grid-template-columns: minmax(0, 1fr); }
-  .engine-group-head .settings-access { grid-column: 1; grid-row: auto; justify-self: start; }
   .setup-facts > div { grid-template-columns: minmax(0, 1fr); gap: 4px; }
 }
 
@@ -8090,7 +8054,6 @@ a.project-global-line:focus-visible { outline: none; box-shadow: var(--shadow-fo
 .gardener-switches .gardener-source { margin: 0; color: var(--faint); font-size: var(--text-xs); line-height: 1.45; }
 .gardener-switches .gardener-source strong { color: var(--ink-2); }
 .gardener-switches .updates-actions { margin: 4px 0 0; }
-.gardener-switches .settings-precedence { margin-bottom: 14px; }
 
 /* UX 03: the project page. A claim strip words its step (claim lapsed,
    unclaimed) and wraps at phone width; a session's held task reads as its
@@ -9109,6 +9072,41 @@ tbody tr.row-link[data-panel-current] td:first-child { box-shadow: inset 2px 0 0
 .plan-page-hd .count { color: var(--muted); font-weight: 600; letter-spacing: 0; }
 .plan-page .plan-page-card { margin-bottom: 0; }
 .item-card-title.mono { font-family: var(--font-mono); font-size: var(--text-sm); }
+
+
+/* UX 34: Settings' sub-nav states and one-line heads. A sub-nav row reads
+   icon, label and the section's state chip (settings_sections.go), with a
+   rule after the Basic sections; where the column narrows the chip drops
+   under the label, and on a phone the rows stay one scrolling line of pills
+   that keep their chips. A section's head is its title with a hint, one
+   sentence, and the source chip; a switch the config file decides carries its
+   locked chip beside it. Tokens only. */
+.settings-layout { grid-template-columns: 248px minmax(0, 1fr); }
+.settings-subnav a { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 4px 9px; padding: 8px 10px; }
+.settings-subnav-ico { margin-top: 0; }
+.settings-subnav-label { min-width: 0; font-size: var(--text-sm); font-weight: 650; line-height: 1.25; overflow-wrap: anywhere; }
+.settings-subnav-state { justify-self: end; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings-subnav-rule { display: block; height: 1px; margin: 5px 10px; background: var(--border); }
+.settings-section-head h2 { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
+.settings-section-head h2 .hint { vertical-align: 0; }
+.settings-section-head > .src-chip { justify-self: end; margin-top: 2px; }
+.engine-group-head > .src-chip { grid-column: 2; grid-row: 1 / span 2; align-self: start; justify-self: end; }
+.engine-group-head h3 .settings-readonly { display: inline-flex; margin-right: 7px; color: var(--faint); vertical-align: -1px; }
+.engine-group-head h3 .settings-readonly .ico { width: 14px; height: 14px; }
+.updates-actions form:has(> .src-chip) { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+@media (max-width: 1100px) {
+  .settings-layout { grid-template-columns: 200px minmax(0, 1fr); }
+  .settings-subnav a { grid-template-columns: 16px minmax(0, 1fr); }
+  .settings-subnav-state { grid-column: 2; justify-self: start; }
+}
+@media (max-width: 720px) {
+  .settings-layout { grid-template-columns: minmax(0, 1fr); }
+  .settings-subnav a { display: flex; gap: 6px; padding: 5px 6px 5px 11px; }
+  .settings-subnav-label { font-size: var(--text-xs); white-space: nowrap; overflow-wrap: normal; }
+  .settings-subnav-rule { display: none; }
+  .settings-section-head > .src-chip { justify-self: start; }
+  .engine-group-head > .src-chip { grid-column: 1; grid-row: auto; justify-self: start; }
+}
 
 
 /* UX 29: the Notes list (templates/notes.html). It is the Memories list

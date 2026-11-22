@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -288,8 +289,16 @@ func TestAaSettingsGardener_FileFalseLocksTheSwitch(t *testing.T) {
 	require.Equal(t, http.StatusOK, rr.Code)
 	page := rr.Body.String()
 	require.Contains(t, page, `id="settings-gardener"`)
-	require.Regexp(t, `<button class="btn small primary" type="submit" disabled title="Set in the config file or environment">Let agents apply proposals</button>`, page)
-	require.Contains(t, page, "gardener.agents_may_apply: false is final there")
+	// The file decides this one switch: it is disabled, and its locked chip
+	// beside it says so once, with where to change it in its hint.
+	group := regexp.MustCompile(`(?s)<section class="engine-group gardener-switches" id="settings-gardener".*?</section>`).FindString(page)
+	require.NotEmpty(t, group)
+	require.Contains(t, group, `<button class="btn small primary" type="submit" disabled>Let agents apply proposals</button>`)
+	require.Contains(t, group, `<span class="src-chip is-locked">`)
+	require.Contains(t, group, "gardener.agents_may_apply: false is set in the config file or SEAMLESS_GARDENER_AGENTS_MAY_APPLY; change it there.")
+	require.Equal(t, 1, strings.Count(page, "Config file decides"), "said once in the section")
+	require.Equal(t, 1, strings.Count(page, "SEAMLESS_GARDENER_AGENTS_MAY_APPLY"), "said once in the section")
+	require.NotContains(t, page, "Set in the config file or environment")
 
 	kind, _ = aaFlash(t, c, "/console/settings/gardener/reset", "")
 	require.Equal(t, "notice", kind)
@@ -308,7 +317,8 @@ func TestAaSettingsGardener_Renders(t *testing.T) {
 	page := get("engine")
 	require.Contains(t, page, `id="settings-gardener"`)
 	require.Contains(t, page, "Turn agents&rsquo; applying off")
-	require.Contains(t, page, "<strong>Default</strong>")
+	require.Contains(t, page, `<span class="src-chip is-file">`, "the group's chip says where the switches come from")
+	require.Contains(t, page, "Agents may apply proposals by default. By default nothing applies by itself.")
 	require.NotContains(t, page, `form="gardener-reset"`, "nothing to reset")
 	for _, k := range gardener.AutoSafeKinds() {
 		require.Contains(t, page, `<input type="checkbox" name="auto" value="`+k+`">`, k)
@@ -322,7 +332,9 @@ func TestAaSettingsGardener_Renders(t *testing.T) {
 	page = get("engine")
 	require.Contains(t, page, `<input type="checkbox" name="auto" value="memory_wanted" checked>`)
 	require.Contains(t, page, "Let agents apply proposals")
-	require.Contains(t, page, `form="gardener-reset"`)
+	require.Contains(t, page, `<span class="src-chip is-override">`)
+	require.Contains(t, page, "Whether agents may apply proposals is set here. The kinds that apply automatically are set here.")
+	require.Contains(t, page, `<button class="btn small src-chip-reset" type="submit" form="gardener-reset">Reset</button>`)
 	require.Contains(t, page, `action="/console/settings/gardener/reset"`)
 	require.Contains(t, get("setup"), "only you apply proposals; memory wanted apply by themselves")
 }

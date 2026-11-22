@@ -232,8 +232,9 @@ func TestLevelGates_EventDetail(t *testing.T) {
 }
 
 // Settings at Basic: Features keeps its cards, blurbs, data lines, and the
-// "nothing is deleted" promise, but not the precedence line or the tool
-// names; Workspaces' repo hosts and unbound routes are Advanced.
+// "nothing is deleted" promise, but not the source chip (the surface named
+// "the precedence line") or the tool names; Workspaces' repo hosts and
+// unbound routes are Advanced.
 func TestLevelGates_Settings(t *testing.T) {
 	db, mux := newConsoleLevel(t, config.Features{}, "basic")
 	ctx := context.Background()
@@ -247,12 +248,12 @@ func TestLevelGates_Settings(t *testing.T) {
 	require.NoError(t, err)
 
 	features := getPeek(t, mux, "/console/settings?s=features").Body.String()
-	absent(t, features, `class="settings-precedence`, "(lab_open, trial_record, trial_query)")
+	absent(t, features, `class="src-chip`, "(lab_open, trial_record, trial_query)")
 	present(t, features, "3 agent tools", "nothing is ever deleted", `name="feature_research"`)
 
 	setLevel(t, db, "standard")
 	features = getPeek(t, mux, "/console/settings?s=features").Body.String()
-	present(t, features, `class="settings-precedence`, "(lab_open, trial_record, trial_query)")
+	present(t, features, `class="src-chip`, "(lab_open, trial_record, trial_query)")
 	workspaces := getPeek(t, mux, "/console/settings?s=workspaces").Body.String()
 	absent(t, workspaces, `title="Machine this checkout lives on"`, "workspace-unbound")
 	present(t, workspaces, "/Users/x/repos/seamless")

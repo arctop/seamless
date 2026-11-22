@@ -323,8 +323,13 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 			want: []string{
 				`<span class="badge ok">Notify</span>`, `<span class="badge">off</span>`,
 				"Off: update.auto: false is set in the config file or environment, so this console cannot turn them on.",
-				`<button class="btn small primary" type="submit" disabled title="Set in the config file or environment">Turn automatic updates on</button>`,
+				// The file decides this one switch: its locked chip sits
+				// beside it, with where to change it in its hint, and the
+				// head's chip says where the rest comes from.
+				`<button class="btn small primary" type="submit" disabled>Turn automatic updates on</button>`,
+				`<span class="src-chip is-locked">`,
 				"update.auto: false is set in the config file or SEAMLESS_UPDATE_AUTO; change it there.",
+				`<span class="src-chip is-file">`,
 				"Update to v0.7.3 now</button>", // Update now works whatever update.auto says
 			},
 		},
@@ -349,11 +354,11 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 			want: []string{
 				"Off: turned off in this console.", `<input type="hidden" name="auto" value="on">`,
 				`<button class="btn small primary" type="submit">Turn automatic updates on</button>`,
-				`class="settings-precedence is-override"`,
-				"<strong>Automatic updates set in this console</strong> &mdash; That choice wins over the config file until you reset it; update checks follow the build&#39;s default.",
+				`<span class="src-chip is-override">`,
+				"Automatic updates are set here, which wins over the config file until you reset it; update checks follow the build&#39;s default.",
 				`<form id="updates-reset" method="post" action="/console/settings/updates/reset"></form>`,
 			},
-			absent: []string{"Default for this build"},
+			absent: []string{"The build&#39;s default"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -369,6 +374,11 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 			for _, gone := range tc.absent {
 				require.NotContains(t, sec, gone)
 			}
+			// A value the file makes final is said once, by its chip, and
+			// its switch carries no sentence of its own.
+			require.LessOrEqual(t, strings.Count(sec, "Config file decides"), 1)
+			require.NotContains(t, sec, `title="Set in the config file or environment"`)
+			require.NotContains(t, sec, `class="updates-note"><svg class="ico ico-lock"`)
 		})
 	}
 }

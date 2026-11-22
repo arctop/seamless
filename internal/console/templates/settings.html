@@ -9,12 +9,16 @@
     {{/* One section at a time. The sub-nav swaps sections in place through the
          shared no-reload path (data-seam-query); a section above the console
          level still opens by URL, under the level banner, and shows here while
-         it is the one open. */}}
+         it is the one open. Each row reads icon, label and the section's state
+         (settingsSectionStates); its blurb is the link's title, and its name
+         carries the state ("Updates, up to date"). */}}
     <nav class="settings-subnav" aria-label="Settings sections" data-seam-query>
-      {{range .Subnav}}
-      <a href="{{.Href}}" data-section-link="{{.ID}}" class="{{if .Active}}active{{end}}"{{if .Active}} aria-current="page"{{end}}>
+      {{range .Subnav}}{{if .Rule}}
+      <span class="settings-subnav-rule" aria-hidden="true"></span>{{end}}
+      <a href="{{.Href}}" data-section-link="{{.ID}}" class="{{if .Active}}active{{end}}"{{if .Active}} aria-current="page"{{end}} title="{{.Title}}" aria-label="{{.Name}}">
         <span class="settings-subnav-ico">{{icon .Icon}}</span>
-        <span class="settings-subnav-copy"><strong>{{.Label}}</strong><small>{{.Blurb}}</small></span>
+        <span class="settings-subnav-label">{{.Label}}</span>
+        {{with .State}}<span class="badge compact {{.Tone}} settings-subnav-state" data-section-state>{{.Word}}</span>{{end}}
       </a>
       {{end}}
     </nav>
@@ -22,21 +26,16 @@
     <div class="settings-body">
     {{if eq .Section "experience"}}
     <section class="settings-zone settings-section" id="experience">
+      {{/* Each section's head: its title with a hint holding the why, one
+           sentence, and the source chip where values can be set (kit.go
+           sourceChip, kit_shared.html "source-chip"). */ -}}
       <header class="settings-section-head">
         <div>
-          <div class="settings-zone-kicker">You and this console</div>
-          <h2>Experience</h2>
-          <p>How much of the console you see. A level changes what is shown here, never what your agents receive &mdash; and a screen a level hides still opens from any link.</p>
+          <h2>Experience{{hintFor "Experience" "A level changes what this console shows, never what your agents receive, and a screen a level hides still opens from any link."}}</h2>
+          <p>How much of the console you see.</p>
         </div>
-        <span class="settings-access editable">{{icon "settings"}} Editable here</span>
+        {{if not .ConsoleLevelOverridden}}{{template "source-chip" (sourceChip "file" "From the config file or its environment variables (console.level). Choosing a level here stores it, and it wins until you reset it." "")}}{{else if eq .ConsoleLevelSource "seeded"}}{{template "source-chip" (sourceChip "override" "Set by the upgrade: this installation was in use before levels existed, so it kept every screen. Reset hands the level back to the config file." "level-reset")}}{{else}}{{template "source-chip" (sourceChip "override" "Chosen in this console, so it wins over the config file and its environment variables until you reset it." "level-reset")}}{{end}}
       </header>
-
-      <div class="settings-precedence{{if .ConsoleLevelOverridden}} is-override{{end}}">
-        <span class="state-dot"></span>
-        {{if .ConsoleLevelOverridden}}{{if eq .ConsoleLevelSource "seeded"}}<span><strong>Set by the upgrade</strong> &mdash; this installation was in use before levels existed, so it kept every screen.</span>{{else}}<span><strong>Chosen in the console</strong> &mdash; this choice wins over the file and environment until reset.</span>{{end}}
-        <button class="btn small" type="submit" form="level-reset">Reset to file + env</button>
-        {{else}}<span><strong>Following file + env</strong> &mdash; choosing a level here stores it and wins until reset.</span>{{end}}
-      </div>
 
       <div class="level-cards">
         {{range .LevelCards}}
@@ -76,30 +75,13 @@
     <section class="settings-zone settings-section" id="features">
       <header class="settings-section-head">
         <div>
-          <div class="settings-zone-kicker">What is on</div>
-          <h2>Optional features</h2>
-          <p>Optional features are off until you turn them on. Turning one off later hides it &mdash; nothing is ever deleted. Console changes apply immediately; agents pick the change up on their next session.</p>
+          <h2>Features{{hintFor "Features" "Optional features are off until you turn them on. Each switch turns a feature's screens and its agent tools on or off together, so an agent never sees a tool for a screen you turned off. Turning one off hides it, and nothing is ever deleted. Console changes apply immediately; agents pick the change up on their next session."}}</h2>
+          <p>Optional parts of Seamless, for you and your agents alike.</p>
         </div>
-        <span class="settings-access editable">{{icon "settings"}} Editable here</span>
+        {{if $.Level.AtLeast "standard"}}{{if .FeaturesOverridden}}{{template "source-chip" (sourceChip "override" "Stored in this console, by a save here or by the upgrade that kept the features already in use: these switches win over the config file and its environment variables until you reset them." "features-reset" "Clear the stored override and go back to the file/env configuration? No data is deleted.")}}{{else}}{{template "source-chip" (sourceChip "file" "From the config file and its environment variables. Saving here stores your choice, which wins until you reset it." "")}}{{end}}{{end}}
       </header>
 
-      {{if $.Level.AtLeast "standard"}}
-      <div class="settings-precedence{{if .FeaturesOverridden}} is-override{{end}}">
-        <span class="state-dot"></span>
-        {{if .FeaturesOverridden}}<span><strong>Stored override active</strong> &mdash; these switches ignore the file and environment until reset.</span>
-        <button class="btn small" type="submit" form="features-reset" data-confirm="Clear the stored override and go back to the file/env configuration? No data is deleted." data-confirm-label="Reset it">Reset to file + env</button>
-        {{else}}<span><strong>Following file + env</strong> &mdash; saving stores an override that wins until reset.</span>{{end}}
-      </div>
-      {{end}}
-
       <article class="features-workbench">
-        <header class="features-workbench-head">
-          <div>
-            <div class="briefing-title"><span class="runtime-icon pop">{{icon "toggle-right"}}</span><div><span>Exposure</span><h3>Feature switches</h3></div></div>
-            <p>Each switch controls console screens and the matching agent tools together, so an agent never sees a tool for a screen you switched off.</p>
-          </div>
-        </header>
-
         <form method="post" action="/console/settings/features" data-features-form>
           <div class="features-grid">
             {{range .Features}}
@@ -139,11 +121,9 @@
     <section class="settings-zone settings-section" id="setup">
       <header class="settings-section-head">
         <div>
-          <div class="settings-zone-kicker">This installation</div>
           <h2>Your setup</h2>
           <p>What is running, where it keeps things, and which agents are connected.</p>
         </div>
-        <span class="settings-access">{{icon "lock"}} Read only</span>
       </header>
       <dl class="setup-facts">
         {{with .Setup.Version}}<div><dt>Version</dt><dd><span class="mono">{{.}}</span></dd></div>{{end}}
@@ -173,20 +153,13 @@
     <section class="settings-zone settings-section" id="updates">
       <header class="settings-section-head">
         <div>
-          <div class="settings-zone-kicker">Staying current</div>
-          <h2>Updates</h2>
-          <p>Seamless asks GitHub whether a newer release exists and tells you &mdash; here, on the Overview, and in your agents&rsquo; briefings. An install the curl or PowerShell installer made also installs new releases by itself, at a quiet moment; anywhere else, updating stays your call.</p>
+          <h2>Updates{{hintFor "Updates" "Seamless asks GitHub whether a newer release exists and tells you: here, on the Overview, and in your agents’ briefings. An install the curl or PowerShell installer made also installs new releases by itself, at a quiet moment; anywhere else, updating stays your call."}}</h2>
+          <p>New releases, and whether this install takes them by itself.</p>
         </div>
-        {{if and .Updates.Running (not .Updates.Locked)}}<span class="settings-access editable">{{icon "settings"}} Editable here</span>{{else}}<span class="settings-access">{{icon "lock"}} Read only</span>{{end}}
+        {{with .Updates}}{{if .Running}}{{template "source-chip" (sourceChip .ChipSource .SourceNote "updates-reset")}}{{end}}{{end}}
       </header>
       {{with .Updates}}{{if .Running}}
       {{if .Stopped}}<p class="updates-alert" role="alert">{{icon "triangle-alert"}}<span><strong>The update checker stopped after an internal error.</strong> The daemon keeps serving; restart it to revive the check.</span></p>{{end}}
-
-      <div class="settings-precedence{{if .Overridden}} is-override{{end}}">
-        <span class="state-dot"></span>
-        <span><strong>{{.SourceLabel}}</strong> &mdash; {{.SourceNote}}</span>
-        {{if .Overridden}}<button class="btn small" type="submit" form="updates-reset">Reset to the config file</button>{{end}}
-      </div>
 
       <dl class="setup-facts updates-facts">
         <div><dt>Mode</dt><dd>{{if and .Checking (not .Stopped)}}<span class="badge ok">{{.Mode}}</span>{{else}}<span class="badge">{{.Mode}}</span>{{end}}<span>{{.ModeReason}}</span></dd></div>
@@ -211,7 +184,7 @@
           {{if .Checking}}<input type="hidden" name="check" value="off">
           <button class="btn small" type="submit">Turn update checks off</button>
           {{else}}<input type="hidden" name="check" value="on">
-          <button class="btn small primary" type="submit"{{if .Locked}} disabled title="Set in the config file or environment"{{end}}>Turn update checks on</button>{{end}}
+          <button class="btn small primary" type="submit"{{if .Locked}} disabled{{end}}>Turn update checks on</button>{{end}}
         </form>
         <form method="post" action="/console/settings/updates/check">
           <button class="btn small" type="submit"{{with .CheckNowBlocked}} disabled title="{{.}}"{{end}}>{{icon "refresh-cw"}} Check now</button>
@@ -220,7 +193,11 @@
           {{if .Auto.On}}<input type="hidden" name="auto" value="off">
           <button class="btn small" type="submit">Turn automatic updates off</button>
           {{else}}<input type="hidden" name="auto" value="on">
-          <button class="btn small primary" type="submit"{{if .Auto.Locked}} disabled title="Set in the config file or environment"{{end}}>Turn automatic updates on</button>{{end}}
+          <button class="btn small primary" type="submit"{{if .Auto.Locked}} disabled{{end}}>Turn automatic updates on</button>{{end}}
+          {{/* update.auto: false decides this one switch, so the chip sits
+               beside it; update.check: false decides the whole section, and
+               the head's chip says so. Either way it is said once. */}}
+          {{if .Auto.Locked}}{{template "source-chip" (sourceChip "locked" .Auto.LockedNote "")}}{{end}}
         </form>{{end}}
         {{with .UpdateNow}}{{if .Offered}}<form method="post" action="/console/settings/updates/apply">
           <button class="btn small" type="submit"{{with .Blocked}} disabled title="{{.}}"{{else}} data-confirm="Install {{.Target}} now? The daemon restarts to finish, so agent sessions lose Seamless for a moment. This skips the soak and does not wait for agents to go idle." data-confirm-label="Install now"{{end}}>{{icon "arrow-down-to-line"}} {{if .Target}}Update to {{.Target}} now{{else}}Update now{{end}}</button>
@@ -229,8 +206,6 @@
           <button class="btn small primary" type="submit"{{with .Blocked}} disabled title="{{.}}"{{end}}>{{icon "power"}} Resume automatic updates</button>
         </form>{{end}}{{end}}
       </div>
-      {{with .LockedNote}}<p class="updates-note">{{icon "lock"}}<span>{{.}}</span></p>{{end}}
-      {{with .Auto.LockedNote}}<p class="updates-note">{{icon "lock"}}<span>{{.}}</span></p>{{end}}
       {{if .Overridden}}<form id="updates-reset" method="post" action="/console/settings/updates/reset"></form>{{end}}
       {{else}}
       <p class="updates-note">{{icon "info"}}<span>The update check is not running in this process, so there is nothing to show or change here.</span></p>
@@ -246,27 +221,13 @@
     <section class="settings-zone settings-section" id="briefing-recipe">
       <header class="settings-section-head">
         <div>
-          <div class="settings-zone-kicker">Agent handoff</div>
-          <h2>Briefing</h2>
-          <p>Choose the context packed into <span class="mono">&lt;seam-briefing&gt;</span> at the start of a session. Saving creates a database-backed runtime layer; it never rewrites your config file and needs no daemon restart.</p>
+          <h2>Briefing{{hintFor "Briefing" "Pick a preset, or customize every knob, to choose the context packed into <seam-briefing> at the start of a session. It applies from the next session start with no restart. Saving stores a layer in the database and never rewrites your config file, where the token budget stays."}}</h2>
+          <p>What every new agent session starts with.</p>
         </div>
-        <span class="settings-access editable">{{icon "settings"}} Editable here</span>
+        {{if .BriefingOverridden}}{{template "source-chip" (sourceChip "override" "Saved in this console: new sessions use these values, not the config file and its environment variables, until you reset them." "brief-reset" "Clear the console override and go back to the file/env configuration?")}}{{else}}{{template "source-chip" (sourceChip "file" "From the config file and its environment variables. Saving here stores your values, which win until you reset them." "")}}{{end}}
       </header>
 
-      <div class="settings-precedence{{if .BriefingOverridden}} is-override{{end}}">
-        <span class="state-dot"></span>
-        {{if .BriefingOverridden}}<span><strong>Console override active</strong> &mdash; new sessions use these values, not the file and environment.</span>
-        <button class="btn small" type="submit" form="brief-reset" data-confirm="Clear the console override and go back to the file/env configuration?" data-confirm-label="Reset it">Reset to file + env</button>
-        {{else}}<span><strong>Following file + env</strong> &mdash; saving stores an override that wins until reset.</span>{{end}}
-      </div>
-
       <article class="briefing-workbench">
-        <header class="briefing-workbench-head">
-          <div>
-            <div class="briefing-title"><span class="runtime-icon brand">{{icon "brain"}}</span><div><span>Context assembly</span><h3>Briefing injection</h3></div></div>
-            <p>Pick a preset, or customize every knob. Either way it applies from the next session start; the token budget stays in the config file.</p>
-          </div>
-        </header>
 
         {{/* The preset radios belong to this never-submitted form, so picking one
              only fills the fields below: the briefing form still submits the whole
@@ -466,7 +427,6 @@
     <section class="settings-zone settings-section" id="workspace-registry">
       <header class="settings-section-head registry-zone-head">
         <div>
-          <div class="settings-zone-kicker">Projects and repositories</div>
           <h2>Workspaces</h2>
           <p>See which project each repository resolves to, then group related projects when they should share context.</p>
         </div>
@@ -621,9 +581,8 @@
     <section class="settings-zone settings-section" id="knowledge-engine">
       <header class="settings-section-head">
         <div>
-          <div class="settings-zone-kicker">Under the hood</div>
-          <h2>Knowledge engine</h2>
-          <p>How recall finds knowledge, how the briefing ranks it, and where it all lives. Read-only values change through the config file or environment, then a restart.</p>
+          <h2>Knowledge engine{{hintFor "Knowledge engine" "Values with a lock are read only: they change through the config file or environment, then a restart."}}</h2>
+          <p>How recall finds knowledge, how the briefing ranks it, and where it all lives.</p>
         </div>
       </header>
 
@@ -631,7 +590,6 @@
         <header class="engine-group-head">
           <h3 id="engine-recall-title">Recall</h3>
           <p>Embeddings power the semantic half of recall and search; lexical search keeps working without them. The switch and a model change apply at the next daemon restart.</p>
-          <span class="settings-access editable">{{icon "settings"}} Editable here</span>
         </header>
         <div class="runtime-grid semantic-grid">
           {{with .Embeddings}}
@@ -720,7 +678,6 @@
         <header class="engine-group-head">
           <h3 id="engine-ranking-title">Ranking</h3>
           <p>Where each scope stands on utility-blended ordering. The weight and the activation mode are briefing knobs, set in Briefing.</p>
-          <span class="settings-access editable">{{icon "settings"}} Editable here</span>
         </header>
       {{if .UtilityRows}}
       <div class="utility-scopes">
@@ -764,9 +721,8 @@
 
       <section class="engine-group" id="runtime-profile" aria-labelledby="engine-storage-title">
         <header class="engine-group-head">
-          <h3 id="engine-storage-title">Storage &amp; policy</h3>
+          <h3 id="engine-storage-title"><span class="settings-readonly" role="img" aria-label="Read only" title="Read only">{{icon "lock"}}</span>Storage &amp; policy</h3>
           <p>Values loaded by the daemon. Change these through the config file or environment, then restart.</p>
-          <span class="settings-access">{{icon "lock"}} Read only</span>
         </header>
         <div class="runtime-grid">
           <article class="runtime-card storage-card">
@@ -846,21 +802,13 @@
         <header class="engine-group-head">
           <h3 id="engine-gardener-title">Gardener</h3>
           <p>Who may apply the gardener&rsquo;s proposals, and which kinds apply by themselves. A change applies at once, with no restart.</p>
-          <span class="settings-access editable">{{icon "settings"}} Editable here</span>
+          {{template "source-chip" (sourceChip .ChipSource .ChipNote "gardener-reset")}}
         </header>
         {{if .ReadFailed}}<p class="updates-alert" role="alert">{{icon "triangle-alert"}}<span><strong>The stored choices could not be read.</strong> This shows the config file&rsquo;s values, and the Gardener&rsquo;s writes refuse an agent&rsquo;s process until they can be read again.</span></p>{{end}}
         {{if .Unreadable}}<p class="updates-note">{{icon "info"}}<span>The stored choice was unreadable, so the config file decides. Saving here replaces it.</span></p>{{end}}
-        {{if .Overridden}}
-        <div class="settings-precedence is-override">
-          <span class="state-dot"></span>
-          <span><strong>Set in this console</strong> &mdash; a choice made here wins over the config file until you reset it.</span>
-          <button class="btn small" type="submit" form="gardener-reset">Reset to the config file</button>
-        </div>
-        {{end}}
 
         <form method="post" action="/console/settings/gardener" aria-labelledby="gardener-agents-title">
           <h4 id="gardener-agents-title">Agents may apply proposals</h4>
-          <p class="gardener-source"><strong>{{.AgentsLabel}}</strong> &mdash; {{.AgentsNote}}</p>
           <dl class="setup-facts">
             <div><dt>Now</dt><dd>{{if .AgentsMayApply}}<span class="badge ok">on</span><span>Agents may apply, dismiss and hide proposals with gardener_apply, and through the Gardener screen.</span>{{else}}<span class="badge">off</span><span>Only you decide: gardener_apply refuses agents, and so do the Gardener&rsquo;s writes from an agent&rsquo;s process. Agents still see the proposals.</span>{{end}}</dd></div>
           </dl>
@@ -868,15 +816,17 @@
             {{if .AgentsMayApply}}<input type="hidden" name="agents" value="off">
             <button class="btn small" type="submit">Turn agents&rsquo; applying off</button>
             {{else}}<input type="hidden" name="agents" value="on">
-            <button class="btn small primary" type="submit"{{if .AgentsLocked}} disabled title="Set in the config file or environment"{{end}}>Let agents apply proposals</button>{{end}}
+            <button class="btn small primary" type="submit"{{if .AgentsLocked}} disabled{{end}}>Let agents apply proposals</button>{{end}}
+            {{/* agents_may_apply: false decides this one switch: the chip sits
+                 beside it, once, and the group's chip says where the rest
+                 comes from. */}}
+            {{with .LockedNote}}{{template "source-chip" (sourceChip "locked" . "")}}{{end}}
           </div>
-          {{with .LockedNote}}<p class="updates-note">{{icon "lock"}}<span>{{.}}</span></p>{{end}}
         </form>
 
         <form method="post" action="/console/settings/gardener" aria-labelledby="gardener-auto-title">
           <input type="hidden" name="auto_set" value="1">
           <h4 id="gardener-auto-title">Apply automatically</h4>
-          <p class="gardener-source"><strong>{{.AutoLabel}}</strong> &mdash; {{.AutoNote}}</p>
           <p class="gardener-source">A new proposal of a kind you check is applied by the pass that raises it, recorded as applied automatically, and listed in the decision history with Undo. It waits for you instead while lockdown is on, when write screening would hold it, and for a locked or fenced project. Every other kind always waits for you.</p>
           <div class="brief-toggles">
             {{range .Kinds}}

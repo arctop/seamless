@@ -133,11 +133,13 @@ type backupsForm struct {
 	// right before (and without) the script.
 	Check backupsFolderLine
 	Chips []backupsChip
-	// Overridden reports a console choice in force, which Reset clears;
-	// SourceLabel and SourceNote say who decided each value.
-	Overridden  bool
-	SourceLabel string
-	SourceNote  string
+	// Overridden reports a console choice in force, which Reset clears.
+	// ChipSource is the section's source chip ("file" or "override":
+	// sourceChip), drawn in its head, and SourceNote its hint, which says who
+	// decided each value.
+	Overridden bool
+	ChipSource string
+	SourceNote string
 }
 
 // backupsOption is one How often choice.
@@ -523,17 +525,17 @@ func (s *Service) backupsFormFor(st backup.Status, local string) backupsForm {
 	switch {
 	case len(console) > 0:
 		f.Overridden = true
-		f.SourceLabel = "Set in this console: " + joinWords(console)
-		f.SourceNote = "Your choices here win over the config file until you reset them."
+		f.ChipSource = "override"
+		f.SourceNote = "Set here: " + joinWords(console) + ". Your choices here win over the config file until you reset them."
 	case anyConfig:
-		f.SourceLabel = "Following the config file"
-		f.SourceNote = "Saving here stores your choices, which win over the config file until you reset them."
+		f.ChipSource = "file"
+		f.SourceNote = "Following the config file. Saving here stores your choices, which win over it until you reset them."
 	case set.Auto:
-		f.SourceLabel = "Default for this build"
-		f.SourceNote = "Release builds back up every day and keep the newest 7, in Seamless's data folder. Saving here stores your choices."
+		f.ChipSource = "file"
+		f.SourceNote = "The build's default: release builds back up every day and keep the newest 7, in Seamless's data folder. Saving here stores your choices."
 	default:
-		f.SourceLabel = "Default for this build"
-		f.SourceNote = "A Seamless built from source backs up only when you turn it on. Saving here stores your choices."
+		f.ChipSource = "file"
+		f.SourceNote = "The build's default: a Seamless built from source backs up only when you turn it on. Saving here stores your choices."
 	}
 	return f
 }

@@ -197,11 +197,14 @@ func TestUpdatesSection_Renders(t *testing.T) {
 		mutate func(st *update.Status)
 		want   []string
 		absent []string
+		// once are said exactly once in the section.
+		once []string
 	}{
 		{
 			name: "release build, checking, up to date",
 			want: []string{
-				`<span class="settings-access editable">`, "Default for this build",
+				`<span class="src-chip is-file">`, `<span class="src-chip-label">Config file</span>`,
+				"The build&#39;s default: release builds check for updates and builds from source do not.",
 				`<span class="badge ok">Notify</span>`, "this install is told about new releases",
 				"One anonymous request to <span class=\"mono\">api.github.com</span> every 6 hours",
 				`<span class="mono">v0.7.2</span><span class="faint">release build</span>`,
@@ -255,14 +258,18 @@ func TestUpdatesSection_Renders(t *testing.T) {
 				st.Settings = update.Effective(locked, config.UpdateOverride{Check: boolPtr(true)}, true)
 			},
 			want: []string{
-				`<span class="settings-access">`, "Read only", "Set in the config file or environment",
-				"update.check: false is final there", `<span class="badge">Off</span>`,
+				// The file decides the whole section: the head's chip says so,
+				// with where to change it in its hint, and the switch it
+				// governs is disabled, with no sentence of its own.
+				`<span class="src-chip is-locked">`,
+				"update.check: false is set in the config file or SEAMLESS_UPDATE_CHECK, so this install makes no update request and installs nothing by itself; change it there.",
+				`<span class="badge">Off</span>`,
 				"update checks are off (update.check: false in the config file or environment)",
 				"Nothing: with checks off, this install makes no update request at all.",
-				`<button class="btn small primary" type="submit" disabled title="Set in the config file or environment">Turn update checks on</button>`,
-				"update.check: false is set in the config file or SEAMLESS_UPDATE_CHECK; change it there.",
+				`<button class="btn small primary" type="submit" disabled>Turn update checks on</button>`,
 			},
-			absent: []string{"Editable here", `id="updates-reset"`, "next check"},
+			absent: []string{`id="updates-reset"`, "next check", "Set in the config file or environment", `class="updates-note"`, "src-chip-reset"},
+			once:   []string{"Config file decides", "SEAMLESS_UPDATE_CHECK"},
 		},
 		{
 			name: "turned off in the console",
@@ -270,8 +277,9 @@ func TestUpdatesSection_Renders(t *testing.T) {
 				st.Settings = update.Settings{Check: false, CheckSource: update.SourceConsole, CheckInterval: 6 * time.Hour}
 			},
 			want: []string{
-				"Set in this console", `class="settings-precedence is-override"`,
-				`<button class="btn small" type="submit" form="updates-reset">Reset to the config file</button>`,
+				`<span class="src-chip is-override">`, `<span class="src-chip-label">Set here</span>`,
+				"Update checks are set here, which wins over the config file and the build&#39;s default until you reset it.",
+				`<button class="btn small src-chip-reset" type="submit" form="updates-reset">Reset</button>`,
 				`<form id="updates-reset" method="post" action="/console/settings/updates/reset"></form>`,
 				"update checks are off (turned off in the console)",
 				`<button class="btn small primary" type="submit">Turn update checks on</button>`,
@@ -292,7 +300,7 @@ func TestUpdatesSection_Renders(t *testing.T) {
 			want: []string{
 				`<span class="mono">0.0.0-dev</span><span class="faint">built from source</span>`,
 				"builds from source do not check unless update.check is true",
-				"git pull &amp;&amp; make install", "Not checked yet", "Default for this build",
+				"git pull &amp;&amp; make install", "Not checked yet", "The build&#39;s default: release builds check",
 			},
 			absent: []string{"make install, go install or go build", "next check", "up to date"},
 		},
@@ -330,6 +338,9 @@ func TestUpdatesSection_Renders(t *testing.T) {
 			for _, gone := range tt.absent {
 				require.NotContains(t, sec, gone)
 			}
+			for _, one := range tt.once {
+				require.Equal(t, 1, strings.Count(sec, one), "%q is said once", one)
+			}
 			check := formFor(sec, "/console/settings/updates/check")
 			require.NotEmpty(t, check, "Check now is a POST form")
 			require.Contains(t, check, `method="post"`)
@@ -350,7 +361,7 @@ func TestUpdatesSection_NoUpdateCheckHere(t *testing.T) {
 	_, mux, _ := newUpdatesConsole(t, config.Update{}, nil)
 	sec := updatesSection(t, mux)
 	require.Contains(t, sec, "The update check is not running in this process")
-	require.Contains(t, sec, "Read only")
+	require.NotContains(t, sec, "src-chip", "nothing here can be set, so no chip says where it comes from")
 	require.NotContains(t, sec, "<form")
 	require.NotContains(t, sec, "Check now")
 }
@@ -373,7 +384,7 @@ func TestUpdatesSave_StoresTheSwitch(t *testing.T) {
 		require.Equal(t, update.SourceConsole, fake.Status().Settings.CheckSource)
 
 		sec := updatesSection(t, mux)
-		require.Contains(t, sec, "Set in this console", "the page the redirect lands on shows the new state")
+		require.Contains(t, sec, `<span class="src-chip-label">Set here</span>`, "the page the redirect lands on shows the new state")
 		require.Contains(t, sec, "Turn update checks on")
 
 		param, msg = locationOf(t, postForm(mux, "/console/settings/updates", "check=on"))

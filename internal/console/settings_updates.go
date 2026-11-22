@@ -55,12 +55,14 @@ type updatesPanel struct {
 	// hours").
 	Interval string
 	// Source names who decided Checking (update.SourceDefault, SourceConfig
-	// or SourceConsole), with the owner-facing label and note for it. Locked
-	// marks an explicit file/env false the console may not turn on.
-	Source      string
-	SourceLabel string
-	SourceNote  string
-	Locked      bool
+	// or SourceConsole). ChipSource is the section's source chip ("file",
+	// "override" or "locked": sourceChip) and SourceNote its hint, which says
+	// who decided. Locked marks an explicit file/env false the console may not
+	// turn on: the config file decides the whole section then.
+	Source     string
+	ChipSource string
+	SourceNote string
+	Locked     bool
 
 	// Version is the running build: "v0.7.2", or the build's own version
 	// string when it is not a published release ("0.0.0-dev"). Build says
@@ -96,9 +98,6 @@ type updatesPanel struct {
 	// CheckNowBlocked says why "Check now" cannot run (checks are off, or the
 	// checker stopped); empty when it can.
 	CheckNowBlocked string
-	// LockedNote says where a locked switch was set and where to change it
-	// (the same sentence the refused save flashes); empty when not locked.
-	LockedNote string
 	// Overridden reports a console choice in force for the check switch or
 	// the automatic-updates switch, which Reset clears.
 	Overridden bool
@@ -189,7 +188,7 @@ func (s *Service) updatesPanelAt(now time.Time) updatesPanel {
 	case update.ModeAuto:
 		p.Mode = "Automatic"
 	}
-	p.SourceLabel, p.SourceNote = updatesSource(st.Settings)
+	p.ChipSource, p.SourceNote = updatesSource(st.Settings)
 	p.Overridden = st.Settings.CheckSource == update.SourceConsole || st.Settings.AutoSource == update.SourceConsole
 
 	cur, comparable := st.Current()
@@ -236,36 +235,32 @@ func (s *Service) updatesPanelAt(now time.Time) updatesPanel {
 	case p.Stopped:
 		p.CheckNowBlocked = "The update checker is not running"
 	}
-	if p.Locked {
-		p.LockedNote = updatesLockedText
-	}
 	p.Signers = signersRow(st)
 	autoRows(&p, st, now)
 	return p
 }
 
-// updatesSource names who decided the check switch, and what that means for
-// the console's own switch -- or, when only the automatic-updates switch is
-// this console's choice, says that one instead, since Reset clears it.
-func updatesSource(set update.Settings) (label, note string) {
+// updatesSource is the Updates section's source chip and its hint: who
+// decided the check switch, and what that means for the console's own switch
+// -- or, when only the automatic-updates switch is this console's choice,
+// that one instead, since Reset clears it. update.check: false in the file
+// decides the whole section (nothing is checked, so nothing installs by
+// itself): the chip says "Config file decides", and nowhere else in the
+// section does.
+func updatesSource(set update.Settings) (source, note string) {
 	switch {
 	case set.CheckLocked:
-		return "Set in the config file or environment",
-			"update.check: false is final there, so this console cannot turn checks on."
+		return "locked", "update.check: false is set in the config file or SEAMLESS_UPDATE_CHECK, so this install makes no update request and installs nothing by itself; change it there."
 	case set.CheckSource == update.SourceConsole:
-		return "Set in this console", "It wins over the config file and the build's default until you reset it."
+		return "override", "Update checks are set here, which wins over the config file and the build's default until you reset it."
 	case set.AutoSource == update.SourceConsole && set.CheckSource == update.SourceConfig:
-		return "Automatic updates set in this console",
-			"That choice wins over the config file until you reset it; update checks follow the config file."
+		return "override", "Automatic updates are set here, which wins over the config file until you reset it; update checks follow the config file."
 	case set.AutoSource == update.SourceConsole:
-		return "Automatic updates set in this console",
-			"That choice wins over the config file until you reset it; update checks follow the build's default."
+		return "override", "Automatic updates are set here, which wins over the config file until you reset it; update checks follow the build's default."
 	case set.CheckSource == update.SourceConfig:
-		return "Set in the config file or environment",
-			"update.check: true is set there; you can still turn checks off here."
+		return "file", "update.check: true is set in the config file or environment; you can still turn checks off here."
 	default:
-		return "Default for this build",
-			"Release builds check for updates and builds from source do not. Switch it here, or set update.check in the config file."
+		return "file", "The build's default: release builds check for updates and builds from source do not. Switch it here, or set update.check in the config file."
 	}
 }
 

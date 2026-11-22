@@ -397,12 +397,12 @@ a release (<a href="#during-an-update">what happens during an update</a>).</p>
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">check</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w">
 </span></span></span></code></pre></div>
 <p><code>false</code> means no update traffic at all - and so no automatic update either -
-and it is final: the console shows its toggle locked. With the key left out,
+and it is final: the console says <strong>Config file decides</strong> and its toggle is disabled. With the key left out,
 <strong>Settings -&gt; Updates</strong> turns checks on and off at runtime, and
 <code>SEAMLESS_UPDATE_CHECK=false</code> does the same from the service's environment.
 Turning checks off there is your decision alone: an agent's process on the
 <a href="../guides/peer-auth/">peer_auth</a> socket, and a paired device, may turn them on
-but are refused off, and so is a <strong>Reset to the config file</strong> that would turn
+but are refused off, and so is a <strong>Reset</strong> that would turn
 them off (<a href="../reference/console/#what-the-console-can-change">what the console can change</a>).
 <code>seamlessd update --check</code> and <code>seamlessd update</code> work either way - running
 them is you asking. The <code>update:</code> keys are new in v0.7.0: a seamlessd release

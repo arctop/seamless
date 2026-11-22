@@ -335,14 +335,15 @@ func TestBackupsSection_StatusCard(t *testing.T) {
 	require.Contains(t, sec, `<span class="badge danger">Stopped</span>`)
 }
 
-// Off by default on a build from source, and the precedence bar says the
+// Off by default on a build from source, and the source chip's hint says the
 // build decided.
 func TestBackupsSection_OffOnASourceBuild(t *testing.T) {
 	bc := newBackupsConsole(t, &fakeBackups{})
 	sec := sectionOf(t, bc.page(t, ""))
 	require.Contains(t, sec, "Automatic backups are off: a Seamless built from source does not back up by itself.")
 	require.Contains(t, sec, `<span class="badge">Off</span>`)
-	require.Contains(t, sec, "Default for this build")
+	require.Contains(t, sec, `<span class="src-chip is-file">`)
+	require.Contains(t, sec, "The build&#39;s default: a Seamless built from source backs up only when you turn it on.")
 	require.Contains(t, sec, "No backups yet. Make one now, or turn on Back up automatically under Schedule and folder.")
 	require.Contains(t, sec, `<input type="checkbox" name="auto" value="on">`, "the switch is off")
 	require.NotContains(t, sec, "Next backup")
@@ -456,7 +457,8 @@ func TestBackupsSave_StoresOnlyWhatChanged(t *testing.T) {
 
 	sec := sectionOf(t, bc.page(t, ""))
 	require.Contains(t, sec, `<option value="12h" selected>Every 12 hours (config file)</option>`)
-	require.Contains(t, sec, "Following the config file")
+	require.Contains(t, sec, `<span class="src-chip is-file">`)
+	require.Contains(t, sec, "Following the config file. Saving here stores your choices")
 	require.Contains(t, sec, `value="`+bc.local()+`"`, "the folder field holds the folder in force")
 
 	notice, flashErr := bc.post(t, "/console/settings/backups", url.Values{"auto": {"on"}, "every": {"12h"}, "keep": {"14"}, "dir": {bc.local()}})
@@ -474,8 +476,9 @@ func TestBackupsSave_StoresOnlyWhatChanged(t *testing.T) {
 	require.Empty(t, bc.fb.prepared, "an unchanged folder is not probed")
 
 	sec = sectionOf(t, bc.page(t, ""))
-	require.Contains(t, sec, "Set in this console: the switch and how many to keep")
-	require.Contains(t, sec, `form="backups-reset"`)
+	require.Contains(t, sec, `<span class="src-chip is-override">`)
+	require.Contains(t, sec, "Set here: the switch and how many to keep.")
+	require.Contains(t, sec, `<button class="btn small src-chip-reset" type="submit" form="backups-reset">Reset</button>`)
 
 	notice, _ = bc.post(t, "/console/settings/backups", url.Values{"auto": {"on"}, "every": {"12h"}, "keep": {"14"}, "dir": {""}})
 	require.Equal(t, "Nothing changed: these are the backup settings in force.", notice, "an empty folder is Seamless's own, which is in force")

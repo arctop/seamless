@@ -5983,29 +5983,34 @@ window.SEAM_NO_LIVE_REFRESH = true;
     
     <nav class="settings-subnav" aria-label="Settings sections" data-seam-query>
       
-      <a href="/console/settings?s=experience" data-section-link="experience" class="active" aria-current="page">
+      <a href="/console/settings?s=experience" data-section-link="experience" class="active" aria-current="page" title="How much of the console you see, and how it looks" aria-label="Experience, basic">
         <span class="settings-subnav-ico"><svg class="ico ico-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg></span>
-        <span class="settings-subnav-copy"><strong>Experience</strong><small>How much of the console you see, and how it looks</small></span>
+        <span class="settings-subnav-label">Experience</span>
+        <span class="badge compact quiet settings-subnav-state" data-section-state>Basic</span>
       </a>
       
-      <a href="/console/settings?s=features" data-section-link="features" class="">
+      <a href="/console/settings?s=features" data-section-link="features" class="" title="Optional features, for the console and agents alike" aria-label="Features, 1 of 6 on">
         <span class="settings-subnav-ico"><svg class="ico ico-toggle-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="12" x="2" y="6" rx="6" ry="6"/><circle cx="16" cy="12" r="2"/></svg></span>
-        <span class="settings-subnav-copy"><strong>Features</strong><small>Optional features, for the console and agents alike</small></span>
+        <span class="settings-subnav-label">Features</span>
+        <span class="badge compact accent settings-subnav-state" data-section-state>1 of 6 on</span>
       </a>
       
-      <a href="/console/settings?s=setup" data-section-link="setup" class="">
+      <a href="/console/settings?s=setup" data-section-link="setup" class="" title="Version, files, and what is connected. Version 0.0.0-dg." aria-label="Your setup, dev build">
         <span class="settings-subnav-ico"><svg class="ico ico-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg></span>
-        <span class="settings-subnav-copy"><strong>Your setup</strong><small>Version, files, and what is connected</small></span>
+        <span class="settings-subnav-label">Your setup</span>
+        <span class="badge compact quiet settings-subnav-state" data-section-state>Dev build</span>
       </a>
       
-      <a href="/console/settings?s=updates" data-section-link="updates" class="">
+      <a href="/console/settings?s=updates" data-section-link="updates" class="" title="New releases, and whether this install checks for and installs them" aria-label="Updates, not running">
         <span class="settings-subnav-ico"><svg class="ico ico-refresh-cw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></span>
-        <span class="settings-subnav-copy"><strong>Updates</strong><small>New releases, and whether this install checks for and installs them</small></span>
+        <span class="settings-subnav-label">Updates</span>
+        <span class="badge compact quiet settings-subnav-state" data-section-state>Not running</span>
       </a>
       
-      <a href="/console/settings?s=backups" data-section-link="backups" class="">
+      <a href="/console/settings?s=backups" data-section-link="backups" class="" title="Automatic backups, the folder they go to, and restoring one" aria-label="Backups, not running">
         <span class="settings-subnav-ico"><svg class="ico ico-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg></span>
-        <span class="settings-subnav-copy"><strong>Backups</strong><small>Automatic backups, the folder they go to, and restoring one</small></span>
+        <span class="settings-subnav-label">Backups</span>
+        <span class="badge compact quiet settings-subnav-state" data-section-state>Not running</span>
       </a>
       
     </nav>
@@ -6015,17 +6020,11 @@ window.SEAM_NO_LIVE_REFRESH = true;
     <section class="settings-zone settings-section" id="experience">
       <header class="settings-section-head">
         <div>
-          <div class="settings-zone-kicker">You and this console</div>
-          <h2>Experience</h2>
-          <p>How much of the console you see. A level changes what is shown here, never what your agents receive &mdash; and a screen a level hides still opens from any link.</p>
+          <h2>Experience<span class="hint"><button type="button" class="hint-btn" aria-label="About Experience" aria-describedby="hint-b8204465"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></button><span class="hint-pop" id="hint-b8204465" role="tooltip">A level changes what this console shows, never what your agents receive, and a screen a level hides still opens from any link.</span></span></h2>
+          <p>How much of the console you see.</p>
         </div>
-        <span class="settings-access editable"><svg class="ico ico-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> Editable here</span>
+        <span class="src-chip is-file"><span class="src-chip-dot" aria-hidden="true"></span><span class="src-chip-label">Config file</span><span class="hint"><button type="button" class="hint-btn" aria-label="About where this comes from" aria-describedby="hint-0c56b0e3"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></button><span class="hint-pop" id="hint-0c56b0e3" role="tooltip">From the config file or its environment variables (console.level). Choosing a level here stores it, and it wins until you reset it.</span></span></span>
       </header>
-
-      <div class="settings-precedence">
-        <span class="state-dot"></span>
-        <span><strong>Following file + env</strong> &mdash; choosing a level here stores it and wins until reset.</span>
-      </div>
 
       <div class="level-cards">
         
@@ -6045,7 +6044,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
           <header class="level-card-head"><h3>Standard</h3></header>
           <p class="level-card-line">Watch your agents live, curate knowledge and look after the server.</p>
           <div class="level-card-items"><span class="level-card-lead">Adds</span><ul><li>Now</li><li>Labs</li><li>Trials</li><li>System</li><li>Privacy</li><li>Settings: Briefing and Workspaces</li></ul>
-            <ul class="level-card-details"><li>Overview: the observation window, the vitals, and the projects table and the knowledge rail</li><li>Sessions: the Retained filter, the Sort menu, and a session&#39;s review signals</li><li>Memories: the Reach and Utility sorts, how often each memory surfaced, the Never surfaced filter, and the utility score in the reader</li><li>Gardener: the Type and Source filters, the project-split example, the Hidden forever list, Retarget on a proposal, and Hide forever on a proposal</li><li>Search: the Updated window and the Sort control</li><li>Settings › Features: the precedence line and the agent tool names</li></ul></div>
+            <ul class="level-card-details"><li>Overview: the observation window, the vitals, and the projects table and the knowledge rail</li><li>Sessions: the Retained filter, the Sort menu, and a session&#39;s review signals</li><li>Memories: the Reach and Utility sorts, how often each memory surfaced, the Never surfaced filter, and the utility score in the reader</li><li>Gardener: the Type and Source filters, the project-split example, the Hidden forever list, Retarget on a proposal, and Hide forever on a proposal</li><li>Search: the Updated window and the Sort control</li><li>Settings › Features: the source chip and the agent tool names</li></ul></div>
           <button class="btn small primary" type="submit">Use Standard</button>
         </form>
         

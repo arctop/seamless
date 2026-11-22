@@ -17,8 +17,8 @@ import (
 // Settings > Knowledge engine > Gardener: the gardener's two switches. One
 // says whether agents may resolve proposals (gardener.agents_may_apply, on by
 // default); the other names the kinds a pass applies by itself the moment it
-// raises one (gardener.auto_apply, empty by default). Each control says where
-// its value comes from and offers Reset, as Settings > Updates does. The
+// raises one (gardener.auto_apply, empty by default). The group's source chip
+// says where they come from and offers Reset, as Settings > Updates does. The
 // console's choice wins over the file until Reset, except that
 // agents_may_apply: false in the file or environment is final
 // (gardener.Effective). Both routes are the owner's own decision (ownerHands):
@@ -100,13 +100,15 @@ type gardenerPanel struct {
 	gardenerSwitches
 	// AgentsLabel and AgentsNote say who decided the agents switch, and what
 	// that means for the console's own switch; AutoLabel and AutoNote the
-	// same for automatic apply.
+	// same for automatic apply. The JSON answer keeps them; the page says it
+	// with the group's source chip instead (ChipSource, ChipNote).
 	AgentsLabel, AgentsNote string
 	AutoLabel, AutoNote     string
 	// Overridden reports a console choice in force for either switch, which
 	// Reset clears.
 	Overridden bool
-	// LockedNote says where a locked agents switch was set; empty when not.
+	// LockedNote says where a locked agents switch was set, the hint of the
+	// locked chip beside it; empty when not.
 	LockedNote string
 	// Kinds are automatic apply's checkboxes, one per AutoSafe kind, in
 	// store.ProposalKinds order.
@@ -373,6 +375,47 @@ func (s *Service) autoAppliedCards(ctx context.Context) []attnCard {
 		Sub:   sub,
 		Href:  "/console/gardener/decisions#gardener-auto",
 	}}
+}
+
+// ChipSource is the Gardener group's source chip: "override" (Set here, with
+// Reset, which hands both switches back) while either switch is this
+// console's choice, else "file". agents_may_apply: false in the file is final
+// for its own switch only: its locked chip sits beside that switch.
+func (p gardenerPanel) ChipSource() string {
+	if p.Overridden {
+		return "override"
+	}
+	return "file"
+}
+
+// ChipNote is the group chip's hint: where each switch comes from, in one
+// sentence each, then what a choice here does. A switch the file decides is
+// left to its own chip.
+func (p gardenerPanel) ChipNote() string {
+	var parts []string
+	switch {
+	case p.AgentsLocked:
+	case p.AgentsSource == gardener.SourceConsole:
+		parts = append(parts, "Whether agents may apply proposals is set here.")
+	case p.AgentsSource == gardener.SourceConfig:
+		parts = append(parts, "gardener.agents_may_apply: true is set in the config file or environment.")
+	default:
+		parts = append(parts, "Agents may apply proposals by default.")
+	}
+	switch p.AutoSource {
+	case gardener.SourceConsole:
+		parts = append(parts, "The kinds that apply automatically are set here.")
+	case gardener.SourceConfig:
+		parts = append(parts, "gardener.auto_apply names the kinds that apply automatically, in the config file or environment.")
+	default:
+		parts = append(parts, "By default nothing applies by itself.")
+	}
+	if p.Overridden {
+		parts = append(parts, "A choice made here wins over the config file until you reset it; Reset hands both switches back.")
+	} else {
+		parts = append(parts, "A choice made here wins over the config file until you reset it.")
+	}
+	return strings.Join(parts, " ")
 }
 
 // SetupLine is the Your setup row's sentence about the switches.

@@ -91,7 +91,7 @@ func (l level) AtLeast(name string) (bool, error) {
 }
 
 // levelState is the level in force for one request, with the facts the
-// Settings precedence line and the Overview's welcome card read.
+// Settings source chip and the Overview's welcome card read.
 type levelState struct {
 	Level level
 	// Overridden reports a stored row setting the level (else file/env).

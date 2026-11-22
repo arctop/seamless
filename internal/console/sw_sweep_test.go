@@ -74,7 +74,7 @@ func TestSwFeatureSwitchSaysWhatOffDoes(t *testing.T) {
 func TestSwSettingsSaysProjectAndOverview(t *testing.T) {
 	_, mux := newConsole(t)
 	updates := getHTMLBody(t, mux, "/console/settings?s=updates")
-	require.Contains(t, updates, "tells you &mdash; here, on the Overview, and in your agents&rsquo; briefings.")
+	require.Contains(t, updates, "tells you: here, on the Overview, and in your agents’ briefings.")
 	require.NotContains(t, updates, "on Home")
 
 	ws := getHTMLBody(t, mux, "/console/settings?s=workspaces")

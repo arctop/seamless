@@ -1777,12 +1777,12 @@ update:
 ```
 
 `false` means no update traffic at all - and so no automatic update either -
-and it is final: the console shows its toggle locked. With the key left out,
+and it is final: the console says **Config file decides** and its toggle is disabled. With the key left out,
 **Settings -> Updates** turns checks on and off at runtime, and
 `SEAMLESS_UPDATE_CHECK=false` does the same from the service's environment.
 Turning checks off there is your decision alone: an agent's process on the
 [peer_auth](/guides/peer-auth/) socket, and a paired device, may turn them on
-but are refused off, and so is a **Reset to the config file** that would turn
+but are refused off, and so is a **Reset** that would turn
 them off ([what the console can change](/reference/console/#what-the-console-can-change)).
 `seamlessd update --check` and `seamlessd update` work either way - running
 them is you asking. The `update:` keys are new in v0.7.0: a seamlessd release
@@ -19924,6 +19924,10 @@ Settings and the lock screens share a few parts.
 - **Steps** list a ceremony with more than one step, each done (a check), the
   one under way, or still to come, numbered: a restore's progress in
   [Backups](#backups) is one.
+- **The source chip** in a [Settings](#settings) section's head says where its
+  values come from: **Config file**, **Set here** with **Reset**, or **Config
+  file decides** with a lock when the config file makes a value final. Its
+  hint says more.
 
 ### The command palette
 
@@ -20124,7 +20128,7 @@ What each level shows, generated from the console's own registries:
 | **Gardener: Hide forever on a proposal** | - | shown | shown |
 | **Search: the Updated window** | - | shown | shown |
 | **Search: the Sort control** | - | shown | shown |
-| **Settings › Features: the precedence line** | - | shown | shown |
+| **Settings › Features: the source chip** | - | shown | shown |
 | **Settings › Features: the agent tool names** | - | shown | shown |
 | **Settings › Workspaces: each repo route's host** | - | - | shown |
 | **Settings › Workspaces: the unbound repo routes** | - | - | shown |
@@ -21783,20 +21787,35 @@ group; `g` then `c` opens it.
 
 Settings is one section at a time, each shaped by what you came to do rather
 than by subsystem. A sub-nav on the left (a row of chips on a phone) switches
-sections in place, without reloading the page. `/console/settings` alone opens
+sections in place, without reloading the page. Each row names its section and
+its state in a word or two, so you can tell from any section whether backups
+run or an update waits: the level (Experience), how many features are on, the
+version (Your setup, amber while semantic recall's settings have a mistake),
+**Up to date**, **v0.7.3 ready**, **Checks off**, **Paused** or **Failed**
+(Updates), when the last backup ran, **Off**, **None yet** or **Failing**
+(Backups), the briefing preset or **Custom**, how many projects (Workspaces),
+and **Semantic** or **Keywords only** (Knowledge engine). Green is fine, amber
+is worth a look, red needs you. A row's tooltip is what the section is for.
+`/console/settings` alone opens
 **Experience**; an unknown `?s=` is a 400 that names the valid sections. Which
 sections a level offers is in the [matrix above](#choose-how-much-you-see); a
 section above your level still opens from a link, under the same note a hidden
 screen gets. Old `/console/settings#...` bookmarks land on the matching section.
 
-The editable sections share two habits. A one-line note at the top says where
-the values come from - **Following file + env**, or an override in force, with
-**Reset to file + env** beside it. And a save bar appears at the bottom once a
-form has unsaved changes, with **Save** and **Discard** (which puts the form back
-exactly as the page loaded it); without JavaScript the bar is simply always
-there. `GET /console/settings?format=json` returns the whole payload whatever
-`?s=` says, plus `consoleLevel`, `consoleLevelOverridden`, and
-`consoleLevelSource`.
+Each section opens with one line: its title, a [hint](#shared-parts) with the
+longer why, one sentence, and - where its values can be set here - the source
+chip, which says where they come from: **Config file** (the config file and its
+environment variables, or the build's default), or **Set here** with **Reset**,
+which hands them back to the config file. The chip's hint says more. A value
+the config file makes final reads **Config file decides**, said once in its
+section, and the control it governs is disabled. The editable forms also share
+a save bar that appears at the bottom once a form has unsaved changes, with
+**Save** and **Discard** (which puts the form back exactly as the page loaded
+it); without JavaScript the bar is simply always there. `GET
+/console/settings?format=json` returns the whole payload whatever `?s=` says,
+plus `consoleLevel`, `consoleLevelOverridden`, `consoleLevelSource`, and
+`sectionStatus`: each section's state as `{"word", "tone"}` by section id
+(`ok`, `accent`, `quiet`, `warn` or `danger`), every section at every level.
 
 ### Experience
 
@@ -21807,9 +21826,10 @@ Advanced - the current one marked, each with a one-line pitch and a list of what
 it shows, generated from the same registries the sidebar and the page gates
 read, so the list cannot promise something the level does not do. Choosing one
 applies at once: the sidebar and the page update in place, and if the new level
-hides the screen you were on you land on the Overview with a note. The note at the top
-says whether the level was **chosen in the console** or **set by the upgrade**,
-and **Reset to file + env** hands the choice back to `console.level`. The same
+hides the screen you were on you land on the Overview with a note. The source chip
+says **Config file**, or **Set here** once a level is stored, whether you chose it
+in this console or the upgrade set it (its hint says which); **Reset** hands the
+choice back to `console.level`. The same
 section holds the theme and a button for the shortcut sheet. The theme is
 **System**, **Light**, or **Dark**, kept per browser. System is what a browser
 starts on: it follows your computer's light or dark appearance, and follows it
@@ -21976,16 +21996,16 @@ each card is for - it reports the feature's own rows whether it is on or off.
 
 Saving writes a **stored override** row in the database - the same layer the
 briefing form uses. It wins over file and env, never touches your config file,
-and holds until **Reset to file + env** clears it; reset means back to the
-file/env configuration, which unless you set `features:` there is off.
+and holds until **Reset** on the source chip clears it; reset means back to
+the file/env configuration, which unless you set `features:` there is off.
 
 One override can be in force without you having set it. Upgrading an
 installation that already holds trial data seeds the override with research on,
 so a feature that now ships off does not disappear from under data you were
-already using. That is why the section states that a stored override is in force
-rather than crediting you with the choice - and reset clears it like any other.
-At Basic the section keeps the cards, what each hides, and the data-kept line,
-and leaves out the agent tool names and the precedence line.
+already using. That is why the chip's hint says the choice is stored here, by a
+save or by that upgrade, rather than crediting you with it - and reset clears it
+like any other. At Basic the section keeps the cards, what each hides, and the
+data-kept line, and leaves out the agent tool names and the source chip.
 
 ### Your setup
 
@@ -22017,19 +22037,20 @@ hand** on an install that updates itself), the newest release with its date and
 release notes - or "up to date" - and when the daemon last checked and checks
 next, including a streak of failed checks and why.
 
-The note at the top says who decided the switches: **Default for this build**,
-**Set in the config file or environment**, **Set in this console**, or
-**Automatic updates set in this console**, with **Reset to the config file**
-beside a console choice. Turning checks off from here always works for you; an
+The source chip says who decided the switches: **Config file** (the config
+file, or the build's default), or **Set here** with **Reset** when this console
+set either switch; its hint says which. Turning checks off from here always works for you; an
 agent's process on the peer_auth socket, and a paired device but for your own
 hands through a relay, may turn checks and automatic updates on, never off. Turning them on does not work when the config
-file or `SEAMLESS_UPDATE_CHECK` says `false`: that is final, the switch shows
-locked, and the form refuses - `false` promises no update traffic at all. **Check now** asks GitHub once, right away (not more than
+file or `SEAMLESS_UPDATE_CHECK` says `false`: that is final, the chip reads
+**Config file decides**, the switch is disabled, and the form refuses - `false`
+promises no update traffic at all. **Check now** asks GitHub once, right away (not more than
 once a minute).
 
 On an install that updates itself, the section adds **Automatic updates** - on
 or off, who decided, and **Turn automatic updates off** / **on**, which
-`update.auto: false` in the config file or environment locks off - and, while
+`update.auto: false` in the config file or environment locks off, with a
+**Config file decides** chip beside it - and, while
 they apply, **Next update** (the release it installs next and what it waits
 for: the soak, live agent sessions, or a lull after its deadline), **Paused**,
 **Held back**, **Skipped releases** and **Next try**. **Updating now** and
@@ -22105,10 +22126,10 @@ walks through it; this is what each card holds.
   on Linux, OneDrive and other drives on Windows, and Seamless's data folder.
 
 **Save** stores only what differs from the settings in force; a new folder is
-created and tested with a write first. **Reset to the config file** makes the
-settings follow the config file again. The bar at the top says where the values
-come from: **Default for this build**, **Following the config file**, or **Set
-in this console** with the fields you set.
+created and tested with a write first. The source chip in the section's head
+says where the values come from: **Config file** (the config file, or the
+build's default), or **Set here**, whose hint names the fields you set and whose
+**Reset** makes the settings follow the config file again.
 
 **Available backups**, the list, newest first: the backups in the chosen folder
 and in Seamless's data folder (`~/.seamless/backups`, where the safety and
@@ -22255,7 +22276,7 @@ A per-scope **force** overrides the latch in either direction; when the global
 mode is `on` or `off`, the table says the per-scope state is dormant until auto
 returns.
 
-**Storage & policy** - read-only: the data folder, the context budgets, the
+**Storage & policy** - read-only, with a lock by its heading: the data folder, the context budgets, the
 database (path, size on disk including the WAL, schema version), and the
 gardener's cadence and policy. Change these through the config file or
 environment, then restart.
@@ -22263,13 +22284,14 @@ environment, then restart.
 **Gardener** (`#settings-gardener`) - editable, and applied at once without a
 restart: **Agents may apply proposals**, on or off, and **Apply
 automatically**, one checkbox per kind it may take with a sentence on what
-applying it does and how Undo takes it back. Each control says where its value
-comes from - this console, the config file or environment, or the default - and
-**Reset to the config file** clears this console's choice for both. A choice
-made here wins over the file until then, except that
+applying it does and how Undo takes it back. The group's source chip says
+**Config file** (the file, the environment, or the default) or **Set here**, its
+hint where each switch comes from, and its **Reset** clears this console's
+choice for both. A choice made here wins over the file until then, except that
 `gardener.agents_may_apply: false` in the file or environment is final: the
-switch shows locked, and saving it on is refused. **Your setup** states both
-switches in one line, with a link here.
+switch is disabled with a **Config file decides** chip beside it, and saving it
+on is refused. **Your setup** states both switches in one line, with a link
+here.
 
 See [Configuration](/reference/configuration/) for what each knob does, and
 [Sessions & briefings](/concepts/sessions/) for what they tune.

@@ -908,7 +908,9 @@ func TestSettingsFeaturesZone_MarkupContract(t *testing.T) {
 		"the reassurance line reports the data of a feature that is currently off")
 	require.NotContains(t, body, `action="/console/settings/features/reset"`,
 		"reset is offered only while a stored override exists")
-	require.Contains(t, body, "Following file + env", "the precedence line says where the switches come from")
+	require.Contains(t, body, `<span class="src-chip is-file">`, "the source chip says where the switches come from")
+	require.Contains(t, body, `<span class="src-chip-label">Config file</span>`)
+	require.Contains(t, body, "From the config file and its environment variables. Saving here stores your choice")
 
 	// No numbered zones any more: the numbers implied a sequence that never existed.
 	require.NotContains(t, body, `class="settings-zone-index"`)
@@ -922,9 +924,11 @@ func TestSettingsFeaturesZone_ShowsLiveDataAndOverrideState(t *testing.T) {
 	require.Contains(t, body, "Data kept: 1 trial across 1 lab.")
 	require.Contains(t, body, "Enabled")
 	require.Contains(t, body, `action="/console/settings/features/reset"`)
-	require.Contains(t, body, "Stored override active",
-		"the precedence line says stored override -- the grandfather migration can be the writer")
-	require.Contains(t, body, "Reset to file + env")
+	require.Contains(t, body, `<span class="src-chip is-override">`)
+	require.Contains(t, body, `<span class="src-chip-label">Set here</span>`)
+	require.Contains(t, body, "by a save here or by the upgrade that kept the features already in use",
+		"the chip's hint says a stored choice -- the grandfather migration can be the writer")
+	require.Contains(t, body, `form="features-reset" data-confirm="Clear the stored override and go back to the file/env configuration? No data is deleted." data-confirm-label="Reset it">Reset</button>`)
 }
 
 func TestSettingsFeaturesSaveAndReset(t *testing.T) {

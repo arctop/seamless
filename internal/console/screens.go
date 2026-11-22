@@ -448,7 +448,7 @@ var surfaces = []surface{
 	{Where: "Gardener", Template: "gardener.html", Label: "Hide forever on a proposal", Min: levelStandard},
 	{Where: "Search", Template: "search.html", Label: "the Updated window", Min: levelStandard},
 	{Where: "Search", Template: "search.html", Label: "the Sort control", Min: levelStandard},
-	{Where: "Settings \u203a Features", Template: "settings.html", Label: "the precedence line", Min: levelStandard},
+	{Where: "Settings \u203a Features", Template: "settings.html", Label: "the source chip", Min: levelStandard},
 	{Where: "Settings \u203a Features", Template: "settings.html", Label: "the agent tool names", Min: levelStandard},
 	{Where: "Settings \u203a Workspaces", Template: "settings.html", Label: "each repo route's host", Min: levelAdvanced},
 	{Where: "Settings \u203a Workspaces", Template: "settings.html", Label: "the unbound repo routes", Min: levelAdvanced},

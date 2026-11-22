@@ -51,10 +51,11 @@ func TestSwConfirmsMovedOntoTheirButtons(t *testing.T) {
 			"Re-run the review? Every memory and note is screened again, and clean ones are marked safe as they read now.",
 			"Clear the outside-text mark on this session? Its changes to binding rules will land without a hold.",
 		},
+		// Features' and Briefing's Reset ask through the source chip's
+		// button (kit_shared.html), so they are not in this template's own
+		// tags: TestSsResetConfirmsRideTheSourceChip renders them.
 		"settings.html": {
-			"Clear the stored override and go back to the file/env configuration? No data is deleted.",
 			"Install {{.Target}} now? The daemon restarts to finish, so agent sessions lose Seamless for a moment. This skips the soak and does not wait for agents to go idle.",
-			"Clear the console override and go back to the file/env configuration?",
 			"Delete this project family? Projects and their knowledge will not be deleted.",
 			"Switch embeddings off? Recall and search degrade to lexical-only after the next restart.",
 			"Re-embed every memory and note with the active model? This calls the embedding provider once per item.",

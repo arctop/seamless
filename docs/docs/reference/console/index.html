@@ -804,6 +804,10 @@ session ends</strong>.</li>
 <li><strong>Steps</strong> list a ceremony with more than one step, each done (a check), the
 one under way, or still to come, numbered: a restore's progress in
 <a href="#backups">Backups</a> is one.</li>
+<li><strong>The source chip</strong> in a <a href="#settings">Settings</a> section's head says where its
+values come from: <strong>Config file</strong>, <strong>Set here</strong> with <strong>Reset</strong>, or <strong>Config
+file decides</strong> with a lock when the config file makes a value final. Its
+hint says more.</li>
 </ul>
 <h3 id="the-command-palette">The command palette</h3>
 <p><code>Cmd/Ctrl+K</code>, the sidebar's search field, or <code>/</code> on a screen with no filter of
@@ -1285,7 +1289,7 @@ there. See <a href="../../reference/configuration/">Configuration</a>.</p>
 <td>shown</td>
 </tr>
 <tr>
-<td><strong>Settings › Features: the precedence line</strong></td>
+<td><strong>Settings › Features: the source chip</strong></td>
 <td>-</td>
 <td>shown</td>
 <td>shown</td>
@@ -3025,19 +3029,33 @@ group; <code>g</code> then <code>c</code> opens it.</p>
 <p><code>/console/settings?s=&lt;section&gt;</code></p>
 <p>Settings is one section at a time, each shaped by what you came to do rather
 than by subsystem. A sub-nav on the left (a row of chips on a phone) switches
-sections in place, without reloading the page. <code>/console/settings</code> alone opens
+sections in place, without reloading the page. Each row names its section and
+its state in a word or two, so you can tell from any section whether backups
+run or an update waits: the level (Experience), how many features are on, the
+version (Your setup, amber while semantic recall's settings have a mistake),
+<strong>Up to date</strong>, <strong>v0.7.3 ready</strong>, <strong>Checks off</strong>, <strong>Paused</strong> or <strong>Failed</strong>
+(Updates), when the last backup ran, <strong>Off</strong>, <strong>None yet</strong> or <strong>Failing</strong>
+(Backups), the briefing preset or <strong>Custom</strong>, how many projects (Workspaces),
+and <strong>Semantic</strong> or <strong>Keywords only</strong> (Knowledge engine). Green is fine, amber
+is worth a look, red needs you. A row's tooltip is what the section is for.
+<code>/console/settings</code> alone opens
 <strong>Experience</strong>; an unknown <code>?s=</code> is a 400 that names the valid sections. Which
 sections a level offers is in the <a href="#choose-how-much-you-see">matrix above</a>; a
 section above your level still opens from a link, under the same note a hidden
 screen gets. Old <code>/console/settings#...</code> bookmarks land on the matching section.</p>
-<p>The editable sections share two habits. A one-line note at the top says where
-the values come from - <strong>Following file + env</strong>, or an override in force, with
-<strong>Reset to file + env</strong> beside it. And a save bar appears at the bottom once a
-form has unsaved changes, with <strong>Save</strong> and <strong>Discard</strong> (which puts the form back
-exactly as the page loaded it); without JavaScript the bar is simply always
-there. <code>GET /console/settings?format=json</code> returns the whole payload whatever
-<code>?s=</code> says, plus <code>consoleLevel</code>, <code>consoleLevelOverridden</code>, and
-<code>consoleLevelSource</code>.</p>
+<p>Each section opens with one line: its title, a <a href="#shared-parts">hint</a> with the
+longer why, one sentence, and - where its values can be set here - the source
+chip, which says where they come from: <strong>Config file</strong> (the config file and its
+environment variables, or the build's default), or <strong>Set here</strong> with <strong>Reset</strong>,
+which hands them back to the config file. The chip's hint says more. A value
+the config file makes final reads <strong>Config file decides</strong>, said once in its
+section, and the control it governs is disabled. The editable forms also share
+a save bar that appears at the bottom once a form has unsaved changes, with
+<strong>Save</strong> and <strong>Discard</strong> (which puts the form back exactly as the page loaded
+it); without JavaScript the bar is simply always there. <code>GET /console/settings?format=json</code> returns the whole payload whatever <code>?s=</code> says,
+plus <code>consoleLevel</code>, <code>consoleLevelOverridden</code>, <code>consoleLevelSource</code>, and
+<code>sectionStatus</code>: each section's state as <code>{&quot;word&quot;, &quot;tone&quot;}</code> by section id
+(<code>ok</code>, <code>accent</code>, <code>quiet</code>, <code>warn</code> or <code>danger</code>), every section at every level.</p>
 <h3 id="experience">Experience</h3>
 <p><code>/console/settings?s=experience</code></p>
 <p>The three <a href="#choose-how-much-you-see">levels</a> side by side - Basic, Standard,
@@ -3045,9 +3063,10 @@ Advanced - the current one marked, each with a one-line pitch and a list of what
 it shows, generated from the same registries the sidebar and the page gates
 read, so the list cannot promise something the level does not do. Choosing one
 applies at once: the sidebar and the page update in place, and if the new level
-hides the screen you were on you land on the Overview with a note. The note at the top
-says whether the level was <strong>chosen in the console</strong> or <strong>set by the upgrade</strong>,
-and <strong>Reset to file + env</strong> hands the choice back to <code>console.level</code>. The same
+hides the screen you were on you land on the Overview with a note. The source chip
+says <strong>Config file</strong>, or <strong>Set here</strong> once a level is stored, whether you chose it
+in this console or the upgrade set it (its hint says which); <strong>Reset</strong> hands the
+choice back to <code>console.level</code>. The same
 section holds the theme and a button for the shortcut sheet. The theme is
 <strong>System</strong>, <strong>Light</strong>, or <strong>Dark</strong>, kept per browser. System is what a browser
 starts on: it follows your computer's light or dark appearance, and follows it
@@ -3226,15 +3245,15 @@ each card is for - it reports the feature's own rows whether it is on or off.</p
 </div>
 <p>Saving writes a <strong>stored override</strong> row in the database - the same layer the
 briefing form uses. It wins over file and env, never touches your config file,
-and holds until <strong>Reset to file + env</strong> clears it; reset means back to the
-file/env configuration, which unless you set <code>features:</code> there is off.</p>
+and holds until <strong>Reset</strong> on the source chip clears it; reset means back to
+the file/env configuration, which unless you set <code>features:</code> there is off.</p>
 <p>One override can be in force without you having set it. Upgrading an
 installation that already holds trial data seeds the override with research on,
 so a feature that now ships off does not disappear from under data you were
-already using. That is why the section states that a stored override is in force
-rather than crediting you with the choice - and reset clears it like any other.
-At Basic the section keeps the cards, what each hides, and the data-kept line,
-and leaves out the agent tool names and the precedence line.</p>
+already using. That is why the chip's hint says the choice is stored here, by a
+save or by that upgrade, rather than crediting you with it - and reset clears it
+like any other. At Basic the section keeps the cards, what each hides, and the
+data-kept line, and leaves out the agent tool names and the source chip.</p>
 <h3 id="your-setup">Your setup</h3>
 <p><code>/console/settings?s=setup</code></p>
 <p>Read-only facts in plain words: the version, the machine the daemon runs on, the
@@ -3259,18 +3278,19 @@ command that updates this install (with a copy button, labeled <strong>To update
 hand</strong> on an install that updates itself), the newest release with its date and
 release notes - or &quot;up to date&quot; - and when the daemon last checked and checks
 next, including a streak of failed checks and why.</p>
-<p>The note at the top says who decided the switches: <strong>Default for this build</strong>,
-<strong>Set in the config file or environment</strong>, <strong>Set in this console</strong>, or
-<strong>Automatic updates set in this console</strong>, with <strong>Reset to the config file</strong>
-beside a console choice. Turning checks off from here always works for you; an
+<p>The source chip says who decided the switches: <strong>Config file</strong> (the config
+file, or the build's default), or <strong>Set here</strong> with <strong>Reset</strong> when this console
+set either switch; its hint says which. Turning checks off from here always works for you; an
 agent's process on the peer_auth socket, and a paired device but for your own
 hands through a relay, may turn checks and automatic updates on, never off. Turning them on does not work when the config
-file or <code>SEAMLESS_UPDATE_CHECK</code> says <code>false</code>: that is final, the switch shows
-locked, and the form refuses - <code>false</code> promises no update traffic at all. <strong>Check now</strong> asks GitHub once, right away (not more than
+file or <code>SEAMLESS_UPDATE_CHECK</code> says <code>false</code>: that is final, the chip reads
+<strong>Config file decides</strong>, the switch is disabled, and the form refuses - <code>false</code>
+promises no update traffic at all. <strong>Check now</strong> asks GitHub once, right away (not more than
 once a minute).</p>
 <p>On an install that updates itself, the section adds <strong>Automatic updates</strong> - on
 or off, who decided, and <strong>Turn automatic updates off</strong> / <strong>on</strong>, which
-<code>update.auto: false</code> in the config file or environment locks off - and, while
+<code>update.auto: false</code> in the config file or environment locks off, with a
+<strong>Config file decides</strong> chip beside it - and, while
 they apply, <strong>Next update</strong> (the release it installs next and what it waits
 for: the soak, live agent sessions, or a lull after its deadline), <strong>Paused</strong>,
 <strong>Held back</strong>, <strong>Skipped releases</strong> and <strong>Next try</strong>. <strong>Updating now</strong> and
@@ -3339,10 +3359,10 @@ Drive, cloud folders and external disks on macOS, Dropbox and external disks
 on Linux, OneDrive and other drives on Windows, and Seamless's data folder.</li>
 </ul>
 <p><strong>Save</strong> stores only what differs from the settings in force; a new folder is
-created and tested with a write first. <strong>Reset to the config file</strong> makes the
-settings follow the config file again. The bar at the top says where the values
-come from: <strong>Default for this build</strong>, <strong>Following the config file</strong>, or <strong>Set
-in this console</strong> with the fields you set.</p>
+created and tested with a write first. The source chip in the section's head
+says where the values come from: <strong>Config file</strong> (the config file, or the
+build's default), or <strong>Set here</strong>, whose hint names the fields you set and whose
+<strong>Reset</strong> makes the settings follow the config file again.</p>
 <p><strong>Available backups</strong>, the list, newest first: the backups in the chosen folder
 and in Seamless's data folder (<code>~/.seamless/backups</code>, where the safety and
 pre-update backups stay). Each row has:</p>
@@ -3472,20 +3492,21 @@ exactly what remains before auto arms (&quot;needs 7 more events, 3d more histor
 A per-scope <strong>force</strong> overrides the latch in either direction; when the global
 mode is <code>on</code> or <code>off</code>, the table says the per-scope state is dormant until auto
 returns.</p>
-<p><strong>Storage &amp; policy</strong> - read-only: the data folder, the context budgets, the
+<p><strong>Storage &amp; policy</strong> - read-only, with a lock by its heading: the data folder, the context budgets, the
 database (path, size on disk including the WAL, schema version), and the
 gardener's cadence and policy. Change these through the config file or
 environment, then restart.</p>
 <p><strong>Gardener</strong> (<code>#settings-gardener</code>) - editable, and applied at once without a
 restart: <strong>Agents may apply proposals</strong>, on or off, and <strong>Apply
 automatically</strong>, one checkbox per kind it may take with a sentence on what
-applying it does and how Undo takes it back. Each control says where its value
-comes from - this console, the config file or environment, or the default - and
-<strong>Reset to the config file</strong> clears this console's choice for both. A choice
-made here wins over the file until then, except that
+applying it does and how Undo takes it back. The group's source chip says
+<strong>Config file</strong> (the file, the environment, or the default) or <strong>Set here</strong>, its
+hint where each switch comes from, and its <strong>Reset</strong> clears this console's
+choice for both. A choice made here wins over the file until then, except that
 <code>gardener.agents_may_apply: false</code> in the file or environment is final: the
-switch shows locked, and saving it on is refused. <strong>Your setup</strong> states both
-switches in one line, with a link here.</p>
+switch is disabled with a <strong>Config file decides</strong> chip beside it, and saving it
+on is refused. <strong>Your setup</strong> states both switches in one line, with a link
+here.</p>
 <p>See <a href="../../reference/configuration/">Configuration</a> for what each knob does, and
 <a href="../../concepts/sessions/">Sessions &amp; briefings</a> for what they tune.</p>
 <h2 id="event-detail">Event detail</h2>
