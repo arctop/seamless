@@ -1,6 +1,7 @@
 package console
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -19,7 +20,8 @@ func TestFuProjectSessionsTab_RowsWearTheHeadline(t *testing.T) {
 	rec := events.NewRecorder(db)
 	pvProject(t, db, "demo", "Demo")
 	holder := snSession(t, db, "cc/fu000001", "demo", core.SessionActive, "", time.Minute)
-	snClaim(t, db, snTask(t, db, "demo", "Fix the watcher race"), holder)
+	held := snTask(t, db, "demo", "Fix the watcher race")
+	snClaim(t, db, held, holder)
 	asker := snSession(t, db, "cc/fu000002", "demo", core.SessionActive, "", 2*time.Minute)
 	snPrompt(t, rec, asker, "Add a **retry** to the `uploader`")
 	snSession(t, db, "cc/fu000003", "demo", core.SessionActive, "", 3*time.Minute)
@@ -30,7 +32,21 @@ func TestFuProjectSessionsTab_RowsWearTheHeadline(t *testing.T) {
 	require.Contains(t, body, `class="sess-headline is-prompt" href="/console/sessions/`+asker.ID+`">Add a retry to the uploader</a>`)
 	require.Contains(t, body, `<span class="mono">cc/fu000002</span> &middot; its first prompt`)
 	require.Contains(t, body, `">cc/fu000003</a>`, "a session with no task and no prompt keeps its name")
-	require.Contains(t, body, `href="/console/tasks/`, "the held task is still linked from its claim")
+	require.Contains(t, body, `<a href="/console/tasks/`+held.ID+`">Fix the watcher race</a>`, "the held task is still linked from its claim")
+}
+
+// A claim on a Now card wears the Tasks icon: a claim is never a lock.
+func TestFuNow_ClaimRowIsNotALock(t *testing.T) {
+	db, mux := newConsole(t)
+	holder := snSession(t, db, "cc/fu000021", "demo", core.SessionActive, "", time.Minute)
+	task := snTask(t, db, "demo", "Rotate the signing keys")
+	snClaim(t, db, task, holder)
+	body := getHTMLBody(t, mux, "/console/now")
+	start := strings.Index(body, `id="cl-`+task.ID+`"`)
+	require.Positive(t, start)
+	row := body[start:]
+	row = row[:strings.Index(row, "</a>")]
+	require.NotContains(t, row, "lock", "the claim row's icon")
 }
 
 // A Now card whose agent holds no claim is titled by the session's first

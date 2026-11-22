@@ -68,7 +68,7 @@
         <div class="now-claims">
           {{range .Claims}}
           <a class="now-claim" id="cl-{{.ID}}" href="/console/tasks/{{.ID}}">
-            {{icon "lock"}}
+            {{icon "list-checks"}}
             <span class="t" title="{{.Title}}">{{.Title}}</span>
             {{if .PlanSlug}}<span class="now-chip plan" title="plan:{{.PlanSlug}}">plan:{{.PlanSlug}}</span>{{end}}
             {{if .LeaseExp}}<span class="lease" data-lease-exp="{{.LeaseExp}}">{{icon "timer"}}<span class="v">{{.LeaseLeft}}</span></span>{{end}}
