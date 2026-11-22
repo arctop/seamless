@@ -148,33 +148,3 @@ func TestSessionCoverageBuckets_Empty(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, got)
 }
-
-func TestSessionsWithArtifacts(t *testing.T) {
-	db := openTestDB(t)
-	ctx := context.Background()
-	now := time.Now().UTC()
-
-	mk := func(id, name string) core.Session {
-		return core.Session{ID: id, Name: name, Status: core.SessionCompleted, CreatedAt: now, UpdatedAt: now}
-	}
-	// One session per durable event kind.
-	require.NoError(t, CreateSession(ctx, db, mk("a1", "cc/a")))
-	insertSessionEvent(t, db, core.EventMemoryWritten, "a1", now)
-	require.NoError(t, CreateSession(ctx, db, mk("a2", "cc/b")))
-	insertSessionEvent(t, db, core.EventNoteWritten, "a2", now)
-	require.NoError(t, CreateSession(ctx, db, mk("a3", "cc/c")))
-	insertSessionEvent(t, db, core.EventTrialRecorded, "a3", now)
-	// Findings-only coverage lives on the session row, not in the event log:
-	// the caller combines that side itself, so this session stays absent here.
-	s4 := mk("a4", "cc/d")
-	s4.Findings = "kept on the row"
-	require.NoError(t, CreateSession(ctx, db, s4))
-	// Reads and injections are not durable artifacts.
-	require.NoError(t, CreateSession(ctx, db, mk("a5", "cc/e")))
-	insertSessionEvent(t, db, core.EventMemoryRead, "a5", now)
-	insertSessionEvent(t, db, core.EventInjected, "a5", now)
-
-	got, err := SessionsWithArtifacts(ctx, db)
-	require.NoError(t, err)
-	require.Equal(t, map[string]struct{}{"a1": {}, "a2": {}, "a3": {}}, got)
-}

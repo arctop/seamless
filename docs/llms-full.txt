@@ -3247,8 +3247,9 @@ The last two pages are about work and upkeep rather than knowledge.
 ready queue, lease-based claiming that lets parallel agents divide work without
 colliding, and plans as compositions of notes and tasks rather than a separate
 primitive. [The gardener](/concepts/gardener/) is the background pass that
-finds duplicates, staleness, and drift - and only ever proposes, because
-nothing in Seamless rewrites your knowledge behind your back.
+finds duplicates, staleness, and drift - and proposes, applying by itself only
+the few task-opening and plan-retagging kinds you opt in to, because nothing in
+Seamless rewrites your knowledge behind your back.
 
 [Networked Seamless](/concepts/networked/) is the shape for more than one
 computer: one Server keeps the data, and the others connect to it as Clients,
@@ -4954,7 +4955,7 @@ to this project it files a **relocate** proposal in the
 [Gardener inbox](/concepts/gardener/) offering to move it behind the fence.
 
 Two things this deliberately is not. It does not move anything on its own -
-the gardener only ever proposes, and dismissing the proposal is how you say the
+the gardener only ever proposes a relocate, and dismissing it is how you say the
 memory really is general knowledge. And it does not run on a timer: once the
 fence is up, the write funnel refuses this project's sessions any write outside
 it, so the leak set is closed at the moment of tightening and never grows.
@@ -5692,7 +5693,8 @@ every decision is yours:
   your own terminal and the bearer key keep working.
 
 Asking in words (`gardener_request`), planning a split (`gardener_split`) and
-**Run a pass now** stay open: they only ever propose. The switch stops an
+**Run a pass now** stay open: they only propose, apart from the kinds you name
+for automatic apply (below), which any pass applies by itself. The switch stops an
 agent's ordinary calls; it is not a wall against an agent set on getting in,
 since whoever holds the bearer key passes. A restricted account is refused
 either way.
@@ -14048,13 +14050,22 @@ see each other's dead ends instead of re-walking them. When the investigation
 resolves, distill the finding into a memory - the lab is the working record, not
 the conclusion.
 
-## The gardener proposes; it never acts
+## The gardener proposes; you decide who acts
 
 The gardener runs periodically over the store looking for drift. Every pass it
 makes ends in a **proposal row for you to review** - it never rewrites your
-knowledge behind your back. That is the whole contract, and it is why the tool
+knowledge behind your back. That is the contract, and it is why the tool
 surface has both `gardener_proposals` (read them) and `gardener_apply` (act on
 one) instead of a single "tidy up" button.
+
+Two switches, both yours, say who may act on a proposal
+([The gardener](/concepts/gardener/#propose-only-unless-you-opt-in)).
+`gardener.agents_may_apply` is on by default; turned off, `gardener_apply`
+refuses an agent's apply, dismiss and hide, and `gardener_proposals` says so.
+`gardener.auto_apply` is empty by default; it may name any of `memory_wanted`,
+`tool_error`, `abandon_plan` and `ship_plan` - kinds that only open a task or
+retag a plan note, each undoable from the console - and a pass then applies a
+new proposal of a named kind by itself, recorded as `auto`.
 
 Its passes:
 
@@ -19543,7 +19554,7 @@ nothing, and their rows say so.
 | Apply a whole rail section | `POST /console/gardener/group/apply` | Applies the proposals one rail section shows (`group=`, and one `id=` for each proposal shown), one at a time, so each keeps its own event and its own Undo in the decision history. Offered only on a section whose every proposal can be undone and none of which asks to be read first (it touches a project fenced since it was raised, or moves a stamped memory into a less fenced project); a batch holding any other is refused before anything is applied. A consolidation or a split never takes part. |
 | Swap which memory a merge keeps | `POST /console/gardener/{id}/swap` | Rewrites a **pending** merge so it keeps the other memory (`keep=` names it, one of the two) and retires the one it kept. Nothing changes until the merge is applied. Records a `gardener.action` event. Merge proposals only. |
 | Undo a decision | `POST /console/gardener/{id}/undo` | Returns a resolved proposal to the queue from **Recently decided** or the **decision history**, inverting whatever its apply did, for the kinds whose apply can be inverted. |
-| Run a gardener pass now | `POST /console/gardener/run` | Runs the background proposal passes now instead of at the next pass, in the background. They only ever propose. Refused while a pass runs, and while `gardener.enabled` is false. |
+| Run a gardener pass now | `POST /console/gardener/run` | Runs the background proposal passes now instead of at the next pass, in the background. Like every pass they only propose, except that a new proposal of a kind you named under **Apply automatically** (`gardener.auto_apply`, off by default) is applied by the pass that raised it. Refused while a pass runs, and while `gardener.enabled` is false. |
 | Release a held write | `POST /console/held/{id}/release` | [Write screening](#held): lands a held agent write exactly as the agent sent it, and marks the memory owner-confirmed. Refused when its target changed after it was held. |
 | Discard a held write | `POST /console/held/{id}/discard` | Lands nothing and erases the held text; the row stays as the record. |
 | Clear a session's outside-text mark | `POST /console/held/sessions/{id}/clear` | The only way the mark comes off: the session's changes to binding rules land without a hold again. |
@@ -19661,7 +19672,7 @@ never text of the console's own: the data from before is saved as a backup
 first, so a restore is itself undone by restoring.
 
 This is deliberate, and it is the same principle as
-[the gardener's](/concepts/gardener/) propose-only contract. The store is written
+[the gardener's](/concepts/gardener/) propose-only default. The store is written
 by agents doing work, with provenance attached. A console that could quietly edit
 a memory would produce knowledge that came from nowhere, attributable to no
 session, explaining nothing.
@@ -21089,14 +21100,16 @@ The line carries no counts: a pass spans every project, a locked one included.
 The actions are **apply**, **dismiss**, **hide forever**, **retarget**
 (reproject cards only), and **apply plan**. Dismissing answers the evidence in
 front of you - the pattern comes back if it recurs; hiding answers the pattern
-itself. A proposal changes nothing until it is applied, by you here or by an
-agent with `gardener_apply`, and every decision records who made it. The newest
-ten land in **Recently decided** with an Undo; the **decision history**
-(`/console/gardener/decisions`) pages through all of them, newest first, with
-the outcome, who decided (you, an agent's session, the gardener settling a
-proposal whose memory had gone inactive, or unknown for a decision made before
-this was recorded), the note or task an apply produced, and Undo wherever it
-can be taken back. A hide is additionally listed under **Hidden forever**, where
+itself. A proposal changes nothing until it is applied - by you here, by an
+agent with `gardener_apply` while agents may apply proposals, or, for a kind
+you named under **Apply automatically**, by automatic apply - and every
+decision records who made it. The newest ten land in **Recently decided** with
+an Undo; the **decision history** (`/console/gardener/decisions`) pages
+through all of them, newest first, with the outcome, who decided (you; an
+agent, by its session's name when a session made the call; automatic apply;
+the gardener settling a proposal whose memory had gone inactive; or unknown
+for a decision made before this was recorded), the note or task an apply
+produced, and Undo wherever it can be taken back. A hide is additionally listed under **Hidden forever**, where
 **Unhide** lifts the block without returning the proposal to the queue. Above
 them sits a single ask-in-words box, and it only ever
 produces more proposals for this same queue. A request recognized as a project
@@ -22307,8 +22320,8 @@ memory is what is *true*.
 Seamless recall.
 
 **Gardener** - the Seamless background pass that finds duplicates, staleness,
-and drift and **proposes** fixes; it never acts on its own. See [The
-gardener](/concepts/gardener/).
+and drift and **proposes** fixes; it acts on its own only for the few kinds
+you opt in to automatic apply. See [The gardener](/concepts/gardener/).
 
 **Gate** - what a Seamless task waits on outside Seamless: who must act and
 what must happen. A step whose own gate is open, or that a gate task (`kind:

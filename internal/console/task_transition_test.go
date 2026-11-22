@@ -36,7 +36,7 @@ func TestTaskTransition_ReadsTheStatusBeforeTheCall(t *testing.T) {
 			"updated", "task updated"},
 		{"a status move", map[string]any{"to": "done", "from": "in_progress"}, "done", "task -> done"},
 		{"a reopen", map[string]any{"to": "open", "from": "done"}, "reopened", "task -> open"},
-		{"a start", map[string]any{"to": "in_progress", "from": "open"}, "started", "task -> in_progress"},
+		{"a start", map[string]any{"to": "in_progress", "from": "open"}, "started", "task -> in progress"},
 
 		// Without from: exactly as before.
 		{"old: an update of an open task", map[string]any{"to": "open"}, "reopened", "task -> open"},
@@ -44,7 +44,7 @@ func TestTaskTransition_ReadsTheStatusBeforeTheCall(t *testing.T) {
 		{"old: removed_depends_on without from", map[string]any{"to": "open", "removed_depends_on": []any{"01KA"}},
 			"reopened", "task -> open"},
 		{"created", map[string]any{"to": "open", "created": true}, "created", "task -> open"},
-		{"claimed", map[string]any{"to": "in_progress", "claimed_by": "01KS"}, "claimed", "task -> in_progress"},
+		{"claimed", map[string]any{"to": "in_progress", "claimed_by": "01KS"}, "claimed", "task -> in progress"},
 		{"released", map[string]any{"to": "open", "released": true, "by": "console"}, "released", "task -> open"},
 		{"no payload", nil, "reopened", "task transition"},
 	} {
@@ -53,6 +53,25 @@ func TestTaskTransition_ReadsTheStatusBeforeTheCall(t *testing.T) {
 			require.Equal(t, tc.verb, verb)
 			require.Equal(t, tc.summary, eventSummary(core.Event{Kind: core.EventTaskTransition, Payload: tc.payload}))
 		})
+	}
+}
+
+// A transition's summary names the status it moved to in the task vocabulary
+// (taskwords.go), never the stored word: every status a task can have reads
+// as statusWord's text, and none prints with an underscore.
+func TestFd_TaskTransitionSummaryUsesTheTaskWords(t *testing.T) {
+	want := map[core.TaskStatus]string{
+		core.TaskOpen:       "task -> open",
+		core.TaskInProgress: "task -> in progress",
+		core.TaskDone:       "task -> done",
+		core.TaskDropped:    "task -> dropped",
+	}
+	require.Len(t, want, len(core.TaskStatuses), "a new status needs its words here")
+	for _, st := range core.TaskStatuses {
+		got := eventSummary(core.Event{Kind: core.EventTaskTransition, Payload: map[string]any{"to": string(st)}})
+		require.Equal(t, want[st], got, "status %s", st)
+		require.Equal(t, "task -> "+statusWord(string(st)).Text, got)
+		require.NotContains(t, got, "_", "status %s printed raw", st)
 	}
 }
 

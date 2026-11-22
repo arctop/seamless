@@ -422,58 +422,61 @@ func DiaryCommits(ctx context.Context, db *sql.DB, from, to time.Time) ([]DiaryC
 // session start's briefing) or the text was withheld.
 var diaryPromptKinds = []core.EventKind{core.EventHookPrompt, core.EventInjected}
 
+// eventPrompt is a prompt-bearing event's prompt (the e alias's payload key
+// prompt), NULL when it carries none. A payload that is not JSON is read as
+// holding no prompt rather than failing the read: json_extract errors on one.
+const eventPrompt = `json_extract(CASE WHEN json_valid(e.payload) THEN e.payload ELSE '{}' END, '$.prompt')`
+
+// promptHasWords keeps an event whose prompt is more than whitespace, so a
+// blank prompt is passed over for the session's next one.
+const promptHasWords = `trim(COALESCE(` + eventPrompt + `, ''), ' ' || char(9, 10, 13)) <> ''`
+
 // DiaryFirstPrompts returns, for each of the given sessions, the first prompt
-// it recorded in [from, to), keyed by session id; a session with none is
-// absent. The prompt-bearing events are found without parsing their payloads
-// (an injection's carries the injected text), and only each session's first
-// one is parsed: the CROSS JOIN keeps the sessions' firsts the outer loop and
-// +kind keeps the kind index, which holds every prompt ever recorded, out of
-// the lookup back.
+// with words in it that it recorded in [from, to), keyed by session id; a
+// session with none is absent. It is SessionFirstPrompts bounded to the
+// range: each session's own events are walked from from in order
+// (idx_events_session, +kind keeping the kind index, which holds every prompt
+// ever recorded, out), and the walk stops at the first prompt with words. A
+// blank prompt falls through to the session's next one, and a payload that is
+// not JSON holds none; only the payloads up to the first prompt with words are
+// parsed (an injection's carries the injected text).
 func DiaryFirstPrompts(ctx context.Context, db *sql.DB, from, to time.Time, sessionIDs []string) (map[string]string, error) {
 	out := map[string]string{}
 	if !from.Before(to) {
 		return out, nil
 	}
-	kinds := placeholders(len(diaryPromptKinds))
 	kindArgs := make([]any, len(diaryPromptKinds))
 	for i, k := range diaryPromptKinds {
 		kindArgs[i] = string(k)
 	}
 	for chunk := range slices.Chunk(diaryDistinct(sessionIDs), diaryChunk) {
-		args := slices.Concat(anySlice(chunk), kindArgs, []any{core.FormatTime(from), core.FormatTime(to)}, kindArgs)
-		rows, err := db.QueryContext(ctx, `WITH firsts AS (
-				SELECT session_id, MIN(ts) AS ts FROM events
-				 WHERE session_id IN (`+placeholders(len(chunk))+`) AND kind IN (`+kinds+`)
-				   AND ts >= ? AND ts < ? AND instr(payload, '"prompt":') > 0
-				 GROUP BY session_id)
-			SELECT f.session_id, COALESCE(json_extract(e.payload, '$.prompt'), '')
-			  FROM firsts f CROSS JOIN events e ON e.session_id = f.session_id AND e.ts = f.ts
-			 WHERE +e.kind IN (`+kinds+`)
-			 ORDER BY e.id`, args...)
+		args := slices.Concat(anySlice(chunk), []any{core.FormatTime(from), core.FormatTime(to)}, kindArgs)
+		rows, err := db.QueryContext(ctx, diaryFirstPromptsQuery(len(chunk)), args...)
 		if err != nil {
 			return nil, fmt.Errorf("store.DiaryFirstPrompts: %w", err)
 		}
-		if err := scanDiaryPrompts(rows, out); err != nil {
+		if err := scanSessionPrompts(rows, out); err != nil {
 			return nil, fmt.Errorf("store.DiaryFirstPrompts: %w", err)
 		}
 	}
 	return out, nil
 }
 
-// scanDiaryPrompts scans DiaryFirstPrompts' rows into out, the first prompt
-// with words in it per session, closing rows.
-func scanDiaryPrompts(rows *sql.Rows, out map[string]string) error {
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var id, prompt string
-		if err := rows.Scan(&id, &prompt); err != nil {
-			return fmt.Errorf("scan: %w", err)
-		}
-		if _, seen := out[id]; !seen && strings.TrimSpace(prompt) != "" {
-			out[id] = prompt
-		}
-	}
-	return rows.Err()
+// diaryFirstPromptsQuery is DiaryFirstPrompts' statement for n sessions. Its
+// binds: the n session ids, from and to, then diaryPromptKinds.
+func diaryFirstPromptsQuery(n int) string {
+	return `WITH asked(id) AS (VALUES ` + valueRows(n) + `)
+		SELECT a.id, COALESCE((SELECT ` + eventPrompt + ` FROM events e
+		 WHERE e.session_id = a.id AND e.ts >= ? AND e.ts < ?
+		   AND +e.kind IN (` + placeholders(len(diaryPromptKinds)) + `)
+		   AND instr(e.payload, '"prompt":') > 0 AND ` + promptHasWords + `
+		 ORDER BY e.ts, e.id LIMIT 1), '')
+		  FROM asked a`
+}
+
+// valueRows returns "(?), (?), ..." with n rows for a one-column VALUES list.
+func valueRows(n int) string {
+	return strings.TrimSuffix(strings.Repeat("(?), ", n), ", ")
 }
 
 // DiaryPlanNotes returns the notes tagged into each of the given plans'

@@ -64,7 +64,8 @@ every decision is yours:
   your own terminal and the bearer key keep working.
 
 Asking in words (`gardener_request`), planning a split (`gardener_split`) and
-**Run a pass now** stay open: they only ever propose. The switch stops an
+**Run a pass now** stay open: they only propose, apart from the kinds you name
+for automatic apply (below), which any pass applies by itself. The switch stops an
 agent's ordinary calls; it is not a wall against an agent set on getting in,
 since whoever holds the bearer key passes. A restricted account is refused
 either way.

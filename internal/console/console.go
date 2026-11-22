@@ -376,7 +376,8 @@ func (s *Service) Register(mux *http.ServeMux) {
 	// request; settings_gardener.go): an agent's process on the socket and a
 	// paired device are then refused (ownerHandsIf), and the owner's browser,
 	// terminal and bearer key are not. Asking, planning a split and running a
-	// pass only ever propose, so they stay open.
+	// pass decide nothing an agent chose (a pass applies by itself only the
+	// kinds the owner named in gardener.auto_apply), so they stay open.
 	post("POST /console/gardener/request", formBodyStandard, s.gardenerRequest)
 	post("POST /console/gardener/split", formBodyStandard, s.gardenerSplit)
 	post("POST /console/gardener/group/dismiss", formBodySmall, ownerHandsIf(s.gardenerAgentsBarred, s.gardenerGroupDismiss))

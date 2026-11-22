@@ -295,8 +295,11 @@ func eventSummary(e core.Event) string {
 		case statusUnmoved(p):
 			return "task updated"
 		}
+		// The status it moved to, in the one task vocabulary (taskwords.go):
+		// the event knows the status and nothing else, so "in progress",
+		// never the stored "in_progress".
 		if to := payloadStr(p, "to"); to != "" {
-			return "task -> " + to
+			return "task -> " + statusWord(to).Text
 		}
 		return "task transition"
 	case core.EventInjected:

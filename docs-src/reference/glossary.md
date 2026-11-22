@@ -108,8 +108,8 @@ memory is what is *true*.
 Seamless recall.
 
 **Gardener** - the Seamless background pass that finds duplicates, staleness,
-and drift and **proposes** fixes; it never acts on its own. See [The
-gardener](/concepts/gardener/).
+and drift and **proposes** fixes; it acts on its own only for the few kinds
+you opt in to automatic apply. See [The gardener](/concepts/gardener/).
 
 **Gate** - what a Seamless task waits on outside Seamless: who must act and
 what must happen. A step whose own gate is open, or that a gate task (`kind:

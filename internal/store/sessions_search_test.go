@@ -205,7 +205,7 @@ func TestSnClaimsHeldBy_ReadsAListsClaims(t *testing.T) {
 // its whole life: a blank prompt and a later one are passed over, an injection
 // carries one as a recall miss does, a payload that is not JSON holds none,
 // and a locked project's session is absent through the view. Over one day it
-// agrees with DiaryFirstPrompts.
+// agrees with DiaryFirstPrompts, session for session.
 func TestSnSessionFirstPrompts_FirstWithWordsPerSession(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "seam.db")
 	db, err := Open(path)
@@ -247,17 +247,20 @@ func TestSnSessionFirstPrompts_FirstWithWordsPerSession(t *testing.T) {
 	require.NotContains(t, got, ledger.ID, "the locked project's prompt is not read")
 	require.Len(t, got, 2)
 
-	// The Diary's read over the day finds the same for sessions whose first
-	// prompt has words; it is not asked about b, whose payload that is not
-	// JSON fails DiaryFirstPrompts' json_extract, nor about a, whose blank
-	// first prompt it stops at.
+	// The Diary's read over the day finds the same for every session, through
+	// either handle: a's blank first prompt falls through to its next one, and
+	// b's payload that is not JSON holds no prompt rather than failing the read.
 	c := snSession(t, db, "cc/c", "example-ops", "", core.SessionCompleted, day, day)
 	put(c, core.EventInjected, `{"prompt":"rotate the keys\nfirst","item_ids":[]}`, day.Add(time.Minute))
 	put(c, core.EventHookPrompt, `{"prompt":"later"}`, day.Add(2*time.Minute))
-	diary, err := DiaryFirstPrompts(ctx, db, day, day.Add(24*time.Hour), []string{c.ID, quiet.ID})
-	require.NoError(t, err)
-	mine, err := SessionFirstPrompts(ctx, db, []string{c.ID, quiet.ID})
-	require.NoError(t, err)
-	require.Equal(t, map[string]string{c.ID: "rotate the keys\nfirst"}, mine)
-	require.Equal(t, diary, mine)
+	ids = append(ids, c.ID)
+	for _, h := range []*sql.DB{db, view} {
+		diary, err := DiaryFirstPrompts(ctx, h, day, day.Add(24*time.Hour), ids)
+		require.NoError(t, err)
+		mine, err := SessionFirstPrompts(ctx, h, ids)
+		require.NoError(t, err)
+		require.Equal(t, "rotate the keys\nfirst", mine[c.ID])
+		require.Equal(t, "fix the watcher", mine[a.ID])
+		require.Equal(t, diary, mine)
+	}
 }

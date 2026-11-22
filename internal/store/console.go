@@ -188,36 +188,6 @@ func sessionCoverage(ctx context.Context, db *sql.DB, project string, byProject 
 	return c, nil
 }
 
-// SessionsWithArtifacts returns the ids of sessions that recorded at least one
-// durable-artifact event (a written memory or note, or a recorded trial). It is
-// the event half of the covered-ness test sessionCoverage applies; the other
-// half -- non-empty findings -- lives on the session row itself, so a caller
-// already holding the rows combines the two sides. Backs the Sessions list's
-// ?retained filter, which is why it is a set rather than a count.
-func SessionsWithArtifacts(ctx context.Context, db *sql.DB) (map[string]struct{}, error) {
-	rows, err := db.QueryContext(ctx, `
-		SELECT DISTINCT session_id FROM events
-		WHERE session_id <> '' AND kind IN (?, ?, ?)`,
-		string(core.EventMemoryWritten), string(core.EventNoteWritten), string(core.EventTrialRecorded),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("store.SessionsWithArtifacts: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-	out := map[string]struct{}{}
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("store.SessionsWithArtifacts: scan: %w", err)
-		}
-		out[id] = struct{}{}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("store.SessionsWithArtifacts: %w", err)
-	}
-	return out, nil
-}
-
 // CoverageBucket is one time bucket of the session-coverage trend: a pre-formatted
 // tick label, how many sessions started in it, and how many of those retained
 // knowledge. Total == 0 means no sessions in the bucket, so its coverage is

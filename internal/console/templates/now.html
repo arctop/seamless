@@ -215,7 +215,7 @@
         {{if .Wire}}
         <div class="now-wire">
           {{range .Wire}}
-          <a id="{{.ID}}" class="now-evt" href="/console/events/{{.ID}}">
+          <a id="{{.ID}}" class="now-evt" data-sev="{{evtSev .Kind}}" href="/console/events/{{.ID}}">
             {{agoTime .When}}
             <span class="kindchip" title="{{.Kind}}">{{icon (evtIcon .Kind)}}{{evtLabel .Kind}}</span>
             <p title="{{.Summary}}">{{.Summary}}</p>

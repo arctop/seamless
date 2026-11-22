@@ -186,8 +186,9 @@
      server copy; re-enhancing on seam:content-updated lifts them again.
    - Click (or Enter on the keyboard cursor) focuses the session map on that
      day via the shared no-reload path: it mints the ?day URL the server
-     defined, preserving the other filters; clicking the already-focused day
-     clears it. Real navigation stays the no-JS fallback via the svg's titles.
+     defined from the page's own URL, so every other filter (?project=
+     among them) rides along; clicking the already-focused day clears it.
+     Without script a cell is not a link: its <title> still reads the day.
    - Arrow keys walk days from today (the svg is server-rendered focusable):
      up/down one day, left/right one week, Home/End the span's edges. */
 (function () {

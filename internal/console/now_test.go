@@ -430,3 +430,28 @@ func TestNwNow_EachLooseEndSaysItsStateOnce(t *testing.T) {
 	require.Contains(t, q, "data-lease-exp=", "a live claim still counts down")
 	require.NotContains(t, q, "release claim", "a live claim is not released without a confirm")
 }
+
+// The Now wire's rows carry the one stream severity (evtSev), as the Overview
+// ledger's do, so the wire's injection chips wear the flow tint the stylesheet
+// gives .now-evt[data-sev="inject"].
+func TestFd_NowWireRowsCarryTheSharedSeverityCode(t *testing.T) {
+	db, mux := newConsole(t)
+	ctx := context.Background()
+	rec := events.NewRecorder(db)
+	for _, ev := range []core.Event{
+		{Kind: core.EventInjected, ProjectSlug: "seamless", Payload: map[string]any{"hook": "SessionStart"}},
+		{Kind: core.EventMemoryWritten, ProjectSlug: "seamless", Payload: map[string]any{"name": "outbox-writes-same-tx"}},
+		{Kind: core.EventGardenerAction, ProjectSlug: "seamless", Payload: map[string]any{"action": "proposed", "kind": "merge"}},
+	} {
+		_, err := rec.Record(ctx, ev)
+		require.NoError(t, err)
+	}
+
+	page := getPeek(t, mux, "/console/now")
+	require.Equal(t, http.StatusOK, page.Code)
+	body := page.Body.String()
+	require.Contains(t, body, `class="now-evt" data-sev="inject"`)
+	require.Contains(t, body, `class="now-evt" data-sev="write"`)
+	require.Contains(t, body, `class="now-evt" data-sev="system"`)
+	require.Contains(t, string(consoleCSS), `.now-evt[data-sev="inject"] .kindchip`)
+}

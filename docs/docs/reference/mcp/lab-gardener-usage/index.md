@@ -1,6 +1,6 @@
 # Lab, gardener & usage
 
-> Research trials, the propose-only gardener, the usage summary, and favorites - the nine tools for keeping the store honest.
+> Research trials, the gardener (propose-only unless you opt in), the usage summary, and favorites - the nine tools for keeping the store honest.
 
 ## The research lab
 
@@ -15,13 +15,22 @@ see each other's dead ends instead of re-walking them. When the investigation
 resolves, distill the finding into a memory - the lab is the working record, not
 the conclusion.
 
-## The gardener proposes; it never acts
+## The gardener proposes; you decide who acts
 
 The gardener runs periodically over the store looking for drift. Every pass it
 makes ends in a **proposal row for you to review** - it never rewrites your
-knowledge behind your back. That is the whole contract, and it is why the tool
+knowledge behind your back. That is the contract, and it is why the tool
 surface has both `gardener_proposals` (read them) and `gardener_apply` (act on
 one) instead of a single "tidy up" button.
+
+Two switches, both yours, say who may act on a proposal
+([The gardener](https://thereisnospoon.org/docs/concepts/gardener/#propose-only-unless-you-opt-in)).
+`gardener.agents_may_apply` is on by default; turned off, `gardener_apply`
+refuses an agent's apply, dismiss and hide, and `gardener_proposals` says so.
+`gardener.auto_apply` is empty by default; it may name any of `memory_wanted`,
+`tool_error`, `abandon_plan` and `ship_plan` - kinds that only open a task or
+retag a plan note, each undoable from the console - and a pass then applies a
+new proposal of a named kind by itself, recorded as `auto`.
 
 Its passes:
 

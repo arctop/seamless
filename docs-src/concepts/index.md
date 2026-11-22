@@ -31,8 +31,9 @@ The last two pages are about work and upkeep rather than knowledge.
 ready queue, lease-based claiming that lets parallel agents divide work without
 colliding, and plans as compositions of notes and tasks rather than a separate
 primitive. [The gardener](/concepts/gardener/) is the background pass that
-finds duplicates, staleness, and drift - and only ever proposes, because
-nothing in Seamless rewrites your knowledge behind your back.
+finds duplicates, staleness, and drift - and proposes, applying by itself only
+the few task-opening and plan-retagging kinds you opt in to, because nothing in
+Seamless rewrites your knowledge behind your back.
 
 [Networked Seamless](/concepts/networked/) is the shape for more than one
 computer: one Server keeps the data, and the others connect to it as Clients,

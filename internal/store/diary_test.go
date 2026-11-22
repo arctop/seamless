@@ -177,6 +177,57 @@ func TestDiaryFirstPrompts(t *testing.T) {
 	require.Equal(t, map[string]string{"s1": "Why is the build red?", "s2": "unmatched first"}, got)
 }
 
+// A payload that is not JSON but carries "prompt": holds no prompt rather than
+// failing the whole read, and a blank first prompt falls through to the
+// session's next one in the range, never to one after it. Each session's day
+// is walked by its own index, so the day's prompts across every session are
+// never read through the kind index.
+func TestFd_DiaryFirstPromptsPassesOverBlankAndBrokenPayloads(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	day := time.Date(2026, 11, 18, 0, 0, 0, 0, time.UTC)
+	raw := func(id string, at time.Time, kind core.EventKind, session, payload string) {
+		t.Helper()
+		_, err := db.ExecContext(ctx, `INSERT INTO events (id, ts, kind, session_id, project_slug, item_id, payload)
+			VALUES (?, ?, ?, ?, 'example-ops', '', ?)`, id, core.FormatTime(at), string(kind), session, payload)
+		require.NoError(t, err)
+	}
+	// broken: its first prompt-bearing payload is not JSON.
+	raw("01EV0000000000000000000011", day.Add(time.Hour), core.EventHookPrompt, "broken", `not json "prompt": at all`)
+	raw("01EV0000000000000000000012", day.Add(2*time.Hour), core.EventInjected, "broken", `{"prompt":"why is it slow","content":"x"}`)
+	// blank: two blank prompts at one instant, then one with words.
+	raw("01EV0000000000000000000013", day.Add(time.Hour), core.EventHookPrompt, "blank", `{"prompt":" \n\t "}`)
+	raw("01EV0000000000000000000014", day.Add(time.Hour), core.EventHookPrompt, "blank", `{"prompt":""}`)
+	raw("01EV0000000000000000000015", day.Add(3*time.Hour), core.EventHookPrompt, "blank", `{"prompt":"fix the watcher"}`)
+	// late: blank on the day, words only the day after.
+	raw("01EV0000000000000000000016", day.Add(time.Hour), core.EventHookPrompt, "late", `{"prompt":"   "}`)
+	raw("01EV0000000000000000000017", day.AddDate(0, 0, 1).Add(time.Hour), core.EventHookPrompt, "late", `{"prompt":"tomorrow"}`)
+	// only: nothing but a payload that is not JSON.
+	raw("01EV0000000000000000000018", day.Add(time.Hour), core.EventHookPrompt, "only", `{"prompt": "cut off`)
+
+	got, err := DiaryFirstPrompts(ctx, db, day, day.AddDate(0, 0, 1), []string{"broken", "blank", "late", "only", "absent"})
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"broken": "why is it slow", "blank": "fix the watcher"}, got)
+
+	var plan strings.Builder
+	args := []any{"a", "b", core.FormatTime(day), core.FormatTime(day.AddDate(0, 0, 1))}
+	for _, k := range diaryPromptKinds {
+		args = append(args, string(k))
+	}
+	rows, err := db.QueryContext(ctx, "EXPLAIN QUERY PLAN "+diaryFirstPromptsQuery(2), args...)
+	require.NoError(t, err)
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var id, parent, notused int
+		var detail string
+		require.NoError(t, rows.Scan(&id, &parent, &notused, &detail))
+		plan.WriteString(detail + "\n")
+	}
+	require.NoError(t, rows.Err())
+	require.Contains(t, plan.String(), "idx_events_session (session_id=? AND ts>? AND ts<?)", plan.String())
+	require.NotContains(t, plan.String(), "idx_events_kind", plan.String())
+}
+
 // A plan's composition notes, by slug, in NotesByTag's order.
 func TestDiaryPlanNotes(t *testing.T) {
 	db := openTestDB(t)

@@ -41,7 +41,7 @@ nothing, and their rows say so.
 | Apply a whole rail section | `POST /console/gardener/group/apply` | Applies the proposals one rail section shows (`group=`, and one `id=` for each proposal shown), one at a time, so each keeps its own event and its own Undo in the decision history. Offered only on a section whose every proposal can be undone and none of which asks to be read first (it touches a project fenced since it was raised, or moves a stamped memory into a less fenced project); a batch holding any other is refused before anything is applied. A consolidation or a split never takes part. |
 | Swap which memory a merge keeps | `POST /console/gardener/{id}/swap` | Rewrites a **pending** merge so it keeps the other memory (`keep=` names it, one of the two) and retires the one it kept. Nothing changes until the merge is applied. Records a `gardener.action` event. Merge proposals only. |
 | Undo a decision | `POST /console/gardener/{id}/undo` | Returns a resolved proposal to the queue from **Recently decided** or the **decision history**, inverting whatever its apply did, for the kinds whose apply can be inverted. |
-| Run a gardener pass now | `POST /console/gardener/run` | Runs the background proposal passes now instead of at the next pass, in the background. They only ever propose. Refused while a pass runs, and while `gardener.enabled` is false. |
+| Run a gardener pass now | `POST /console/gardener/run` | Runs the background proposal passes now instead of at the next pass, in the background. Like every pass they only propose, except that a new proposal of a kind you named under **Apply automatically** (`gardener.auto_apply`, off by default) is applied by the pass that raised it. Refused while a pass runs, and while `gardener.enabled` is false. |
 | Release a held write | `POST /console/held/{id}/release` | [Write screening](#held): lands a held agent write exactly as the agent sent it, and marks the memory owner-confirmed. Refused when its target changed after it was held. |
 | Discard a held write | `POST /console/held/{id}/discard` | Lands nothing and erases the held text; the row stays as the record. |
 | Clear a session's outside-text mark | `POST /console/held/sessions/{id}/clear` | The only way the mark comes off: the session's changes to binding rules land without a hold again. |
@@ -159,7 +159,7 @@ never text of the console's own: the data from before is saved as a backup
 first, so a restore is itself undone by restoring.
 
 This is deliberate, and it is the same principle as
-[the gardener's](/concepts/gardener/) propose-only contract. The store is written
+[the gardener's](/concepts/gardener/) propose-only default. The store is written
 by agents doing work, with provenance attached. A console that could quietly edit
 a memory would produce knowledge that came from nowhere, attributable to no
 session, explaining nothing.
@@ -1521,14 +1521,16 @@ The line carries no counts: a pass spans every project, a locked one included.
 The actions are **apply**, **dismiss**, **hide forever**, **retarget**
 (reproject cards only), and **apply plan**. Dismissing answers the evidence in
 front of you - the pattern comes back if it recurs; hiding answers the pattern
-itself. A proposal changes nothing until it is applied, by you here or by an
-agent with `gardener_apply`, and every decision records who made it. The newest
-ten land in **Recently decided** with an Undo; the **decision history**
-(`/console/gardener/decisions`) pages through all of them, newest first, with
-the outcome, who decided (you, an agent's session, the gardener settling a
-proposal whose memory had gone inactive, or unknown for a decision made before
-this was recorded), the note or task an apply produced, and Undo wherever it
-can be taken back. A hide is additionally listed under **Hidden forever**, where
+itself. A proposal changes nothing until it is applied - by you here, by an
+agent with `gardener_apply` while agents may apply proposals, or, for a kind
+you named under **Apply automatically**, by automatic apply - and every
+decision records who made it. The newest ten land in **Recently decided** with
+an Undo; the **decision history** (`/console/gardener/decisions`) pages
+through all of them, newest first, with the outcome, who decided (you; an
+agent, by its session's name when a session made the call; automatic apply;
+the gardener settling a proposal whose memory had gone inactive; or unknown
+for a decision made before this was recorded), the note or task an apply
+produced, and Undo wherever it can be taken back. A hide is additionally listed under **Hidden forever**, where
 **Unhide** lifts the block without returning the proposal to the queue. Above
 them sits a single ask-in-words box, and it only ever
 produces more proposals for this same queue. A request recognized as a project

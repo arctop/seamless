@@ -21,7 +21,7 @@ func TestReadingFrom_ReadsThroughTheViewAndSharesTheHub(t *testing.T) {
 	db, err := storetest.OpenFresh(t, dbPath)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
-	view, err := store.OpenView(dbPath, []string{"arctop-finance"})
+	view, err := store.OpenView(dbPath, []string{"example-legal"})
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = view.Close() })
 
@@ -31,9 +31,9 @@ func TestReadingFrom_ReadsThroughTheViewAndSharesTheHub(t *testing.T) {
 	defer unsubscribe()
 
 	ctx := context.Background()
-	hidden, err := main.Record(ctx, core.Event{Kind: core.EventToolCall, ProjectSlug: "arctop-finance"})
+	hidden, err := main.Record(ctx, core.Event{Kind: core.EventToolCall, ProjectSlug: "example-legal"})
 	require.NoError(t, err)
-	shown, err := reading.Record(ctx, core.Event{Kind: core.EventToolCall, ProjectSlug: "arctop-ops"})
+	shown, err := reading.Record(ctx, core.Event{Kind: core.EventToolCall, ProjectSlug: "example-ops"})
 	require.NoError(t, err)
 
 	got := []string{(<-ch).ID, (<-ch).ID}

@@ -830,7 +830,7 @@ const (
 )
 
 // sessionArtifact is the event half of the covered-ness test over the
-// sessions row a statement reads (SessionsWithArtifacts' kinds): it wrote a
+// sessions row a statement reads (GetSessionCoverage's kinds): it wrote a
 // memory or a note, or recorded a trial. Three binds: the kinds.
 const sessionArtifact = `EXISTS (SELECT 1 FROM events e WHERE e.session_id = sessions.id AND e.kind IN (?, ?, ?))`
 
@@ -968,12 +968,11 @@ func ClaimsHeldBy(ctx context.Context, db *sql.DB, sessionIDs []string) (map[str
 // SessionFirstPrompts returns each of the given sessions' first prompt with
 // words in it, of its whole life, keyed by session id; a session with none, or
 // one the handle does not hold, is absent. The prompt-bearing events are
-// DiaryFirstPrompts' (diaryPromptKinds, the prompt payload key). Where that
-// reads a day's prompts through the kind index and keeps its sessions' firsts,
-// this walks each session's own events from its start (idx_events_session,
-// +kind keeping the kind index out) and stops at its first prompt: a list of
-// sessions costs a few rows each, however many prompts the log holds. A
-// payload that is not JSON is read as holding no prompt.
+// DiaryFirstPrompts' (diaryPromptKinds, the prompt payload key, eventPrompt and
+// promptHasWords), and so is the walk: each session's own events from its
+// start (idx_events_session, +kind keeping the kind index out), stopping at
+// its first prompt with words, where DiaryFirstPrompts walks a day's. A list
+// of sessions costs a few rows each, however many prompts the log holds.
 func SessionFirstPrompts(ctx context.Context, db *sql.DB, sessionIDs []string) (map[string]string, error) {
 	ids := slices.DeleteFunc(slices.Clone(sessionIDs), func(id string) bool { return id == "" })
 	slices.Sort(ids)
@@ -982,13 +981,11 @@ func SessionFirstPrompts(ctx context.Context, db *sql.DB, sessionIDs []string) (
 	for i, k := range diaryPromptKinds {
 		kinds[i] = string(k)
 	}
-	const prompt = `json_extract(CASE WHEN json_valid(e.payload) THEN e.payload ELSE '{}' END, '$.prompt')`
 	out := map[string]string{}
 	for chunk := range slices.Chunk(ids, sessionClaimChunk) {
-		rows, err := db.QueryContext(ctx, `SELECT s.id, COALESCE((SELECT `+prompt+` FROM events e
+		rows, err := db.QueryContext(ctx, `SELECT s.id, COALESCE((SELECT `+eventPrompt+` FROM events e
 			 WHERE e.session_id = s.id AND +e.kind IN (`+placeholders(len(kinds))+`)
-			   AND instr(e.payload, '"prompt":') > 0
-			   AND trim(COALESCE(`+prompt+`, ''), ' ' || char(9, 10, 13)) <> ''
+			   AND instr(e.payload, '"prompt":') > 0 AND `+promptHasWords+`
 			 ORDER BY e.ts, e.id LIMIT 1), '')
 			FROM sessions s WHERE s.id IN (`+placeholders(len(chunk))+`)`,
 			append(slices.Clone(kinds), anySlice(chunk)...)...)
@@ -1002,7 +999,8 @@ func SessionFirstPrompts(ctx context.Context, db *sql.DB, sessionIDs []string) (
 	return out, nil
 }
 
-// scanSessionPrompts scans SessionFirstPrompts' rows into out, closing rows.
+// scanSessionPrompts scans SessionFirstPrompts' and DiaryFirstPrompts' rows into
+// out, each session's prompt when it has words, closing rows.
 func scanSessionPrompts(rows *sql.Rows, out map[string]string) error {
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {

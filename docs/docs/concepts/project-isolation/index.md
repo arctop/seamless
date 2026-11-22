@@ -106,7 +106,7 @@ to this project it files a **relocate** proposal in the
 [Gardener inbox](https://thereisnospoon.org/docs/concepts/gardener/) offering to move it behind the fence.
 
 Two things this deliberately is not. It does not move anything on its own -
-the gardener only ever proposes, and dismissing the proposal is how you say the
+the gardener only ever proposes a relocate, and dismissing it is how you say the
 memory really is general knowledge. And it does not run on a timer: once the
 fence is up, the write funnel refuses this project's sessions any write outside
 it, so the leak set is closed at the moment of tightening and never grows.

@@ -14,12 +14,14 @@ import (
 	"html"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/store"
@@ -258,6 +260,37 @@ func TestSnSessionsList_ProjectFilterLockedProjectIsAbsent(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &got))
 	require.Equal(t, []string{open.ID}, snRowIDs(got.Sessions))
 	require.Equal(t, []string{lockedSlug}, got.Locked)
+}
+
+// The capture calendar keeps the ?project= filter: a cell's click builds its
+// ?day URL from the page's own (charts.js open(), which sets day and nothing
+// else), and the day focus's clear link carries the project as every other
+// list link does.
+func TestFd_CalendarDayFocusKeepsTheProjectFilter(t *testing.T) {
+	db, mux := newConsole(t)
+	require.NoError(t, store.SetFeaturesConfig(context.Background(), db, config.Features{Momentum: true}))
+	snSession(t, db, "cc/ops", "example-ops", core.SessionCompleted, "ran it", time.Minute)
+	day := time.Now().Local().Format("2006-01-02")
+
+	code, page := snGet(t, mux, "/console/sessions?project=example-ops&day="+day)
+	require.Equal(t, http.StatusOK, code)
+	require.Contains(t, page, `class="mom-cal-grid"`, "the calendar renders")
+	require.Contains(t, page, `data-day="`+day+`"`)
+	require.Contains(t, page, `<a class="mom-cal-day-x" href="/console/sessions?status=&amp;sort=recent&amp;q=&amp;retained=&amp;project=example-ops"`,
+		"clearing the day keeps the project")
+
+	src, err := os.ReadFile("static/charts.js")
+	require.NoError(t, err)
+	js := string(src)
+	at := strings.Index(js, "function open(cell) {")
+	require.GreaterOrEqual(t, at, 0)
+	end := strings.Index(js[at:], "\n  }\n")
+	require.Greater(t, end, 0)
+	open := js[at : at+end]
+	require.Contains(t, open, "var url = new URL(location.href);", "the click starts from the page's own URL")
+	require.Equal(t, 2, strings.Count(open, "url.searchParams."), "and touches day alone")
+	require.Contains(t, open, "url.searchParams.delete('day')")
+	require.Contains(t, open, "url.searchParams.set('day', ")
 }
 
 func snRowIDs(rows []sessionRow) []string {
