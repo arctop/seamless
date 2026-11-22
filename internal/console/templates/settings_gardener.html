@@ -21,7 +21,7 @@
       {{if .ReadFailed}}<p class="updates-alert" role="alert">{{icon "triangle-alert"}}<span><strong>The stored choices could not be read.</strong> This shows the config file&rsquo;s values, and the Gardener&rsquo;s writes refuse an agent&rsquo;s process until they can be read again.</span></p>{{end}}
       {{if .Unreadable}}<p class="updates-note">{{icon "info"}}<span>The stored choice was unreadable, so the config file decides. Saving here replaces it.</span></p>{{end}}
 
-      <form method="post" action="/console/settings/gardener" class="gs-card gs-agents" data-autosave aria-labelledby="gs-agents-label">
+      <form method="post" action="/console/settings/gardener" class="gs-card gs-agents" data-autosave id="gs-agents-form" aria-labelledby="gs-agents-label">
         <input type="hidden" name="agents_set" value="1">
         <div class="set-row">
           <div class="set-row-label"><strong id="gs-agents-label">Agents may apply proposals</strong>{{hintFor "Agents may apply proposals" "Off, only you decide: gardener_apply refuses agents, and so do the Gardener screen’s writes from an agent’s process. Agents still see every proposal. It is not a wall: whoever holds the bearer key passes."}}
@@ -37,7 +37,7 @@
         {{if not .AgentsLocked}}<button class="btn small gs-save" type="submit">Save</button>{{end}}
       </form>
 
-      <form method="post" action="/console/settings/gardener" class="gs-card gs-auto" data-autosave aria-labelledby="gs-auto-title">
+      <form method="post" action="/console/settings/gardener" class="gs-card gs-auto" data-autosave id="gs-auto-form" aria-labelledby="gs-auto-title">
         <input type="hidden" name="auto_set" value="1">
         <div class="gs-card-head">
           <h3 id="gs-auto-title">Apply by themselves</h3>{{hintFor "Apply by themselves" "The pass that raises a proposal of a kind you turn on applies it, records it as applied automatically, and lists it with Undo in the decision history. It waits for you instead while lockdown is on, when write screening would hold it, and for a locked or fenced project."}}

@@ -455,6 +455,69 @@ func TestKtAutosave_FormsPostToRegisteredRoutes(t *testing.T) {
 	require.Zero(t, forms, "only data-autosave itself marks a form")
 }
 
+var ktIDRe = regexp.MustCompile(`\sid="([^"{}]+)"`)
+
+// ktAutosaveUnfindable lists the data-autosave forms in src that Undo and
+// Try again could not find after a morph draws them anew: shell.js's
+// liveForm finds a redrawn form by its id, or by an action no other autosave
+// form on the page posts to. Forms sharing an action each need an id of
+// their own.
+func ktAutosaveUnfindable(src string) (faults []string) {
+	byAction := map[string][]string{}
+	for _, tag := range ktFormTag.FindAllString(src, -1) {
+		if !ktAutosave.MatchString(tag) {
+			continue
+		}
+		action := ""
+		if m := ktActionRe.FindStringSubmatch(tag); m != nil {
+			action = m[1]
+		}
+		byAction[action] = append(byAction[action], tag)
+	}
+	for _, tags := range byAction {
+		if len(tags) < 2 {
+			continue
+		}
+		seen := map[string]bool{}
+		for _, tag := range tags {
+			m := ktIDRe.FindStringSubmatch(tag)
+			if m == nil || seen[m[1]] {
+				faults = append(faults, "shares its action with another autosave form and has no id of its own: "+tag)
+				continue
+			}
+			seen[m[1]] = true
+		}
+	}
+	return faults
+}
+
+// Undo and Try again replay a change onto the form shell.js finds again after
+// the save's morph. Two autosave forms posting to one route (Settings >
+// Gardener's agents and automatic-apply forms) are told apart only by their
+// ids; without them Undo found neither and did nothing (wave cux1122f's
+// visual pass).
+func TestKtAutosave_FormsSharingAnActionCarryIDs(t *testing.T) {
+	err := fs.WalkDir(templateFS, "templates", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		src, rerr := templateFS.ReadFile(path)
+		require.NoError(t, rerr)
+		require.Empty(t, ktAutosaveUnfindable(string(src)), "%s", path)
+		return nil
+	})
+	require.NoError(t, err)
+	require.Contains(t, string(shellJS), "if (form.id) return document.getElementById(form.id);",
+		"liveForm finds a redrawn form by its id")
+
+	// The controls.
+	two := `<form method="post" action="/console/x" data-autosave><form method="post" action="/console/x" data-autosave>`
+	require.Len(t, ktAutosaveUnfindable(two), 2, "two forms on one action, no ids")
+	require.Len(t, ktAutosaveUnfindable(`<form id="a" method="post" action="/console/x" data-autosave><form id="a" method="post" action="/console/x" data-autosave>`), 1, "one id twice")
+	require.Empty(t, ktAutosaveUnfindable(`<form id="a" method="post" action="/console/x" data-autosave><form id="b" method="post" action="/console/x" data-autosave>`))
+	require.Empty(t, ktAutosaveUnfindable(`<form method="post" action="/console/x" data-autosave><form method="post" action="/console/y" data-autosave>`), "distinct actions need no id")
+}
+
 // The autosave posts only through navigation.js: it submits the form, which
 // the shared submit listener takes (X-Seam-Follow, the follow GET), and never
 // fetches on its own. Only a switch, a radio or a select saves at once.
