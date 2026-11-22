@@ -1,7 +1,7 @@
 // Package demokit is the shared seeding core that fills a THROWAWAY Seamless
 // data dir with backdated fixtures. It backs the demoseed CLI (the console-fleet
-// history for landing-page screenshots, and the -scenes terminal-scene fixture)
-// and is importable so other tooling -- the agent-scenario benchmark's scenario
+// history for landing-page screenshots, the -review fixture layered on it, and
+// the -scenes terminal-scene fixture) and is importable so other tooling -- the agent-scenario benchmark's scenario
 // seeder -- can build fixture state in Go without shelling out or reimplementing
 // the time-backdating logic. Point it only at a fresh dir while no daemon holds
 // the DB (single-writer SQLite).
@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -101,6 +102,13 @@ func (s *Seeder) Close() error { return s.db.Close() }
 // branding surface: landing-page screenshots) and prints a summary. This is the
 // demoseed default mode.
 func (s *Seeder) SeedConsoleFleet() {
+	s.consoleFleet()
+	s.summary()
+}
+
+// consoleFleet seeds the console fleet history: SeedConsoleFleet without its
+// summary, and the base SeedReview lays its layer on.
+func (s *Seeder) consoleFleet() {
 	s.projects()
 	sessions := s.sessions()
 	mems := s.memories(sessions)
@@ -112,7 +120,6 @@ func (s *Seeder) SeedConsoleFleet() {
 	s.gardener(mems)
 	s.recentBurst(sessions, mems)
 	s.coverage(sessions, mems)
-	s.summary()
 }
 
 // ---------------------------------------------------------------------------
@@ -963,7 +970,11 @@ func (s *Seeder) recentBurst(sessions []sessRec, mems []memRec) {
 // summary
 // ---------------------------------------------------------------------------
 
-func (s *Seeder) summary() {
+func (s *Seeder) summary() { fmt.Print(s.fleetSummary()) }
+
+// fleetSummary is the console fleet's summary: its counts line and its
+// memory-kinds line, counted from the database as it stands.
+func (s *Seeder) fleetSummary() string {
 	q := func(query string) int {
 		var n int
 		if err := s.db.QueryRowContext(s.ctx, query).Scan(&n); err != nil {
@@ -971,7 +982,8 @@ func (s *Seeder) summary() {
 		}
 		return n
 	}
-	fmt.Printf("seeded: %d sessions, %d active memories (%d total), %d notes, %d tasks (%d open/wip), %d events, %d proposals\n",
+	var b strings.Builder
+	fmt.Fprintf(&b, "seeded: %d sessions, %d active memories (%d total), %d notes, %d tasks (%d open/wip), %d events, %d proposals\n",
 		q(`SELECT COUNT(*) FROM sessions`),
 		q(`SELECT COUNT(*) FROM memories_index WHERE invalid_at IS NULL`),
 		q(`SELECT COUNT(*) FROM memories_index`),
@@ -985,17 +997,18 @@ func (s *Seeder) summary() {
 		log.Fatalf("demoseed: kinds: %v", err)
 	}
 	defer func() { _ = kinds.Close() }()
-	fmt.Print("kinds:")
+	b.WriteString("kinds:")
 	for kinds.Next() {
 		var k string
 		var n int
 		if err := kinds.Scan(&k, &n); err != nil {
 			log.Fatalf("demoseed: kinds scan: %v", err)
 		}
-		fmt.Printf(" %s=%d", k, n)
+		fmt.Fprintf(&b, " %s=%d", k, n)
 	}
-	fmt.Println()
+	b.WriteString("\n")
 	if err := kinds.Err(); err != nil {
 		log.Fatalf("demoseed: kinds rows: %v", err)
 	}
+	return b.String()
 }

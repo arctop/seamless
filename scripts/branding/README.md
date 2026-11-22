@@ -369,6 +369,20 @@ capture it alone with `SEAMLESS_SHOT_PAGES=diary` in step 3. A run without
 the other's pages. The entry opens the seed's day of seven agents, the third
 weekday before the seeding day, so capture on the day you seeded.
 
+**The review fixture** is not a branding flow: no shot comes from it. `go run
+./cmd/demoseed -review -data /tmp/review-home/.seamless` seeds the same fleet
+as step 1, then adds the states the console must show and the fleet has none
+of (`internal/demokit/review.go`, plan:console-ux-pass): off-plan tasks in
+progress with a live claim, a lapsed claim and no claim; blocked and gated
+tasks; plans that are stalled, gated, missing their note or sharing a slug; 40
+quiet projects, with stars, a retired one and a confidential one; live sessions
+holding different claims; 264 sessions in one project; mishaps, a held write, a
+lock request and usage-ledger rows. It prints one line per state, with the page
+that shows it. Serve it as in step 2, adding `SEAMLESS_FEATURES_DIARY=1` and
+`SEAMLESS_FEATURES_REPO_LOCKS=1`. Its live claims hold for about two hours after
+seeding. Without `-review` the seed is exactly step 1's, so no shot ever shows
+the review states.
+
 ---
 
 ## Related
