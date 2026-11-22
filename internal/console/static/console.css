@@ -6505,18 +6505,10 @@ html:not(.js) .brief-preview { display: none; }
 .held-mark .held-mark .held-mark { text-underline-offset: 9px; }
 .held-preview:has(.held-mark) { line-height: 2; }
 
-/* Access requests, their passkey page and the unlock page: the facts as a
-   label/value grid, the warnings in the warning color, rows as rows. */
-.access-page h2, .unlock-page h2 { margin: 18px 0 0; font-family: var(--font-serif); font-weight: 560; font-size: 19px; }
-.access-facts {
-  display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 22px; max-width: 860px;
-  margin: 16px 0 0; font-size: var(--text-sm);
-}
-.access-facts dt { margin: 0; color: var(--muted); }
-.access-facts dd { margin: 0; min-width: 0; color: var(--ink); overflow-wrap: anywhere; }
-.access-facts code { font-family: var(--font-mono); font-size: var(--text-xs); }
-.access-facts q { font-style: italic; }
-.access-facts .faint { color: var(--faint); font-size: var(--text-xs); }
+/* The access-page shell the Devices and Locks pages share: section heads,
+   forms and rows as rows. (Access and a request have their own cards since
+   UX 41, the unlock and lock pages the door since UX 40.) */
+.access-page h2 { margin: 18px 0 0; font-family: var(--font-serif); font-weight: 560; font-size: 19px; }
 .access-form { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 18px 0 0; }
 .access-form fieldset {
   flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0; padding: 10px 14px 12px;
