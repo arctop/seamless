@@ -1,7 +1,8 @@
 // Package demokit is the shared seeding core that fills a THROWAWAY Seamless
 // data dir with backdated fixtures. It backs the demoseed CLI (the console-fleet
-// history for landing-page screenshots, the -review fixture layered on it, and
-// the -scenes terminal-scene fixture) and is importable so other tooling -- the agent-scenario benchmark's scenario
+// history for landing-page screenshots, the -review fixture layered on it and
+// its -scale volume (scale.go), and the -scenes terminal-scene fixture) and is
+// importable so other tooling -- the agent-scenario benchmark's scenario
 // seeder -- can build fixture state in Go without shelling out or reimplementing
 // the time-backdating logic. Point it only at a fresh dir while no daemon holds
 // the DB (single-writer SQLite).

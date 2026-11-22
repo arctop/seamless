@@ -29,9 +29,11 @@ cmd/seam/          headless CLI (agents + owner observability)  [P2/P5]
 cmd/docsgen/       docs site generator: docs-src/ -> docs/docs/ (see SITE.md)
 cmd/demoseed/      thin CLI over internal/demokit: the console-fleet seed
                    (branding screenshots), `-review` (that seed plus the
-                   states the console must show, plan:console-ux-pass),
-                   `-scenes` (the shared fixture) and `-diary` (the Diary's
-                   three weeks around now, plan:diary)
+                   states the console must show, plan:console-ux-pass;
+                   with `-scale`, at the owner's size: about 1,500
+                   memories, 700 notes and 55 projects), `-scenes` (the
+                   shared fixture) and `-diary` (the Diary's three weeks
+                   around now, plan:diary)
 cmd/seambench/     agent-scenario benchmark: `run` (headless scenario x condition
                    matrix) + `report` (grade, uplift, version deltas). Driven by
                    `make seambench`; see cmd/seambench/README.md
