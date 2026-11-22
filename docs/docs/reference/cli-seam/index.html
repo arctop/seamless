@@ -607,23 +607,30 @@ locally. Bare <code>seam plan</code> is not a command - it names its subcommands
 <h3 id="seam_plan_list">seam plan list</h3>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam plan list <span class="o">[</span>--project SLUG<span class="o">]</span> <span class="o">[</span>--window WINDOW<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span>
 </span></span></code></pre></div>
-<p>Lists captured plans with slug, status, title, project, iteration, agent count,
-task progress, and age. <code>--window</code> is <code>24h</code>, <code>7d</code>, <code>30d</code>, or <code>all</code> (default
-<code>all</code>) and is applied by the server; anything else is a parse error rather than a
-silent fall back to the server's <code>24h</code> default. <code>--project</code> filters the returned
+<p>Lists the plans the console's Plans board lists, in its order (Needs you, In
+progress, Stalled, Ready, then Shipped), with slug, status, title, project,
+iteration, agent count, task progress (closed steps, done and dropped alike),
+and age. <code>--window</code> is <code>24h</code>, <code>7d</code>, <code>30d</code>, or <code>all</code> (default <code>all</code>) and is
+applied by the server to the shipped plans alone: an active plan is listed in
+every window. Anything else is a parse error rather than a silent fall back to
+the server's <code>24h</code> default. <code>--project</code> filters the returned
 rows client-side, which is why it cannot be combined with <code>--json</code>
 (<a href="#json-output">see above</a>).
 Prints <code>(no captured plans)</code> when nothing matches.</p>
 <p><code>plan list</code> takes no positional: <code>seam plan list &lt;slug&gt;</code> is an error pointing at
 <code>seam plan show</code>, not a listing of every plan.</p>
 <h3 id="seam_plan_show">seam plan show</h3>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam plan show <span class="o">[</span>--json<span class="o">]</span> &lt;slug&gt;
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam plan show <span class="o">[</span>--project SLUG<span class="o">]</span> <span class="o">[</span>--json<span class="o">]</span> &lt;slug&gt;
 </span></span></code></pre></div>
 <p>Prints one plan: its status, project, title, source file and iteration, the
-notes attached to the composition (each marked <code>note</code> or <code>agent</code>), its tasks,
-and then the plan body.</p>
+notes attached to the composition (each marked <code>note</code> or <code>agent</code>), its tasks
+in dependency order, and then the plan body. A plan is keyed by its project
+and slug: <code>--project</code> names the project (<code>global</code> for the global scope), and a
+slug that is a plan in more than one project is refused without it, the
+error naming each project, never answered with one of them or both merged.
+<code>plan check</code> and <code>plan approve</code> take <code>--project</code> the same way.</p>
 <h3 id="seam_plan_check">seam plan check</h3>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam plan check <span class="o">[</span>--cwd DIR<span class="o">]</span> &lt;slug&gt;
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam plan check <span class="o">[</span>--cwd DIR<span class="o">]</span> <span class="o">[</span>--project SLUG<span class="o">]</span> &lt;slug&gt;
 </span></span></code></pre></div>
 <p>Staleness check against a repo's git history. <code>--cwd</code> defaults to the current
 directory and must be a git repo. For the plan body and each attached note, it
@@ -641,7 +648,7 @@ longer resolves (rebased away), or the note could not be read.</li>
 note wrote them absolute or repo-relative. <strong>The command exits non-zero when any
 note is stale</strong>, so it works as a gate in a script.</p>
 <h3 id="seam_plan_approve">seam plan approve</h3>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam plan approve &lt;slug&gt;
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seam plan approve <span class="o">[</span>--project SLUG<span class="o">]</span> &lt;slug&gt;
 </span></span></code></pre></div>
 <p>Escape hatch for when Claude Code skips the approval hook: flips the plan to
 approved and creates its tracking task, reporting the new task or noting that

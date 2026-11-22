@@ -321,7 +321,7 @@ nothing, and their rows say so.</p>
 <tr>
 <td>Approve a captured plan</td>
 <td><code>POST /console/plans/{slug}/approve</code></td>
-<td>The escape hatch for a Claude Code approval whose <code>PostToolUse</code> never fired: flips the <code>cc-plan</code> note to <code>plan-status:approved</code> and creates the tracking task, exactly as the hook would have. Only applies to a CC capture. Returns to the plan's page, or with <code>next=</code> a console page (the Overview's <strong>Approve</strong>) there, with a notice.</td>
+<td>The escape hatch for a Claude Code approval whose <code>PostToolUse</code> never fired: flips the <code>cc-plan</code> note to <code>plan-status:approved</code> and creates the tracking task, exactly as the hook would have. Only applies to a CC capture. <code>?project=&lt;slug&gt;</code> names the capture's project (every card's <strong>Approve</strong> sends it); without it the slug's only capture is approved, and a slug captured in two projects is refused (409) with both named. Returns to the plan's page, or with <code>next=</code> a console page (the Overview's <strong>Approve</strong>, a plan card's) there, with a notice.</td>
 </tr>
 <tr>
 <td>Star / unstar an entity</td>
@@ -2317,27 +2317,79 @@ gone or stuck.</li>
 <p><code>/console/locks/{id}</code> is the same page with that lock marked; with
 <code>?format=json</code>, the lock alone.</p>
 <h2 id="plans">Plans</h2>
-<p><code>/console/plans</code>, <code>/console/plans/{slug}</code></p>
-<p>The same library shape, with the rail grouped by phase (<strong>in progress</strong>,
-<strong>ready</strong>, <strong>done</strong>) and scoped by the window selector in the rail's tools
-(24h by default). Both kinds of plan share the rail:</p>
-<ul>
-<li><strong>captures</strong> - Claude Code plan-mode captures (<code>cc-plan</code> notes), with their
-lifecycle status, iteration count, and cached subagent runs.</li>
-<li><strong>composed</strong> - plain <a href="../../concepts/tasks-and-plans/">plans-as-composition</a> plans (a
-note tagged <code>plan:&lt;slug&gt;</code> plus its tasks), which have none of the capture-only
-fields.</li>
-</ul>
-<p>When the window hides plans, the rail ends with how many last moved before it
-and the wider windows to switch to.</p>
-<p>A capture owns its slug; composed plans fill only the rest. The reader shows
-the rendered plan body, the step tasks (each in its <a href="#tasks">status word</a>,
-with a copy button for its id), and the notes attached to the
-composition (supporting notes and agent caches). A plan whose steps exist with
-no note tagged <code>plan:&lt;slug&gt;</code> still opens: its page says it has no narrative
-note yet and lists the steps (a slug with steps in more than one project opens
-the most recently active one). <strong>Approve</strong> appears here, for
-captures only.</p>
+<p><code>/console/plans</code>, <code>/console/plans/{slug}?project=&lt;slug&gt;</code></p>
+<p>One board of plan cards for every project: the card a project's
+<a href="#projects">Plans &amp; tasks</a> tab shows, the same template, grouped by the state
+the plan is in, top to bottom:</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Group</th>
+<th>What puts a plan there</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Needs you</strong></td>
+<td>A captured plan you can approve (a draft, or presented and awaiting approval), a step waiting on people (an open gate, its own or one it depends on), or a step in progress that no live claim holds (a lapsed claim, or one started with none).</td>
+</tr>
+<tr>
+<td><strong>In progress</strong></td>
+<td>A live claim holds a step.</td>
+</tr>
+<tr>
+<td><strong>Stalled</strong></td>
+<td>Open steps, none in progress, and nothing moved for 7 days.</td>
+</tr>
+<tr>
+<td><strong>Ready</strong></td>
+<td>Everything else still open: open steps that moved in the last 7 days, or a plan with no steps yet.</td>
+</tr>
+<tr>
+<td><strong>Shipped</strong></td>
+<td>Every step closed, done or dropped (a dropped step closes a plan as a done one does), or a captured plan the gardener settled.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Needs you and In progress cards open with their steps; Stalled and Ready
+cards show their head line (&quot;3/5 done · 1 ready · 1 blocked · moved 9d ago&quot;)
+and load their steps when opened. On the board a step names its nearest
+blocker; the plan's page names the whole chain. Only <strong>Shipped</strong> is windowed
+(24h, 7d, 30d, All time; 24h by default) and folded, with how many shipped
+before the window and the wider windows: an active plan is never hidden by a
+window. Every card carries its project as a chip that opens that project's
+Plans &amp; tasks tab at the plan, and <strong>Approve</strong> on a card returns to the card on
+the board, its filters kept.</p>
+<p>The <strong>Project</strong> menu lists each project with a plan on the board and how many
+(starred projects first, then the global scope), and <code>?project=&lt;slug&gt;</code> narrows
+the board to one (<code>global</code> names the global scope); a project that is not
+there, or that is locked and not unlocked in this browser, is a 400. <code>?q=</code>
+keeps the plans whose title or slug holds the text, in any case
+(<code>plan:&lt;slug&gt;</code> works too). A title holding &quot; -- &quot; shows it as a dash that never
+splits across lines; the stored title is untouched.</p>
+<p>A plan is keyed by its project and slug: the same slug in two projects is two
+plans, with their own steps and notes. <code>/console/plans/{slug}?project=&lt;slug&gt;</code>
+is one plan's page: its card with every step row first, in dependency order (a
+step below the steps it depends on, otherwise in the order they were
+written), each with its holder, its blockers and the gates it waits on, then
+its narrative note, then the notes attached to it (supporting notes and agent
+caches). A plan whose steps exist with no note tagged <code>plan:&lt;slug&gt;</code> in its
+project still opens: its page says it has no narrative note yet. Every plan
+link the board, the project tab and the plan's page render names its project;
+a slug that is a plan in more than one project, opened without <code>?project=</code>,
+answers a chooser naming each project's plan (with <code>?format=json</code>, a 409 that
+names them), never one page holding both. A plan's source reads &quot;captured from
+plan mode&quot; (a Claude Code capture, with its plan file, iteration and agent
+runs) or &quot;from tasks&quot; (a composed plan). <strong>Approve</strong> appears for captures
+only.</p>
+<p>With <code>?format=json</code> the board is <code>rows</code> (each plan the board lists, in its
+order, with its <code>state</code> and <code>href</code>), the group counts (<code>needsYou</code>,
+<code>inProgress</code>, <code>stalled</code>, <code>ready</code>, <code>done</code> for the shipped plans the window
+lists, <code>shippedAll</code>), <code>total</code>, <code>projects</code> (the menu) and <code>filter</code>; a plan's
+page is its row, body, attached notes and <code>tasks</code> (its steps in the page's
+order, each with its word, holder and the gates it waits on).</p>
 <p>Each plan also carries a <strong>model tokens</strong> rollup - the cumulative transcript
 tokens of every session attributed to the plan (any session that moved a step,
 or captured the plan) - compact in the rail (<code>~483k tok</code>) and qualified in the

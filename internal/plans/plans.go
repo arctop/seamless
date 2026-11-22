@@ -161,6 +161,46 @@ func Composition(ctx context.Context, db *sql.DB, slug string) (primary core.Not
 	if err != nil {
 		return core.Note{}, nil, false, err
 	}
+	primary, others, ok = composition(tagged)
+	return primary, others, ok, nil
+}
+
+// CompositionIn is Composition for one plan: the notes tagged plan:<slug> in
+// project alone ("" is the global scope, never every project). A plan is
+// keyed by project and slug, so the same slug in two projects is two plans,
+// and neither one's notes are the other's (plan:console-ux-pass UX 07).
+func CompositionIn(ctx context.Context, db *sql.DB, project, slug string) (primary core.Note, others []core.Note, ok bool, err error) {
+	tagged, err := store.NotesByTag(ctx, db, project, SlugTag(slug))
+	if err != nil {
+		return core.Note{}, nil, false, err
+	}
+	// NotesByTag reads "" as every project; the global scope is its own.
+	tagged = slices.DeleteFunc(tagged, func(n core.Note) bool { return n.Project != project })
+	primary, others, ok = composition(tagged)
+	return primary, others, ok, nil
+}
+
+// CompositionProjects names the projects in which slug is a composition: a
+// note tagged plan:<slug> that is not an agent cache (an agent cache alone
+// has no primary). Each project once, sorted; "" is the global scope.
+func CompositionProjects(ctx context.Context, db *sql.DB, slug string) ([]string, error) {
+	tagged, err := store.NotesByTag(ctx, db, "", SlugTag(slug))
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, n := range tagged {
+		if !slices.Contains(n.Tags, TagAgent) && !slices.Contains(out, n.Project) {
+			out = append(out, n.Project)
+		}
+	}
+	slices.Sort(out)
+	return out, nil
+}
+
+// composition picks the primary of a set of notes tagged into one plan and
+// returns the rest (Composition's rule).
+func composition(tagged []core.Note) (primary core.Note, others []core.Note, ok bool) {
 	idx := -1
 	for i, n := range tagged {
 		if slices.Contains(n.Tags, TagPlan) {
@@ -179,7 +219,7 @@ func Composition(ctx context.Context, db *sql.DB, slug string) (primary core.Not
 		}
 	}
 	if idx == -1 {
-		return core.Note{}, nil, false, nil
+		return core.Note{}, nil, false
 	}
 	others = make([]core.Note, 0, len(tagged)-1)
 	for i, n := range tagged {
@@ -187,7 +227,7 @@ func Composition(ctx context.Context, db *sql.DB, slug string) (primary core.Not
 			others = append(others, n)
 		}
 	}
-	return tagged[idx], others, true, nil
+	return tagged[idx], others, true
 }
 
 // EnsureTask creates the "Implement plan" tracking task for an approved plan

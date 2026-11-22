@@ -140,15 +140,41 @@ func runPlanList(_ context.Context, e *env, o *planListOpts, _ []string) error {
 // lease on is refused with the lock named -- the console answers the lock
 // refusal the tool-backed commands print (answerLocked) -- never "not found";
 // plan check and plan approve read the same route family and say the same.
+//
+// A plan is keyed by its project and slug: --project names which project's
+// plan:<slug> to read, and a slug that is a plan in two projects, asked for
+// without it, is refused by the console with both named (never one answer
+// holding both plans).
 var planShowCmd = spec("plan show", groupPlans, "one plan: body, attached notes, tasks",
 	exactly(1, "slug"), bindPlanShow, runPlanShow)
 
 type planShowOpts struct {
-	asJSON *bool
+	project *string
+	asJSON  *bool
 }
 
 func bindPlanShow(fs *flag.FlagSet) *planShowOpts {
-	return &planShowOpts{asJSON: jsonFlag(fs, jsonUsage)}
+	return &planShowOpts{project: planProjectFlag(fs), asJSON: jsonFlag(fs, jsonUsage)}
+}
+
+// planProjectFlag is plan show/check/approve's --project: the project whose
+// plan the slug names (global for the global scope), for a slug that is a
+// plan in more than one project.
+func planProjectFlag(fs *flag.FlagSet) *string {
+	return fs.String("project", "", "the plan's project `SLUG` (global for the global scope), when the slug is a plan in more than one")
+}
+
+// planPath is a plan route of the console's, with its project named when
+// one was given.
+func planPath(slug, suffix, project string, query ...string) string {
+	path := "/console/plans/" + url.PathEscape(slug) + suffix
+	if project != "" {
+		query = append([]string{"project=" + url.QueryEscape(project)}, query...)
+	}
+	if len(query) > 0 {
+		path += "?" + strings.Join(query, "&")
+	}
+	return path
 }
 
 func runPlanShow(_ context.Context, e *env, o *planShowOpts, pos []string) error {
@@ -156,7 +182,7 @@ func runPlanShow(_ context.Context, e *env, o *planShowOpts, pos []string) error
 	if err != nil {
 		return err
 	}
-	path := "/console/plans/" + url.PathEscape(pos[0]) + "?format=json"
+	path := planPath(pos[0], "", *o.project, "format=json")
 	if *o.asJSON {
 		return printConsoleJSON(e, cfg, path)
 	}
@@ -193,9 +219,17 @@ func runPlanShow(_ context.Context, e *env, o *planShowOpts, pos []string) error
 
 var planApproveCmd = spec("plan approve", groupPlans,
 	"escape hatch: flip to approved + create the task",
-	exactly(1, "slug"), bindNoOpts, runPlanApprove)
+	exactly(1, "slug"), bindPlanApprove, runPlanApprove)
 
-func runPlanApprove(_ context.Context, e *env, _ *noOpts, pos []string) error {
+type planApproveOpts struct {
+	project *string
+}
+
+func bindPlanApprove(fs *flag.FlagSet) *planApproveOpts {
+	return &planApproveOpts{project: planProjectFlag(fs)}
+}
+
+func runPlanApprove(_ context.Context, e *env, o *planApproveOpts, pos []string) error {
 	cfg, err := e.loadConfig()
 	if err != nil {
 		return err
@@ -206,7 +240,7 @@ func runPlanApprove(_ context.Context, e *env, _ *noOpts, pos []string) error {
 		TaskCreated bool   `json:"taskCreated"`
 		TaskID      string `json:"taskId"`
 	}
-	if err := consolePOST(cfg, "/console/plans/"+url.PathEscape(pos[0])+"/approve?format=json", &out); err != nil {
+	if err := consolePOST(cfg, planPath(pos[0], "/approve", *o.project, "format=json"), &out); err != nil {
 		return err
 	}
 	fmt.Fprintf(e.stdout, "plan %s -> %s\n", out.Slug, out.Status)
@@ -225,12 +259,14 @@ var planCheckCmd = spec("plan check", groupPlans,
 	exactly(1, "slug"), bindPlanCheck, runPlanCheck)
 
 type planCheckOpts struct {
-	cwd *string
+	cwd     *string
+	project *string
 }
 
 func bindPlanCheck(fs *flag.FlagSet) *planCheckOpts {
 	return &planCheckOpts{
-		cwd: fs.String("cwd", "", "repo `DIR` to check against (default: current)"),
+		cwd:     fs.String("cwd", "", "repo `DIR` to check against (default: current)"),
+		project: planProjectFlag(fs),
 	}
 }
 
@@ -253,7 +289,7 @@ func runPlanCheck(_ context.Context, e *env, o *planCheckOpts, pos []string) err
 		return err
 	}
 	var d cliPlanDetail
-	if err := consoleJSON(cfg, "/console/plans/"+url.PathEscape(slug)+"?format=json", &d); err != nil {
+	if err := consoleJSON(cfg, planPath(slug, "", *o.project, "format=json"), &d); err != nil {
 		return err
 	}
 

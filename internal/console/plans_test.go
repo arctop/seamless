@@ -289,65 +289,70 @@ func addPlanTaskAt(t *testing.T, db *sql.DB, slug string, status core.TaskStatus
 	}))
 }
 
-// TestPlans_WindowUsesCompositionActivity pins the recency window to the whole
-// composition rather than to whichever note represents it. A plan whose
-// narrative is old but whose supporting note or step task moved an hour ago is
-// active, and keying the window to the primary's own stamp hides exactly the
-// plans the window exists to surface.
+// TestPlans_WindowUsesCompositionActivity pins the Shipped window to the
+// whole composition rather than to whichever note or step represents it: a
+// shipped plan whose last step closed days ago but whose supporting note
+// moved an hour ago is inside 24h. An active plan is never windowed, however
+// long nothing moved.
 func TestPlans_WindowUsesCompositionActivity(t *testing.T) {
 	db, mgr, mux := newConsoleWithFiles(t)
 	old := time.Now().UTC().AddDate(0, 0, -3)
 	recent := time.Now().UTC().Add(-time.Hour)
 
-	// Narrative 3 days old, supporting note an hour old. The narrative is the
-	// primary (earliest created), so its stamp alone would exclude the plan.
+	// Shipped 3 days ago, a supporting note an hour ago: inside the window.
 	seedPlanNoteAt(t, mgr, "narrative-live-plan", "live-plan", old)
 	seedPlanNoteAt(t, mgr, "support-live-plan", "live-plan", recent)
-
-	// Narrative 3 days old, but a step moved an hour ago: no note is recent at all.
-	seedPlanNoteAt(t, mgr, "narrative-task-plan", "task-plan", old)
-	addPlanTaskAt(t, db, "task-plan", core.TaskInProgress, recent)
-
-	// Nothing has moved in 3 days -- genuinely outside the window.
+	addPlanTaskAt(t, db, "live-plan", core.TaskDone, old)
+	// Shipped 3 days ago, nothing since: outside.
 	seedPlanNoteAt(t, mgr, "narrative-dormant-plan", "dormant-plan", old)
+	addPlanTaskAt(t, db, "dormant-plan", core.TaskDone, old)
+	// Active, untouched for 3 days: on the board whatever the window.
+	seedPlanNoteAt(t, mgr, "narrative-task-plan", "task-plan", old)
+	addPlanTaskAt(t, db, "task-plan", core.TaskOpen, old)
 
 	var list plansData
 	getJSON(t, mux, "/console/plans?format=json&w=24h", &list)
-
-	slugs := map[string]bool{}
+	slugs := map[string]string{}
 	for _, row := range list.Rows {
-		slugs[row.Slug] = true
+		slugs[row.Slug] = row.State
 	}
-	require.True(t, slugs["live-plan"], "a recent supporting note keeps the plan in the 24h window")
-	require.True(t, slugs["task-plan"], "a recently moved step keeps the plan in the 24h window")
-	require.False(t, slugs["dormant-plan"], "a dormant plan still falls outside the window")
+	require.Equal(t, planStateShipped, slugs["live-plan"], "a recent supporting note keeps the shipped plan in the 24h window")
+	require.NotContains(t, slugs, "dormant-plan", "a plan shipped before the window is folded out of it")
+	require.Equal(t, planStateReady, slugs["task-plan"], "an active plan is never windowed")
 	require.Equal(t, 2, list.Count)
-	require.Equal(t, 3, list.Total, "Total is all-time and must never be windowed")
+	require.Equal(t, 3, list.Total, "Total is all-time and never windowed")
+	require.Equal(t, 1, list.Done)
+	require.Equal(t, 2, list.ShippedAll)
 }
 
-// TestPlans_TotalIsUnwindowed pins the headline count the sidebar badge must
-// agree with: Total spans all time whatever window the list is scoped to.
+// TestPlans_TotalIsUnwindowed: the window narrows the shipped plans alone;
+// Total, and every active plan, are the same in any window.
 func TestPlans_TotalIsUnwindowed(t *testing.T) {
-	_, mgr, mux := newConsoleWithFiles(t)
+	db, mgr, mux := newConsoleWithFiles(t)
 	seedPlanNoteAt(t, mgr, "narrative-fresh", "fresh-plan", time.Now().UTC())
 	seedPlanNoteAt(t, mgr, "narrative-stale", "stale-plan", time.Now().UTC().AddDate(0, 0, -10))
+	addPlanTaskAt(t, db, "stale-plan", core.TaskDone, time.Now().UTC().AddDate(0, 0, -10))
 
 	var win24 plansData
 	getJSON(t, mux, "/console/plans?format=json&w=24h", &win24)
-	require.Equal(t, 1, win24.Count, "only the fresh plan is inside 24h")
-	require.Equal(t, 2, win24.Total, "the badge counts both")
+	require.Equal(t, 1, win24.Count, "only the active plan is listed inside 24h")
+	require.Equal(t, 2, win24.Total)
 
 	var all plansData
 	getJSON(t, mux, "/console/plans?format=json&w=all", &all)
 	require.Equal(t, 2, all.Count)
 	require.Equal(t, 2, all.Total)
+
+	rr := getPeek(t, mux, "/console/plans?w=bogus&format=json")
+	require.Equal(t, http.StatusBadRequest, rr.Code, "a window outside the four is a 400, never a silent 24h")
+	require.Contains(t, rr.Body.String(), "valid values are 24h, 7d, 30d, all")
 }
 
 func TestPlans_PhaseGrouping(t *testing.T) {
 	db, mgr, mux := newConsoleWithFiles(t)
 
-	// A plan with an in-progress step, one with only an open step, one whose
-	// single step is done, and one with no steps at all.
+	// A plan with an in-progress step (claimless: it needs you), one with only
+	// an open step, one whose single step is done, and one with no steps.
 	seedPlanNarrative(t, mgr, "wip-plan")
 	addPlanTask(t, db, "wip-plan", core.TaskInProgress)
 	seedPlanNarrative(t, mgr, "ready-plan")
@@ -359,18 +364,21 @@ func TestPlans_PhaseGrouping(t *testing.T) {
 	var list plansData
 	getJSON(t, mux, "/console/plans?format=json&w=all", &list)
 	require.Equal(t, 4, list.Count)
-	require.Equal(t, 1, list.InProgress)
+	require.Equal(t, 1, list.NeedsYou, "a step marked in progress with no claim needs you")
 	require.Equal(t, 2, list.Ready)
 	require.Equal(t, 1, list.Done)
+	require.Equal(t, 3, list.Active)
 
-	phase := map[string]string{}
+	phase, state := map[string]string{}, map[string]string{}
 	for _, row := range list.Rows {
-		phase[row.Slug] = row.Phase
+		phase[row.Slug], state[row.Slug] = row.Phase, row.State
 	}
-	require.Equal(t, planPhaseInProgress, phase["wip-plan"])
+	require.Equal(t, planPhaseInProgress, phase["wip-plan"], "the JSON's phase keeps its meaning")
 	require.Equal(t, planPhaseReady, phase["ready-plan"])
 	require.Equal(t, planPhaseDone, phase["done-plan"])
 	require.Equal(t, planPhaseReady, phase["fresh-plan"])
+	require.Equal(t, map[string]string{"wip-plan": planStateNeeds, "ready-plan": planStateReady,
+		"done-plan": planStateShipped, "fresh-plan": planStateReady}, state)
 }
 
 func TestPlanPhase(t *testing.T) {
@@ -383,6 +391,7 @@ func TestPlanPhase(t *testing.T) {
 		{"abandoned capture is done", planRow{Status: plans.StatusAbandoned}, planPhaseDone},
 		{"shipped capture is done", planRow{Status: plans.StatusShipped}, planPhaseDone},
 		{"all steps closed is done", planRow{TasksDone: 2, TasksTotal: 2}, planPhaseDone},
+		{"a dropped step is closed", planRow{TasksDone: 2, TasksDropped: 1, TasksTotal: 2}, planPhaseDone},
 		{"open steps remain is ready", planRow{TasksOpen: 1, TasksTotal: 2, TasksDone: 1}, planPhaseReady},
 		{"no steps is ready", planRow{}, planPhaseReady},
 		{"presented capture with no steps is ready", planRow{Status: plans.StatusPresented}, planPhaseReady},
@@ -413,10 +422,10 @@ func TestPlans_HTMLShellRenders(t *testing.T) {
 	require.Contains(t, rr.Body.String(), "agent-cache")
 }
 
-// TestPlanPeek_FragmentAndLibraryPage covers the two HTML shapes of a plan
-// detail: the ?peek=1 fragment kept for detail-pane surfaces (search results),
-// and the default page, which is the plans library with the plan open in the
-// reader.
+// TestPlanPeek_FragmentAndLibraryPage covers the HTML shapes of a plan
+// detail: the ?peek=1 fragment kept for detail-pane surfaces (search
+// results), the ?reader=1 fragment, and the default page, the plan's own
+// page with its project named.
 func TestPlanPeek_FragmentAndLibraryPage(t *testing.T) {
 	_, mgr, mux := newConsoleWithFiles(t)
 	seedPlanComposition(t, mgr)
@@ -430,73 +439,73 @@ func TestPlanPeek_FragmentAndLibraryPage(t *testing.T) {
 	require.Contains(t, fb, "Do the thing.")   // rendered body
 	require.Contains(t, fb, "agent-cache")     // attached agent note ref
 	require.Contains(t, fb, "/console/notes/") // note refs are peek links
+	require.Contains(t, fb, `action="/console/plans/my-plan/approve?project=demo"`, "its Approve names the project")
 
-	// Default (no peek) renders the library page with the plan in the reader.
-	full := getPeek(t, mux, "/console/plans/my-plan")
+	// Default (no peek): the plan's page, not a library reader.
+	full := getPeek(t, mux, "/console/plans/my-plan?project=demo")
 	require.Equal(t, http.StatusOK, full.Code)
-	require.Contains(t, full.Body.String(), "<html")
-	require.Contains(t, full.Body.String(), `id="lib-reader"`)
-	require.Contains(t, full.Body.String(), "Do the thing.")
-	require.NotContains(t, full.Body.String(), "data-auto-url=", "an explicit selection is not client-pinned")
+	body := full.Body.String()
+	require.Contains(t, body, "<html")
+	require.Contains(t, body, `class="lib-page" data-library="plans"`)
+	require.Contains(t, body, `data-plan-scope data-return="/console/plans/my-plan?project=demo"`)
+	require.Contains(t, body, "Do the thing.")
+	require.NotContains(t, body, `id="lib-reader"`)
+	require.NotContains(t, body, "data-auto-url=")
 
-	// The rail items are plain links; the window filter rides along on them.
-	list := getPeek(t, mux, "/console/plans?w=all")
-	require.Equal(t, http.StatusOK, list.Code)
-	require.Contains(t, list.Body.String(), `href="/console/plans/my-plan?w=all"`)
-
-	// Unknown slug still 404s through the styled path.
-	require.Equal(t, http.StatusNotFound, getPeek(t, mux, "/console/plans/no-such-plan?peek=1").Code)
-}
-
-// TestPlansLibrary_AutoSelectPrefersInProgress pins the reader's default
-// selection on the list URL to the first rail item: the in-progress group
-// leads, so its newest plan wins over a ready one.
-func TestPlansLibrary_AutoSelectPrefersInProgress(t *testing.T) {
-	db, mgr, mux := newConsoleWithFiles(t)
-	seedPlanNarrative(t, mgr, "ready-plan")
-	addPlanTask(t, db, "ready-plan", core.TaskOpen)
-	seedPlanNarrative(t, mgr, "wip-plan")
-	addPlanTask(t, db, "wip-plan", core.TaskInProgress)
-
-	html := getPeek(t, mux, "/console/plans?w=all")
-	require.Equal(t, http.StatusOK, html.Code)
-	body := html.Body.String()
-	require.Contains(t, body, `id="lib-reader"`)
-	require.Contains(t, body, `data-auto-url="/console/plans/wip-plan?w=all"`)
-	require.Contains(t, body, `aria-current="page"`)
-
-	// ?reader=1 returns just the reader fragment for the in-place swap.
-	frag := getPeek(t, mux, "/console/plans/ready-plan?reader=1")
+	frag = getPeek(t, mux, "/console/plans/my-plan?project=demo&reader=1")
 	require.Equal(t, http.StatusOK, frag.Code)
 	require.NotContains(t, frag.Body.String(), "<html")
 	require.Contains(t, frag.Body.String(), "reader-sheet")
-	require.Contains(t, frag.Body.String(), "plan:ready-plan")
+	require.Contains(t, frag.Body.String(), "plan:my-plan")
+
+	// The board's card links to the plan's page with its project named.
+	list := getPeek(t, mux, "/console/plans?w=all")
+	require.Equal(t, http.StatusOK, list.Code)
+	require.Contains(t, list.Body.String(), `href="/console/plans/my-plan?project=demo"`)
+
+	// Unknown slug still 404s through the styled path.
+	require.Equal(t, http.StatusNotFound, getPeek(t, mux, "/console/plans/no-such-plan?peek=1").Code)
+	require.Equal(t, http.StatusNotFound, getPeek(t, mux, "/console/plans/my-plan?project=elsewhere").Code,
+		"a plan is looked up in the project named, never in another")
 }
 
-// TestPlans_HTMLGroupsInOrder renders the list HTML with a plan in each phase
-// and asserts the three rail groups appear, newest-first order aside, in the
-// fixed order: in progress, then ready, then done.
+// TestPlans_HTMLGroupsInOrder renders the board with a plan in each state
+// and asserts the groups appear in the plan note's order: Needs you, In
+// progress, Stalled, Ready, then Shipped.
 func TestPlans_HTMLGroupsInOrder(t *testing.T) {
 	db, mgr, mux := newConsoleWithFiles(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	seedPlanComposition(t, mgr) // presented: needs you
 	seedPlanNarrative(t, mgr, "wip-plan")
-	addPlanTask(t, db, "wip-plan", core.TaskInProgress)
+	wip := mustID(t)
+	require.NoError(t, store.CreateTask(ctx, db, core.Task{ID: wip, ProjectSlug: "demo", Title: "held step",
+		Status: core.TaskOpen, PlanSlug: "wip-plan", CreatedAt: now, UpdatedAt: now}))
+	_, err := store.ClaimTask(ctx, db, wip, "01SESSIONHOLDER00000000000", 15*time.Minute, now)
+	require.NoError(t, err)
+	seedPlanNarrative(t, mgr, "quiet-plan")
+	addPlanTaskAt(t, db, "quiet-plan", core.TaskOpen, now.AddDate(0, 0, -9))
 	seedPlanNarrative(t, mgr, "ready-plan")
 	addPlanTask(t, db, "ready-plan", core.TaskOpen)
 	seedPlanNarrative(t, mgr, "done-plan")
 	addPlanTask(t, db, "done-plan", core.TaskDone)
 
-	req := httptest.NewRequest(http.MethodGet, "/console/plans?w=all", nil)
-	req.Header.Set("Authorization", "Bearer "+testKey)
-	rr := do(mux, req)
-	require.Equal(t, http.StatusOK, rr.Code)
-	body := rr.Body.String()
-
-	inProgress := strings.Index(body, `id="rg-inprogress"`)
-	ready := strings.Index(body, `id="rg-ready"`)
-	done := strings.Index(body, `id="rg-done"`)
-	require.Greater(t, inProgress, -1, "in-progress group present")
-	require.Greater(t, ready, inProgress, "ready group after in progress")
-	require.Greater(t, done, ready, "done group after ready")
+	body := getHTMLBody(t, mux, "/console/plans")
+	at := func(id string) int {
+		t.Helper()
+		i := strings.Index(body, `id="`+id+`"`)
+		require.GreaterOrEqual(t, i, 0, "group %s present", id)
+		return i
+	}
+	order := []int{at("pg-needs"), at("pg-inprogress"), at("pg-stalled"), at("pg-ready"), at("pg-shipped")}
+	for i := 1; i < len(order); i++ {
+		require.Less(t, order[i-1], order[i], "the groups read in the plan note's order")
+	}
+	for slug, group := range map[string]string{"my-plan": "pg-needs", "wip-plan": "pg-inprogress",
+		"quiet-plan": "pg-stalled", "ready-plan": "pg-ready"} {
+		card := strings.Index(body, `id="plan-demo:`+slug+`"`)
+		require.Greater(t, card, at(group), "%s is in %s", slug, group)
+	}
 }
 
 // seedPlanTransition inserts a task.transition event attributing a session to
@@ -556,14 +565,12 @@ func TestPlans_TokenRollupSurfaces(t *testing.T) {
 	require.Equal(t, 483000, d.Row.Tokens)
 	require.Equal(t, 2, d.Row.TokenSessions)
 
-	req := httptest.NewRequest(http.MethodGet, "/console/plans?w=all", nil)
-	req.Header.Set("Authorization", "Bearer "+testKey)
-	rr := do(mux, req)
-	require.Equal(t, http.StatusOK, rr.Code)
-	body := rr.Body.String()
-	require.Contains(t, body, "~483k tok", "rail meta carries the compact total")
-	require.Contains(t, body, "~483k model tokens", "reader fact carries the qualified total")
-	require.Contains(t, body, "(1 unreported)", "the live session is disclosed, not silently dropped")
+	board := getHTMLBody(t, mux, "/console/plans?w=all")
+	require.Contains(t, board, "~483k tok (1 unreported)</span>",
+		"the card carries the compact total, the live session disclosed, not silently dropped")
+	page := getHTMLBody(t, mux, "/console/plans/my-plan?project=demo")
+	require.Contains(t, page, "~483k model tokens", "the page's fact carries the qualified total")
+	require.Contains(t, page, "(1 unreported)", "the live session is disclosed, not silently dropped")
 
 	frag := getPeek(t, mux, "/console/plans/my-plan?peek=1")
 	require.Equal(t, http.StatusOK, frag.Code)
@@ -583,46 +590,57 @@ func TestPlans_NoTokenAttributionRendersNothing(t *testing.T) {
 	require.Zero(t, list.Rows[0].Tokens)
 	require.Zero(t, list.Rows[0].TokenSessions)
 
-	req := httptest.NewRequest(http.MethodGet, "/console/plans?w=all", nil)
-	req.Header.Set("Authorization", "Bearer "+testKey)
-	rr := do(mux, req)
-	require.NotContains(t, rr.Body.String(), "model tokens")
-	require.NotContains(t, rr.Body.String(), " tok<")
+	for _, path := range []string{"/console/plans?w=all", "/console/plans/my-plan?project=demo"} {
+		body := getHTMLBody(t, mux, path)
+		require.NotContains(t, body, "model tokens", path)
+		require.NotContains(t, body, " tok<", path)
+		require.NotContains(t, body, "plan-tok", path)
+	}
 }
 
-// TestRwPlansReader_StepsWordAndCopy covers the Plans screen's reader and its
-// peek: each step reads its word and copies its whole id, and the plan copies
-// as plan:<slug>, the form an agent is handed.
+// TestRwPlansReader_StepsWordAndCopy covers the plan's page and its peek:
+// each step reads its word and copies its whole id, and the plan copies as
+// plan:<slug>, the form an agent is handed. On the page each step is the
+// shared step row.
 func TestRwPlansReader_StepsWordAndCopy(t *testing.T) {
 	db, mgr, mux := newConsoleWithFiles(t)
 	seedComposedPlan(t, mgr, "rw-plan")
 	f := rwSeedFleet(t, db, "rw-plan")
-	for _, path := range []string{"/console/plans/rw-plan", "/console/plans/rw-plan?peek=1"} {
-		body := getHTMLBody(t, mux, path)
+	words := map[string]string{f.ready: "ready", f.blocked: "blocked", f.gated: "waiting",
+		f.held: "in-progress", f.lapsed: "claim-lapsed", f.done: "done"}
+	page := getHTMLBody(t, mux, "/console/plans/rw-plan?project=demo")
+	peek := getHTMLBody(t, mux, "/console/plans/rw-plan?peek=1")
+	for path, body := range map[string]string{"page": page, "peek": peek} {
 		require.Contains(t, body, `data-copy="plan:rw-plan"`, path)
 		require.NotContains(t, body, `data-copy="rw-plan"`, "%s: the plan copies with its plan: prefix", path)
-		for id, word := range map[string]string{f.ready: "ready", f.blocked: "blocked", f.gated: "waiting",
-			f.held: "in-progress", f.lapsed: "claim-lapsed", f.done: "done"} {
-			require.Contains(t, body, `data-copy="`+id+`"`, "%s: step %s copies its id", path, id)
-			at := strings.Index(body, `href="/console/tasks/`+id+`"`)
-			require.GreaterOrEqual(t, at, 0)
-			near := body[at:]
-			end := strings.Index(near, "</li>")
-			if tr := strings.Index(near, "</tr>"); end < 0 || (tr >= 0 && tr < end) {
-				end = tr
-			}
-			near = near[:end]
-			require.Contains(t, near, `data-copy="`+id+`"`)
-			require.Contains(t, near, `data-word="`+word+`"`, "%s: step %s reads %s", path, id, word)
-		}
 		require.NotContains(t, body, ">in_progress<", path)
 	}
+	for id, word := range words {
+		row := page[strings.Index(page, `id="`+id+`">`):]
+		row = row[:strings.Index(row, "</summary>")]
+		require.Contains(t, row, `data-copy="`+id+`"`, "page: step %s copies its id", id)
+		require.Contains(t, row, `data-word="`+word+`"`, "page: step %s reads %s", id, word)
+
+		at := strings.Index(peek, `href="/console/tasks/`+id+`"`)
+		require.GreaterOrEqual(t, at, 0)
+		near := peek[at:]
+		near = near[:strings.Index(near, "</tr>")]
+		require.Contains(t, near, `data-copy="`+id+`"`)
+		require.Contains(t, near, `data-word="`+word+`"`, "peek: step %s reads %s", id, word)
+	}
+	held := peek[strings.Index(peek, `href="/console/tasks/`+f.held+`"`):]
+	require.Contains(t, held[:strings.Index(held, "</tr>")], "held by "+f.sessName, "the peek names the holder")
+	gated := peek[strings.Index(peek, `href="/console/tasks/`+f.gated+`"`):]
+	require.Contains(t, gated[:strings.Index(gated, "</tr>")], "waits on owner: sign off", "and the gate a step waits on")
+
 	var d planDetailData
 	getJSON(t, mux, "/console/plans/rw-plan?format=json", &d)
-	words := map[string]string{}
+	byID := map[string]planTaskRef{}
 	for _, st := range d.Tasks {
-		words[st.ID] = st.Word.Key
+		byID[st.ID] = st
 	}
-	require.Equal(t, wordLapsed, words[f.lapsed])
-	require.Equal(t, wordWaiting, words[f.gate])
+	require.Equal(t, wordLapsed, byID[f.lapsed].Word.Key)
+	require.Equal(t, wordWaiting, byID[f.gate].Word.Key)
+	require.Equal(t, f.sessName, byID[f.held].Holder)
+	require.Equal(t, []planWaitRef{{Who: "owner", What: "sign off"}}, byID[f.gated].Waits)
 }

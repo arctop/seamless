@@ -133,3 +133,42 @@ func TestFinishLinePlans(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, empty)
 }
+
+// A slug's steps name their projects once each, and the dropped steps are
+// counted per plan, keyed by project and slug: one slug in two projects is
+// two plans (plan:console-ux-pass UX 07).
+func TestPvbPlanStepProjectsAndDroppedCounts(t *testing.T) {
+	db := newTaskDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 11, 21, 9, 0, 0, 0, time.UTC)
+	seed := func(project, plan string, status core.TaskStatus) {
+		t.Helper()
+		id, err := core.NewID()
+		require.NoError(t, err)
+		require.NoError(t, CreateTask(ctx, db, core.Task{
+			ID: id, ProjectSlug: project, Title: "step", Status: status,
+			PlanSlug: plan, CreatedAt: now, UpdatedAt: now,
+		}))
+	}
+	seed("example-web", "shared", core.TaskOpen)
+	seed("example-ops", "shared", core.TaskDropped)
+	seed("example-ops", "shared", core.TaskDone)
+	seed("example-ops", "shared", core.TaskDropped)
+	seed("", "shared", core.TaskOpen)
+	seed("example-ops", "other", core.TaskDone)
+	seed("example-ops", "", core.TaskDropped) // off-plan: no plan's drop
+
+	projects, err := PlanStepProjects(ctx, db, "shared")
+	require.NoError(t, err)
+	require.Equal(t, []string{"", "example-ops", "example-web"}, projects)
+	none, err := PlanStepProjects(ctx, db, "no-such-plan")
+	require.NoError(t, err)
+	require.Empty(t, none)
+	offPlan, err := PlanStepProjects(ctx, db, "")
+	require.NoError(t, err)
+	require.Empty(t, offPlan, "the empty slug is no plan")
+
+	dropped, err := PlanDroppedCounts(ctx, db)
+	require.NoError(t, err)
+	require.Equal(t, map[PlanRef]int{{Project: "example-ops", Slug: "shared"}: 2}, dropped)
+}

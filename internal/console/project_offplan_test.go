@@ -407,3 +407,43 @@ func TestOpOffPlan_LockedBlockersUnderBlocked(t *testing.T) {
 	require.Contains(t, opRow(t, page, gated), `data-gate-who="auditor `+lockedSecret+`"`)
 	require.Contains(t, opRow(t, page, openGate), "holds 2 tasks</span>")
 }
+
+// The closed fold reads its ten rows bounded, and its total counts every
+// closed off-plan task of the project beyond them: not plan steps, not
+// another project's. The in-progress group is read bounded too, oldest
+// created first, a gate someone started staying with the gates.
+func TestPvbOffPlan_ClosedTotalCountsBeyondTheFold(t *testing.T) {
+	db, mux := newConsole(t)
+	pvProject(t, db, "demo", "Demo")
+	now := time.Now().UTC().Add(-time.Hour)
+	closed := func(project, plan string, i int) {
+		at := now.Add(time.Duration(i) * time.Second)
+		opTask(t, db, project, "pvb closed "+strconv.Itoa(i), func(k *core.Task) {
+			k.PlanSlug, k.Status, k.ClosedAt = plan, core.TaskDone, &at
+		})
+	}
+	for i := range 25 {
+		closed("demo", "", i)
+	}
+	for i := range 4 {
+		closed("demo", "pvb-plan", 100+i) // plan steps: the plan's, not the fold's
+		closed("example-other", "", 200+i)
+	}
+	late := opTask(t, db, "demo", "pvb started late", func(k *core.Task) { k.Status, k.CreatedAt = core.TaskInProgress, now.Add(time.Minute) })
+	early := opTask(t, db, "demo", "pvb started early", func(k *core.Task) { k.Status, k.CreatedAt = core.TaskInProgress, now })
+	gate := opTask(t, db, "demo", "pvb gate started", func(k *core.Task) {
+		k.Status, k.Kind, k.Gate = core.TaskInProgress, core.TaskKindGate, core.TaskGate{Who: "owner", What: "decide"}
+	})
+
+	page := getHTMLBody(t, mux, "/console/projects/demo?tab=tasks")
+	fold := opCard(t, page)
+	fold = fold[strings.Index(fold, `id="offplan-closed"`):]
+	require.Contains(t, fold[:strings.Index(fold, "</summary>")], "10 recently closed of 25 &middot; ",
+		"the total counts the project's closed off-plan tasks beyond the ten it shows")
+	groups := opGroups(t, page)
+	require.Equal(t, "in-progress", groups[early])
+	require.Equal(t, "in-progress", groups[late])
+	require.Equal(t, "gates", groups[gate], "a started gate is among the gates, once")
+	card := opCard(t, page)
+	require.Less(t, strings.Index(card, `id="`+early+`"`), strings.Index(card, `id="`+late+`"`), "oldest created first")
+}

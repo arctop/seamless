@@ -309,7 +309,7 @@ func TestPcHeadTitleSlugStatusNarrative(t *testing.T) {
 
 	page := getHTMLBody(t, mux, "/console/projects/demo?tab=tasks")
 	head := pcHead(t, pcCard(t, page, "pc-webhooks"))
-	require.Contains(t, head, `<a class="nm titled" href="/console/plans/pc-webhooks">Replay-safe webhook ingest</a>`, "titled by its note")
+	require.Contains(t, head, `<a class="nm titled" href="/console/plans/pc-webhooks?project=demo">Replay-safe webhook ingest</a>`, "titled by its note")
 	require.Contains(t, head, `plan:pc-webhooks<button type="button" class="copy-btn" data-copy="plan:pc-webhooks"`, "the slug chip copies")
 	require.Contains(t, head, `<span class="kind ok" data-plan-status="approved">approved</span>`)
 	require.Contains(t, head, `<a class="plan-narrative" href="/console/notes/`+noteID+`"`)
@@ -317,7 +317,7 @@ func TestPcHeadTitleSlugStatusNarrative(t *testing.T) {
 	require.NotContains(t, head, "plan-approve", "an approved plan has nothing to approve")
 
 	bare := pcHead(t, pcCard(t, page, "pc-bare"))
-	require.Contains(t, bare, `<a class="nm" href="/console/plans/pc-bare">pc-bare</a>`, "no note: the slug is the title")
+	require.Contains(t, bare, `<a class="nm" href="/console/plans/pc-bare?project=demo">pc-bare</a>`, "no note: the slug is the title")
 	require.Contains(t, bare, `data-copy="plan:pc-bare"`)
 	for _, absent := range []string{"data-plan-status", "plan-narrative", "star-form", "plan-approve"} {
 		require.NotContains(t, bare, absent, "no note, so no %s", absent)
@@ -354,8 +354,9 @@ func TestPcNoteOnlyPlansAreCards(t *testing.T) {
 	head := pcHead(t, card)
 	require.Contains(t, head, ">Rate limits for the public API</a>")
 	require.Contains(t, head, `data-plan-status="presented">awaiting approval</span>`)
-	approve := between(t, card, `action="/console/plans/pc-await/approve"`, "<form", "</form>")
-	require.Contains(t, approve, `<form class="plan-approve" method="post" action="/console/plans/pc-await/approve">`)
+	approve := between(t, card, `action="/console/plans/pc-await/approve?project=demo"`, "<form", "</form>")
+	require.Contains(t, approve, `<form class="plan-approve" method="post" action="/console/plans/pc-await/approve?project=demo">`,
+		"Approve names its project, so a slug two projects capture is never guessed")
 	require.Contains(t, approve, `<input type="hidden" name="next" value="/console/projects/demo?tab=tasks#plan-pc-await">`,
 		"Approve lands back on the card")
 	require.Contains(t, pcSummary(t, card), "no steps yet")
@@ -363,7 +364,7 @@ func TestPcNoteOnlyPlansAreCards(t *testing.T) {
 
 	draft := pcCard(t, panel, "pc-draft")
 	require.Contains(t, pcHead(t, draft), `data-plan-status="draft">draft</span>`)
-	require.Contains(t, draft, `action="/console/plans/pc-draft/approve"`)
+	require.Contains(t, draft, `action="/console/plans/pc-draft/approve?project=demo"`)
 
 	approved := pcCard(t, panel, "pc-approved")
 	require.Contains(t, pcHead(t, approved), `data-plan-status="approved">approved</span>`)
@@ -375,7 +376,7 @@ func TestPcNoteOnlyPlansAreCards(t *testing.T) {
 	}
 
 	active := pcCard(t, panel, "pc-active")
-	require.Contains(t, active, `action="/console/plans/pc-active/approve"`, "a presented capture with steps still offers Approve")
+	require.Contains(t, active, `action="/console/plans/pc-active/approve?project=demo"`, "a presented capture with steps still offers Approve")
 	require.Contains(t, active, "pc implement")
 
 	order := []int{
@@ -398,7 +399,7 @@ func TestPcPlanWithStepsAndNoNoteOpens(t *testing.T) {
 	next := pcStep(t, db, "pc-steps-only", "pc next step", func(k *core.Task) { k.DependsOn = []string{first} })
 
 	require.Contains(t, pcHead(t, pcCard(t, getHTMLBody(t, mux, "/console/projects/demo?tab=tasks"), "pc-steps-only")),
-		`href="/console/plans/pc-steps-only"`)
+		`href="/console/plans/pc-steps-only?project=demo"`)
 
 	for _, path := range []string{"/console/plans/pc-steps-only", "/console/plans/pc-steps-only?reader=1", "/console/plans/pc-steps-only?peek=1"} {
 		body := getHTMLBody(t, mux, path)
@@ -443,7 +444,10 @@ func TestPcOlderPlansLink(t *testing.T) {
 	panel := tabPanel(t, getHTMLBody(t, mux, "/console/projects/demo?tab=tasks"), "tasks")
 	fold := between(t, panel, `id="plans-completed"`, "<details", "</summary>")
 	require.Contains(t, fold, strconv.Itoa(donePlansCap)+" completed plans")
-	require.Contains(t, fold, `<a href="/console/plans?project=demo" data-older-plans title="Every plan of demo on Plans">2 older</a>`)
+	require.Contains(t, fold, `<a href="/console/plans?project=demo&amp;w=all#pg-shipped" data-older-plans title="Every plan of demo on Plans, shipped ones of all time">2 older</a>`)
+	var board plansData
+	getJSON(t, mux, "/console/plans?project=demo&w=all&format=json", &board)
+	require.Equal(t, donePlansCap+2, board.Done, "the link opens every shipped plan of the project")
 	require.NotContains(t, fold, "not shown")
 }
 
@@ -509,8 +513,12 @@ func TestPcLockedProjectIsAbsent(t *testing.T) {
 	bearer.Header.Set("Authorization", "Bearer "+testKey)
 	bearer.Header.Set("Accept", "application/json")
 	rr := lc.do(bearer)
-	require.Equal(t, http.StatusNotFound, rr.Code, "steps only in the locked project: not on this handle")
+	require.Equal(t, http.StatusForbidden, rr.Code, "steps only in the locked project: not on this handle, so the lock is named")
 	require.NotContains(t, rr.Body.String(), lockedSecret)
+	var refused lockedAnswer
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &refused))
+	require.True(t, refused.Locked)
+	require.Equal(t, lockedSlug, refused.Project)
 
 	cookie := lc.unlockByTerminal(t)
 	req := lc.browser(http.MethodGet, "/console/plans/pc-locked-steps?format=json", cookie, nil)

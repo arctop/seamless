@@ -226,3 +226,61 @@ func planRemainingTitles(ctx context.Context, db *sql.DB, project, plan string) 
 	}
 	return titles, nil
 }
+
+// PlanStepProjects names the projects holding a step of plan, each once, by
+// slug ("" is the global scope): a plan is keyed by project and slug, so a
+// slug with steps in two projects is two plans (plan:console-ux-pass UX 07).
+// Read through a request's handle, a locked project it does not read is not
+// named.
+func PlanStepProjects(ctx context.Context, db *sql.DB, plan string) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT DISTINCT project_slug FROM tasks
+		 WHERE plan_slug = ? AND plan_slug <> ''
+		 ORDER BY project_slug ASC`, plan)
+	if err != nil {
+		return nil, fmt.Errorf("store.PlanStepProjects: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []string
+	for rows.Next() {
+		var slug string
+		if err := rows.Scan(&slug); err != nil {
+			return nil, fmt.Errorf("store.PlanStepProjects: scan: %w", err)
+		}
+		out = append(out, slug)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store.PlanStepProjects: %w", err)
+	}
+	return out, nil
+}
+
+// PlanDroppedCounts counts each plan's dropped steps, keyed by project and
+// slug; a plan with none is absent. A rollup's Done counts done and dropped
+// alike (a plan whose every step closed is complete), and this says how many
+// of those closed steps were dropped rather than done.
+func PlanDroppedCounts(ctx context.Context, db *sql.DB) (map[PlanRef]int, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT project_slug, plan_slug, COUNT(*) FROM tasks
+		 WHERE plan_slug <> '' AND status = 'dropped'
+		 GROUP BY project_slug, plan_slug`)
+	if err != nil {
+		return nil, fmt.Errorf("store.PlanDroppedCounts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[PlanRef]int{}
+	for rows.Next() {
+		var (
+			ref PlanRef
+			n   int
+		)
+		if err := rows.Scan(&ref.Project, &ref.Slug, &n); err != nil {
+			return nil, fmt.Errorf("store.PlanDroppedCounts: scan: %w", err)
+		}
+		out[ref] = n
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store.PlanDroppedCounts: %w", err)
+	}
+	return out, nil
+}

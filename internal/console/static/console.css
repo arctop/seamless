@@ -8487,6 +8487,42 @@ a.ov2-attn-main:hover > .ico-arrow-right { transform: translateX(2px); }
 .step .meta .gate-kind { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--warn); }
 .step .meta .gate-kind .ico { width: 11px; height: 11px; }
 
+/* UX 07: Plans, one board of plan cards for every project. Groups by state,
+   the project chip and token chip on a card's head, the lazily loaded steps
+   of a Stalled or Ready card, the shipped fold's lines, the plan's page and
+   the chooser for a slug two projects share. Tokens only. */
+.plan-board { display: flex; flex-direction: column; gap: 6px; padding-block: 4px 18px; }
+.plan-group { display: flex; flex-direction: column; }
+.plan-group-hd { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; margin: 14px 0 10px; font-size: var(--text-sm); font-weight: 700; color: var(--ink); }
+.plan-group-hd .n { font-size: var(--text-2xs); font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.plan-group-hint { font-size: var(--text-2xs); font-weight: 500; color: var(--faint); }
+.plan-card .plan-head .plan-proj, .done-plan .plan-proj, .plan-chooser .plan-proj { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: var(--text-2xs); font-weight: 600; color: var(--ink-2); background: var(--surface); }
+.plan-card .plan-head a.plan-proj:hover, .done-plan a.plan-proj:hover { border-color: var(--border-strong); color: var(--brand); text-decoration: none; }
+.plan-card .plan-head .plan-proj .ico, .done-plan .plan-proj .ico, .plan-chooser .plan-proj .ico { width: 11px; height: 11px; color: var(--muted); }
+.plan-card .plan-head .plan-tok { font-size: var(--text-2xs); color: var(--muted); font-variant-numeric: tabular-nums; }
+.plan-lazy > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; padding: 9px 14px; font-size: var(--text-2xs); color: var(--muted); }
+.plan-lazy > summary::-webkit-details-marker { display: none; }
+.plan-lazy > summary::after { content: "+"; color: var(--faint); font-weight: 500; margin-left: auto; }
+.plan-lazy[open] > summary::after { content: "\2212"; }
+.plan-lazy[open] > summary { border-bottom: 1px solid var(--border); }
+.plan-lazy > summary:hover { background: var(--surface-2); color: var(--ink-2); }
+.plan-lazy > summary .ico { width: 13px; height: 13px; }
+.plan-lazy-box:not([data-loaded]) { padding: 10px 14px; font-size: var(--text-xs); }
+.plan-lazy-box.dossier-error { padding: 10px 14px; font-size: var(--text-xs); color: var(--warn); }
+.plan-shipped > summary .ico { width: 13px; height: 13px; color: var(--ok); }
+.plan-shipped .done-plan { flex-wrap: wrap; }
+.plan-shipped .done-plan > a:first-child { font-family: inherit; }
+.plan-shipped .done-plan .plan-slug { display: inline-flex; align-items: center; gap: 2px; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--muted); }
+.plan-shipped .widen { margin: 0; border: 0; border-top: 1px solid var(--border); border-radius: 0; }
+.plan-page .plan-sheet > .plan-card { margin-bottom: 14px; }
+.plan-page .plan-narrative-body h3 .count { display: inline-flex; align-items: center; gap: 4px; }
+.plan-page .plan-narrative-body h3 .count .ico { width: 12px; height: 12px; }
+.plan-chooser .peek-refs li { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 480px) {
+  .plan-group-hint { flex-basis: 100%; }
+  .plan-shipped .done-plan .muted { margin-left: 0; flex-basis: 100%; }
+}
+
 /* UX 13: a sidebar that fits the screen, with badges that mean "act"
    (plan:console-ux-pass). Only the sections scroll; the head (brand, search)
    and the foot (Settings, the account row) stay put, and a fade marks an edge

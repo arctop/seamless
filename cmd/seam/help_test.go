@@ -41,7 +41,7 @@ func TestHelpText_RendersEveryMigratedCommand(t *testing.T) {
 func TestHelpText_CoversTheWholeCommandSet(t *testing.T) {
 	help := helpText()
 	for _, want := range []string{
-		"seam plan approve <slug>",
+		"seam plan approve [--project SLUG] <slug>",
 		"seam access request [--json] [--reason TEXT] [--write] <project>",
 		"seam approve [--access ACCESS] [--for DURATION] [--passkey] [--watch] [<request>]",
 		"seam status",

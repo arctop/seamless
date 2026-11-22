@@ -392,9 +392,9 @@ func TestPvClaimStrip_LapsedAndClaimlessSteps(t *testing.T) {
 	for _, id := range []string{f.held, f.ready, f.blocked, f.done} {
 		require.Empty(t, strip(id), "step %s carries no claim strip", id)
 	}
-	source, err := templateFS.ReadFile("templates/projectdetail.html")
+	source, err := templateFS.ReadFile("templates/plan_shared.html")
 	require.NoError(t, err)
-	require.Contains(t, string(source), "closest('[data-open-step]')", "the strip's link opens the row in place")
+	require.Contains(t, string(source), "closest('[data-open-step]')", "the strip's link opens the row in place (the cards' shared script)")
 }
 
 // An error page under /console/projects/<slug> offers the way back to that

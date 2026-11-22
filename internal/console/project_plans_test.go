@@ -201,7 +201,7 @@ func TestProjectWorkspace_PlanCardIsLiveTriage(t *testing.T) {
 	body := getHTMLBody(t, mux, "/console/projects/seamless?tab=tasks")
 
 	require.Contains(t, body, `id="plan-ios-demo"`, "the card is keyed so a morph reorders instead of rewriting")
-	require.Contains(t, body, `href="/console/plans/ios-demo"`, "the header links to the plan")
+	require.Contains(t, body, `href="/console/plans/ios-demo?project=seamless"`, "the header links to the plan, its project named")
 	require.Contains(t, body, "approved", "the narrative note's status chip")
 	require.Contains(t, body, `action="/console/favorites/plan/ios-demo"`, "the plan star")
 	require.Contains(t, body, "1 ready", "claimable steps are the headline number")
@@ -351,7 +351,7 @@ func TestProjectWorkspace_FoldsDoneRunsAndCompletedPlans(t *testing.T) {
 		"the frontier renders above the fold, never between two folds")
 	require.Contains(t, body, `id="plans-completed"`, "the finished plan gets a rollup group")
 	require.Contains(t, body, "1 completed plan")
-	require.Contains(t, body, `href="/console/plans/older"`)
+	require.Contains(t, body, `href="/console/plans/older?project=seamless"`)
 	require.NotContains(t, body, `id="plan-older"`, "a finished plan costs no step query and renders no card")
 }
 
@@ -430,9 +430,12 @@ func TestTaskPeek_CarriesTheCallersNextIntoItsActions(t *testing.T) {
 // TestProjectTasksPanel_StaysInsideTheDocument is the structural half of
 // console-data-updates-never-reload-document for the panel's own client.
 func TestProjectTasksPanel_StaysInsideTheDocument(t *testing.T) {
-	source, err := templateFS.ReadFile("templates/projectdetail.html")
+	tab, err := templateFS.ReadFile("templates/projectdetail.html")
 	require.NoError(t, err)
-	page := string(source)
+	require.Contains(t, string(tab), `{{template "plan-steps-js"}}`, "the tab runs the cards' shared script")
+	source, err := templateFS.ReadFile("templates/plan_shared.html")
+	require.NoError(t, err)
+	page := string(source) + string(tab)
 	for _, banned := range []string{"location.reload(", "location.assign(", "location.href ="} {
 		require.NotContains(t, page, banned,
 			"the plans panel must patch in place, never navigate as a fetch fallback")
@@ -460,7 +463,7 @@ func TestRwProjectTab_StepRowsWordsAndCopy(t *testing.T) {
 		Status: core.TaskOpen, CreatedAt: now, UpdatedAt: now}))
 
 	body := getHTMLBody(t, mux, "/console/projects/demo?tab=tasks")
-	require.Contains(t, body, `<a class="nm" href="/console/plans/rw-plan">rw-plan</a>`,
+	require.Contains(t, body, `<a class="nm" href="/console/plans/rw-plan?project=demo">rw-plan</a>`,
 		"a plan with no narrative note is titled by its slug")
 	require.Contains(t, body, `plan:rw-plan<button type="button" class="copy-btn" data-copy="plan:rw-plan"`,
 		"the plan head copies plan:<slug>")

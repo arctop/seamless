@@ -494,10 +494,13 @@ locally. Bare `seam plan` is not a command - it names its subcommands and exits
 seam plan list [--project SLUG] [--window WINDOW] [--json]
 ```
 
-Lists captured plans with slug, status, title, project, iteration, agent count,
-task progress, and age. `--window` is `24h`, `7d`, `30d`, or `all` (default
-`all`) and is applied by the server; anything else is a parse error rather than a
-silent fall back to the server's `24h` default. `--project` filters the returned
+Lists the plans the console's Plans board lists, in its order (Needs you, In
+progress, Stalled, Ready, then Shipped), with slug, status, title, project,
+iteration, agent count, task progress (closed steps, done and dropped alike),
+and age. `--window` is `24h`, `7d`, `30d`, or `all` (default `all`) and is
+applied by the server to the shipped plans alone: an active plan is listed in
+every window. Anything else is a parse error rather than a silent fall back to
+the server's `24h` default. `--project` filters the returned
 rows client-side, which is why it cannot be combined with `--json`
 ([see above](#json-output)).
 Prints `(no captured plans)` when nothing matches.
@@ -508,17 +511,21 @@ Prints `(no captured plans)` when nothing matches.
 ### seam plan show {#seam_plan_show}
 
 ```bash
-seam plan show [--json] <slug>
+seam plan show [--project SLUG] [--json] <slug>
 ```
 
 Prints one plan: its status, project, title, source file and iteration, the
-notes attached to the composition (each marked `note` or `agent`), its tasks,
-and then the plan body.
+notes attached to the composition (each marked `note` or `agent`), its tasks
+in dependency order, and then the plan body. A plan is keyed by its project
+and slug: `--project` names the project (`global` for the global scope), and a
+slug that is a plan in more than one project is refused without it, the
+error naming each project, never answered with one of them or both merged.
+`plan check` and `plan approve` take `--project` the same way.
 
 ### seam plan check {#seam_plan_check}
 
 ```bash
-seam plan check [--cwd DIR] <slug>
+seam plan check [--cwd DIR] [--project SLUG] <slug>
 ```
 
 Staleness check against a repo's git history. `--cwd` defaults to the current
@@ -540,7 +547,7 @@ note is stale**, so it works as a gate in a script.
 ### seam plan approve {#seam_plan_approve}
 
 ```bash
-seam plan approve <slug>
+seam plan approve [--project SLUG] <slug>
 ```
 
 Escape hatch for when Claude Code skips the approval hook: flips the plan to

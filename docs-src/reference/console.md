@@ -28,7 +28,7 @@ nothing, and their rows say so.
 | Force-release a repo lock | `POST /console/locks/{id}/release` | [Repo locks](#locks): ends the hold a lock carries, live or lapsed, whoever holds it; the lock stays declared. What `seam lock release --force` sends. Refused when nobody holds it (409), from an agent's process on the peer_auth socket, and from a paired device. |
 | Approve a lock declaration | `POST /console/locks/{id}/approve` | Makes a restricted account's waiting declaration an active lock, which agents may then hold. With `next=` a console page (the Overview's **Approve**), it returns there; a lock decision without one returns to Locks. Refused for a lock already active (409), from an agent's process on the peer_auth socket, and from a paired device. |
 | Discard a lock declaration | `POST /console/locks/{id}/discard` | Deletes a restricted account's waiting declaration with its repository identities, so the repository may be declared again. An active lock is refused (409): no route removes one. Refused from an agent's process on the peer_auth socket, and from a paired device. |
-| Approve a captured plan | `POST /console/plans/{slug}/approve` | The escape hatch for a Claude Code approval whose `PostToolUse` never fired: flips the `cc-plan` note to `plan-status:approved` and creates the tracking task, exactly as the hook would have. Only applies to a CC capture. Returns to the plan's page, or with `next=` a console page (the Overview's **Approve**) there, with a notice. |
+| Approve a captured plan | `POST /console/plans/{slug}/approve` | The escape hatch for a Claude Code approval whose `PostToolUse` never fired: flips the `cc-plan` note to `plan-status:approved` and creates the tracking task, exactly as the hook would have. Only applies to a CC capture. `?project=<slug>` names the capture's project (every card's **Approve** sends it); without it the slug's only capture is approved, and a slug captured in two projects is refused (409) with both named. Returns to the plan's page, or with `next=` a console page (the Overview's **Approve**, a plan card's) there, with a notice. |
 | Star / unstar an entity | `POST /console/favorites/{kind}/{id}` | Toggles the same starred flag the `favorite_set` MCP tool sets: a starred memory pins into briefings and gets a post-fusion recall boost. For memories and notes the star lives in frontmatter; it never bumps `updated`. |
 | Ask the gardener for proposals | `POST /console/gardener/request` | Interprets a natural-language maintenance request into **pending proposals**. It never mutates a memory. |
 | Plan a project split | `POST /console/gardener/split` | Interprets a split request into a plan batch of **pending proposals** (one split setup plus one reproject per memory). Also never mutates a memory. |
@@ -1450,29 +1450,60 @@ and such a listed project is left out.
 
 ## Plans
 
-`/console/plans`, `/console/plans/{slug}`
+`/console/plans`, `/console/plans/{slug}?project=<slug>`
 
-The same library shape, with the rail grouped by phase (**in progress**,
-**ready**, **done**) and scoped by the window selector in the rail's tools
-(24h by default). Both kinds of plan share the rail:
+One board of plan cards for every project: the card a project's
+[Plans & tasks](#projects) tab shows, the same template, grouped by the state
+the plan is in, top to bottom:
 
-- **captures** - Claude Code plan-mode captures (`cc-plan` notes), with their
-  lifecycle status, iteration count, and cached subagent runs.
-- **composed** - plain [plans-as-composition](/concepts/tasks-and-plans/) plans (a
-  note tagged `plan:<slug>` plus its tasks), which have none of the capture-only
-  fields.
+| Group | What puts a plan there |
+| --- | --- |
+| **Needs you** | A captured plan you can approve (a draft, or presented and awaiting approval), a step waiting on people (an open gate, its own or one it depends on), or a step in progress that no live claim holds (a lapsed claim, or one started with none). |
+| **In progress** | A live claim holds a step. |
+| **Stalled** | Open steps, none in progress, and nothing moved for 7 days. |
+| **Ready** | Everything else still open: open steps that moved in the last 7 days, or a plan with no steps yet. |
+| **Shipped** | Every step closed, done or dropped (a dropped step closes a plan as a done one does), or a captured plan the gardener settled. |
 
-When the window hides plans, the rail ends with how many last moved before it
-and the wider windows to switch to.
+Needs you and In progress cards open with their steps; Stalled and Ready
+cards show their head line ("3/5 done · 1 ready · 1 blocked · moved 9d ago")
+and load their steps when opened. On the board a step names its nearest
+blocker; the plan's page names the whole chain. Only **Shipped** is windowed
+(24h, 7d, 30d, All time; 24h by default) and folded, with how many shipped
+before the window and the wider windows: an active plan is never hidden by a
+window. Every card carries its project as a chip that opens that project's
+Plans & tasks tab at the plan, and **Approve** on a card returns to the card on
+the board, its filters kept.
 
-A capture owns its slug; composed plans fill only the rest. The reader shows
-the rendered plan body, the step tasks (each in its [status word](#tasks),
-with a copy button for its id), and the notes attached to the
-composition (supporting notes and agent caches). A plan whose steps exist with
-no note tagged `plan:<slug>` still opens: its page says it has no narrative
-note yet and lists the steps (a slug with steps in more than one project opens
-the most recently active one). **Approve** appears here, for
-captures only.
+The **Project** menu lists each project with a plan on the board and how many
+(starred projects first, then the global scope), and `?project=<slug>` narrows
+the board to one (`global` names the global scope); a project that is not
+there, or that is locked and not unlocked in this browser, is a 400. `?q=`
+keeps the plans whose title or slug holds the text, in any case
+(`plan:<slug>` works too). A title holding " -- " shows it as a dash that never
+splits across lines; the stored title is untouched.
+
+A plan is keyed by its project and slug: the same slug in two projects is two
+plans, with their own steps and notes. `/console/plans/{slug}?project=<slug>`
+is one plan's page: its card with every step row first, in dependency order (a
+step below the steps it depends on, otherwise in the order they were
+written), each with its holder, its blockers and the gates it waits on, then
+its narrative note, then the notes attached to it (supporting notes and agent
+caches). A plan whose steps exist with no note tagged `plan:<slug>` in its
+project still opens: its page says it has no narrative note yet. Every plan
+link the board, the project tab and the plan's page render names its project;
+a slug that is a plan in more than one project, opened without `?project=`,
+answers a chooser naming each project's plan (with `?format=json`, a 409 that
+names them), never one page holding both. A plan's source reads "captured from
+plan mode" (a Claude Code capture, with its plan file, iteration and agent
+runs) or "from tasks" (a composed plan). **Approve** appears for captures
+only.
+
+With `?format=json` the board is `rows` (each plan the board lists, in its
+order, with its `state` and `href`), the group counts (`needsYou`,
+`inProgress`, `stalled`, `ready`, `done` for the shipped plans the window
+lists, `shippedAll`), `total`, `projects` (the menu) and `filter`; a plan's
+page is its row, body, attached notes and `tasks` (its steps in the page's
+order, each with its word, holder and the gates it waits on).
 
 Each plan also carries a **model tokens** rollup - the cumulative transcript
 tokens of every session attributed to the plan (any session that moved a step,

@@ -570,7 +570,7 @@ func parseTemplates() (pages, fragments map[string]*template.Template, err error
 		if name == "context" || name == "projectdetail" {
 			files = append(files, "templates/context_shared.html")
 		}
-		if name == "projectdetail" {
+		if name == "projectdetail" || name == "plans" {
 			files = append(files, "templates/plan_shared.html")
 		}
 		if name == "settings" {

@@ -3,6 +3,7 @@ package plans
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 	"time"
@@ -264,4 +265,70 @@ func TestEnsureTask_ScopedToItsOwnPlan(t *testing.T) {
 	_, created, err := EnsureTask(ctx, db, planNote(), "my-plan", "cc/abc")
 	require.NoError(t, err)
 	require.True(t, created)
+}
+
+// pvbNote indexes a note tagged with tags in project, created at ts.
+func pvbNote(t *testing.T, db *sql.DB, id, project, slug string, ts time.Time, tags ...string) {
+	t.Helper()
+	raw, err := json.Marshal(tags)
+	require.NoError(t, err)
+	stamp := core.FormatTime(ts)
+	_, err = db.ExecContext(context.Background(), `
+		INSERT INTO notes_index
+		    (id, title, slug, description, project, file_path, tags, content_hash, created_at, updated_at)
+		VALUES (?, ?, ?, '', ?, ?, ?, 'hash', ?, ?)`,
+		id, "note "+id, slug, project, "notes/"+project+"/"+slug+".md", string(raw), stamp, stamp)
+	require.NoError(t, err)
+}
+
+// One slug in two projects is two plans: CompositionIn reads one project's
+// notes, the global scope being its own and never every project's, while
+// Composition, the slug's old reading, still spans them all.
+// CompositionProjects names where the slug is a composition, an agent cache
+// alone being none.
+func TestPvbCompositionIsPerProject(t *testing.T) {
+	db := newPlansDB(t)
+	ctx := context.Background()
+	at := time.Date(2026, 11, 21, 9, 0, 0, 0, time.UTC)
+	pvbNote(t, db, "01OPSNARRATIVE", "example-ops", "ops-narrative", at, SlugTag("shared"))
+	pvbNote(t, db, "01OPSSUPPORT", "example-ops", "ops-support", at.Add(time.Hour), SlugTag("shared"))
+	pvbNote(t, db, "01WEBCAPTURE", "example-web", NotePrefix+"shared", at.Add(2*time.Hour), SlugTag("shared"), TagPlan)
+	pvbNote(t, db, "01GLOBALNOTE", "", "global-narrative", at.Add(-time.Hour), SlugTag("shared"))
+	pvbNote(t, db, "01CACHEONLY", "example-api", AgentNotePrefix+"x", at, SlugTag("shared"), TagAgent)
+
+	ops, others, ok, err := CompositionIn(ctx, db, "example-ops", "shared")
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "01OPSNARRATIVE", ops.ID, "the earliest note of its own project")
+	require.Len(t, others, 1)
+	require.Equal(t, "01OPSSUPPORT", others[0].ID, "and only its own project's notes")
+
+	web, others, ok, err := CompositionIn(ctx, db, "example-web", "shared")
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "01WEBCAPTURE", web.ID)
+	require.Empty(t, others)
+
+	global, others, ok, err := CompositionIn(ctx, db, "", "shared")
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "01GLOBALNOTE", global.ID, "the global scope is its own project")
+	require.Empty(t, others)
+
+	_, _, ok, err = CompositionIn(ctx, db, "example-api", "shared")
+	require.NoError(t, err)
+	require.False(t, ok, "an agent cache alone is no composition")
+	_, _, ok, err = CompositionIn(ctx, db, "example-none", "shared")
+	require.NoError(t, err)
+	require.False(t, ok)
+
+	merged, others, ok, err := Composition(ctx, db, "shared")
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "01WEBCAPTURE", merged.ID, "the slug's reading: the capture wins across projects")
+	require.Len(t, others, 4)
+
+	projects, err := CompositionProjects(ctx, db, "shared")
+	require.NoError(t, err)
+	require.Equal(t, []string{"", "example-ops", "example-web"}, projects)
 }

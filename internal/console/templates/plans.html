@@ -1,147 +1,122 @@
 {{define "content"}}
 {{with .Data}}
-{{$sel := .Selected}}
-{{$qs := .QS}}
 <div class="lib-page" data-library="plans">
-{{$base := "/console/plans"}}{{if .Selected}}{{$base = printf "/console/plans/%s" .Selected.Row.Slug}}{{end}}
+{{if .Plan}}{{template "plan-page" .}}{{else if .Chooser}}{{template "plan-chooser-page" .}}{{else}}{{template "plan-board" .}}{{end}}
+</div><!-- .lib-page -->
+{{end}}
+{{end}}
+
+{{/* The board: every project's plans as the shared card (plan_shared.html),
+     grouped by state top to bottom. Needs you and In progress cards open
+     with their steps; Stalled and Ready cards show their head line and load
+     their steps when opened. Only Shipped is windowed (?w=) and folded. */}}
+{{define "plan-board"}}
+{{$v := .View}}
 <header class="mv2-bar">
-  <h1>{{icon "map"}}Plans</h1>{{about "Captured and composed plans, organized by execution state and connected to their steps."}}
-  <span class="mv2-count" aria-label="{{.Total}} plans">
-    <strong>{{.Total}}</strong>plan{{if ne .Total 1}}s{{end}}<small>{{if eq .Window "all"}}all time{{else}}{{.Count}} updated in {{.WindowLabel}}{{end}}</small>
+  <h1>{{icon "map"}}Plans</h1>{{about "Every project's plans, one card each, grouped by what state the plan is in: what needs you, what is in progress, what stalled, what is ready, and what shipped."}}
+  <span class="mv2-count" aria-label="{{.Active}} active plans">
+    <strong>{{.Active}}</strong>active<small>{{.ShippedAll}} shipped{{if .Total}} &middot; {{.Total}} in all{{end}}</small>
   </span>
   <div class="lib-summary-pills">
-    {{if .InProgress}}<a class="status-live" href="#rg-inprogress"><span class="live-dot"></span>{{.InProgress}} in progress</a>{{end}}
-    {{if .Ready}}<a class="status-ready" href="#rg-ready">{{.Ready}} ready</a>{{end}}
-    {{if .Done}}<a href="#rg-done">{{.Done}} done</a>{{end}}
+    {{if .NeedsYou}}<a class="status-blocked" href="#pg-needs" data-state="needs_you">{{.NeedsYou}} need{{if eq .NeedsYou 1}}s{{end}} you</a>{{end}}
+    {{if .InProgress}}<a class="status-live" href="#pg-inprogress"><span class="live-dot"></span>{{.InProgress}} in progress</a>{{end}}
+    {{if .Stalled}}<a class="status-blocked" href="#pg-stalled">{{.Stalled}} stalled</a>{{end}}
+    {{if .Ready}}<a class="status-ready" href="#pg-ready">{{.Ready}} ready</a>{{end}}
+    {{if .Done}}<a href="#pg-shipped">{{.Done}} shipped in {{.WindowLabel}}</a>{{end}}
   </div>
   {{with .ShippedMonth}}<span class="mom-shipped" title="Counted from plan.shipped settlements in the current local month">Plans shipped this month: <strong>{{.Count}}</strong></span>{{end}}
+  {{- if $v.Filtered}}
+  <a class="lib-clear" href="{{$v.ClearHref}}" data-seam-query title="Every project's plans again, with no text filter">{{icon "x"}}Clear</a>{{end}}
+  <form class="search lib-query" method="get" action="/console/plans" data-seam-query>
+    {{icon "search"}}
+    <input name="q" aria-label="Filter plans by title or slug" placeholder="Filter plan titles and slugs&hellip;" value="{{$v.Query.Q}}">
+    {{range $v.Keep}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">{{end}}
+  </form>
   <button type="button" class="mv2-filter-toggle" data-filters-toggle aria-expanded="false" aria-controls="mv2-controls">{{icon "sliders"}}<span>Filters</span></button>
   <span class="mv2-spacer"></span>
   <div class="mv2-controls" id="mv2-controls">
+  <details class="menu lib-filter-menu" data-plan-projects>
+    <summary class="menu-btn" aria-label="Project: {{$v.ProjectLabel}}">{{icon "folder-tree"}}<span class="menu-k">Project</span><strong>{{$v.ProjectLabel}}</strong>{{icon "chevron-down"}}</summary>
+    <div class="menu-list" data-seam-query>
+      {{range $v.Projects}}<a class="{{if .On}}on{{end}}" href="{{.Href}}" title="{{if .Title}}{{.Title}}{{else}}{{.Count}} plans{{end}}">{{.Label}}<span class="n">{{.Count}}</span></a>{{end}}
+    </div>
+  </details>
   <div class="mv2-sort">
-    <span class="mv2-sort-label">Updated</span>
+    <span class="mv2-sort-label" title="The window applies to shipped plans only: an active plan is always on the board">Shipped</span>
     <div class="seg" data-seam-query>
-      {{range .Windows}}<a class="{{if .Active}}on{{end}}" href="{{$base}}?w={{.Key}}">{{.Label}}</a>{{end}}
+      {{range $v.Windows}}<a class="{{if .On}}on{{end}}" href="{{.Href}}">{{.Label}}</a>{{end}}
     </div>
   </div>
   </div>
 </header>
 
-{{if or .Total .Selected}}
-<div class="lib-layout"{{if and .Selected .SelectedAuto}} data-auto-url="/console/plans/{{.Selected.Row.Slug}}{{$qs}}"{{end}}>
-  <nav class="lib-rail" aria-label="Plans">
-    <div class="rail-overview"><span>Plan map</span><span>Phase &rarr; plan</span></div>
-    <div class="rail-scroll">
-    {{if .Rows}}
-    <div class="rail-groups">
-      {{if .InProgress}}
-      <section class="rail-group" id="rg-inprogress">
-        <header class="rail-group-hd"><span class="hd-label"><span class="live-dot"></span>in progress</span> <span class="n">{{.InProgress}}</span></header>
-        <div class="rail-items">
-          {{range phaseRows .Rows "in_progress"}}
-          <a class="rail-item{{if and $sel (eq .Slug $sel.Row.Slug)}} selected{{end}}" id="ri-{{.NoteID}}" href="/console/plans/{{.Slug}}{{$qs}}" data-title="{{.Title}}" data-context="In progress"{{if and $sel (eq .Slug $sel.Row.Slug)}} aria-current="page"{{end}}>
-            <span class="ri-title">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</span>
-            <span class="ri-meta">{{if .Project}}{{.Project}}{{else}}global{{end}}{{if .TasksTotal}} &middot; {{.TasksDone}}/{{.TasksTotal}} steps{{end}}{{if .Tokens}} &middot; ~{{compactNum .Tokens}} tok{{end}}{{if .Status}} &middot; {{.Status}}{{end}} &middot; {{agoTime .Updated}}</span>
-          </a>
-          {{end}}
-        </div>
-      </section>
-      {{end}}
-      {{if .Ready}}
-      <section class="rail-group" id="rg-ready">
-        <header class="rail-group-hd">ready <span class="n">{{.Ready}}</span></header>
-        <div class="rail-items">
-          {{range phaseRows .Rows "ready"}}
-          <a class="rail-item{{if and $sel (eq .Slug $sel.Row.Slug)}} selected{{end}}" id="ri-{{.NoteID}}" href="/console/plans/{{.Slug}}{{$qs}}" data-title="{{.Title}}" data-context="Ready"{{if and $sel (eq .Slug $sel.Row.Slug)}} aria-current="page"{{end}}>
-            <span class="ri-title">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</span>
-            <span class="ri-meta">{{if .Project}}{{.Project}}{{else}}global{{end}}{{if .TasksTotal}} &middot; {{.TasksDone}}/{{.TasksTotal}} steps{{end}}{{if .Tokens}} &middot; ~{{compactNum .Tokens}} tok{{end}}{{if .Status}} &middot; {{.Status}}{{end}} &middot; {{agoTime .Updated}}</span>
-          </a>
-          {{end}}
-        </div>
-      </section>
-      {{end}}
-      {{if .Done}}
-      <section class="rail-group" id="rg-done">
-        <header class="rail-group-hd">done <span class="n">{{.Done}}</span></header>
-        <div class="rail-items">
-          {{range phaseRows .Rows "done"}}
-          {{/* mom-settle: a plan shipped this local month wears the settle hook;
-               the one-time wash plays only on live arrival (.live-in). */}}
-          <a class="rail-item dim{{if .Shipped}} mom-settle{{end}}{{if and $sel (eq .Slug $sel.Row.Slug)}} selected{{end}}" id="ri-{{.NoteID}}" href="/console/plans/{{.Slug}}{{$qs}}" data-title="{{.Title}}" data-context="Done"{{if and $sel (eq .Slug $sel.Row.Slug)}} aria-current="page"{{end}}>
-            <span class="ri-title">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</span>
-            <span class="ri-meta">{{if .Project}}{{.Project}}{{else}}global{{end}}{{if .TasksTotal}} &middot; {{.TasksDone}}/{{.TasksTotal}} steps{{end}}{{if .Tokens}} &middot; ~{{compactNum .Tokens}} tok{{end}}{{if .Status}} &middot; {{.Status}}{{end}} &middot; {{agoTime .Updated}}</span>
-          </a>
-          {{end}}
-        </div>
-      </section>
-      {{end}}
+<div class="plan-board" data-plan-scope data-return="{{.Return}}">
+{{if not .Total}}
+  {{if $v.Filtered}}
+  <div class="empty dotgrid" data-plans-none><span class="empty-ico">{{icon "map"}}</span><div>No plan matches{{with $v.Query.Q}} &ldquo;{{.}}&rdquo;{{end}}{{if $v.Query.Project}} in {{$v.ProjectLabel}}{{end}}. <a href="{{$v.ClearHref}}" data-seam-query>Show every plan</a>.</div></div>
+  {{else}}
+  <div class="empty dotgrid"><span class="empty-ico">{{icon "map"}}</span><div>No plans yet &mdash; Claude Code plan-mode captures and plan:&lt;slug&gt; compositions land here.</div></div>
+  {{end}}
+{{else}}
+  {{range .Groups}}
+  <section class="plan-group" id="{{.ID}}" data-group="{{.Key}}">
+    <h2 class="plan-group-hd" title="{{.Hint}}">{{.Label}} <span class="n">{{len .Cards}}</span><span class="plan-group-hint">{{.Hint}}</span></h2>
+    {{range .Cards}}{{template "plan-card" .}}{{end}}
+  </section>
+  {{else}}
+  <div class="empty" data-no-active>No active plans{{if $v.Query.Project}} in {{$v.ProjectLabel}}{{end}}: every plan here shipped.</div>
+  {{end}}
+  {{if .ShippedAll}}
+  <details class="plan-done-group plan-shipped" id="pg-shipped" data-group="shipped"{{if .Done}} open{{end}}>
+    <summary>{{icon "check"}}{{if .Done}}{{.Done}} shipped in {{if eq .Window "all"}}all time{{else}}the last {{.WindowLabel}}{{end}}{{else}}Nothing shipped in the last {{.WindowLabel}}{{end}}{{if lt .Done .ShippedAll}} <span class="muted">&middot; {{sub .ShippedAll .Done}} before</span>{{end}}</summary>
+    {{range .Shipped}}
+    {{/* mom-settle: a plan shipped this local month wears the settle hook;
+         the one-time wash plays only on live arrival (.live-in). */}}
+    <div class="done-plan{{if .MomSettle}} mom-settle{{end}}" id="{{.CardID}}" data-plan-state="shipped">
+      <a href="{{.Href}}">{{.TitleHTML}}</a><span class="plan-slug">plan:{{.Slug}}{{copyBtn (printf "plan:%s" .Slug)}}</span>{{if .ProjectHref}}<a class="plan-proj" href="{{.ProjectHref}}" data-plan-project="{{.ProjectLabel}}">{{icon "folder-tree"}}{{.ProjectLabel}}</a>{{else}}<span class="plan-proj" data-plan-project="{{.ProjectLabel}}">{{icon "folder-tree"}}{{.ProjectLabel}}</span>{{end}}
+      <span class="muted" data-plan-summary>{{if .NoteOnly}}{{.StatusText}}{{else}}{{.Total}}/{{.Total}} closed{{if .Dropped}}: {{.DoneOnly}} done, {{.Dropped}} dropped{{end}}{{end}} &middot; last moved {{agoTime .LastActivity}}</span>
     </div>
-    {{else}}
-    <div class="rail-none">No plans moved in the last {{.WindowLabel}}.</div>
     {{end}}
-    {{if and (ne .Window "all") (lt .Count .Total)}}
+    {{if lt .Done .ShippedAll}}
     <div class="widen" role="note">
       {{icon "history"}}
-      <span>{{sub .Total .Count}} more plan{{if ne (sub .Total .Count) 1}}s{{end}} last moved before this window.</span>
-      <span class="widen-acts" data-seam-query>Widen to {{range .Windows}}{{if .Wider}}<a href="{{$base}}?w={{.Key}}">{{.Label}}</a>{{end}}{{end}}</span>
+      <span>{{sub .ShippedAll .Done}} more plan{{if ne (sub .ShippedAll .Done) 1}}s{{end}} shipped before this window.</span>
+      <span class="widen-acts" data-seam-query>Widen to {{range $v.Wider}}<a href="{{.Href}}">{{.Label}}</a>{{end}}</span>
     </div>
     {{end}}
-    </div><!-- .rail-scroll -->
-  </nav>
-  <section class="lib-reader" id="lib-reader" data-base="/console/plans" aria-live="polite" aria-label="Plan">
-    {{if .Selected}}{{template "plan-reader" .Selected}}{{else}}
-    <div class="reader-empty dotgrid"><span class="empty-ico">{{icon "map"}}</span><div>Select a plan to read it here.</div></div>
-    {{end}}
-  </section>
+  </details>
+  {{end}}
+{{end}}
 </div>
-{{else}}
-<div class="empty dotgrid"><span class="empty-ico">{{icon "map"}}</span><div>No plans yet &mdash; Claude Code plan-mode captures and plan:&lt;slug&gt; compositions land here.</div></div>
-{{end}}
-</div><!-- .lib-page -->
-{{end}}
 {{end}}
 
+{{/* One plan's page: the card with every step row first, in dependency
+     order, then the narrative, then the attached notes. */}}
+{{define "plan-page"}}
+<header class="mv2-bar">
+  <h1>{{icon "map"}}<a href="/console/plans" title="Every project's plans">Plans</a></h1>{{about "One plan: its steps first, in the order they depend on each other, then its narrative note and the notes attached to it."}}
+  <span class="mv2-count" aria-label="plan:{{.Plan.Row.Slug}} in {{.Plan.Card.ProjectLabel}}"><strong>plan:{{.Plan.Row.Slug}}</strong><small>{{.Plan.Card.ProjectLabel}}</small></span>
+</header>
+<div class="plan-board plan-page" data-plan-scope data-return="{{.Return}}">
+{{template "plan-reader" .Plan}}
+</div>
+{{end}}
+
+{{/* The plan's body: the page's, and the ?reader=1 fragment. */}}
 {{define "plan-reader"}}
-<article class="reader-sheet">
-  <header class="reader-head">
-    <div class="reader-eyebrow">
-      <span class="kind">plan:{{.Row.Slug}}</span>{{copyBtn (printf "plan:%s" .Row.Slug)}}
-      {{if .Row.Status}}<span class="badge {{planTone .Row.Status}}">{{.Row.Status}}</span>{{end}}
-      {{if .Row.Project}}<a class="chip-parent" href="/console/projects/{{.Row.Project}}">{{icon "git-branch"}}{{.Row.Project}}</a>{{else}}<span class="chip-parent">{{icon "git-branch"}}global</span>{{end}}
-      {{if .CanApprove}}
-      <span class="reader-actions">
-        <form method="post" action="/console/plans/{{.Row.Slug}}/approve">
-          <button class="ract" type="submit" title="Escape hatch when Claude Code skipped the approval hook: flips the plan to approved and creates the tracking task">{{icon "check"}}Approve plan</button>
-        </form>
-      </span>
-      {{end}}
-    </div>
-    <h2 class="reader-title">{{.Row.Title}}{{copyBtn .Row.Title}}
-      {{if not .NoNote}}<form class="star-form" method="post" action="/console/favorites/plan/{{.Row.Slug}}">
-        <input type="hidden" name="favorite" value="{{if .Row.Favorite}}0{{else}}1{{end}}">
-        <input type="hidden" name="next" value="/console/plans/{{.Row.Slug}}">
-        <button class="star{{if .Row.Favorite}} on{{end}}" type="submit" aria-pressed="{{if .Row.Favorite}}true{{else}}false{{end}}" title="{{if .Row.Favorite}}Unstar{{else}}Star{{end}} this plan">{{icon "star"}}</button>
-      </form>{{end}}
-    </h2>
-    <div class="reader-facts">
-      <span class="fact">{{if eq .Row.Source "capture"}}CC capture{{if .Row.Basename}} &middot; <span class="mono">{{.Row.Basename}}.md</span>{{end}}{{else}}composed{{end}}</span>
-      {{if .Row.Iteration}}<span class="fact">iteration {{.Row.Iteration}}</span>{{end}}
-      {{if .Row.TasksTotal}}<span class="fact">{{.Row.TasksDone}}/{{.Row.TasksTotal}} steps done{{if .Row.TasksWIP}} &middot; {{.Row.TasksWIP}} in progress{{end}}</span>{{end}}
-      {{if .Row.Agents}}<span class="fact">{{.Row.Agents}} agent run{{if ne .Row.Agents 1}}s{{end}}</span>{{end}}
-      {{if .Row.TokenSessions}}<span class="fact" title="Cumulative model tokens harvested from the transcripts of the sessions attributed to this plan (moved a step, or captured the plan). Whole-session totals: a session's full burn counts toward every plan it touched, so plan totals must not be summed. Claude Code reports tokens at session end, so a live session stays unreported until it finishes.">{{if .Row.Tokens}}~{{compactNum .Row.Tokens}} model tokens{{else}}model tokens pending{{end}} &middot; {{.Row.TokenSessions}} session{{if ne .Row.TokenSessions 1}}s{{end}}{{if .Row.TokenUnreported}} ({{.Row.TokenUnreported}} unreported){{end}}{{if .Row.TokenShared}} &middot; {{.Row.TokenShared}} shared with other plans{{end}}</span>{{end}}
-      <span class="fact">updated {{agoTime .Row.Updated}}</span>
-      {{if .NoNote}}<span class="fact" data-no-note>no narrative note</span>{{else}}<span class="fact"><a href="/console/notes/{{.Row.NoteID}}">{{icon "file-text"}} note</a></span>{{end}}
-    </div>
-  </header>
-  {{if .NoNote}}<div class="peek-note" data-no-note>No narrative note yet. A note tagged <span class="mono">plan:{{.Row.Slug}}</span> becomes this plan's narrative; its steps are below.</div>{{else if .BodyLoaded}}<div class="prose doc">{{.Body}}</div>{{else}}<div class="peek-note">Body unavailable</div>{{end}}
-  {{if .Tasks}}
-  <section class="reader-links">
-    <h3>Steps <span class="count">{{len .Tasks}}</span></h3>
-    <ul class="peek-refs task-refs">
-      {{range .Tasks}}<li id="step-{{.ID}}"><a href="/console/tasks/{{.ID}}">{{.Title}}</a> {{taskBadge .Word}} <span class="mono-id">{{shortID .ID}}</span>{{copyBtn .ID}}</li>{{end}}
-    </ul>
+<article class="reader-sheet plan-sheet" data-plan="{{.Row.Slug}}">
+  {{template "plan-card" .Card}}
+  <div class="reader-facts">
+    <span class="fact" data-plan-source="{{.Row.Source}}">{{.SourceText}}{{if .Row.Basename}} &middot; <span class="mono">{{.Row.Basename}}.md</span>{{end}}</span>
+    {{if .Row.Iteration}}<span class="fact">iteration {{.Row.Iteration}}</span>{{end}}
+    {{if .Row.Agents}}<span class="fact">{{.Row.Agents}} agent run{{if ne .Row.Agents 1}}s{{end}}</span>{{end}}
+    {{if .Row.TokenSessions}}<span class="fact" title="Cumulative model tokens harvested from the transcripts of the sessions attributed to this plan (moved a step, or captured the plan). Whole-session totals: a session's full burn counts toward every plan it touched, so plan totals must not be summed. Claude Code reports tokens at session end, so a live session stays unreported until it finishes.">{{if .Row.Tokens}}~{{compactNum .Row.Tokens}} model tokens{{else}}model tokens pending{{end}} &middot; {{.Row.TokenSessions}} session{{if ne .Row.TokenSessions 1}}s{{end}}{{if .Row.TokenUnreported}} ({{.Row.TokenUnreported}} unreported){{end}}{{if .Row.TokenShared}} &middot; {{.Row.TokenShared}} shared with other plans{{end}}</span>{{end}}
+    <span class="fact">updated {{agoTime .Row.Updated}}</span>
+  </div>
+  <section class="reader-links plan-narrative-body">
+    <h3>Narrative{{if not .NoNote}} <a class="count" href="/console/notes/{{.Row.NoteID}}">{{icon "file-text"}} note</a>{{end}}</h3>
+    {{if .NoNote}}<div class="peek-note" data-no-note>No narrative note yet. A note tagged <span class="mono">plan:{{.Row.Slug}}</span> in {{.Card.ProjectLabel}} becomes this plan's narrative; its steps are above.</div>{{else if .BodyLoaded}}<div class="prose doc">{{.Body}}</div>{{else}}<div class="peek-note">Body unavailable</div>{{end}}
   </section>
-  {{end}}
   {{if .Attached}}
   <section class="reader-links">
     <h3>Attached notes <span class="count">{{len .Attached}}</span></h3>
@@ -151,4 +126,29 @@
   </section>
   {{end}}
 </article>
+{{end}}
+
+{{/* A slug that is a plan in more than one project, asked for without
+     ?project=: each project's plan, to choose from. Never a merge. */}}
+{{define "plan-chooser-page"}}
+<header class="mv2-bar">
+  <h1>{{icon "map"}}<a href="/console/plans" title="Every project's plans">Plans</a></h1>
+  <span class="mv2-count" aria-label="plan:{{.Chooser.Slug}} in {{len .Chooser.Choices}} projects"><strong>plan:{{.Chooser.Slug}}</strong><small>{{len .Chooser.Choices}} projects</small></span>
+</header>
+{{template "plan-chooser" .Chooser}}
+{{end}}
+
+{{define "plan-chooser"}}
+<article class="reader-sheet plan-chooser" data-plan-chooser="{{.Slug}}">
+  <p class="peek-note"><span class="mono">plan:{{.Slug}}</span> is a plan in {{len .Choices}} projects, each with its own steps and notes. Open one:</p>
+  <ul class="peek-refs">
+    {{range .Choices}}<li><a href="{{.Href}}" data-plan-choice="{{.Project}}">{{.TitleHTML}}</a> <span class="plan-proj">{{icon "folder-tree"}}{{.Project}}</span></li>{{end}}
+  </ul>
+</article>
+{{end}}
+
+{{define "scripts"}}
+<script>
+{{template "plan-steps-js"}}
+</script>
 {{end}}

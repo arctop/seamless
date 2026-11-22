@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -236,4 +237,52 @@ func TestCheckEntryAgainstRealRepo(t *testing.T) {
 	require.Equal(t, "UNKNOWN", v)
 	v, _ = checkEntry(dir, head, "no stamp\n\na.go")
 	require.Equal(t, "UNKNOWN", v)
+}
+
+// A plan is keyed by project and slug: plan show, check and approve take
+// --project, which names the project in the console route, and a slug that
+// is a plan in two projects, asked for without it, prints the console's
+// refusal naming both rather than one plan's answer.
+func TestPvbPlanProject_NamesThePlansProject(t *testing.T) {
+	for _, argv := range [][]string{
+		{"plan", "show", "--project", "example-ops", "shared"},
+		{"plan", "approve", "shared", "--project", "example-ops"},
+		{"plan", "check", "--cwd", "/tmp/repo", "--project", "example-ops", "shared"},
+	} {
+		p, err := parse(commands(), argv)
+		require.NoError(t, err, "%v", argv)
+		require.Equal(t, []string{"shared"}, p.pos)
+	}
+	require.Equal(t, "/console/plans/a%2Fb/approve?project=example-ops&format=json", planPath("a/b", "/approve", "example-ops", "format=json"))
+	require.Equal(t, "/console/plans/shared?format=json", planPath("shared", "", "", "format=json"), "no project: the route as before")
+	require.Equal(t, "/console/plans/shared?project=global", planPath("shared", "", "global"))
+
+	ambiguous := mustJSON(t, map[string]any{"error": "plan:shared is a plan in 2 projects (example-ops, example-web): name one with " +
+		"?project=<slug> (seam plan show shared --project <slug>)", "ambiguous": true})
+	detail := mustJSON(t, map[string]any{"plan": map[string]any{"slug": "shared", "status": "presented", "project": "example-ops",
+		"title": "Shared plan in ops", "basename": "shared-ops", "iteration": 1}, "body": "", "tasks": []any{}})
+	approved := mustJSON(t, map[string]any{"slug": "shared", "status": "approved", "taskCreated": true, "taskId": "01KDDDDDDDDDDDDDDDDDDDDDDD"})
+	type route = struct {
+		status int
+		body   string
+	}
+	e := lockedConsole(t, map[string]route{
+		"GET /console/plans/shared?format=json":                              {http.StatusConflict, ambiguous},
+		"GET /console/plans/shared?project=example-ops&format=json":          {http.StatusOK, detail},
+		"POST /console/plans/shared/approve?project=example-ops&format=json": {http.StatusOK, approved},
+	})
+	stdout, stderr, code := runLocked(t, e, "plan", "show", "shared")
+	require.Equal(t, 1, code)
+	require.Empty(t, stdout)
+	require.Contains(t, stderr, "plan:shared is a plan in 2 projects (example-ops, example-web)")
+	require.Contains(t, stderr, "--project <slug>")
+
+	stdout, stderr, code = runLocked(t, e, "plan", "show", "--project", "example-ops", "shared")
+	require.Equal(t, 0, code, stderr)
+	require.Contains(t, stdout, "shared  [presented]  example-ops")
+	require.Contains(t, stdout, "title:    Shared plan in ops")
+
+	stdout, stderr, code = runLocked(t, e, "plan", "approve", "--project", "example-ops", "shared")
+	require.Equal(t, 0, code, stderr)
+	require.Contains(t, stdout, "plan shared -> approved")
 }

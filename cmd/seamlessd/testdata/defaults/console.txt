@@ -2420,7 +2420,7 @@
   
 <div class="plan-card" id="plan-example-deploy-plan">
   <div class="plan-head">
-    <svg class="ico ico-git-merge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg><a class="nm titled" href="/console/plans/example-deploy-plan">Example deploy plan</a>
+    <svg class="ico ico-git-merge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg><a class="nm titled" href="/console/plans/example-deploy-plan?project=example-open-alpha">Example deploy plan</a>
     <span class="plan-slug" title="The plan's tag, the form an agent takes: copy it">plan:example-deploy-plan<button type="button" class="copy-btn" data-copy="plan:example-deploy-plan" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></span>
     <span class="kind ok" data-plan-status="approved">approved</span>
     
@@ -2482,7 +2482,7 @@
   
 <div class="plan-card" id="plan-example-rollout">
   <div class="plan-head">
-    <svg class="ico ico-git-merge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg><a class="nm titled" href="/console/plans/example-rollout">Example rollout narrative</a>
+    <svg class="ico ico-git-merge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg><a class="nm titled" href="/console/plans/example-rollout?project=example-open-alpha">Example rollout narrative</a>
     <span class="plan-slug" title="The plan's tag, the form an agent takes: copy it">plan:example-rollout<button type="button" class="copy-btn" data-copy="plan:example-rollout" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></span>
     
     
@@ -3150,15 +3150,21 @@
 (function () {
   
 
-  var PANEL = '.tabpanel[data-panel="tasks"]';
-  function inPanel(el) { return !!(el && el.closest && el.closest(PANEL)); }
+  var PANEL = '.tabpanel[data-panel="tasks"], [data-plan-scope]';
+  function scopeOf(el) { return el && el.closest ? el.closest(PANEL) : null; }
+  function inPanel(el) { return !!scopeOf(el); }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
 
   function fill(box) {
     var src = box.getAttribute('data-dossier');
     if (!src) return;
     box.setAttribute('data-loaded', 'loading');
-    var url = src + '?peek=1&next=' + encodeURIComponent(location.pathname + '?tab=tasks');
+    
+    
+    var scope = scopeOf(box);
+    var row = box.closest('details.step');
+    var back = (scope && scope.getAttribute('data-return')) || (location.pathname + '?tab=tasks');
+    var url = src + '?peek=1&next=' + encodeURIComponent(back + (row && row.id ? '#' + row.id : ''));
     fetch(url, { credentials: 'same-origin', headers: { Accept: 'text/html' } })
       .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.text(); })
       .then(function (html) {
@@ -3184,6 +3190,27 @@
     if (!row.matches || !row.matches('details.step') || !row.open || !inPanel(row)) return;
     var box = row.querySelector('.step-dossier');
     if (box && !box.getAttribute('data-loaded')) fill(box);
+  }, true);
+
+  
+  document.addEventListener('toggle', function (e) {
+    var lazy = e.target;
+    if (!lazy.matches || !lazy.matches('details.plan-lazy') || !lazy.open || !inPanel(lazy)) return;
+    var box = lazy.querySelector('[data-plan-steps]');
+    if (!box || box.getAttribute('data-loaded')) return;
+    box.setAttribute('data-loaded', 'loading');
+    fetch(box.getAttribute('data-plan-steps'), { credentials: 'same-origin', headers: { Accept: 'text/html' } })
+      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.text(); })
+      .then(function (html) {
+        box.classList.remove('dossier-error');
+        box.innerHTML = html;
+        box.setAttribute('data-loaded', '1');
+      })
+      .catch(function () {
+        box.textContent = 'Could not load the steps. The card is unchanged.';
+        box.classList.add('dossier-error');
+        box.removeAttribute('data-loaded'); 
+      });
   }, true);
 
   
@@ -3228,7 +3255,8 @@
   
   setInterval(function () {
     var now = Date.now();
-    document.querySelectorAll(PANEL + ' [data-lease-exp]').forEach(function (el) {
+    document.querySelectorAll('[data-lease-exp]').forEach(function (el) {
+      if (!inPanel(el)) return;
       var exp = Date.parse(el.getAttribute('data-lease-exp'));
       var v = el.querySelector('.v');
       if (isNaN(exp) || !v) return;
@@ -4335,120 +4363,782 @@
     
     
 
-
-
 <div class="lib-page" data-library="plans">
 
+
 <header class="mv2-bar">
-  <h1><svg class="ico ico-map" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>Plans</h1><details class="page-about"><summary aria-label="About this page" title="About this page"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary><p class="page-about-pop" role="note">Captured and composed plans, organized by execution state and connected to their steps.</p></details>
-  <span class="mv2-count" aria-label="2 plans">
-    <strong>2</strong>plans<small>2 updated in 24h</small>
+  <h1><svg class="ico ico-map" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg>Plans</h1><details class="page-about"><summary aria-label="About this page" title="About this page"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary><p class="page-about-pop" role="note">Every project&#39;s plans, one card each, grouped by what state the plan is in: what needs you, what is in progress, what stalled, what is ready, and what shipped.</p></details>
+  <span class="mv2-count" aria-label="2 active plans">
+    <strong>2</strong>active<small>0 shipped &middot; 2 in all</small>
   </span>
   <div class="lib-summary-pills">
     
-    <a class="status-ready" href="#rg-ready">2 ready</a>
+    
+    
+    <a class="status-ready" href="#pg-ready">2 ready</a>
     
   </div>
   
+  <form class="search lib-query" method="get" action="/console/plans" data-seam-query>
+    <svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+    <input name="q" aria-label="Filter plans by title or slug" placeholder="Filter plan titles and slugs&hellip;" value="">
+    
+  </form>
   <button type="button" class="mv2-filter-toggle" data-filters-toggle aria-expanded="false" aria-controls="mv2-controls"><svg class="ico ico-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg><span>Filters</span></button>
   <span class="mv2-spacer"></span>
   <div class="mv2-controls" id="mv2-controls">
+  <details class="menu lib-filter-menu" data-plan-projects>
+    <summary class="menu-btn" aria-label="Project: All"><svg class="ico ico-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg><span class="menu-k">Project</span><strong>All</strong><svg class="ico ico-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+    <div class="menu-list" data-seam-query>
+      <a class="on" href="/console/plans" title="2 plans">All projects<span class="n">2</span></a><a class="" href="/console/plans?project=example-open-alpha" title="2 plans">example-open-alpha<span class="n">2</span></a>
+    </div>
+  </details>
   <div class="mv2-sort">
-    <span class="mv2-sort-label">Updated</span>
+    <span class="mv2-sort-label" title="The window applies to shipped plans only: an active plan is always on the board">Shipped</span>
     <div class="seg" data-seam-query>
-      <a class="on" href="/console/plans/example-deploy-plan?w=24h">24h</a><a class="" href="/console/plans/example-deploy-plan?w=7d">7d</a><a class="" href="/console/plans/example-deploy-plan?w=30d">30d</a><a class="" href="/console/plans/example-deploy-plan?w=all">All time</a>
+      <a class="on" href="/console/plans#pg-shipped">24h</a><a class="" href="/console/plans?w=7d#pg-shipped">7d</a><a class="" href="/console/plans?w=30d#pg-shipped">30d</a><a class="" href="/console/plans?w=all#pg-shipped">All time</a>
     </div>
   </div>
   </div>
 </header>
 
+<div class="plan-board" data-plan-scope data-return="/console/plans">
 
-<div class="lib-layout" data-auto-url="/console/plans/example-deploy-plan">
-  <nav class="lib-rail" aria-label="Plans">
-    <div class="rail-overview"><span>Plan map</span><span>Phase &rarr; plan</span></div>
-    <div class="rail-scroll">
+  
+  <section class="plan-group" id="pg-ready" data-group="ready">
+    <h2 class="plan-group-hd" title="Open steps that moved in the last 7 days, or a plan with no steps yet.">Ready <span class="n">2</span><span class="plan-group-hint">Open steps that moved in the last 7 days, or a plan with no steps yet.</span></h2>
     
-    <div class="rail-groups">
-      
-      
-      <section class="rail-group" id="rg-ready">
-        <header class="rail-group-hd">ready <span class="n">2</span></header>
-        <div class="rail-items">
-          
-          <a class="rail-item selected" id="ri-<id:29>" href="/console/plans/example-deploy-plan" data-title="Example deploy plan" data-context="Ready" aria-current="page">
-            <span class="ri-title">Example deploy plan</span>
-            <span class="ri-meta">example-open-alpha &middot; 0/1 steps &middot; approved &middot; <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
-          </a>
-          
-          <a class="rail-item" id="ri-<id:8>" href="/console/plans/example-rollout" data-title="Example rollout narrative" data-context="Ready">
-            <span class="ri-title">Example rollout narrative</span>
-            <span class="ri-meta">example-open-alpha &middot; 0/1 steps &middot; <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
-          </a>
-          
-        </div>
-      </section>
-      
-      
-    </div>
+<div class="plan-card" id="plan-example-open-alpha:example-deploy-plan" data-plan-state="ready">
+  <div class="plan-head">
+    <svg class="ico ico-git-merge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg><a class="nm titled" href="/console/plans/example-deploy-plan?project=example-open-alpha">Example deploy plan</a>
+    <span class="plan-slug" title="The plan's tag, the form an agent takes: copy it">plan:example-deploy-plan<button type="button" class="copy-btn" data-copy="plan:example-deploy-plan" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></span><a class="plan-proj" href="/console/projects/example-open-alpha?tab=tasks#plan-example-deploy-plan" data-plan-project="example-open-alpha" title="Open example-open-alpha's Plans &amp; tasks at this plan"><svg class="ico ico-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>example-open-alpha</a><span class="plan-tok" title="Cumulative model tokens of the sessions attributed to this plan (whole-session totals: never sum them across plans)">tokens pending (1 unreported)</span>
+    <span class="kind ok" data-plan-status="approved">approved</span>
     
     
-    </div>
-  </nav>
-  <section class="lib-reader" id="lib-reader" data-base="/console/plans" aria-live="polite" aria-label="Plan">
+    <a class="plan-narrative" href="/console/notes/<id:29>" title="The plan's narrative note"><svg class="ico ico-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>narrative</a>
     
-<article class="reader-sheet">
-  <header class="reader-head">
-    <div class="reader-eyebrow">
-      <span class="kind">plan:example-deploy-plan</span><button type="button" class="copy-btn" data-copy="plan:example-deploy-plan" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
-      <span class="badge ok">approved</span>
-      <a class="chip-parent" href="/console/projects/example-open-alpha"><svg class="ico ico-git-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>example-open-alpha</a>
-      
-    </div>
-    <h2 class="reader-title">Example deploy plan<button type="button" class="copy-btn" data-copy="Example deploy plan" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
-      <form class="star-form" method="post" action="/console/favorites/plan/example-deploy-plan">
-        <input type="hidden" name="favorite" value="1">
-        <input type="hidden" name="next" value="/console/plans/example-deploy-plan">
-        <button class="star" type="submit" aria-pressed="false" title="Star this plan"><svg class="ico ico-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg></button>
-      </form>
-    </h2>
-    <div class="reader-facts">
-      <span class="fact">CC capture &middot; <span class="mono">example-deploy-plan.md</span></span>
-      <span class="fact">iteration 1</span>
-      <span class="fact">0/1 steps done</span>
-      
-      <span class="fact" title="Cumulative model tokens harvested from the transcripts of the sessions attributed to this plan (moved a step, or captured the plan). Whole-session totals: a session's full burn counts toward every plan it touched, so plan totals must not be summed. Claude Code reports tokens at session end, so a live session stays unreported until it finishes.">model tokens pending &middot; 1 session (1 unreported)</span>
-      <span class="fact">updated <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
-      <span class="fact"><a href="/console/notes/<id:29>"><svg class="ico ico-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg> note</a></span>
-    </div>
-  </header>
-  <div class="prose doc"><blockquote>
-<p>captured from cc/dg-claud-393af69c59c44e2b | example-deploy-plan.md | iter 1 | git unknown | <time></p>
-</blockquote>
-<h1>Example deploy plan</h1>
-<ol>
-<li>Stage the example deploy.</li>
-<li>Promote it.</li>
-</ol>
+    <form class="star-form" method="post" action="/console/favorites/plan/example-deploy-plan">
+      <input type="hidden" name="favorite" value="1">
+      <input type="hidden" name="next" value="/console/plans">
+      <button class="star" type="submit" aria-pressed="false" title="Star this plan"><svg class="ico ico-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg></button>
+    </form>
+    
+    
+    <span class="prog" data-plan-summary>0/1 done &middot; <b class="ready-n">1 ready</b> &middot; moved <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
+  </div>
+  
+  <div class="plan-bar"><span class="done" style="width:0%"></span><span class="doing" style="width:0%"></span></div>
+  <details class="plan-lazy" id="lazy-plan-example-open-alpha:example-deploy-plan"><summary><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>Show the 1 step</summary><div class="plan-lazy-box" id="lazybox-plan-example-open-alpha:example-deploy-plan" data-live-skip data-plan-steps="/console/plans/example-deploy-plan?project=example-open-alpha&amp;steps=1"><a class="link-act" href="/console/plans/example-deploy-plan?project=example-open-alpha">open the plan to read its steps</a></div></details>
+  
 </div>
+
+<div class="plan-card" id="plan-example-open-alpha:example-rollout" data-plan-state="ready">
+  <div class="plan-head">
+    <svg class="ico ico-git-merge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg><a class="nm titled" href="/console/plans/example-rollout?project=example-open-alpha">Example rollout narrative</a>
+    <span class="plan-slug" title="The plan's tag, the form an agent takes: copy it">plan:example-rollout<button type="button" class="copy-btn" data-copy="plan:example-rollout" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></span><a class="plan-proj" href="/console/projects/example-open-alpha?tab=tasks#plan-example-rollout" data-plan-project="example-open-alpha" title="Open example-open-alpha's Plans &amp; tasks at this plan"><svg class="ico ico-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>example-open-alpha</a><span class="plan-tok" title="Cumulative model tokens of the sessions attributed to this plan (whole-session totals: never sum them across plans)">tokens pending (1 unreported)</span>
+    
+    
+    
+    <a class="plan-narrative" href="/console/notes/<id:8>" title="The plan's narrative note"><svg class="ico ico-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>narrative</a>
+    
+    <form class="star-form" method="post" action="/console/favorites/plan/example-rollout">
+      <input type="hidden" name="favorite" value="1">
+      <input type="hidden" name="next" value="/console/plans">
+      <button class="star" type="submit" aria-pressed="false" title="Star this plan"><svg class="ico ico-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg></button>
+    </form>
+    
+    
+    <span class="prog" data-plan-summary>0/1 done &middot; <b class="ready-n">1 ready</b> &middot; moved <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
+  </div>
   
-  <section class="reader-links">
-    <h3>Steps <span class="count">1</span></h3>
-    <ul class="peek-refs task-refs">
-      <li id="step-<id:30>"><a href="/console/tasks/<id:30>">Implement plan: Example deploy plan</a> <span class="badge pop" data-word="ready" title="Nothing unfinished before it: an agent can claim it now.">ready</span> <span class="mono-id"><id:30>~8</span><button type="button" class="copy-btn" data-copy="<id:30>" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></li>
-    </ul>
-  </section>
+  <div class="plan-bar"><span class="done" style="width:0%"></span><span class="doing" style="width:0%"></span></div>
+  <details class="plan-lazy" id="lazy-plan-example-open-alpha:example-rollout"><summary><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>Show the 1 step</summary><div class="plan-lazy-box" id="lazybox-plan-example-open-alpha:example-rollout" data-live-skip data-plan-steps="/console/plans/example-rollout?project=example-open-alpha&amp;steps=1"><a class="link-act" href="/console/plans/example-rollout?project=example-open-alpha">open the plan to read its steps</a></div></details>
   
-  
-</article>
+</div>
 
   </section>
+  
+  
+
 </div>
 
 </div>
 
 
   </main>
-==== /console/plans tail: the common tail ====
+==== /console/plans tail ====
+</div>
+<div class="nav-progress" aria-hidden="true"></div>
+<button id="live-pill" type="button" hidden>new activity &middot; refresh</button>
+<div id="live-toast" role="status" aria-live="polite" hidden></div>
+
+<div class="build-notice" id="build-notice" role="status" aria-live="polite">
+  <div class="build-notice-card" hidden>
+    <p class="build-notice-copy">Seamless was updated. Reload this page to use the new version.</p>
+    <a class="btn small primary" id="build-reload" href="" data-no-prefetch>Reload</a>
+  </div>
+</div>
+<div id="cmdk" class="cmdk-overlay" hidden>
+  <div class="cmdk" role="dialog" aria-modal="true" aria-label="Search or jump to">
+    <div class="cmdk-input-row">
+      <svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="cmdk-input" type="text" role="combobox" aria-expanded="true" aria-controls="cmdk-list"
+             aria-autocomplete="list" autocomplete="off" spellcheck="false"
+             placeholder="Search knowledge and work, or jump to a page&hellip;">
+      <kbd class="cmdk-esc">esc</kbd>
+    </div>
+    <ul id="cmdk-list" class="cmdk-list" role="listbox" aria-label="Results"></ul>
+    <div class="cmdk-foot">
+      <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> navigate</span>
+      <span><kbd>&crarr;</kbd> open</span>
+      <span><kbd>?</kbd> shortcuts</span>
+      <a class="sp" id="cmdk-all" href="/console/search">See all results</a>
+    </div>
+  </div>
+</div>
+
+<div id="keys" class="keys-overlay" hidden>
+  <div class="keys" role="dialog" aria-modal="true" aria-labelledby="keys-title">
+    <header class="keys-head">
+      <h2 id="keys-title"><svg class="ico ico-keyboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/></svg>Keyboard shortcuts</h2>
+      <button type="button" class="keys-close" data-keys-close aria-label="Close"><svg class="ico ico-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    </header>
+    <div class="keys-body">
+      <section>
+        <h3>Anywhere</h3>
+        <dl>
+          <div><dt><kbd>&#8984;</kbd><kbd>K</kbd></dt><dd>Search or jump to a page</dd></div>
+          <div><dt><kbd>/</kbd></dt><dd>Filter this page (search when it has no filter)</dd></div>
+          <div><dt><kbd>?</kbd></dt><dd>This sheet</dd></div>
+          <div><dt><kbd>[</kbd></dt><dd>Collapse or expand the sidebar</dd></div>
+          <div><dt><kbd>esc</kbd></dt><dd>Close a panel, sheet, or search</dd></div>
+        </dl>
+      </section>
+      <section>
+        <h3>Lists and readers</h3>
+        <dl>
+          <div><dt><kbd>j</kbd></dt><dd>Next item</dd></div>
+          <div><dt><kbd>k</kbd></dt><dd>Previous item</dd></div>
+        </dl>
+      </section>
+      <section>
+        <h3>Gardener</h3>
+        <dl>
+          <div><dt><kbd>a</kbd></dt><dd>Apply what the reader shows (press again to confirm a change that cannot be undone)</dd></div>
+          <div><dt><kbd>x</kbd></dt><dd>Dismiss what the reader shows</dd></div>
+        </dl>
+      </section>
+      <section>
+        <h3>Go to <small>press <kbd>g</kbd>, then</small></h3>
+        <dl id="keys-goto"></dl>
+      </section>
+    </div>
+  </div>
+</div>
+<script src="/console/static/interactions.js?v=<hash:11>"></script>
+<script src="/console/static/search.js?v=<hash:12>"></script>
+<script src="/console/static/library.js?v=<hash:13>"></script>
+<script src="/console/static/charts.js?v=<hash:14>"></script>
+<script src="/console/static/navigation.js?v=<hash:15>"></script>
+<script src="/console/static/shell.js?v=<hash:16>"></script>
+<script>
+(function () {
+  
+  
+  
+  
+  var connected = false;
+  function setLive(on) { document.querySelectorAll('.topbar .live:not(#ix-live)').forEach(function (p) { p.classList.toggle('off', !on); }); }
+  if (!window.EventSource) { setLive(false); return; }
+  var pill = document.getElementById('live-pill');
+  var toast = document.getElementById('live-toast');
+  
+  
+  
+  
+  var orbs = document.querySelectorAll('a.brand .dot');
+  function setOrb(on) { orbs.forEach(function (o) { o.classList.toggle('on', on); o.classList.toggle('off', !on); }); }
+
+  var n = 0;            
+  var pending = false;  
+  var busy = false;     
+  var again = false;    
+  var debounce = null;
+  var toastTimer = null;
+  var toastHold = 0;    
+
+  function fieldFocused() { var a = document.activeElement; return !!(a && a.matches && a.matches('input, textarea, select, [contenteditable=""], [contenteditable="true"]')); }
+  function selecting() { var s = window.getSelection && window.getSelection(); return !!(s && s.type === 'Range' && String(s).trim()); }
+  function paneOpen() { return !!document.querySelector('.list-detail-split.detail-open'); }
+  function cmdkOpen() { var c = document.getElementById('cmdk'); return !!(c && !c.hidden); }
+  
+  function safe() { return !document.hidden && !fieldFocused() && !selecting() && !paneOpen() && !cmdkOpen(); }
+
+  
+  
+  function showPill() { if (!pill) return; pill.textContent = (n ? n + ' update' + (n > 1 ? 's' : '') : 'may be out of date') + ' · tap to refresh'; pill.hidden = false; }
+  function hidePill() { if (pill) pill.hidden = true; }
+  function flashToast(msg) {
+    if (!toast) return;
+    toast.textContent = msg; toast.hidden = false;
+    toast.classList.remove('error');
+    toast.classList.remove('show'); void toast.offsetWidth; toast.classList.add('show'); 
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toast.classList.remove('show'); setTimeout(function () { toast.hidden = true; }, 300); }, 2600);
+  }
+  
+  
+  
+  function eventToast(msg) { flashToast(msg); toastHold = Date.now() + 2600; }
+  
+  
+  
+  
+  function actionToastUp() { return !!(toast && !toast.hidden && toast.classList.contains('show') && toast.textContent !== 'Updated'); }
+
+  
+  
+  
+  
+  
+  
+  
+  var LIVE_TIMEOUT = 15000;
+  
+  function apply(quiet) {
+    if (busy) { again = true; return; }
+    busy = true;
+    
+    
+    var headers = { 'X-Seam-Live': '1' };
+    if (window.SeamConsole) window.SeamConsole.heldViews(headers);
+    var stop = window.AbortController ? new AbortController() : null;
+    var limit = stop ? setTimeout(function () { stop.abort(); }, LIVE_TIMEOUT) : null;
+    fetch(location.href, { credentials: 'same-origin', headers: headers, signal: stop ? stop.signal : undefined })
+      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.text(); })
+      .then(function (html) {
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        if (!doc.querySelector('.sidebar')) {
+          
+          location.assign('/console/login?next=' + encodeURIComponent(location.pathname + location.search));
+          return;
+        }
+        if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
+        setLive(connected); 
+        n = 0; pending = false; hidePill();
+        
+        if (quiet !== true) {
+          if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
+        }
+        
+        
+        setTimeout(function () {
+          document.querySelectorAll('.live-in, nav.nav .count.bump').forEach(function (el) { el.classList.remove('live-in', 'bump'); });
+        }, 600);
+      })
+      .catch(function (error) {
+        
+        
+        if (window.SeamConsole && window.SeamConsole.stale(error)) { again = true; return; }
+        pending = true; showPill(); 
+      })
+      .finally(function () { if (limit) clearTimeout(limit); busy = false; if (again) { again = false; schedule(); } });
+  }
+  function trigger(quiet) { if (safe()) apply(quiet === true); else { pending = true; showPill(); } }
+  function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } 
+
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  var STREAM_GRACE = 10000;
+  var es = null;
+  var hideTimer = null;
+  var missed = false; 
+  
+  function streaming() { return !!es && es.readyState !== EventSource.CLOSED; }
+  function connect() {
+    if (streaming()) return;
+    if (es) es.close();
+    es = new EventSource('/console/events');
+    es.onopen = function () {
+      connected = true; setOrb(true); setLive(true);
+      if (missed) { missed = false; catchUp(); }
+    };
+    es.onmessage = function (ev) {
+      
+      
+      
+      
+      try {
+        var d = JSON.parse(ev.data), k = d.kind;
+        
+        
+        
+        document.dispatchEvent(new CustomEvent('seam:event', { detail: d }));
+        if ((k === 'tool.call' || k === 'hook.prompt') && !window.SEAM_LIVE_ALL_KINDS) return;
+        
+        
+        if (k === 'memory.first_reuse' && d.summary) eventToast(d.summary);
+        
+        
+        
+        if (k === 'update.available' && d.summary) eventToast(d.summary);
+      } catch (e) {}
+      
+      
+      
+      if (window.SEAM_NO_LIVE_REFRESH) return;
+      n++; schedule();
+    };
+    es.onerror = function () { connected = false; setOrb(false); setLive(false); missed = true; };
+  }
+  function letGo() {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (!es) return;
+    es.close(); es = null; missed = true;
+  }
+  
+  
+  function rest() {
+    if (hideTimer || !es) return;
+    hideTimer = setTimeout(function () { hideTimer = null; if (document.hidden) letGo(); }, STREAM_GRACE);
+  }
+  function wake() {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (!document.hidden) connect();
+  }
+  
+  
+  
+  
+  function catchUp() {
+    document.dispatchEvent(new CustomEvent('seam:stream-resumed'));
+    if (window.SEAM_NO_LIVE_REFRESH) return;
+    trigger(true);
+  }
+  
+  
+  if (document.hidden) missed = true; else connect();
+  document.addEventListener('visibilitychange', function () { if (document.hidden) rest(); else wake(); });
+  window.addEventListener('pagehide', letGo);
+  window.addEventListener('pageshow', function (e) { if (e.persisted) wake(); });
+
+  
+  
+  setInterval(function () { if (pending && !busy && safe()) apply(); }, 1500);
+  if (pill) pill.onclick = function () { apply(); };
+})();
+(function () {
+  
+
+  if (document.querySelector('.list-detail-split')) return;
+  document.addEventListener('click', function (e) {
+    var row = e.target.closest ? e.target.closest('.row-link[data-href]') : null;
+    if (!row) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+    if (e.target.closest('a, button, form')) return; 
+    var sel = window.getSelection && window.getSelection();
+    if (sel && sel.type === 'Range' && sel.toString()) return;
+    location.href = row.getAttribute('data-href');
+  });
+})();
+(function () {
+  
+
+  
+  
+  
+  if (!document.querySelector('.list-detail-split') || !document.getElementById('detail-pane')) return;
+  function split() { return document.querySelector('.list-detail-split'); }
+  function pane() { return document.getElementById('detail-pane'); }
+  function pbody() { var p = pane(); return p ? p.querySelector('.detail-pane-body') : null; }
+  var lastTrigger = null; 
+  var pushed = false;     
+
+  function peekURL(href) { return href + (href.indexOf('?') >= 0 ? '&' : '?') + 'peek=1'; }
+  function targetHref(el) {
+    if (el.getAttribute('href')) return el.getAttribute('href');
+    var h = el.closest('[data-href]');
+    return h ? h.getAttribute('data-href') : null;
+  }
+  function mark(href) {
+    var s = split();
+    if (!s) return;
+    s.querySelectorAll('.row-link.selected').forEach(function (r) {
+      r.classList.remove('selected'); r.removeAttribute('aria-current');
+    });
+    if (!href) return;
+    s.querySelectorAll('.row-link[data-href]').forEach(function (r) {
+      if (r.getAttribute('data-href') === href) { r.classList.add('selected'); r.setAttribute('aria-current', 'true'); }
+    });
+  }
+  
+  
+  
+  
+  
+  function anchorOf(el) {
+    if (!el || !el.isConnected) return null;
+    var lp = el.closest('.list-pane');
+    return lp ? { el: el, lp: lp, top: el.getBoundingClientRect().top } : null;
+  }
+  function restore(k) {
+    if (!k || !k.el.isConnected || k.lp.scrollHeight <= k.lp.clientHeight) return;
+    var box = k.lp.getBoundingClientRect(), r = k.el.getBoundingClientRect();
+    var lo = Math.max(box.top, 0) + 8, hi = Math.min(box.bottom, window.innerHeight) - r.height - 8;
+    k.lp.scrollTop += r.top - Math.max(lo, Math.min(k.top, hi));
+  }
+  function load(href) {
+    return fetch(peekURL(href)).then(function (r) {
+      if (!r.ok) throw new Error('http ' + r.status);
+      return r.text();
+    }).then(function (html) {
+      var b = pbody(), p = pane(), s = split();
+      if (!b || !p || !s) return;
+      b.innerHTML = html;
+      if (window.IX) window.IX.enhance(b);
+      var openLink = p.querySelector('.detail-open');
+      if (openLink) openLink.setAttribute('href', href);
+      var keep = p.hidden ? anchorOf(lastTrigger) : null;
+      p.hidden = false;
+      s.classList.add('detail-open');
+      restore(keep);
+      b.scrollTop = 0;
+    }).catch(function () {
+      if (window.SeamConsole) window.SeamConsole.flash('Could not update the detail view. The current data is unchanged.', 'error');
+    });
+  }
+  function teardown() {
+    var p = pane(), s = split(), b = pbody();
+    if (p) p.hidden = true;
+    if (s) s.classList.remove('detail-open');
+    if (b) b.innerHTML = '';
+    mark(null);
+    pushed = false;
+    if (lastTrigger && typeof lastTrigger.focus === 'function') { try { lastTrigger.focus(); } catch (e) {} }
+    lastTrigger = null;
+  }
+  
+  
+  
+  function open(href, drill) {
+    if (!href) return;
+    var wasHidden = pane().hidden;
+    load(href);
+    mark(href);
+    var hash = '#peek=' + encodeURIComponent(href);
+    try {
+      if (wasHidden) { history.pushState({ peek: 1 }, '', hash); pushed = true; }
+      else if (drill) { history.pushState({ peek: 1 }, '', hash); }
+      else { history.replaceState({ peek: 1 }, '', hash); }
+    } catch (e) {}
+  }
+  
+  
+  function requestClose() {
+    if (pushed) { history.back(); return; }
+    if (location.hash.indexOf('#peek=') === 0) {
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+    }
+    teardown();
+  }
+
+  document.addEventListener('click', function (e) {
+    var closeHit = e.target.closest ? e.target.closest('.detail-close') : null;
+    if (closeHit) { e.preventDefault(); requestClose(); return; }
+    var peek = e.target.closest ? e.target.closest('[data-peek]') : null;
+    if (peek) {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; 
+      if (e.target.closest('button, form')) return;                       
+      var plainLink = e.target.closest('a[href]');
+      if (plainLink && !plainLink.hasAttribute('data-peek')) return;      
+      var href = targetHref(peek);
+      if (!href) return;
+      e.preventDefault();
+      lastTrigger = e.target.closest('a[href]') || peek;
+      open(href, !!e.target.closest('#detail-pane'));
+      return;
+    }
+    var row = e.target.closest ? e.target.closest('.row-link[data-href]') : null;
+    var s = split();
+    if (!row || !s || !s.contains(row)) return;
+    if (e.target.closest('a, button')) return;
+    var sel = window.getSelection && window.getSelection();
+    if (sel && sel.type === 'Range' && sel.toString()) return;
+    location.href = row.getAttribute('data-href');
+  });
+
+  document.addEventListener('keydown', function (e) { var p = pane(); if (e.key === 'Escape' && p && !p.hidden) requestClose(); });
+  
+  window.addEventListener('popstate', function () {
+    var mm = location.hash.match(/^#peek=(.+)$/);
+    if (mm) { var hp = decodeURIComponent(mm[1]); pushed = true; load(hp); mark(hp); }
+    else { var p = pane(); if (p && !p.hidden) teardown(); }
+  });
+  
+  
+  var m = location.hash.match(/^#peek=(.+)$/);
+  if (m) {
+    try { var h0 = decodeURIComponent(m[1]); pushed = false; load(h0); mark(h0); } catch (e) {}
+  }
+})();
+(function () {
+  var btn = document.getElementById('theme-toggle');
+  var root = document.documentElement;
+  var osDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  
+  
+  function choice() {
+    var t = root.getAttribute('data-theme');
+    return t === 'dark' || t === 'light' ? t : 'system';
+  }
+  function effective() {
+    var c = choice();
+    if (c !== 'system') return c;
+    return osDark && osDark.matches ? 'dark' : 'light';
+  }
+  
+  
+  
+  function label() {
+    if (!btn) return;
+    var next = effective() === 'dark' ? 'Light theme' : 'Dark theme';
+    if (choice() === 'system') next += effective() === 'dark' ? ' instead of the system\u2019s dark' : ' instead of the system\u2019s light';
+    btn.setAttribute('aria-label', next);
+    btn.setAttribute('title', next);
+  }
+  label();
+  function announce() {
+    document.dispatchEvent(new CustomEvent('seam:theme', { detail: { theme: choice(), effective: effective() } }));
+  }
+  
+  
+  
+  function set(theme) {
+    if (theme === 'system') {
+      root.removeAttribute('data-theme');
+      try { localStorage.removeItem('seamless-theme'); } catch (e) {}
+    } else if (theme === 'dark' || theme === 'light') {
+      root.setAttribute('data-theme', theme);
+      try { localStorage.setItem('seamless-theme', theme); } catch (e) {}
+    } else {
+      return;
+    }
+    label();
+    announce();
+  }
+  window.SeamTheme = { set: set, choice: choice, effective: effective };
+  if (btn) btn.onclick = function () { set(effective() === 'dark' ? 'light' : 'dark'); };
+  
+  
+  if (osDark) {
+    var onOS = function () { if (choice() === 'system') { label(); announce(); } };
+    if (osDark.addEventListener) osDark.addEventListener('change', onOS);
+    else if (osDark.addListener) osDark.addListener(onOS);
+  }
+})();
+(function () {
+  
+
+  function flash(btn) {
+    btn.classList.add('copied');
+    btn.setAttribute('aria-label', 'Copied');
+    setTimeout(function () {
+      btn.classList.remove('copied');
+      btn.setAttribute('aria-label', 'Copy');
+    }, 1100);
+  }
+  function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-1000px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('.copy-btn[data-copy]') : null;
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var text = btn.getAttribute('data-copy');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { flash(btn); }, function () { fallbackCopy(text); flash(btn); });
+    } else {
+      fallbackCopy(text);
+      flash(btn);
+    }
+  });
+})();
+</script>
+
+<script>
+(function () {
+  
+
+  var PANEL = '.tabpanel[data-panel="tasks"], [data-plan-scope]';
+  function scopeOf(el) { return el && el.closest ? el.closest(PANEL) : null; }
+  function inPanel(el) { return !!scopeOf(el); }
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+
+  function fill(box) {
+    var src = box.getAttribute('data-dossier');
+    if (!src) return;
+    box.setAttribute('data-loaded', 'loading');
+    
+    
+    var scope = scopeOf(box);
+    var row = box.closest('details.step');
+    var back = (scope && scope.getAttribute('data-return')) || (location.pathname + '?tab=tasks');
+    var url = src + '?peek=1&next=' + encodeURIComponent(back + (row && row.id ? '#' + row.id : ''));
+    fetch(url, { credentials: 'same-origin', headers: { Accept: 'text/html' } })
+      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.text(); })
+      .then(function (html) {
+        box.classList.remove('dossier-error');
+        box.innerHTML = html;
+        var open = document.createElement('a');
+        open.className = 'dossier-open';
+        open.href = src;
+        open.textContent = 'open full ↗';
+        box.appendChild(open);
+        box.setAttribute('data-loaded', '1');
+      })
+      .catch(function () {
+        box.textContent = 'Could not load this task. The row is unchanged.';
+        box.classList.add('dossier-error');
+        box.removeAttribute('data-loaded'); 
+      });
+  }
+
+  
+  document.addEventListener('toggle', function (e) {
+    var row = e.target;
+    if (!row.matches || !row.matches('details.step') || !row.open || !inPanel(row)) return;
+    var box = row.querySelector('.step-dossier');
+    if (box && !box.getAttribute('data-loaded')) fill(box);
+  }, true);
+
+  
+  document.addEventListener('toggle', function (e) {
+    var lazy = e.target;
+    if (!lazy.matches || !lazy.matches('details.plan-lazy') || !lazy.open || !inPanel(lazy)) return;
+    var box = lazy.querySelector('[data-plan-steps]');
+    if (!box || box.getAttribute('data-loaded')) return;
+    box.setAttribute('data-loaded', 'loading');
+    fetch(box.getAttribute('data-plan-steps'), { credentials: 'same-origin', headers: { Accept: 'text/html' } })
+      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.text(); })
+      .then(function (html) {
+        box.classList.remove('dossier-error');
+        box.innerHTML = html;
+        box.setAttribute('data-loaded', '1');
+      })
+      .catch(function () {
+        box.textContent = 'Could not load the steps. The card is unchanged.';
+        box.classList.add('dossier-error');
+        box.removeAttribute('data-loaded'); 
+      });
+  }, true);
+
+  
+  
+  
+  function reveal(target) {
+    for (var p = target.parentElement; p; p = p.parentElement) {
+      if (p.tagName === 'DETAILS') p.open = true;
+      if (p.matches && p.matches(PANEL)) break;
+    }
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    target.classList.remove('flash');
+    void target.offsetWidth;
+    target.classList.add('flash');
+  }
+  document.addEventListener('click', function (e) {
+    var chip = e.target.closest ? e.target.closest('[data-jump]') : null;
+    if (!chip || !inPanel(chip) || e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+    e.preventDefault(); 
+    var id = (chip.getAttribute('href') || '').replace(/^#/, '');
+    var target = id ? document.getElementById(id) : null;
+    if (target) reveal(target);
+  });
+
+  
+  
+  
+  document.addEventListener('click', function (e) {
+    var open = e.target.closest ? e.target.closest('[data-open-step]') : null;
+    if (!open || !inPanel(open) || e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+    var row = document.getElementById(open.getAttribute('data-open-step'));
+    if (!row || row.tagName !== 'DETAILS') return;
+    e.preventDefault();
+    row.open = true;
+    reveal(row);
+  });
+  document.addEventListener('animationend', function (e) {
+    if (e.target.classList && e.target.classList.contains('flash')) e.target.classList.remove('flash');
+  });
+
+  
+  
+  setInterval(function () {
+    var now = Date.now();
+    document.querySelectorAll('[data-lease-exp]').forEach(function (el) {
+      if (!inPanel(el)) return;
+      var exp = Date.parse(el.getAttribute('data-lease-exp'));
+      var v = el.querySelector('.v');
+      if (isNaN(exp) || !v) return;
+      var left = Math.floor((exp - now) / 1000);
+      if (left <= 0) {
+        var gone = Math.floor(-left / 60);
+        v.textContent = gone < 1 ? 'lapsed <age>' : gone < 60 ? 'lapsed ' + gone + 'm ago' :
+          gone < 1440 ? 'lapsed ' + Math.floor(gone / 60) + 'h ago' : 'lapsed ' + Math.floor(gone / 1440) + 'd ago';
+        el.classList.add('lease-lapsed');
+        el.classList.remove('lease-warn');
+        return;
+      }
+      if (left >= 3600) v.textContent = Math.floor(left / 3600) + 'h ' + Math.floor((left % 3600) / 60) + 'm';
+      else v.textContent = Math.floor(left / 60) + ':' + pad(left % 60);
+      el.classList.remove('lease-lapsed');
+      el.classList.toggle('lease-warn', left < 300);
+    });
+  }, 1000);
+
+  
+  
+  
+  var stale = '';
+  document.addEventListener('submit', function (e) {
+    var box = e.target.closest ? e.target.closest('.step-dossier') : null;
+    if (box && inPanel(box)) stale = box.id;
+  }, true);
+  document.addEventListener('seam:content-updated', function () {
+    if (!stale) return;
+    var box = document.getElementById(stale);
+    stale = '';
+    if (!box) return;
+    box.removeAttribute('data-loaded');
+    fill(box);
+  });
+})();
+
+</script>
+
+</body>
+</html>
+
 ==== GET /console/held -> 200 ====
 <title>Write screening &middot; Seamless</title>
 ==== /console/held main ====

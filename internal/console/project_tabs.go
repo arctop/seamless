@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"html/template"
 	"net/http"
+	"net/url"
 	"slices"
 	"sort"
 	"strconv"
@@ -129,7 +130,56 @@ type planTimelineVM struct {
 
 	Recent []planLedgerVM
 	Groups []planStepGroup
+
+	// The Plans board's and the plan page's (plans.go); zero on the project
+	// tab, which renders as it did. State is the board's group; Anchor the
+	// card's id, unique per project and slug (CardID); ShowProject puts the
+	// project on the card as a chip, ProjectHref the project tab at it ("" for
+	// a project with no workspace). Lazy marks a card that loads its steps
+	// from StepsURL when it is opened. The token fields are the plan's model
+	// tokens (store.PlanTokenRollup: whole-session, never summed across
+	// plans). Dropped is how many of the closed steps were dropped, and
+	// MomSettle marks a plan shipped this local month (momentum only).
+	State           string
+	Anchor          string
+	ShowProject     bool
+	ProjectHref     string
+	Lazy            bool
+	StepsURL        string
+	Tokens          int
+	TokenSessions   int
+	TokenUnreported int
+	TokenShared     int
+	Dropped         int
+	MomSettle       bool
 }
+
+// CardID is the card's anchor: plan-<slug> on the project tab, where a slug
+// names one plan; the board's own (planAnchor) where it does not.
+func (tl planTimelineVM) CardID() string {
+	if tl.Anchor != "" {
+		return tl.Anchor
+	}
+	return "plan-" + tl.Slug
+}
+
+// Href is the plan's page, its project named: one slug is a plan per project.
+func (tl planTimelineVM) Href() string { return planHref(tl.Project, tl.Slug) }
+
+// ApproveAction is the escape hatch's route for this plan, its project named,
+// so Approve never has to guess between two projects' captures of one slug.
+func (tl planTimelineVM) ApproveAction() string {
+	return "/console/plans/" + url.PathEscape(tl.Slug) + "/approve?project=" + url.QueryEscape(planProjectParam(tl.Project))
+}
+
+// TitleHTML is the card's title for display (planTitleHTML).
+func (tl planTimelineVM) TitleHTML() template.HTML { return planTitleHTML(tl.Title) }
+
+// ProjectLabel is the card's project as the board shows it.
+func (tl planTimelineVM) ProjectLabel() string { return planProjectLabel(tl.Project) }
+
+// DoneOnly is the closed steps that were done, not dropped.
+func (tl planTimelineVM) DoneOnly() int { return tl.Done - tl.Dropped }
 
 // planCountVM is one part of a plan head's count: its word's key (a
 // data-count attribute) and what it says ("2 blocked").
@@ -227,6 +277,22 @@ type planStepVM struct {
 	// this request does not read: their project, once per
 	// blocker (markLockedBlockers' rule). nil while nothing is locked.
 	LockedBlockers []string
+	// Return is where the row's own actions land on the page that shows it
+	// (the Plans board, a plan's page); "" on the project tab, whose rows
+	// land on the tab (ReleaseNext).
+	Return string
+	// deps is the task's own blockers, by id: groupSteps reads them to put
+	// a blocker above what it blocks.
+	deps []string
+}
+
+// ReleaseNext is where the claim strip's release lands: back on this row,
+// on the page that shows it.
+func (st planStepVM) ReleaseNext() string {
+	if st.Return != "" {
+		return st.Return + "#" + st.ID
+	}
+	return "/console/projects/" + st.Project + "?tab=tasks#" + st.ID
 }
 
 // LockedIn is the locked projects the step's locked blockers sit in, once each.
@@ -258,6 +324,9 @@ type planStepCtx struct {
 	// does not read, by project (store.OpenBlockerProjects); nil while
 	// nothing is locked.
 	lockedBy map[string][]string
+	// ret is where the rows' own actions return (planStepVM.Return); "" on
+	// the project tab.
+	ret string
 }
 
 // projSessionVM is one row on the Sessions tab. State is its word, the
@@ -679,20 +748,23 @@ func (s *Service) lockedBlockersOf(ctx context.Context, rows map[string]core.Tas
 // offPlanTasks is a project's off-plan tasks as the tab reads them: the
 // queue's four open groups (the partition in store's tasks_gates.go: ready,
 // blocked, the steps that wait on people, and the gates, in progress or
-// not), the other tasks in progress, and the closed ones, newest closed
-// first.
+// not), the other tasks in progress, and the most recently closed ones,
+// newest closed first, with how many are closed in all.
 type offPlanTasks struct {
 	ready                   []core.Task
 	blocked, waiting, gates []store.BlockedTask
 	inProgress, closed      []core.Task
+	closedTotal             int
 }
 
 // readOffPlan reads a project's off-plan tasks through the request's handle,
 // so a locked project's tasks, and the edges to them, are absent from the
 // read. Every read leaves plan steps out: the queue's by its scope
-// (queueScope), ListTasks by its empty plan slug. ListTasks orders by
-// creation, so the tasks in progress are put oldest first, the queue's
-// order, and the closed by when they closed.
+// (queueScope), the filtered reads by their filter (store.TaskFilter keeps
+// the tasks outside a plan). The tasks in progress come oldest-created
+// first, the queue's order, a gate someone started staying with the gates;
+// the closed ones are read bounded, the offPlanClosedShown most recently
+// closed and how many there are in all.
 func (s *Service) readOffPlan(ctx context.Context, slug string) (offPlanTasks, error) {
 	db := s.db(ctx)
 	var (
@@ -711,31 +783,13 @@ func (s *Service) readOffPlan(ctx context.Context, slug string) (offPlanTasks, e
 	if off.gates, err = store.GateTasks(ctx, db, slug); err != nil {
 		return off, err
 	}
-	all, err := store.ListTasks(ctx, db, slug, "")
-	if err != nil {
+	f := store.TaskFilter{ByProject: true, Project: slug}
+	if off.inProgress, err = store.FilteredStartedTasks(ctx, db, f); err != nil {
 		return off, err
 	}
-	for _, t := range all {
-		switch {
-		case t.Status.Closed():
-			off.closed = append(off.closed, t)
-		case t.Status == core.TaskInProgress && !t.IsGate():
-			// A gate someone marked in progress is among the gates, once.
-			off.inProgress = append(off.inProgress, t)
-		}
+	if off.closed, off.closedTotal, err = store.FilteredClosedTasks(ctx, db, f, offPlanClosedShown, 0); err != nil {
+		return off, err
 	}
-	slices.SortFunc(off.inProgress, func(a, b core.Task) int {
-		if c := a.CreatedAt.Compare(b.CreatedAt); c != 0 {
-			return c
-		}
-		return strings.Compare(a.ID, b.ID)
-	})
-	slices.SortFunc(off.closed, func(a, b core.Task) int {
-		if c := closedAt(b).Compare(closedAt(a)); c != 0 {
-			return c
-		}
-		return strings.Compare(b.ID, a.ID)
-	})
 	return off, nil
 }
 
@@ -814,8 +868,8 @@ func (s *Service) offPlanRows(ctx context.Context, off offPlanTasks, pc planStep
 		vm.Open += len(g.Rows)
 		vm.Groups = append(vm.Groups, g)
 	}
-	vm.ClosedTotal = len(off.closed)
-	vm.Closed = rows(off.closed[:min(len(off.closed), offPlanClosedShown)])
+	vm.ClosedTotal = off.closedTotal
+	vm.Closed = rows(off.closed)
 	return vm, nil
 }
 
@@ -845,7 +899,8 @@ func (s *Service) planStep(ctx context.Context, t core.Task, pc planStepCtx) pla
 	step := planStepVM{
 		ID: t.ID, Title: t.Title, Project: t.ProjectSlug, Plan: t.PlanSlug, Kind: string(t.Kind),
 		Account: t.Account, Status: string(t.Status),
-		State: taskState(t.Status), Created: t.CreatedAt, IsGate: t.IsGate(),
+		State: taskState(t.Status), Created: t.CreatedAt, IsGate: t.IsGate(), Return: pc.ret,
+		deps: t.DependsOn,
 	}
 	if t.Status == core.TaskDone || t.Status == core.TaskDropped {
 		step.Closed = closedAt(t)
@@ -1026,14 +1081,15 @@ func reverseEdges(steps map[string]core.Task) map[string][]depChipVM {
 	return out
 }
 
-// groupSteps orders a plan frontier-first: every unfinished step, in the plan's
-// own step order (oldest created first, the order it was written, so a blocker
-// reads above what it blocks), then ONE group holding every closed step, most
-// recently closed first. Source order is creation-time descending, which
-// scattered finished work above and below the frontier -- history belongs in one
-// place, at the bottom. A closed block shorter than doneRunFold is not worth
-// hiding, so it stays expanded. Pure, and totally ordered: a morph must not
-// shuffle rows between two renders of the same data.
+// groupSteps orders a plan frontier-first: every unfinished step in
+// dependency order -- a step below each unfinished step of the plan it
+// depends on, and otherwise in the plan's own step order (oldest created
+// first, the order it was written: stepOrder) -- then ONE group holding every
+// closed step, most recently closed first. Source order is creation-time
+// descending, which scattered finished work above and below the frontier --
+// history belongs in one place, at the bottom. A closed block shorter than
+// doneRunFold is not worth hiding, so it stays expanded. Pure, and totally
+// ordered: a morph must not shuffle rows between two renders of the same data.
 func groupSteps(steps []planStepVM) []planStepGroup {
 	live, closed := make([]planStepVM, 0, len(steps)), make([]planStepVM, 0, len(steps))
 	for _, st := range steps {
@@ -1043,12 +1099,7 @@ func groupSteps(steps []planStepVM) []planStepGroup {
 		}
 		live = append(live, st)
 	}
-	sort.Slice(live, func(i, j int) bool {
-		if !live[i].Created.Equal(live[j].Created) {
-			return live[i].Created.Before(live[j].Created)
-		}
-		return live[i].ID < live[j].ID
-	})
+	live = stepOrder(live)
 	sort.Slice(closed, func(i, j int) bool {
 		if !closed[i].Closed.Equal(closed[j].Closed) {
 			return closed[i].Closed.After(closed[j].Closed)
@@ -1075,6 +1126,52 @@ func groupSteps(steps []planStepVM) []planStepGroup {
 		DoneRun: true, Steps: closed,
 		LastTitle: closed[0].Title, LastClosed: closed[0].Closed,
 	})
+}
+
+// stepOrder puts a plan's unfinished steps in dependency order: each after
+// every one of them it depends on, ties (and the order where nothing
+// depends) by creation, oldest first, then id. The dependency graph is not
+// guaranteed acyclic: when every step left waits on another left, the
+// oldest of them goes next, so one bad edge costs the order, never a row.
+func stepOrder(live []planStepVM) []planStepVM {
+	sort.Slice(live, func(i, j int) bool {
+		if !live[i].Created.Equal(live[j].Created) {
+			return live[i].Created.Before(live[j].Created)
+		}
+		return live[i].ID < live[j].ID
+	})
+	in := make(map[string]bool, len(live))
+	for _, st := range live {
+		in[st.ID] = true
+	}
+	placed := make(map[string]bool, len(live))
+	waiting := func(st planStepVM) bool {
+		for _, d := range st.deps {
+			if in[d] && !placed[d] && d != st.ID {
+				return true
+			}
+		}
+		return false
+	}
+	out := make([]planStepVM, 0, len(live))
+	for len(out) < len(live) {
+		next := -1
+		for i, st := range live {
+			if placed[st.ID] {
+				continue
+			}
+			if next < 0 {
+				next = i // the oldest left: the cycle breaker
+			}
+			if !waiting(st) {
+				next = i
+				break
+			}
+		}
+		placed[live[next].ID] = true
+		out = append(out, live[next])
+	}
+	return out
 }
 
 // planNoteMeta resolves each plan slug's narrative note in one query. The note
@@ -1104,7 +1201,7 @@ func (s *Service) planNoteMeta(ctx context.Context, project string) (map[string]
 
 // betterPrimary reports whether note a represents a plan over b: a Claude Code
 // capture is the primary of its slug, otherwise the earlier note wins -- the
-// same rule composedPrimaries applies on the Plans library.
+// same rule the Plans board applies (planEntries).
 func betterPrimary(a, b core.Note) bool {
 	aCap, bCap := slices.Contains(a.Tags, plans.TagPlan), slices.Contains(b.Tags, plans.TagPlan)
 	if aCap != bCap {

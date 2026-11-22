@@ -202,8 +202,9 @@ func TestRwWordMarks(t *testing.T) {
 // task, plan and project templates: no task status prints as a label outside
 // the word helper, and taskTone (a bare status's tone) is gone from every
 // template. A plan's own lifecycle status (draft, approved, shipped) is a
-// word already: the project tab prints it beside planTone, and the Plans
-// screen's task data is its steps (range .Tasks) alone.
+// word already: the project tab and the Plans page print it beside
+// planTone, the page's steps are the shared step rows (plan_shared), and the
+// plan peek's task data is its steps (range .Tasks) alone.
 func TestRwTemplatesPrintNoRawTaskStatus(t *testing.T) {
 	files, err := fs.Glob(templateFS, "templates/*.html")
 	require.NoError(t, err)
@@ -221,7 +222,7 @@ func TestRwTemplatesPrintNoRawTaskStatus(t *testing.T) {
 	for _, name := range []string{"tasks", "peek_task", "task_shared"} {
 		require.NotRegexp(t, raw, read(name), "%s.html prints a raw task status", name)
 	}
-	for _, name := range []string{"plans", "peek_plan"} {
+	for _, name := range []string{"peek_plan"} {
 		steps := regexp.MustCompile(`(?s)\{\{range \.Tasks\}\}.*?\{\{end\}\}`).FindAllString(read(name), -1)
 		require.NotEmpty(t, steps, "%s.html lists the plan's steps", name)
 		for _, block := range steps {
@@ -230,7 +231,7 @@ func TestRwTemplatesPrintNoRawTaskStatus(t *testing.T) {
 			require.Contains(t, block, "{{copyBtn .ID}}", "a step copies its whole id")
 		}
 	}
-	for _, name := range []string{"projectdetail", "plan_shared"} {
+	for _, name := range []string{"projectdetail", "plan_shared", "plans"} {
 		for i, line := range strings.Split(read(name), "\n") {
 			for _, loc := range raw.FindAllStringIndex(line, -1) {
 				before := line[:loc[0]]
