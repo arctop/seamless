@@ -250,7 +250,7 @@ func requireVersionedPage(t *testing.T, mux http.Handler, page string, rr *httpt
 // a session exists), link this build's versions.
 func TestStatic_PagesLinkThisBuildsVersions(t *testing.T) {
 	_, mux := newConsole(t)
-	layout := []string{"favicon.svg", "console.css", "interactions.js", "search.js", "library.js", "scope.js", "charts.js", "navigation.js", "shell.js"}
+	layout := []string{"favicon.svg", "console.css", "interactions.js", "search.js", "library.js", "scope.js", "charts.js", "navigation.js", "shell.js", "panel.js"}
 
 	req := httptest.NewRequest(http.MethodGet, "/console/", nil)
 	req.Header.Set("Authorization", "Bearer "+testKey)

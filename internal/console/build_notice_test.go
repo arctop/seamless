@@ -111,7 +111,7 @@ func TestBuild_NoticeIsAPoliteStatusWithAReloadLink(t *testing.T) {
 
 	for name, js := range map[string][]byte{
 		"interactions.js": interactionsJS, "search.js": searchJS, "library.js": libraryJS, "scope.js": scopeJS, "charts.js": chartsJS,
-		"navigation.js": navigationJS, "shell.js": shellJS, "sky.js": skyJS, "diary.js": diaryJS, "backups.js": backupsJS,
+		"navigation.js": navigationJS, "shell.js": shellJS, "panel.js": panelJS, "sky.js": skyJS, "diary.js": diaryJS, "backups.js": backupsJS,
 	} {
 		require.NotContains(t, string(js), "build-reload", "%s: no script acts on the Reload link; only the owner's click does", name)
 	}

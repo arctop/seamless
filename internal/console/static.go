@@ -84,8 +84,8 @@ var staticFiles = staticSet{
 	// and the volume histogram), the command palette, the library screens'
 	// rail and in-place reader, the project switcher, the chart hover
 	// readout, the in-place data navigation (navigation.js, which the live
-	// refresh shares) and the console chrome (sidebar, drawer, shortcuts,
-	// toasts).
+	// refresh shares), the console chrome (sidebar, drawer, shortcuts,
+	// toasts) and read in place (panel.js).
 	"interactions.js": newStaticFile(jsType, interactionsJS),
 	"search.js":       newStaticFile(jsType, searchJS),
 	"library.js":      newStaticFile(jsType, libraryJS),
@@ -93,6 +93,7 @@ var staticFiles = staticSet{
 	"charts.js":       newStaticFile(jsType, chartsJS),
 	"navigation.js":   newStaticFile(jsType, navigationJS),
 	"shell.js":        newStaticFile(jsType, shellJS),
+	"panel.js":        newStaticFile(jsType, panelJS),
 	// One page's script each: the Overview's knowledge sky, the System
 	// page's orrery, the Privacy page, Settings > Backups and the Diary.
 	"sky.js":     newStaticFile(jsType, skyJS),

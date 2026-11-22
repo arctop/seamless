@@ -151,6 +151,7 @@
 <script src="/console/static/charts.js?v=<hash:15>"></script>
 <script src="/console/static/navigation.js?v=<hash:16>"></script>
 <script src="/console/static/shell.js?v=<hash:17>"></script>
+<script src="/console/static/panel.js?v=<hash:18>"></script>
 <script>
 (function () {
   
@@ -1045,6 +1046,7 @@
 <script src="/console/static/charts.js?v=<hash:15>"></script>
 <script src="/console/static/navigation.js?v=<hash:16>"></script>
 <script src="/console/static/shell.js?v=<hash:17>"></script>
+<script src="/console/static/panel.js?v=<hash:18>"></script>
 <script>
 (function () {
   
@@ -1586,7 +1588,7 @@
   syncSky();
 })();
 </script>
-<script src="/console/static/sky.js?v=<hash:18>"></script>
+<script src="/console/static/sky.js?v=<hash:19>"></script>
 
 </body>
 </html>
@@ -1917,6 +1919,7 @@
 <script src="/console/static/charts.js?v=<hash:15>"></script>
 <script src="/console/static/navigation.js?v=<hash:16>"></script>
 <script src="/console/static/shell.js?v=<hash:17>"></script>
+<script src="/console/static/panel.js?v=<hash:18>"></script>
 <script>
 (function () {
   
@@ -2784,6 +2787,7 @@
 <script src="/console/static/charts.js?v=<hash:15>"></script>
 <script src="/console/static/navigation.js?v=<hash:16>"></script>
 <script src="/console/static/shell.js?v=<hash:17>"></script>
+<script src="/console/static/panel.js?v=<hash:18>"></script>
 <script>
 (function () {
   
@@ -4636,6 +4640,7 @@
 <script src="/console/static/charts.js?v=<hash:15>"></script>
 <script src="/console/static/navigation.js?v=<hash:16>"></script>
 <script src="/console/static/shell.js?v=<hash:17>"></script>
+<script src="/console/static/panel.js?v=<hash:18>"></script>
 <script>
 (function () {
   
@@ -5436,6 +5441,7 @@
 <script src="/console/static/charts.js?v=<hash:15>"></script>
 <script src="/console/static/navigation.js?v=<hash:16>"></script>
 <script src="/console/static/shell.js?v=<hash:17>"></script>
+<script src="/console/static/panel.js?v=<hash:18>"></script>
 <script>
 (function () {
   
@@ -6480,6 +6486,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
 <script src="/console/static/charts.js?v=<hash:15>"></script>
 <script src="/console/static/navigation.js?v=<hash:16>"></script>
 <script src="/console/static/shell.js?v=<hash:17>"></script>
+<script src="/console/static/panel.js?v=<hash:18>"></script>
 <script>
 (function () {
   
@@ -6954,8 +6961,8 @@ window.SEAM_NO_LIVE_REFRESH = true;
 })();
 </script>
 
-<script src="/console/static/passkey.js?v=<hash:19>"></script>
-<script src="/console/static/backups.js?v=<hash:20>"></script>
+<script src="/console/static/passkey.js?v=<hash:20>"></script>
+<script src="/console/static/backups.js?v=<hash:21>"></script>
 
 </body>
 </html>

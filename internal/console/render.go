@@ -38,6 +38,11 @@ var libraryJS []byte
 //go:embed static/scope.js
 var scopeJS []byte
 
+// panelJS is read in place: the one panel every item link opens over the page.
+//
+//go:embed static/panel.js
+var panelJS []byte
+
 //go:embed static/charts.js
 var chartsJS []byte
 
@@ -589,12 +594,15 @@ func parseTemplates() (pages, fragments map[string]*template.Template, err error
 		}
 		// An item's own page (item_shared.html) and the project switcher
 		// (scope_shared.html), beside the screens that draw them.
-		if name == "memories" || name == "notes" || name == "tasks" {
+		if name == "memories" || name == "notes" || name == "tasks" || name == "plans" {
 			files = append(files, "templates/item_shared.html")
 		}
 		if name == "memories" || name == "notes" || name == "tasks" || name == "plans" {
 			files = append(files, "templates/scope_shared.html")
 		}
+		// The shared parts of Settings and the lock screens (kit_shared.html:
+		// the source chip, the steps list), beside every page.
+		files = append(files, "templates/kit_shared.html")
 		if entityPeekPages[name] {
 			files = append(files, "templates/peek_"+name+".html")
 		}
