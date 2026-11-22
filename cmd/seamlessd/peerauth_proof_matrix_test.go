@@ -551,7 +551,13 @@ func TestPeerAuthMatrix_Proofs(t *testing.T) {
 		sess := d.session("cc/fin", pmLocked, pmAgent)
 		auth := d.enrollPasskey()
 		a := d.file(d.agent(nil, nil))
-		require.Empty(t, d.readAccess(d.tcp.URL, pmKey, a.ID).PasskeyOptions, "no options before a duration is chosen")
+		// A page that names no duration selects the first, until the session
+		// ends, and its options sign that one (UX 41).
+		first := d.readAccess(d.tcp.URL, pmKey, a.ID)
+		session, err := pmReadAccessFor(d.tcp.URL, pmKey, a.ID, approval.ForSession)
+		require.NoError(t, err)
+		require.NotEmpty(t, first.PasskeyOptions, "the first duration's options are ready")
+		require.JSONEq(t, string(session.PasskeyOptions), string(first.PasskeyOptions))
 		one, assertion := d.assertion(auth, a.ID, approval.For1h)
 		for _, changed := range []string{approval.For4h, approval.ForSession} {
 			status, body := d.passkeyPost(a.ID, assertion, changed, one.Request.Digest)

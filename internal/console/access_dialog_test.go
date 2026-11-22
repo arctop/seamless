@@ -27,12 +27,12 @@ func TestAccessConsole_DialogDecisionsSaySo(t *testing.T) {
 	require.NoError(t, err)
 
 	list := g.html(t, "/console/access")
-	row := between(t, list, `data-grant="`, `<li class="access-item"`, "</li>")
+	row := between(t, list, `data-grant="`, `<li class="ax-open-row`, "</li>")
 	require.Contains(t, row, "example-payroll")
-	require.Contains(t, row, " in the agent's approval dialog, ends ")
+	require.Regexp(t, `approved <time[^>]*>[^<]*</time> in the agent&#39;s approval dialog`, row)
 	page := g.html(t, "/console/access/"+a.ID)
-	require.Contains(t, page, "This request is <strong>approved</strong>: decided in the agent's approval dialog, which "+
-		"without peer_auth is advisory.")
+	require.Contains(t, page, `data-result="approved"`)
+	require.Contains(t, page, "Decided in the agent's approval dialog, which without peer_auth is advisory.")
 
 	var listed struct {
 		Grants []struct {
@@ -59,8 +59,9 @@ func TestAccessConsole_KeyDecisionsReadAsBefore(t *testing.T) {
 	require.NoError(t, err)
 	list := g.html(t, "/console/access")
 	require.NotContains(t, list, "approval dialog")
+	require.Contains(t, list, "with the bearer key", "the open list says what decided it")
 	page := g.html(t, "/console/access/"+a.ID)
-	require.Contains(t, page, "This request is <strong>approved</strong>.")
+	require.Contains(t, page, `data-result="approved"`)
 	require.NotContains(t, page, "approval dialog")
 }
 
@@ -72,8 +73,9 @@ func TestAccessConsole_DialogDenialSaysSo(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, g.grants.DenyInDialog(ctx, a.ID))
 	page := g.html(t, "/console/access/"+a.ID)
-	require.Contains(t, page, "This request is <strong>denied</strong>: decided in the agent's approval dialog, which "+
-		"without peer_auth is advisory.")
+	require.Contains(t, page, `data-result="denied"`)
+	require.Contains(t, page, "The agent hears it was denied, and when; it can ask again with a new request. "+
+		"Decided in the agent's approval dialog, which without peer_auth is advisory.")
 }
 
 // An approved grant's page says what the approval opened: the facts are the
@@ -100,9 +102,9 @@ func TestAccessConsole_ApprovedGrantSaysWhatItOpened(t *testing.T) {
 	until := grant.ExpiresAt.Local().Format("15:04")
 
 	page := g.html(t, "/console/access/"+a.ID)
-	require.Contains(t, page, "example-payroll (confidential), read and write <span class=\"faint\">(approved)</span>")
-	require.Contains(t, page, "This request is <strong>approved</strong>.")
-	require.Contains(t, page, `<p class="held-sub" data-granted="write">Approved `+short+
+	require.Contains(t, page, "<dt>Opens</dt><dd>read and write <span class=\"faint\">(approved)</span></dd>")
+	require.Contains(t, page, `data-result="approved"`)
+	require.Contains(t, page, `<p class="ax-result-line" data-granted="write">Approved `+short+
 		`: example-payroll is readable and writable from example-hr, until `+until+`.</p>`)
 
 	var one struct {
@@ -134,7 +136,7 @@ func TestAccessConsole_ApprovedReadGrantSaysReadOnly(t *testing.T) {
 		Proof: approval.Proof{Kind: approval.ProofKey}})
 	require.NoError(t, err)
 	page := g.html(t, "/console/access/"+a.ID)
-	require.Contains(t, page, "example-payroll (confidential), read-only <span class=\"faint\">(approved)</span>")
+	require.Contains(t, page, "<dt>Opens</dt><dd>read-only <span class=\"faint\">(approved)</span></dd>")
 	require.Contains(t, page, `data-granted="read">Approved `+approval.ShortID(a.ID)+
 		`: example-payroll is readable from example-hr, read-only, until `)
 }

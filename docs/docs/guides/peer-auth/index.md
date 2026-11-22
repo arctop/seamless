@@ -692,11 +692,20 @@ duration question, or `d` at the confirmation, denies. `seam approve --watch`
 prints each new request and raises a notification. Every flag and message is in
 [the CLI reference](https://thereisnospoon.org/docs/reference/cli-seam/#seam_approve).
 
-**The passkey page.** `/console/access/<id>` shows the request's facts; choose a
-duration and sign with an enrolled passkey (`seam approve --passkey` opens it, and
-`--for` chooses the duration, which the page then shows read-only). The page
-denies without a passkey. `/console/access` lists every waiting request, every
-live lease with **Revoke**, and every console unlock with **Lock again**.
+**The passkey page.** `/console/access/<id>` is one card: who asks for what, its
+warnings, its reason quoted as the agent's own words, and what Seamless checked
+(the program, pid and account the kernel names, the kind, and what approving
+opens) beside what the agent reported (its session, working directory,
+repository and model, which the daemon cannot check). The duration is a row of
+segments that opens with the first, until the session ends, selected; each
+choice reloads the page in place, and the passkey signs the duration selected
+(`seam approve --passkey` opens the page, and `--for` selects the duration). A
+grant that offers read and write asks its access too, with neither selected:
+no passkey signs it until you choose one. The page denies without a passkey,
+after asking in the page. `/console/access` lists every waiting request, then
+everything open right now - live leases, read grants and console unlocks in one
+list, what ends first first, each with its time left and **Revoke** or **Lock
+again**.
 
 **Which paths a refusal offers, and when.** Every remedy offers only the paths this
 daemon has for this call:

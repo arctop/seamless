@@ -6508,12 +6508,6 @@ html:not(.js) .brief-preview { display: none; }
 /* Access requests, their passkey page and the unlock page: the facts as a
    label/value grid, the warnings in the warning color, rows as rows. */
 .access-page h2, .unlock-page h2 { margin: 18px 0 0; font-family: var(--font-serif); font-weight: 560; font-size: 19px; }
-.access-warnings { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
-.access-warnings .held-sub {
-  display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 8px 12px; border-radius: var(--radius-md);
-  border: 1px solid color-mix(in oklab, var(--warn) 30%, transparent); background: var(--warn-soft); color: var(--warn);
-}
-.access-warnings .held-sub strong { color: inherit; font-weight: 600; }
 .access-facts {
   display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 22px; max-width: 860px;
   margin: 16px 0 0; font-size: var(--text-sm);
@@ -6523,17 +6517,14 @@ html:not(.js) .brief-preview { display: none; }
 .access-facts code { font-family: var(--font-mono); font-size: var(--text-xs); }
 .access-facts q { font-style: italic; }
 .access-facts .faint { color: var(--faint); font-size: var(--text-xs); }
-.access-decide { margin-top: 18px; }
 .access-form { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 18px 0 0; }
-.access-decide .access-form { margin-top: 0; }
 .access-form fieldset {
   flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0; padding: 10px 14px 12px;
   border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface);
 }
 .access-form legend { padding: 0 6px; color: var(--muted); font-size: var(--text-xs); }
 .access-form label { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); }
-.access-form > .held-sub, .access-form > .access-duration { flex-basis: 100%; margin: 0; }
-.access-duration { font-size: var(--text-sm); }
+.access-form > .held-sub { flex-basis: 100%; margin: 0; }
 .access-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .access-item {
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 14px;
@@ -9072,6 +9063,202 @@ tbody tr.row-link[data-panel-current] td:first-child { box-shadow: inset 2px 0 0
 .plan-page-hd .count { color: var(--muted); font-weight: 600; letter-spacing: 0; }
 .plan-page .plan-page-card { margin-bottom: 0; }
 .item-card-title.mono { font-family: var(--font-mono); font-size: var(--text-sm); }
+
+
+/* UX 41: Access requests and one request (templates/access.html and
+   access_one.html). The list: each waiting request as a card (who asks for
+   what, the agent's reason on one line, its chips, its time left, Review),
+   then everything open right now -- leases, grants and console unlocks -- as
+   one list, what ends first first. A request: one card, its head (the
+   project, its chips, its time left, the short id), one sentence of who asks
+   for what, the warnings as one strip, the agent's words as a quote, what
+   Seamless checked beside what the agent reported, and the decision as
+   segments (.set-seg) with one Approve. Tokens only. */
+.ax-bar .hint { vertical-align: 0; }
+.ax-advisory { display: inline-flex; align-items: center; gap: 1px; }
+.ax-section { max-width: 920px; margin: 0 0 28px; }
+.ax-kicker {
+  margin: 0 0 8px; color: var(--faint); font-family: var(--font-sans); font-size: var(--text-2xs);
+  font-weight: 700; letter-spacing: var(--tracking-wide); line-height: 1.4; text-transform: uppercase;
+}
+.ax-quiet { color: var(--muted); }
+.ax-prog { color: var(--ink-2); font-family: var(--font-mono); font-size: 0.92em; }
+.ax-empty {
+  margin: 0; padding: 14px 18px; border: 1px dashed var(--border-strong); border-radius: var(--radius-lg);
+  color: var(--muted); font-size: var(--text-sm);
+}
+
+/* Waiting for you. */
+.ax-cards { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.ax-card {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 16px 18px;
+  border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-solid);
+}
+.ax-avatar {
+  display: grid; place-items: center; flex: none; width: 38px; height: 38px;
+  border-radius: var(--radius-md); background: var(--surface-2); color: var(--brand);
+}
+.ax-avatar .ico { width: 18px; height: 18px; }
+.ax-card-main { flex: 1 1 320px; min-width: 0; }
+.ax-card-ask { margin: 0; color: var(--ink); font-size: var(--text-base); line-height: 1.45; overflow-wrap: anywhere; }
+.ax-card-ask strong, .ax-ask strong { font-weight: 650; }
+.ax-card-reason {
+  margin: 2px 0 0; overflow: hidden; color: var(--muted); font-size: var(--text-sm); font-style: italic;
+  white-space: nowrap; text-overflow: ellipsis;
+}
+.ax-card-reason.is-none { color: var(--faint); font-style: normal; }
+.ax-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0 0; }
+.ax-warn-chip { display: inline-flex; align-items: center; gap: 1px; }
+.ax-warn-chip .hint { vertical-align: 0; }
+.ax-chips .badge .ico { width: 11px; height: 11px; }
+.ax-card-end, .ax-open-end { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
+.ax-open-end form { margin: 0; }
+
+/* Open right now: one list, what ends first first, each row its kind's
+   icon, who holds what, how it was approved, its time left and its end. */
+.ax-open-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 4px; margin: 0 0 8px; }
+.ax-open-head .ax-kicker { margin: 0; }
+.ax-open-head .hint { vertical-align: 0; }
+.ax-kinds { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
+.ax-kind {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border: 1px solid var(--border);
+  border-radius: var(--radius-pill); color: var(--muted); font-size: var(--text-xs); font-weight: 600; text-decoration: none;
+}
+.ax-kind:hover { border-color: var(--border-strong); color: var(--ink); text-decoration: none; }
+.ax-kind.is-on { border-color: color-mix(in oklab, var(--brand) 40%, transparent); background: var(--brand-soft); color: var(--ink); }
+.ax-kind-n { font-variant-numeric: tabular-nums; }
+.ax-open {
+  margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--surface-solid);
+}
+.ax-open-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 12px 18px; }
+.ax-open-row + .ax-open-row { border-top: 1px solid var(--border); }
+.ax-open-icon { display: inline-flex; flex: none; color: var(--brand); }
+.ax-open-icon .ico { width: 16px; height: 16px; }
+.ax-open-main { flex: 1 1 280px; min-width: 0; }
+.ax-open-who { margin: 0; color: var(--ink); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.ax-open-who strong { font-weight: 600; }
+.ax-open-sub { margin: 1px 0 0; color: var(--faint); font-size: var(--text-xs); overflow-wrap: anywhere; }
+
+/* One request, as one card. */
+.ax-crumb { max-width: 820px; margin: 4px auto 0; color: var(--muted); font-size: var(--text-sm); }
+.ax-request {
+  box-sizing: border-box; max-width: 820px; margin: 14px auto 0; overflow: hidden;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-xl); background: var(--surface-solid);
+  box-shadow: var(--shadow-lg);
+}
+.ax-request-head {
+  padding: 24px 26px 16px;
+  background: radial-gradient(120% 120% at 0% 0%, color-mix(in oklab, var(--brand) 12%, transparent), transparent 60%);
+}
+.ax-request-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.ax-medallion {
+  display: grid; place-items: center; flex: none; width: 40px; height: 40px;
+  border-radius: var(--radius-md); background: var(--brand-soft); color: var(--brand);
+}
+.ax-medallion .ico { width: 19px; height: 19px; }
+.ax-request-title {
+  min-width: 0; margin: 0; color: var(--ink); font-family: var(--font-serif); font-size: var(--text-2xl);
+  font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; overflow-wrap: anywhere;
+}
+.ax-request-head .ax-chips { margin: 0; }
+.ax-request-state { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: auto; }
+.ax-short {
+  display: inline-flex; align-items: center; padding: 1px 3px 1px 9px; border-radius: var(--radius-pill);
+  background: var(--surface-2); color: var(--ink-2); font-size: var(--text-xs);
+}
+.ax-short .copy-btn { margin-left: 2px; }
+.ax-ask { margin: 12px 0 0; color: var(--ink); font-size: var(--text-md); line-height: 1.45; overflow-wrap: anywhere; }
+.ax-warnings {
+  display: flex; align-items: flex-start; gap: 10px; margin: 0 26px; padding: 10px 14px;
+  border: 1px solid color-mix(in oklab, var(--warn) 30%, transparent); border-radius: var(--radius-md);
+  background: var(--warn-soft); color: var(--warn); font-size: var(--text-sm);
+}
+.ax-warnings > .ico { flex: none; width: 16px; height: 16px; margin-top: 2px; }
+.ax-warnings ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.ax-reason {
+  margin: 16px 26px 0; padding: 14px 18px; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.ax-reason .ax-kicker { margin: 0; }
+.ax-kicker-note { color: var(--faint); font-weight: 600; letter-spacing: 0; text-transform: none; }
+.ax-reason-text {
+  margin: 6px 0 0; color: var(--ink); font-family: var(--font-serif); font-size: var(--text-lg); font-style: italic;
+  line-height: 1.4; overflow-wrap: anywhere;
+}
+.ax-reason-text.is-none { color: var(--muted); font-family: var(--font-sans); font-size: var(--text-sm); font-style: normal; }
+.ax-groups { display: flex; flex-wrap: wrap; gap: 12px; margin: 14px 26px 0; }
+.ax-group {
+  flex: 1 1 300px; min-width: 0; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--paper) 55%, var(--surface-solid));
+}
+.ax-group.is-checked {
+  border-color: color-mix(in oklab, var(--ok) 30%, transparent);
+  background: color-mix(in oklab, var(--ok) 5%, var(--surface-solid));
+}
+.ax-group > .ax-kicker { display: flex; align-items: center; gap: 7px; }
+.ax-group > .ax-kicker > .ico { flex: none; width: 14px; height: 14px; }
+.ax-group.is-checked > .ax-kicker { color: var(--ok); }
+.ax-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; margin: 0; font-size: var(--text-sm); }
+.ax-facts dt { margin: 0; color: var(--muted); }
+.ax-facts dd { min-width: 0; margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+.ax-facts dd.is-none { color: var(--faint); }
+.ax-facts .faint { color: var(--faint); font-size: var(--text-xs); }
+.ax-path { display: block; margin-top: 2px; color: var(--muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
+
+/* The decision: the segments (a GET form the page reloads in place on each
+   choice, so the passkey signs what is selected), Approve, Deny, and the
+   terminal way. Without script the segments keep a button to show a choice. */
+.ax-decide {
+  display: flex; flex-direction: column; gap: 12px; margin-top: 18px; padding: 18px 26px 20px;
+  border-top: 1px solid var(--border); background: color-mix(in oklab, var(--paper) 55%, var(--surface-solid));
+}
+.ax-decide-form { display: flex; flex-direction: column; gap: 12px; margin: 0; }
+.ax-choice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0; }
+.ax-choice > .ax-kicker { width: 110px; margin: 0; }
+.ax-choice .hint { vertical-align: 0; }
+.ax-choice .set-seg input + span { padding: 5px 12px; font-size: var(--text-sm); }
+.ax-choose-apply { align-self: flex-start; }
+.js .ax-choose-apply { display: none; }
+.ax-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.ax-actions form { margin: 0; }
+.ax-terminal { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: auto; color: var(--muted); font-size: var(--text-xs); }
+.ax-terminal code { padding: 3px 8px; border-radius: var(--radius-xs); background: var(--surface-2); color: var(--ink-2); }
+.ax-wait-note { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; color: var(--muted); font-size: var(--text-sm); }
+.ax-wait-note .ico { width: 14px; height: 14px; color: var(--warn); }
+.ax-rw-note { margin: 0; color: var(--ink-2); font-size: var(--text-sm); }
+.ax-note { margin: 0; color: var(--faint); font-size: var(--text-xs); }
+.ax-status { margin: 0; color: var(--ink-2); font-size: var(--text-sm); }
+.ax-status:empty { display: none; }
+
+/* A decided request: its result in the card's foot. */
+.ax-result {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 18px; padding: 20px 26px 22px;
+  border-top: 1px solid var(--border);
+}
+.ax-result.is-approved { border-top-color: color-mix(in oklab, var(--ok) 30%, transparent); background: color-mix(in oklab, var(--ok) 6%, var(--surface-solid)); }
+.ax-result.is-denied { border-top-color: color-mix(in oklab, var(--danger) 30%, transparent); background: color-mix(in oklab, var(--danger) 5%, var(--surface-solid)); }
+.ax-result-mark {
+  display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 50%;
+  background: var(--surface-2); color: var(--muted);
+}
+.ax-result-mark .ico { width: 18px; height: 18px; }
+.ax-result.is-approved .ax-result-mark { background: var(--ok-soft); color: var(--ok); }
+.ax-result.is-denied .ax-result-mark { background: var(--danger-soft); color: var(--danger); }
+.ax-result-main { flex: 1 1 300px; min-width: 0; }
+.ax-result-title { margin: 0; color: var(--ink); font-size: var(--text-md); font-weight: 650; }
+.ax-result-line { margin: 2px 0 0; color: var(--muted); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.ax-result-line:empty { display: none; }
+@media (max-width: 720px) {
+  .ax-request { border-radius: var(--radius-lg); }
+  .ax-request-head { padding: 20px 18px 14px; }
+  .ax-warnings, .ax-reason, .ax-groups { margin-left: 18px; margin-right: 18px; }
+  .ax-decide, .ax-result { padding-left: 18px; padding-right: 18px; }
+  .ax-request-state, .ax-terminal, .ax-card-end, .ax-open-end, .ax-kinds { margin-left: 0; }
+  .ax-choice > .ax-kicker { width: auto; flex-basis: 100%; }
+  .ax-facts { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .ax-facts dd { margin-bottom: 6px; }
+}
 
 
 /* UX 34: Settings' sub-nav states and one-line heads. A sub-nav row reads

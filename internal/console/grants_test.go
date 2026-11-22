@@ -110,8 +110,9 @@ func TestGrantsConsole_LockWithoutGrantsShowsNone(t *testing.T) {
 	_, has = out["advisory"]
 	require.False(t, has)
 	rr := do(f.mux, authedReq(httptest.NewRequest(http.MethodGet, "/console/access", nil)))
-	require.NotContains(t, rr.Body.String(), "Read grants")
-	require.Contains(t, rr.Body.String(), "Agent leases")
+	require.NotContains(t, rr.Body.String(), "A grant opens", "the open list's hint names no grant")
+	require.Contains(t, rr.Body.String(), "A lease opens a locked project")
+	require.Contains(t, rr.Body.String(), `<p class="ax-empty">Nothing is open. Every locked project is closed to agents and browsers alike.</p>`)
 }
 
 func TestGrantsConsole_AdvisoryRequestApproveRevoke(t *testing.T) {
@@ -159,7 +160,7 @@ func TestGrantsConsole_AdvisoryRequestApproveRevoke(t *testing.T) {
 	require.Contains(t, one.Request.Warnings, approval.Warning{Code: approval.WarnCopyInto,
 		Text: "content from example-finance may be copied into example-ops's memories"})
 	page := do(g.mux, authedReq(httptest.NewRequest(http.MethodGet, "/console/access/"+filed.ID, nil))).Body.String()
-	require.Contains(t, page, "content from example-finance may be copied into example-ops&#39;s memories")
+	require.Contains(t, page, "<li>Content from example-finance may be copied into example-ops&#39;s memories.</li>")
 	require.Contains(t, page, "this approval is advisory")
 	require.Contains(t, page, `action="/console/access/`+filed.ID+`/approve"`)
 
@@ -175,9 +176,10 @@ func TestGrantsConsole_AdvisoryRequestApproveRevoke(t *testing.T) {
 	require.Equal(t, "example-ops", list.Grants[0].From)
 	require.Equal(t, "cc/ops", list.Grants[0].Session)
 	html := do(g.mux, authedReq(httptest.NewRequest(http.MethodGet, "/console/access", nil))).Body.String()
-	require.Contains(t, html, "Read grants")
+	require.Contains(t, html, `data-grant="`+list.Grants[0].ID+`"`)
 	require.Contains(t, html, `action="/console/access/grants/`+list.Grants[0].ID+`/revoke"`)
-	require.NotContains(t, html, "Agent leases", "no lease exists without peer_auth")
+	require.NotContains(t, html, "A lease opens", "no lease exists without peer_auth")
+	require.NotContains(t, html, `data-lease="`)
 
 	// Revoke: a plain form answers with the page and a notice.
 	rr = g.post(t, "/console/access/grants/"+list.Grants[0].ID+"/revoke", url.Values{}, false)

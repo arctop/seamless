@@ -1,160 +1,148 @@
 {{define "content"}}
-{{with .Data}}
+{{with .Data}}{{$d := .}}
+<nav class="ax-crumb" aria-label="Where this is"><a href="/console/access">Access requests</a><span aria-hidden="true"> &rsaquo; </span><span class="mono">{{.Request.Short}}</span></nav>
+<article class="ax-request is-{{.Status}}" data-access-one="{{.Request.ID}}" aria-labelledby="ax-request-title">
 {{with .Request}}
-<div class="access-one" data-access-one="{{.ID}}">
-<header class="mv2-bar">
-  <h1>{{icon "lock"}}{{.Short}}: {{.Project}}</h1>{{if eq .Kind "move"}}{{about "An agent is asking to move into a fenced project for good. Read the facts and what it carries; the reason is the agent's own words."}}{{else if .AccessChoices}}{{about "An agent is asking for a confidential project. Read the facts and what it carries, and choose read-only or read and write; the reason is the agent's own words."}}{{else if eq .Kind "grant"}}{{about "An agent is asking to read a confidential project. Read the facts; the reason is the agent's own words."}}{{else}}{{about "An agent is asking for a locked project. Read the facts; the reason is the agent's own words."}}{{end}}
+<header class="ax-request-head">
+  <div class="ax-request-top">
+    <span class="ax-medallion" aria-hidden="true">{{icon "lock"}}</span>
+    <h1 id="ax-request-title" class="ax-request-title">{{.Project}}</h1>
+    <span class="ax-chips">{{if $d.LockedChip}}<span class="badge brand">locked</span>{{end}}{{if ne .Isolation "open"}}<span class="badge quiet">{{.Isolation}}</span>{{end}}{{if $d.Advisory}}<span class="ax-advisory"><span class="badge quiet">advisory</span>{{hintFor "the advisory tier" "Without peer_auth this approval is advisory: any process holding the bearer key can make it."}}</span>{{end}}</span>
+    <span class="ax-request-state">{{if eq $d.Status "pending"}}{{timeLeft .ExpiresAt}}{{else}}<span class="badge {{if eq $d.Status "approved"}}ok{{else if eq $d.Status "denied"}}danger{{else}}quiet{{end}}">{{$d.Status}}</span>{{end}}<span class="ax-short"><span class="mono">{{.Short}}</span>{{copyBtn .Short}}</span></span>
+  </div>
+  <p class="ax-ask">{{if .PID}}<span class="ax-prog">{{if $d.Who}}{{$d.Who}}{{else}}A process{{end}}</span>, pid {{.PID}},{{else if .Session}}Session <span class="ax-prog">{{.Session}}</span>{{else}}A session{{end}} asks to <strong>{{$d.Asks}}</strong> it{{if eq .Kind "grant"}}, for {{.From}}{{else if eq .Kind "move"}}, leaving {{if .From}}{{.From}}{{else}}the global scope{{end}}{{end}}.</p>
 </header>
 
 {{if .Warnings}}
-<section class="access-warnings" aria-label="Warnings">
-  {{range .Warnings}}<p class="held-sub">{{icon "triangle-alert"}} <strong>{{.Text}}</strong></p>{{end}}
-</section>
+<div class="ax-warnings" role="note" aria-label="Warnings">{{icon "triangle-alert"}}<ul>{{range $d.WarnLines}}<li>{{.}}</li>{{end}}</ul></div>
 {{end}}
 
-<dl class="access-facts">
-  <dt>Project</dt><dd>{{.Project}} ({{.Isolation}}{{if .Locked}}, locked{{end}}), {{with $.Data.Granted}}{{.Words}} <span class="faint">(approved)</span>{{else}}{{.Access}}{{end}}</dd>{{if eq .Kind "move"}}<dt>Leaves</dt><dd>{{if .From}}{{.From}}{{else}}the global scope{{end}}</dd>{{else if .From}}<dt>For</dt><dd>sessions working in {{.From}}</dd>{{end}}{{with .Carry}}<dt>Holds</dt><dd>{{joinAnd .Holds}} <span class="faint">(once approved)</span></dd><dt>May write to</dt><dd>{{if .WriteTo}}{{joinAnd .WriteTo}}{{else}}nowhere{{end}} <span class="faint">(once approved{{if $.Data.Request.AccessChoices}}, read-only{{end}})</span></dd>{{end}}{{if eq .AskedAccess "read-write"}}<dt>It asks for</dt><dd>read and write</dd>{{end}}{{if .Locked}}<dt>Lock</dt><dd>approving also opens the lock to this agent's process tree, for the duration chosen</dd>{{end}}{{if .Agent}}<dt>Agent</dt><dd>{{.Agent}}</dd>{{end}}
-  <dt>Asking</dt><dd>{{if not .PID}}a session (without peer_auth the daemon knows no process){{else}}{{if .Program}}<code>{{.Program}}</code>{{else}}a process{{end}}, pid {{.PID}}, uid {{.UID}}{{end}}</dd>
-  <dt>Session</dt><dd>{{if .Session}}{{.Session}}{{else}}none{{end}}{{if .Model}} &middot; {{.Model}}{{end}}</dd>
-  <dt>Working in</dt><dd>{{if .CWD}}<code>{{.CWD}}</code>{{else}}unknown{{end}} <span class="faint">The working directory, repository and model are what the agent reported. The daemon cannot check them.</span></dd>
-  <dt>The agent says</dt><dd>{{if .Reason}}<q>{{.Reason}}</q> <span class="faint">(the agent's own words, not checked)</span>{{else}}(no reason given){{end}}</dd>
-  <dt>Kind</dt><dd>{{if eq .Kind "refresh"}}a refresh of a lease it holds{{else if eq .Kind "move"}}a move into a fenced project, for good{{else if and (eq .Kind "grant") .AccessChoices}}a grant of a confidential project: read-only, or read and write as you choose{{else if eq .Kind "grant"}}a read-only grant of a confidential project{{else}}a first request{{end}}</dd>
-  <dt>{{if eq $.Data.Status "pending"}}Waits until{{else}}Waited until{{end}}</dt><dd>{{clock .ExpiresAt}}</dd>
-</dl>
+<figure class="ax-reason">
+  <figcaption class="ax-kicker">The agent says <span class="ax-kicker-note">&middot; its own words, not checked</span></figcaption>
+  {{if .Reason}}<p class="ax-reason-text"><q>{{.Reason}}</q></p>{{else}}<p class="ax-reason-text is-none">(no reason given)</p>{{end}}
+</figure>
+
+<div class="ax-groups">
+  <section class="ax-group is-checked" aria-labelledby="ax-checked-title" data-facts="checked">
+    <h2 id="ax-checked-title" class="ax-kicker">{{icon "shield-check"}}Seamless checked</h2>
+    <dl class="ax-facts">
+      <dt>Program</dt><dd>{{if .PID}}{{if $d.Who}}<span class="ax-prog">{{$d.Who}}</span>, {{end}}pid {{.PID}}{{with .Program}}<code class="ax-path">{{.}}</code>{{end}}{{else}}none: without peer_auth the daemon knows no process{{end}}</dd>
+      {{if .PID}}<dt>Account</dt><dd>uid {{.UID}}</dd>{{end}}
+      <dt>Asks for</dt><dd>{{$d.Asks}}{{if eq .Kind "grant"}}, for sessions working in {{.From}}{{end}}</dd>
+      <dt>Kind</dt><dd>{{$d.KindWords}}</dd>
+      {{if eq .Kind "move"}}<dt>Leaves</dt><dd>{{if .From}}{{.From}}{{else}}the global scope{{end}}</dd>{{end}}
+      {{if eq .Kind "grant"}}<dt>Opens</dt><dd>{{with $d.Granted}}{{.Words}} <span class="faint">(approved)</span>{{else}}{{if eq .Access "read-write"}}read and write{{else}}read-only{{end}}{{if .AccessChoices}}, or read and write as you choose{{end}}{{end}}</dd>{{end}}
+      {{with .Carry}}<dt>Holds</dt><dd>{{joinAnd .Holds}} <span class="faint">(once approved)</span></dd><dt>May write to</dt><dd>{{if .WriteTo}}{{joinAnd .WriteTo}}{{else}}nowhere{{end}} <span class="faint">(once approved{{if $d.Request.AccessChoices}}, read-only{{end}})</span></dd>{{end}}
+      {{if $d.LockedChip}}<dt>Lock</dt><dd>approving opens the lock to this agent and the programs it started, for the duration chosen</dd>{{end}}
+    </dl>
+  </section>
+  <section class="ax-group is-reported" aria-labelledby="ax-reported-title" data-facts="reported">
+    <h2 id="ax-reported-title" class="ax-kicker">{{icon "message-square"}}The agent reported{{hintFor "what the agent reported" "The working directory, repository and model are what the agent reported. The daemon cannot check them."}}</h2>
+    <dl class="ax-facts">
+      <dt>Session</dt><dd{{if not .Session}} class="is-none"{{end}}>{{if .Session}}<span class="mono">{{.Session}}</span>{{else}}none{{end}}</dd>
+      <dt>Working in</dt><dd{{if not .CWD}} class="is-none"{{end}}>{{if .CWD}}<code class="ax-path">{{.CWD}}</code>{{else}}unknown{{end}}</dd>
+      <dt>Repository</dt><dd{{if not .Repo}} class="is-none"{{end}}>{{if .Repo}}{{.Repo}}{{else}}unknown{{end}}</dd>
+      <dt>Model</dt><dd{{if not .Model}} class="is-none"{{end}}>{{if .Model}}{{.Model}}{{else}}unknown{{end}}</dd>
+    </dl>
+  </section>
+</div>
 {{end}}
 
-{{if eq .Status "pending"}}{{if .Advisory}}
-<form class="access-form" method="post" action="/console/access/{{.Request.ID}}/approve">
-  <input type="hidden" name="digest" value="{{.Request.Digest}}">
-  <input type="hidden" name="next" value="/console/access/{{.Request.ID}}">
-  {{if .Accesses}}<fieldset>
-    <legend>Access</legend>
-    {{range $i, $c := .Accesses}}<label><input type="radio" name="access" value="{{$c.Value}}"{{if eq $i 0}} checked{{end}}> {{$c.Words}}</label>
+{{if eq .Status "pending"}}
+<footer class="ax-decide" data-access-id="{{.Request.ID}}">
+{{if .Advisory}}
+  <form id="access-advisory" class="ax-decide-form" method="post" action="/console/access/{{.Request.ID}}/approve">
+    <input type="hidden" name="digest" value="{{.Request.Digest}}">
+    <input type="hidden" name="next" value="/console/access/{{.Request.ID}}">
+    {{template "access-choices" .}}
+    <div class="ax-actions">
+      <button class="btn primary" type="submit">Approve</button>
+      {{template "access-deny-button" .}}
+      {{template "access-terminal" .}}
+    </div>
+  </form>
+{{else if and .PasskeyReady .OnOrigin}}
+  <form id="access-choose" class="ax-decide-form" method="get" action="/console/access/{{.Request.ID}}" data-seam-query data-seam-auto-submit>
+    {{template "access-choices" .}}
+    <button class="btn small ax-choose-apply" type="submit">Show this choice</button>
+  </form>
+  {{if eq .Access "read-write"}}<p class="ax-rw-note">Read and write: {{.Request.ReadWrite}}</p>{{end}}
+  <div class="ax-actions">
+    {{if .PasskeyOptions}}
+    <form id="access-form" class="ax-approve" data-digest="{{.Request.Digest}}" data-duration="{{.For}}"{{if .Access}} data-access="{{.Access}}"{{end}} data-options="{{printf "%s" .PasskeyOptions}}">
+      <button class="btn primary" id="access-approve" type="submit">{{icon "key-round"}} Approve {{if eq .Access "read-write"}}read and write {{else if .Access}}read-only {{end}}{{.ApproveWords}}</button>
+    </form>
+    {{else if .PreFor}}
+    <p class="ax-wait-note">Choose the access first: the passkey signs it with the duration.</p>
+    {{else}}
+    <p class="ax-wait-note">{{icon "triangle-alert"}} The request changed while this page loaded. <a href="/console/access/{{.Request.ID}}?for={{.Selected}}{{if .Access}}&amp;access={{.Access}}{{end}}" data-seam-query>Look at it again</a>.</p>
     {{end}}
-  </fieldset>
-  {{end}}{{if .ForGood}}<input type="hidden" name="duration" value="{{(index .Choices 0).Value}}">
-  <p class="access-duration">How long: <strong>{{(index .Choices 0).Words}}</strong></p>
-  {{else}}<fieldset>
-    <legend>For how long</legend>
-    {{range $i, $c := .Choices}}<label><input type="radio" name="duration" value="{{$c.Value}}"{{if eq $i 0}} checked{{end}}> {{$c.Words}}</label>
-    {{end}}
-  </fieldset>{{end}}
-  <p class="held-sub">{{icon "triangle-alert"}} Without peer_auth this approval is advisory: any process holding the bearer key can make it.</p>
-  <button class="btn primary" type="submit">Approve</button>
-</form>
-<form method="post" action="/console/access/{{.Request.ID}}/deny">
-  <input type="hidden" name="next" value="/console/access/{{.Request.ID}}">
-  <button class="btn" type="submit">Deny</button>
-</form>
+    {{template "access-deny-button" .}}
+    {{template "access-terminal" .}}
+  </div>
+  <p class="ax-note">Your passkey signs the {{if .Accesses}}access and the {{end}}duration selected, with the facts above. If the request changes, this page asks you to look again.</p>
+{{else if .PasskeyReady}}
+  <p class="ax-wait-note">{{icon "triangle-alert"}} A passkey works only on <a href="{{.Origin}}/console/access/{{.Request.ID}}?for={{.Selected}}{{if .Access}}&amp;access={{.Access}}{{end}}">{{.Origin}}</a>.</p>
+  <div class="ax-actions">
+    {{template "access-deny-button" .}}
+    {{template "access-terminal" .}}
+  </div>
 {{else}}
-<div class="access-decide" data-access-id="{{.Request.ID}}">
-{{if .For}}
-<form id="access-form" class="access-form" data-digest="{{.Request.Digest}}" data-duration="{{.For}}"{{if .Access}} data-access="{{.Access}}"{{end}} data-options="{{printf "%s" .PasskeyOptions}}">
-  <p class="access-duration">{{if .ForGood}}How long: <strong>{{.ForWords}}</strong>{{else}}For how long: <strong>{{.ForWords}}</strong>{{end}}{{if .Accesses}} &middot; Access: <strong>{{if eq .Access "read-write"}}read and write{{else}}read-only{{end}}</strong>{{end}}{{if not .ForGood}} &middot; <a href="/console/access/{{.Request.ID}}" data-seam-query>{{if .Accesses}}choose again{{else}}choose another duration{{end}}</a>{{end}}</p>
-  {{if and .PasskeyOptions .OnOrigin}}
-  <button class="btn primary" id="access-approve" type="submit">{{icon "key-round"}} Approve with a passkey</button>
-  {{else if and .PasskeyReady (not .OnOrigin)}}
-  <p class="held-sub">{{icon "triangle-alert"}} A passkey works only on <a href="{{.Origin}}/console/access/{{.Request.ID}}?for={{.For}}{{if .Access}}&amp;access={{.Access}}{{end}}">{{.Origin}}</a>.</p>
-  {{else if .PasskeyReady}}
-  <p class="held-sub">{{icon "triangle-alert"}} The request changed while this page loaded. <a href="/console/access/{{.Request.ID}}?for={{.For}}{{if .Access}}&amp;access={{.Access}}{{end}}" data-seam-query>Look at it again</a>.</p>
-  {{else}}
-  <p class="held-sub">No passkey is enrolled here, so approve it in your own terminal: <code>seam approve {{.Request.Short}}</code></p>
-  {{end}}
-  {{template "access-deny-button" .}}
-</form>
-{{else}}
-<form id="access-choose" class="access-form" method="get" action="/console/access/{{.Request.ID}}" data-seam-query>
-  {{if and .PasskeyReady .OnOrigin}}
-  {{if .Accesses}}<fieldset>
-    <legend>Access</legend>
-    {{range $i, $c := .Accesses}}<label><input type="radio" name="access" value="{{$c.Value}}"{{if eq $i 0}} checked{{end}}> {{$c.Words}}</label>
-    {{end}}
-  </fieldset>
-  {{end}}<fieldset>
-    <legend>For how long</legend>
-    {{range $i, $c := .Choices}}<label><input type="radio" name="for" value="{{$c.Value}}"{{if $.Data.PreFor}}{{if eq $c.Value $.Data.PreFor}} checked{{end}}{{else if eq $i 0}} checked{{end}}> {{$c.Words}}</label>
-    {{end}}
-  </fieldset>
-  <p class="held-sub">The passkey signs the {{if .Accesses}}access and the {{end}}duration you choose, with the facts above.</p>
-  <button class="btn primary" id="access-continue" type="submit">{{icon "key-round"}} Continue to approve with a passkey</button>
-  {{else if .PasskeyReady}}
-  <p class="held-sub">{{icon "triangle-alert"}} A passkey works only on <a href="{{.Origin}}/console/access/{{.Request.ID}}">{{.Origin}}</a>.</p>
-  {{else}}
-  <p class="held-sub">No passkey is enrolled here, so approve it in your own terminal: <code>seam approve {{.Request.Short}}</code></p>
-  {{end}}
-  {{template "access-deny-button" .}}
-</form>
+  <p class="ax-wait-note">No passkey is enrolled here, so approve it in your own terminal: <code>seam approve {{.Request.Short}}</code>{{copyBtn (printf "seam approve %s" .Request.Short)}}</p>
+  <div class="ax-actions">
+    {{template "access-deny-button" .}}
+  </div>
 {{end}}
-{{/* Deny's own form, outside the two above (a form cannot hold one): the
+  <p class="ax-status" id="access-status" role="status" aria-live="polite"></p>
+</footer>
+{{/* Deny's own form, outside the ones above (a form cannot hold one): the
      button points at it with form=. The page's script sends it once the
      button is pressed twice (data-confirm, shell.js); without script it
      posts and follows the redirect back here. */}}
 <form id="access-deny-form" method="post" action="/console/access/{{.Request.ID}}/deny">
   <input type="hidden" name="next" value="/console/access/{{.Request.ID}}">
 </form>
-</div>{{end}}
-{{if or .Advisory .PasskeyReady}}<p class="held-sub">Or, in your own terminal: <code>seam approve {{.Request.Short}}</code></p>{{end}}
-<p class="held-sub" id="access-status" role="status" aria-live="polite"></p>
 {{else}}
-<p class="held-sub">This request is <strong>{{.Status}}</strong>{{if .InDialog}}: decided in the agent's approval dialog, which without peer_auth is advisory{{end}}.</p>
-{{with .Granted}}<p class="held-sub" data-granted="{{.Access}}">{{.Line}}</p>{{end}}
+<footer class="ax-result is-{{.Status}}" data-result="{{.Status}}">
+  <span class="ax-result-mark" aria-hidden="true">{{if eq .Status "approved"}}{{icon "check"}}{{else if eq .Status "denied"}}{{icon "x"}}{{else}}{{icon "clock"}}{{end}}</span>
+  <div class="ax-result-main">
+    <p class="ax-result-title">{{if eq .Status "approved"}}Approved{{else if eq .Status "denied"}}Denied{{else if eq .Status "expired"}}Expired{{else}}{{.Status}}{{end}}</p>
+    {{with .Granted}}<p class="ax-result-line" data-granted="{{.Access}}">{{.Line}}</p>{{end}}
+    <p class="ax-result-line">{{if eq .Status "denied"}}The agent hears it was denied, and when; it can ask again with a new request.{{else if eq .Status "expired"}}It waited until {{clock .Request.ExpiresAt}} and nobody decided it; the agent can ask again.{{else if and (eq .Status "approved") (eq .Request.Kind "move")}}The agent works in {{.Request.Project}} from now on.{{else if and (eq .Status "approved") (not .Granted)}}Open right now, on Access requests, lists it until it ends.{{end}}{{if .InDialog}} Decided in the agent's approval dialog, which without peer_auth is advisory.{{end}}</p>
+  </div>
+  {{if eq .Status "approved"}}<a class="btn" href="/console/access">See it on Access requests</a>{{end}}
+</footer>
+{{end}}
+</article>
 {{end}}
 {{end}}
-{{end}}
+
+{{/* The access and duration segments: radios a form sends, the default
+     first. The advisory tier's approve form posts them; under passkeys they
+     are a GET form the page reloads in place on each choice (?access=,
+     ?for=), so the passkey options always sign what is selected. */}}
+{{define "access-choices"}}{{if .Accesses}}
+    <div class="ax-choice">
+      <span class="ax-kicker" id="ax-access-label">Access</span>
+      <span class="set-seg" role="radiogroup" aria-labelledby="ax-access-label">{{range $i, $c := .Accesses}}<label><input type="radio" name="access" value="{{$c.Value}}"{{if $.Advisory}}{{if eq $i 0}} checked{{end}}{{else if eq $c.Value $.Access}} checked{{end}}><span>{{$c.Label}}</span></label>{{end}}</span>{{hintFor "the access" .AccessNote}}
+    </div>{{end}}{{if .ForGood}}
+    <input type="hidden" name="{{if .Advisory}}duration{{else}}for{{end}}" value="{{(index .Choices 0).Value}}">
+    <p class="ax-choice"><span class="ax-kicker">How long</span> <strong>{{(index .Choices 0).Words}}</strong></p>{{else}}
+    <div class="ax-choice">
+      <span class="ax-kicker" id="ax-for-label">For how long</span>
+      <span class="set-seg" role="radiogroup" aria-labelledby="ax-for-label">{{range .Choices}}<label><input type="radio" name="{{if $.Advisory}}duration{{else}}for{{end}}" value="{{.Value}}"{{if eq .Value $.Selected}} checked{{end}}><span>{{.Label}}</span></label>{{end}}</span>{{with .CapNote}}{{hintFor "how long" .}}{{end}}
+    </div>{{end}}{{end}}
+
+{{define "access-terminal"}}<span class="ax-terminal">or in a terminal <code>seam approve {{.Request.Short}}</code>{{copyBtn (printf "seam approve %s" .Request.Short)}}</span>{{end}}
 
 {{define "access-deny-button"}}<button class="btn" id="access-deny" type="submit" form="access-deny-form" data-confirm="Deny this request? {{if eq .Request.Kind "move"}}The agent stays where it is, and {{.Request.Project}} stays closed to it.{{else}}{{.Request.Project}} stays {{if eq .Request.Kind "grant"}}closed to{{else}}locked for{{end}} that session.{{end}}" data-confirm-label="Deny it">Deny</button>{{end}}
 
 {{define "scripts"}}
+<script src="{{static "passkey.js"}}"></script>
 <script>
 window.SEAM_NO_LIVE_REFRESH = true; // an approval in progress must not be clobbered by a refresh
 (function () {
-  function b64urlToBuf(s) {
-    s = s.replace(/-/g, '+').replace(/_/g, '/');
-    while (s.length % 4) s += '=';
-    var bin = atob(s), out = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-    return out.buffer;
-  }
-  function bufToB64url(buf) {
-    var bytes = new Uint8Array(buf), bin = '';
-    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  }
-  function requestOptions(pk) {
-    if (window.PublicKeyCredential && PublicKeyCredential.parseRequestOptionsFromJSON) {
-      return PublicKeyCredential.parseRequestOptionsFromJSON(pk);
-    }
-    pk.challenge = b64urlToBuf(pk.challenge);
-    (pk.allowCredentials || []).forEach(function (c) { c.id = b64urlToBuf(c.id); });
-    return pk;
-  }
-  function toJSON(cred) {
-    if (cred.toJSON) return cred.toJSON();
-    var r = cred.response;
-    var out = {
-      id: cred.id, rawId: bufToB64url(cred.rawId), type: cred.type,
-      authenticatorAttachment: cred.authenticatorAttachment || null,
-      clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
-      response: {
-        clientDataJSON: bufToB64url(r.clientDataJSON), authenticatorData: bufToB64url(r.authenticatorData),
-        signature: bufToB64url(r.signature)
-      }
-    };
-    if (r.userHandle) out.response.userHandle = bufToB64url(r.userHandle);
-    return out;
-  }
-  function post(path, fields) {
-    return fetch(path, {
-      method: 'POST', credentials: 'same-origin',
-      headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams(fields).toString()
-    }).then(function (res) {
-      return res.json().then(function (data) {
-        if (!res.ok) throw new Error(data.error || ('request failed (' + res.status + ')'));
-        return data;
-      });
-    });
-  }
+  var pk = window.SeamPasskey;
   // Refresh the view in place (console-data-updates-never-reload-document):
   // the shared navigation fetches the page and morphs only what changed.
   function refresh() {
@@ -163,37 +151,57 @@ window.SEAM_NO_LIVE_REFRESH = true; // an approval in progress must not be clobb
     }
     return Promise.resolve(false);
   }
-  // Each control is wired once, by itself rather than by the page: choosing
-  // a duration morphs the same page in place (navigation.js keeps an element
-  // whose tag matches), so a page-wide "already wired" mark would leave the
-  // passkey form that arrives with ?for= unwired, and its native submit
-  // would reload the duration choices instead of asking for the passkey.
+  // Each control is wired once, by itself rather than by the page: a choice
+  // morphs the same page in place (navigation.js keeps an element whose tag
+  // matches), so a page-wide "already wired" mark would leave a control that
+  // arrives with the new choice unwired.
   function wireOnce(el) {
     if (!el || el._seamWired) return false;
     el._seamWired = true;
     return true;
   }
+  // segment is the choose form's first radio named name, null when it offers
+  // none; checked is the value of the one selected, '' when none is.
+  function segment(name, selected) {
+    return document.querySelector('#access-choose input[name="' + name + '"]' + (selected ? ':checked' : ''));
+  }
+  function checked(name) {
+    var el = segment(name, true);
+    return el ? el.value : '';
+  }
   function enhance() {
     var root = document.querySelector('[data-access-id]');
     if (!root) return;
     function say(msg) { var s = document.getElementById('access-status'); if (s) s.textContent = msg; }
-    // The passkey form exists only once the duration is chosen (?for=): its
-    // options sign that duration, so it is the one sent with the assertion.
-    // Every value is read when it is used, since a morph may change them.
+    // A choice reloads the page for it (the form's data-seam-auto-submit):
+    // until it lands, the passkey options on the page sign the previous
+    // choice, so there is nothing to approve.
+    var choose = document.getElementById('access-choose');
+    if (wireOnce(choose)) choose.addEventListener('change', function () {
+      var go = document.getElementById('access-approve');
+      if (go) go.disabled = true;
+    });
+    // The passkey form signs the duration and the access selected: its
+    // options were issued for them, so they are the ones sent with the
+    // assertion. Every value is read when it is used, since a morph may
+    // change them.
     var form = document.getElementById('access-form');
     if (wireOnce(form)) form.addEventListener('submit', function (e) {
-      var id = document.querySelector('[data-access-id]').getAttribute('data-access-id');
       e.preventDefault();
+      var id = document.querySelector('[data-access-id]').getAttribute('data-access-id');
       var raw = form.getAttribute('data-options');
-      if (!raw || !window.PublicKeyCredential) { say('This browser cannot use a passkey here.'); return; }
+      if (!raw || !pk || !pk.supported()) { say('This browser cannot use a passkey here.'); return; }
+      var duration = form.getAttribute('data-duration'), access = form.getAttribute('data-access') || '';
+      if ((checked('for') && checked('for') !== duration) || (segment('access') && checked('access') !== access)) {
+        say('That choice is still loading. Approve once it shows.');
+        return;
+      }
       say('Follow your browser\'s prompt.');
-      navigator.credentials.get({ publicKey: requestOptions(JSON.parse(raw).publicKey) }).then(function (cred) {
-        var fields = {
-          duration: form.getAttribute('data-duration'), digest: form.getAttribute('data-digest'), response: JSON.stringify(toJSON(cred))
-        };
+      pk.assert({ options: JSON.parse(raw) }).then(function (cred) {
+        var fields = { duration: duration, digest: form.getAttribute('data-digest'), response: JSON.stringify(pk.toJSON(cred)) };
         // The access the passkey signed, where the request offers a choice.
-        if (form.getAttribute('data-access')) fields.access = form.getAttribute('data-access');
-        return post('/console/access/' + id + '/approve', fields);
+        if (access) fields.access = access;
+        return pk.post('/console/access/' + id + '/approve', fields);
       }).then(function (done) {
         say('Approved ' + done.approved + ' for ' + done.project + '.');
         refresh();
@@ -208,7 +216,8 @@ window.SEAM_NO_LIVE_REFRESH = true; // an approval in progress must not be clobb
     if (wireOnce(deny)) deny.addEventListener('submit', function (e) {
       e.preventDefault();
       var id = document.querySelector('[data-access-id]').getAttribute('data-access-id');
-      post('/console/access/' + id + '/deny', {}).then(function () { refresh(); })
+      if (!pk) { deny.submit(); return; }
+      pk.post('/console/access/' + id + '/deny', {}).then(function () { refresh(); })
         .catch(function (err) { say(err.message); });
     });
   }

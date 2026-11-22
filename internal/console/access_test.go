@@ -282,9 +282,11 @@ func TestAccess_PasskeyApproveAndDeny(t *testing.T) {
 	key := f.enrollPasskey(t)
 
 	id, _ := f.file(t)
+	// No ?for=: the first duration, until the session ends, is the one the
+	// page shows selected, and its options are ready (UX 41).
 	one, _ := f.page(t, "/console/access/"+id)
-	require.Empty(t, one["passkey_options"], "no duration chosen: no options to sign with")
-	require.Empty(t, one["for"])
+	require.JSONEq(t, `"session"`, string(one["for"]))
+	require.NotEmpty(t, one["passkey_options"])
 	status, one := f.jsonDo(t, authedReq(httptest.NewRequest(http.MethodGet, "/console/access/"+id+"?for=1h", nil)))
 	require.Equal(t, http.StatusOK, status)
 	require.JSONEq(t, `"1h"`, string(one["for"]))
@@ -372,9 +374,9 @@ func TestAccess_RequestFromALeasedTree(t *testing.T) {
 	}
 }
 
-// The passkey page binds the duration (decision D1): ?for= fixes it, the page
-// shows it read-only with a way back to the choice, and the options it issues
-// sign it with the facts shown. A virtual authenticator approves for every
+// The passkey page binds the duration (decision D1): ?for= selects it (the
+// first choice when it names none, UX 41), the page shows it selected among
+// the segments, and the options it issues sign it with the facts shown. A virtual authenticator approves for every
 // duration; the same assertion sent with another duration, or after the facts
 // changed, approves nothing.
 func TestAccess_PasskeyPageBindsTheDuration(t *testing.T) {
@@ -457,28 +459,33 @@ func TestAccess_PasskeyPageBindsTheDuration(t *testing.T) {
 			return rr.Body.String()
 		}
 
-		// ?for= fixes the duration: shown read-only, with the way back.
+		// ?for= selects the duration among the segments, a GET form that
+		// loads the page for another choice in place, and the options sign it.
 		fixed := html("/console/access/" + id + "?for=1h")
-		require.Contains(t, fixed, "For how long: <strong>1 hour</strong>")
-		require.Contains(t, fixed, `<a href="/console/access/`+id+`" data-seam-query>choose another duration</a>`)
+		require.Contains(t, fixed, `<form id="access-choose" class="ax-decide-form" method="get" action="/console/access/`+id+
+			`" data-seam-query data-seam-auto-submit>`)
+		require.Contains(t, fixed, `<input type="radio" name="for" value="1h" checked><span>1 hour</span>`)
+		require.NotContains(t, fixed, `name="for" value="session" checked`)
 		require.Contains(t, fixed, `data-duration="1h"`)
 		require.Contains(t, fixed, `data-options="{`, "the options for that duration")
-		require.Contains(t, fixed, "Approve with a passkey")
-		require.NotContains(t, fixed, `name="for"`, "no duration to choose")
-		require.NotContains(t, fixed, `name="duration"`)
-		require.Contains(t, html("/console/access/"+id+"?for=session"), "For how long: <strong>until this session ends (at most 8h)</strong>", "a lease reads 8h, never Go's 8h0m0s")
+		require.Contains(t, fixed, "Approve for 1 hour</button>")
+		require.NotContains(t, fixed, `name="duration"`, "the approve form sends the duration the options signed")
+		session := html("/console/access/" + id + "?for=session")
+		require.Contains(t, session, "Approve until its session ends</button>")
+		require.Contains(t, session, "Until its session ends lasts at most 8h, the peer_auth.max_lease cap.", "a lease reads 8h, never Go's 8h0m0s")
+		require.NotContains(t, session, "8h0m0s")
 
-		// No ?for=, or one the daemon does not offer: the owner chooses, and
-		// the choice loads the page for it in place.
+		// No ?for=, or one the daemon does not offer: the first duration is
+		// selected and its options are ready, so one press approves it.
 		for _, path := range []string{"/console/access/" + id, "/console/access/" + id + "?for=8d"} {
-			choose := html(path)
-			require.Contains(t, choose, `<form id="access-choose" class="access-form" method="get" action="/console/access/`+id+`" data-seam-query>`, path)
+			page := html(path)
 			for _, d := range approval.Durations {
-				require.Contains(t, choose, `name="for" value="`+d+`"`, path)
+				require.Contains(t, page, `name="for" value="`+d+`"`, path)
 			}
-			require.Contains(t, choose, "Continue to approve with a passkey", path)
-			require.NotContains(t, choose, `data-options="`, "%s: no options before the duration is chosen", path)
-			require.NotContains(t, choose, "For how long: <strong>", path)
+			require.Contains(t, page, `<input type="radio" name="for" value="session" checked><span>Until its session ends</span>`, path)
+			require.Contains(t, page, `data-duration="session"`, path)
+			require.Contains(t, page, `data-options="{`, path)
+			require.Contains(t, page, "Approve until its session ends</button>", path)
 		}
 	})
 }
@@ -525,10 +532,11 @@ func TestAccess_PageOfARequestPastItsWait(t *testing.T) {
 		rr := do(f.mux, req)
 		require.Equal(t, http.StatusOK, rr.Code, ref)
 		page := rr.Body.String()
-		require.Contains(t, page, "This request is <strong>expired</strong>.", ref)
-		require.Contains(t, page, "Waited until", ref)
+		require.Contains(t, page, `data-result="expired"`, ref)
+		require.Contains(t, page, "It waited until <time", ref)
 		require.NotContains(t, page, `id="access-deny"`, ref)
-		require.NotContains(t, page, "Continue to approve with a passkey", ref)
+		require.NotContains(t, page, `id="access-approve"`, ref)
+		require.NotContains(t, page, `data-options="`, ref)
 	}
 }
 
@@ -589,7 +597,7 @@ func TestAccess_PasskeyNeedsAnOrigin(t *testing.T) {
 		require.Equal(t, http.StatusOK, rr.Code, path)
 		page := rr.Body.String()
 		require.NotContains(t, page, "A passkey works only on", path)
-		require.NotContains(t, page, "Continue to approve with a passkey", path)
+		require.NotContains(t, page, `id="access-approve"`, path)
 		require.Contains(t, page, "approve it in your own terminal: <code>seam approve R-", path)
 	}
 }
@@ -624,8 +632,9 @@ func TestAccess_LeaseRowNamesTheAgent(t *testing.T) {
 
 	rr = do(f.mux, authedReq(httptest.NewRequest(http.MethodGet, "/console/access", nil)))
 	require.Equal(t, http.StatusOK, rr.Code)
-	row := between(t, rr.Body.String(), "Claude Code 2.1.319 (pid 200)", `<li class="access-item"`, "</li>")
-	require.Contains(t, row, "session cc/fin &middot; granted ")
+	row := between(t, rr.Body.String(), "Claude Code 2.1.319 (pid 200)", `<li class="ax-open-row`, "</li>")
+	require.Contains(t, row, `lease &middot; session <span class="mono">cc/fin</span> &middot; approved <time`)
+	require.Contains(t, row, "</time> from a terminal", "the daemon's account decided it: the terminal path")
 }
 
 // The request's page says which of its facts are the agent's own report.

@@ -10103,11 +10103,20 @@ duration question, or `d` at the confirmation, denies. `seam approve --watch`
 prints each new request and raises a notification. Every flag and message is in
 [the CLI reference](/reference/cli-seam/#seam_approve).
 
-**The passkey page.** `/console/access/<id>` shows the request's facts; choose a
-duration and sign with an enrolled passkey (`seam approve --passkey` opens it, and
-`--for` chooses the duration, which the page then shows read-only). The page
-denies without a passkey. `/console/access` lists every waiting request, every
-live lease with **Revoke**, and every console unlock with **Lock again**.
+**The passkey page.** `/console/access/<id>` is one card: who asks for what, its
+warnings, its reason quoted as the agent's own words, and what Seamless checked
+(the program, pid and account the kernel names, the kind, and what approving
+opens) beside what the agent reported (its session, working directory,
+repository and model, which the daemon cannot check). The duration is a row of
+segments that opens with the first, until the session ends, selected; each
+choice reloads the page in place, and the passkey signs the duration selected
+(`seam approve --passkey` opens the page, and `--for` selects the duration). A
+grant that offers read and write asks its access too, with neither selected:
+no passkey signs it until you choose one. The page denies without a passkey,
+after asking in the page. `/console/access` lists every waiting request, then
+everything open right now - live leases, read grants and console unlocks in one
+list, what ends first first, each with its time left and **Revoke** or **Lock
+again**.
 
 **Which paths a refusal offers, and when.** Every remedy offers only the paths this
 daemon has for this call:
@@ -15018,11 +15027,11 @@ applies and a terminal on the server, and exits 1. A client whose
 `--passkey` opens the request's passkey page (the `page` the daemon names) in
 the default browser - `open` on macOS, `xdg-open` on Linux, `rundll32` on
 Windows - or prints the address when no browser could be opened. With `--for`
-(a duration the daemon offers), the page opens with it chosen
-(`/console/access/<id>?for=1h`): it shows that duration read-only, with a link
-to choose another; without `--for`, the page asks. A grant that offers read and
-write opens with its access chosen only with `--access`: without it the page
-asks the access, with the duration preselected, so no passkey ever signs
+(a duration the daemon offers), the page opens with it selected
+(`/console/access/<id>?for=1h`) among the durations it offers; without
+`--for`, the first, until the session ends, is selected. A grant that offers
+read and write opens with its access chosen only with `--access`: without it
+the page asks the access, with the duration selected, so no passkey ever signs
 read-only by default (the in-session dialog's passkey link works the same way).
 The passkey signs the duration, the access and the facts shown, so its approval
 binds all three. A daemon that offers
@@ -19584,9 +19593,9 @@ nothing, and their rows say so.
 | Ask for access | `POST /console/access/request` | The agent's ask, not your decision: `seam access request`, run from the agent's own shell, files an [access request](/guides/peer-auth/#requests) for a locked project or, with [access requests](/guides/peer-auth/#read-grants-and-the-advisory-tier) on, what the agent's conversation and a confidential or sealed project no lock covers call for: a grant, or a move into the project. With `write=true` it asks for a read-and-write grant or a move, a locked project's included, whose approval opens the lock too. It writes a waiting request, with the agent's reason of at most 200 characters, and opens nothing. An agent that already holds the access is answered with it. |
 | Approve an access request | `POST /console/access/{id}/approve` | Your decision: writes the agent's lease on a locked project, or a grant, for `duration=` (until the session ends, 1 hour or 4 hours), and only while the request's facts still match `digest=`, the digest of the facts you were shown. A grant is read-only unless `access=read-write` on a request that offers the choice. A move request is approved for good: it ends the conversation's session and opens its continuation in the project, and `duration=` bounds only a locked project's lock. Under peer_auth it takes a proof: a passkey assertion from the request's page, or a Touch ID signature from Seamless Approve (`proof=touchid`), accepted on the peer_auth socket only and never for a move. In the advisory tier - access requests without peer_auth - a decision with no passkey is the bearer key's, which is what `seam approve` sends. A paired device's approval with no passkey or Touch ID proof is refused, peer_auth on or off: the bearer key's decision is never a device's. |
 | Deny an access request | `POST /console/access/{id}/deny` | Closes a waiting request with no lease, grant or move; the project stays closed to that agent, and a move's agent stays where it works. Refused over the peer_auth socket and from a paired device, but for [your own hands through a relay](/guides/peer-auth/#your-own-decisions-through-a-relay): deny on the console, or with `seam approve` in your own terminal on the server. |
-| Revoke an agent's lease | `POST /console/access/leases/{id}/revoke` | **Revoke** under Agent leases on `/console/access`: ends that lease before its expiry and records an `access.revoked` event. Refused over the peer_auth socket and from a paired device, but for [your own hands through a relay](/guides/peer-auth/#your-own-decisions-through-a-relay). |
-| Revoke a read grant | `POST /console/access/grants/{id}/revoke` | **Revoke** under Read grants: ends a live grant, read-only or read and write, before its expiry. Its holder stays write-confined, since a revoke does not unread what it read. Refused over the peer_auth socket and from a paired device, but for [your own hands through a relay](/guides/peer-auth/#your-own-decisions-through-a-relay). |
-| Lock a console unlock again | `POST /console/access/unlocks/{id}/end` | **Lock again** on `/console/access`, or **Lock it again now** on the unlock page: ends any browser's live console unlock, by id. Refused over the peer_auth socket and from a paired device, but for [your own hands through a relay](/guides/peer-auth/#your-own-decisions-through-a-relay). |
+| Revoke an agent's lease | `POST /console/access/leases/{id}/revoke` | **Revoke** on a lease's row under Open right now on `/console/access`: ends that lease before its expiry and records an `access.revoked` event. Refused over the peer_auth socket and from a paired device, but for [your own hands through a relay](/guides/peer-auth/#your-own-decisions-through-a-relay). |
+| Revoke a read grant | `POST /console/access/grants/{id}/revoke` | **Revoke** on a grant's row under Open right now on `/console/access`: ends a live grant, read-only or read and write, before its expiry. Its holder stays write-confined, since a revoke does not unread what it read. Refused over the peer_auth socket and from a paired device, but for [your own hands through a relay](/guides/peer-auth/#your-own-decisions-through-a-relay). |
+| Lock a console unlock again | `POST /console/access/unlocks/{id}/end` | **Lock again** on an unlock's row under Open right now on `/console/access`, or **Lock it again now** on the unlock page: ends any browser's live console unlock, by id. Refused over the peer_auth socket and from a paired device, but for [your own hands through a relay](/guides/peer-auth/#your-own-decisions-through-a-relay). |
 | Begin a passkey enrollment | `POST /console/approvers/passkey/begin` | Only under peer_auth: `name=` the passkey (1 to 64 characters on one line). Returns the WebAuthn creation options, excluding every passkey already [enrolled](/guides/peer-auth/#enroll-an-approver). Holds the enrollment in memory and stores nothing. Refused over the peer_auth socket and from a paired device, since a passkey is created in a browser. A begin never waits for room: at most 16 enrollments wait at once for their browser, and 16 more whose passkey exists and waits for its code, so a begin past 16 displaces the oldest still waiting for its browser, and never one waiting for its code. A displaced enrollment's next step says it expired. |
 | Create the passkey | `POST /console/approvers/passkey/finish` | Verifies the browser's new passkey and returns its key's fingerprint with the `seamlessd approvers enroll-code` command that mints its code. Still stores nothing: the passkey waits for that code. Past 16 waiting for their code, it displaces the oldest of them. Refused from a paired device. |
 | Enroll the passkey | `POST /console/approvers/passkey/confirm` | `code=` the one-time code that command minted for this key. Stores the passkey and uses up the code in one transaction. A code that is mistyped, expired, used or minted for another key leaves the passkey waiting, so it can be typed again. Refused from a paired device. |

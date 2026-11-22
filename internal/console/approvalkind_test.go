@@ -95,17 +95,19 @@ func TestKindsConsole_MoveFromAnOpenHome(t *testing.T) {
 	require.True(t, filed.Filed)
 
 	page := g.html(t, "/console/access/"+filed.ID)
-	require.Contains(t, page, "move into a fenced project for good")
+	require.Contains(t, page, `Session <span class="ax-prog">cc/ext-kind</span> asks to <strong>move into</strong> it, leaving example-ops.`)
 	require.Contains(t, page, "<dt>Leaves</dt><dd>example-ops</dd>")
 	require.Contains(t, page, "<dt>Holds</dt><dd>example-hr <span class=\"faint\">(once approved)</span></dd>")
 	require.Contains(t, page, "This agent has worked in example-ops. If you approve, it works in example-hr from now on")
 	require.Contains(t, page, "a move into a fenced project, for good")
 	require.Contains(t, page, `<input type="hidden" name="duration" value="session">`)
-	require.Contains(t, page, "How long: <strong>for good: a move does not end</strong>")
+	require.Contains(t, page, `<span class="ax-kicker">How long</span> <strong>for good: a move does not end</strong>`)
 	require.NotContains(t, page, `name="duration" value="1h"`, "a move no lock covers asks no duration")
 	require.NotContains(t, page, `name="access"`, "a move offers no access choice")
 	list := g.html(t, "/console/access")
-	require.Contains(t, list, `<span class="badge">move from example-ops</span>`)
+	card := between(t, list, `data-request="`+filed.ID+`"`, `<li class="ax-card"`, "</li>")
+	require.Contains(t, card, `asks to <strong>move into</strong> <strong>example-hr</strong> <span class="ax-quiet">from example-ops</span>`)
+	require.Contains(t, card, `<span class="badge quiet">move</span>`)
 
 	var one accessOneData
 	g.getJSON(t, "/console/access/"+filed.ID, &one)
@@ -140,13 +142,16 @@ func TestKindsConsole_ReadAndWriteGrant(t *testing.T) {
 	require.Equal(t, "write", filed.Access)
 
 	page := g.html(t, "/console/access/"+filed.ID)
-	require.Contains(t, page, `<input type="radio" name="access" value="read-only" checked> read-only (the default): content from example-payroll may be copied into example-hr`)
-	require.Contains(t, page, `<input type="radio" name="access" value="read-write"> read and write: content from example-payroll may be copied into example-hr, and it may change example-payroll&#39;s tasks, memories and notes; content from example-hr may be copied into example-payroll`)
-	require.Contains(t, page, "<dt>It asks for</dt><dd>read and write</dd>")
+	require.Contains(t, page, `<input type="radio" name="access" value="read-only" checked><span>Read-only</span>`)
+	require.Contains(t, page, `<input type="radio" name="access" value="read-write"><span>Read and write</span>`)
+	// What each choice lets happen is the segments' hint.
+	require.Contains(t, page, `Read-only (the default): content from example-payroll may be copied into example-hr. Read and write: content from example-payroll may be copied into example-hr, and it may change example-payroll&#39;s tasks, memories and notes; content from example-hr may be copied into example-payroll.`)
+	require.Contains(t, page, "<dt>Asks for</dt><dd>read and write, for sessions working in example-hr</dd>")
 	require.Contains(t, page, "(once approved, read-only)")
 	require.Contains(t, page, `name="duration" value="1h"`, "a grant has its duration")
 	list := g.html(t, "/console/access")
-	require.Contains(t, list, `<span class="badge">read-only or read and write, for example-hr</span><span class="badge">asks to write</span>`)
+	require.Contains(t, list, `asks to <strong>read and write</strong> <strong>example-payroll</strong> <span class="ax-quiet">for example-hr</span>`)
+	require.Contains(t, list, `<span class="badge quiet">grant</span>`)
 
 	var one accessOneData
 	g.getJSON(t, "/console/access/"+filed.ID, &one)
@@ -156,7 +161,10 @@ func TestKindsConsole_ReadAndWriteGrant(t *testing.T) {
 	loc, err := url.Parse(rr.Header().Get("Location"))
 	require.NoError(t, err)
 	require.Contains(t, loc.Query().Get("notice"), "example-payroll is readable and writable from example-hr, until ")
-	require.Contains(t, g.html(t, "/console/access"), "read and write, for example-hr")
+	row := between(t, g.html(t, "/console/access"), `data-grant="`, `<li class="ax-open-row`, "</li>")
+	require.Contains(t, row, `<strong>example-payroll</strong> <span class="ax-quiet">for example-hr</span>`)
+	require.Contains(t, row, "grant &middot; read and write &middot; approved ")
+	require.Contains(t, row, "writes only into example-hr and example-payroll from now on")
 	live, err := g.grants.Live(context.Background())
 	require.NoError(t, err)
 	require.Len(t, live, 1)
@@ -191,14 +199,17 @@ func TestKindsConsole_PasskeyPageSignsTheAccess(t *testing.T) {
 	rr := do(f.mux, pageReq)
 	require.Equal(t, http.StatusOK, rr.Code)
 	require.Contains(t, rr.Body.String(), `data-access="read-write"`)
-	require.Contains(t, rr.Body.String(), "Access: <strong>read and write</strong>")
+	require.Contains(t, rr.Body.String(), `<input type="radio" name="access" value="read-write" checked><span>Read and write</span>`)
+	require.Contains(t, rr.Body.String(), "Approve read and write for 1 hour</button>")
 	require.Contains(t, rr.Body.String(), `data-options="{`)
 	choose := do(f.mux, func() *http.Request {
 		r := authedReq(httptest.NewRequest(http.MethodGet, "/console/access/"+id, nil))
 		r.Host = "localhost:8081"
 		return r
 	}())
-	require.Contains(t, choose.Body.String(), `name="access" value="read-write"`, "the choose step offers the access")
+	require.Contains(t, choose.Body.String(), `name="access" value="read-write"`, "the page offers the access")
+	require.Contains(t, choose.Body.String(), `name="for" value="session" checked`, "the first duration is selected")
+	require.NotContains(t, choose.Body.String(), `data-options="{`, "no passkey before the access is chosen, even with the duration's default")
 
 	// The in-session dialog sends the owner here with only ?for= (it chose how
 	// long, never the access): the page keeps the access step, with that
@@ -216,13 +227,15 @@ func TestKindsConsole_PasskeyPageSignsTheAccess(t *testing.T) {
 	require.Contains(t, body, `name="for" value="1h" checked`, "the dialog's duration stays chosen")
 	require.NotContains(t, body, `name="for" value="session" checked`)
 	require.NotContains(t, body, `data-options="{`, "no passkey before the access is chosen")
-	require.NotContains(t, body, "Access: <strong>read-only</strong>")
+	require.NotContains(t, body, `name="access" value="read-only" checked`, "neither access is chosen for the owner")
+	require.Contains(t, body, "Choose the access first: the passkey signs it with the duration.")
 	readOnly := do(f.mux, func() *http.Request {
 		r := authedReq(httptest.NewRequest(http.MethodGet, "/console/access/"+id+"?for=1h&access=read-only", nil))
 		r.Host = "localhost:8081"
 		return r
 	}())
-	require.Contains(t, readOnly.Body.String(), "Access: <strong>read-only</strong>", "read-only chosen on purpose signs it")
+	require.Contains(t, readOnly.Body.String(), `<input type="radio" name="access" value="read-only" checked><span>Read-only</span>`, "read-only chosen on purpose signs it")
+	require.Contains(t, readOnly.Body.String(), "Approve read-only for 1 hour</button>")
 	require.Contains(t, readOnly.Body.String(), `data-options="{`)
 
 	one, facts := f.page(t, "/console/access/"+id+"?for=1h&access=read-write")

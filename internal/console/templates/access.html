@@ -1,86 +1,62 @@
 {{define "content"}}
 {{with .Data}}
-<div class="access-page" data-access>
-<header class="mv2-bar">
-  <h1>{{icon "lock"}}Access requests</h1>{{if not .GrantsOn}}{{about "Agents asking for a locked project. Approve one with a passkey here, or in your own terminal with seam approve. Nothing is granted until you do."}}{{else if .LockOn}}{{about "Agents asking for a locked project, or to read a confidential one. Approve one with a passkey here, or in your own terminal with seam approve. Nothing is granted until you do."}}{{else}}{{about "Agents asking to read a confidential project. Approve one here, or in your own terminal with seam approve. Without peer_auth the approval is advisory: any process holding the bearer key can make it."}}{{end}}
-  <span class="mv2-count" aria-label="{{len .Requests}} waiting"><strong>{{len .Requests}}</strong>waiting</span>
+<div class="ax-page" data-access>
+<header class="mv2-bar ax-bar">
+  <h1>{{icon "lock"}}Access requests</h1>{{if not .GrantsOn}}{{hintFor "Access requests" "Agents asking for a locked project. Approve one with a passkey here, or in your own terminal with seam approve. Nothing is granted until you do."}}{{else if .LockOn}}{{hintFor "Access requests" "Agents asking for a locked project, or to read a confidential one. Approve one with a passkey here, or in your own terminal with seam approve. Nothing is granted until you do."}}{{else}}{{hintFor "Access requests" "Agents asking to read a confidential project. Approve one here, or in your own terminal with seam approve. Nothing is granted until you do."}}{{end}}
+  {{if .Requests}}<span class="badge warn" aria-label="{{len .Requests}} waiting">{{len .Requests}} waiting</span>{{end}}{{if .Advisory}}<span class="ax-advisory"><span class="badge quiet">advisory</span>{{hintFor "the advisory tier" "Without peer_auth these approvals are advisory: any process holding the bearer key can make one."}}</span>{{end}}
 </header>
-{{if .Requests}}
-<ul class="access-list">
-  {{range .Requests}}
-  <li class="access-item" data-request="{{.ID}}">
-    <a href="/console/access/{{.ID}}"><strong>{{.Short}}</strong></a>
-    <span class="badge">{{.Project}}</span>
-    {{if eq .Kind "refresh"}}<span class="badge">refresh</span>{{end}}{{if eq .Kind "grant"}}<span class="badge">{{if .AccessChoices}}read-only or read and write{{else}}read-only{{end}}, for {{.From}}</span>{{if eq .AskedAccess "read-write"}}<span class="badge">asks to write</span>{{end}}{{end}}{{if eq .Kind "move"}}<span class="badge">move from {{if .From}}{{.From}}{{else}}the global scope{{end}}</span>{{end}}{{if .Locked}}<span class="badge">locked</span>{{end}}
-    {{if .Warnings}}<span class="badge warn">{{len .Warnings}} warning{{if gt (len .Warnings) 1}}s{{end}}</span>{{end}}
-    <small>{{if .Session}}{{.Session}}{{else}}no session{{end}} &middot; asked {{clock .RequestedAt}}, waits until {{clock .ExpiresAt}}</small>
-  </li>
-  {{end}}
-</ul>
-{{else}}
-<p class="held-sub">Nothing is waiting. When an agent is refused at a {{if not .LockOn}}confidential project's fence{{else}}locked project{{if .GrantsOn}} or at a confidential project's fence{{end}}{{end}}, its request appears here.</p>
-{{end}}{{if .GrantsOn}}
 
-<section aria-labelledby="access-grants-title">
-  <h2 id="access-grants-title">Read grants</h2>
-  {{if .Advisory}}<p class="held-sub">{{icon "triangle-alert"}} Without peer_auth these approvals are advisory: any process holding the bearer key can make one.</p>{{end}}
-  {{if .Grants}}
-  <ul class="access-list">
-    {{range .Grants}}
-    <li class="access-item" data-grant="{{.ID}}">
-      <span class="badge">{{.Project}}</span>
-      <strong>{{if .Agent}}{{.Agent}}{{else if .Session}}{{.Session}}{{else}}pid {{.PID}}{{end}}</strong>
-      <small>{{if and .Agent .Session}}session {{.Session}} &middot; {{end}}{{if eq .Access "write"}}read and write{{else}}read-only{{end}}, for {{.From}} &middot; granted {{clock .GrantedAt}}{{if .Dialog}} in the agent's approval dialog{{end}}, ends {{clock .ExpiresAt}}</small>
-      <form method="post" action="/console/access/grants/{{.ID}}/revoke">
-        <button class="btn" type="submit">Revoke</button>
-      </form>
+<section class="ax-section" aria-labelledby="ax-waiting-title">
+  <h2 id="ax-waiting-title" class="ax-kicker">Waiting for you</h2>
+  {{if .Cards}}
+  <ul class="ax-cards">
+    {{range .Cards}}
+    <li class="ax-card" data-request="{{.ID}}">
+      <span class="ax-avatar" aria-hidden="true">{{icon "bot"}}</span>
+      <div class="ax-card-main">
+        <p class="ax-card-ask">{{if .PID}}<span class="ax-prog">{{if .Who}}{{.Who}}{{else}}a process{{end}}</span> <span class="ax-quiet">pid {{.PID}}</span>{{else if .Session}}<span class="ax-prog">{{.Session}}</span>{{else}}A session{{end}} asks to <strong>{{.Asks}}</strong> <strong>{{.Project}}</strong>{{if eq .Kind "grant"}} <span class="ax-quiet">for {{.From}}</span>{{else if eq .Kind "move"}} <span class="ax-quiet">from {{if .From}}{{.From}}{{else}}the global scope{{end}}</span>{{end}}</p>
+        {{if .ReasonLine}}<p class="ax-card-reason" title="{{.Reason}}"><q>{{.ReasonLine}}</q></p>{{else}}<p class="ax-card-reason is-none">no reason given</p>{{end}}
+        <p class="ax-chips">{{if .LockedChip}}<span class="badge brand">locked</span>{{end}}{{if eq .Kind "grant"}}<span class="badge quiet">grant</span>{{else if eq .Kind "refresh"}}<span class="badge quiet">refresh</span>{{else if eq .Kind "move"}}<span class="badge quiet">move</span>{{end}}{{if .Warnings}}<span class="ax-warn-chip"><span class="badge warn">{{icon "triangle-alert"}}{{len .Warnings}} warning{{if gt (len .Warnings) 1}}s{{end}}</span>{{hintFor "its warnings" .WarnText}}</span>{{end}}<span class="mono-id">{{.Short}}</span></p>
+      </div>
+      <div class="ax-card-end">
+        {{timeLeft .ExpiresAt}}
+        <a class="btn small primary" href="/console/access/{{.ID}}">Review</a>
+      </div>
     </li>
     {{end}}
   </ul>
   {{else}}
-  <p class="held-sub">No session holds a read grant. An approved request becomes one: that session reads that one project, read-only, until it ends, and writes only into its own project for the rest of its life.</p>
-  {{end}}
-</section>{{end}}{{if .LockOn}}
-
-<section aria-labelledby="access-leases-title">
-  <h2 id="access-leases-title">Agent leases</h2>
-  {{if .Leases}}
-  <ul class="access-list">
-    {{range .Leases}}
-    <li class="access-item" data-lease="{{.ID}}">
-      <span class="badge">{{.Project}}</span>
-      <strong>{{if .Agent}}{{.Agent}}{{else}}pid {{.PID}}{{end}}</strong>
-      <small>{{with .Session}}session {{.}} &middot; {{end}}granted {{clock .GrantedAt}}, ends {{clock .ExpiresAt}}</small>
-      <form method="post" action="/console/access/leases/{{.ID}}/revoke">
-        <button class="btn" type="submit">Revoke</button>
-      </form>
-    </li>
-    {{end}}
-  </ul>
-  {{else}}
-  <p class="held-sub">No agent holds a lease. An approved request becomes one: that agent and the programs it started read the project until it ends.</p>
+  <p class="ax-empty">Nothing is waiting. An agent refused at a {{if not .LockOn}}confidential project's fence{{else}}locked project{{if .GrantsOn}} or at a confidential project's fence{{end}}{{end}} asks here.</p>
   {{end}}
 </section>
 
-<section aria-labelledby="access-unlocks-title">
-  <h2 id="access-unlocks-title">Console unlocks</h2>
-  {{if .Unlocks}}
-  <ul class="access-list">
-    {{range .Unlocks}}
-    <li class="access-item" data-unlock-row="{{.ID}}">
-      <span class="badge">{{.Project}}</span>
-      <strong>{{if .ThisBrowser}}this browser{{else}}another browser{{end}}</strong>
-      <small>unlocked by {{.By}}, ends {{clock .ExpiresAt}}</small>
-      <form method="post" action="/console/access/unlocks/{{.ID}}/end">
-        <button class="btn" type="submit">Lock again</button>
-      </form>
+<section class="ax-section" aria-labelledby="ax-open-title">
+  <div class="ax-open-head">
+    <h2 id="ax-open-title" class="ax-kicker">Open right now</h2>{{hintFor "what is open" .OpenHint}}
+    {{if .Kinds}}<nav class="ax-kinds" aria-label="Show">{{range .Kinds}}<a class="ax-kind{{if .On}} is-on{{end}}" href="{{.Href}}" data-seam-query{{if .On}} aria-current="true"{{end}}>{{.Label}} <span class="ax-kind-n">{{.N}}</span></a>{{end}}</nav>{{end}}
+  </div>
+  {{if .OpenShown}}
+  <ul class="ax-open">
+    {{range .OpenShown}}
+    <li class="ax-open-row is-{{.Kind}}" data-open="{{.Kind}}"{{if eq .Kind "lease"}} data-lease="{{.ID}}"{{else if eq .Kind "grant"}} data-grant="{{.ID}}"{{else}} data-unlock-row="{{.ID}}"{{end}}>
+      <span class="ax-open-icon" aria-hidden="true">{{icon .Icon}}</span>
+      <div class="ax-open-main">
+        <p class="ax-open-who"><strong>{{.Who}}</strong> <span class="ax-quiet">reads</span> <strong>{{.Project}}</strong>{{with .For}} <span class="ax-quiet">for {{.}}</span>{{end}}</p>
+        <p class="ax-open-sub">{{.Kind}}{{with .Session}} &middot; session <span class="mono">{{.}}</span>{{end}}{{with .Access}} &middot; {{.}}{{end}}{{if not .GrantedAt.IsZero}} &middot; approved {{clock .GrantedAt}}{{with .How}} {{.}}{{end}}{{end}}{{with .Confined}} &middot; {{.}}{{end}}{{with .By}} &middot; by {{.}}{{end}}</p>
+      </div>
+      <div class="ax-open-end">
+        {{timeLeft .ExpiresAt}}
+        <form method="post" action="{{.Action}}">
+          <button class="btn small" type="submit" data-confirm="{{.Confirm}}" data-confirm-label="{{if eq .Kind "unlock"}}Lock it{{else}}Revoke it{{end}}">{{.Button}}</button>
+        </form>
+      </div>
     </li>
     {{end}}
   </ul>
   {{else}}
-  <p class="held-sub">No browser has a locked project open. Unlocking one opens it in that browser only, never to an agent.</p>
+  <p class="ax-empty">Nothing is open. {{if and .LockOn .GrantsOn}}Every locked project is closed to agents and browsers, and no agent holds a grant.{{else if .LockOn}}Every locked project is closed to agents and browsers alike.{{else}}No agent holds a grant of a confidential project.{{end}}</p>
   {{end}}
-</section>{{end}}
+</section>
 </div>
 {{end}}
 {{end}}

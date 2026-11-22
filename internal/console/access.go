@@ -11,8 +11,9 @@ package console
 // What the routes never do: approve without a proof. The passkey approval is
 // an assertion over approval.PasskeyApproveChallenge -- the request's own
 // challenge with the facts digest, the access and the duration -- so the page
-// issues its options only once the duration is chosen (on the page, or fixed
-// by ?for=); the Touch ID approval is the
+// issues its options for the duration it shows selected (?for=, else the
+// first choice) and, where a grant offers read and write, only once the
+// access is chosen; the Touch ID approval is the
 // helper app's signature over approval.TouchIDApproveMessage, accepted only on
 // the peer_auth socket; the terminal approval is not a route at all
 // (seamlessd approve, run as the daemon's account). Denying needs no proof --
@@ -26,9 +27,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path"
 	"slices"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/agentproc"
@@ -66,6 +70,83 @@ type accessListData struct {
 	// LockOn and GrantsOn say which halves the page shows.
 	LockOn   bool `json:"-"`
 	GrantsOn bool `json:"-"`
+	// Open is everything open right now in one list: the live leases, read
+	// grants and console unlocks above, what ends first first (UX 41).
+	Open []axOpenRow `json:"open"`
+	// Cards are the waiting requests as the page draws them. OpenShown is
+	// Open under the kind filter ?open= chose (Open itself while the filter
+	// is not offered), Kinds the filter's chips, offered only past
+	// axOpenFilterAt rows, and OpenKind the kind chosen ("" for all).
+	// OpenHint says what each kind of row is, for the tiers this daemon has.
+	Cards     []axCard     `json:"-"`
+	OpenShown []axOpenRow  `json:"-"`
+	Kinds     []axOpenKind `json:"-"`
+	OpenKind  string       `json:"-"`
+	OpenHint  string       `json:"-"`
+}
+
+// The kinds of row the Open right now list holds.
+const (
+	axOpenLease  = "lease"
+	axOpenGrant  = "grant"
+	axOpenUnlock = "unlock"
+)
+
+// axOpenFilterAt is how many rows the open list holds before it offers its kind
+// filter.
+const axOpenFilterAt = 5
+
+// axOpenRow is one row of the Open right now list: a live lease, read grant or
+// console unlock. The JSON names the row; the rest is how the page words it.
+type axOpenRow struct {
+	Kind      string    `json:"kind"`
+	ID        string    `json:"id"`
+	Project   string    `json:"project"`
+	ExpiresAt time.Time `json:"expires_at"`
+	// Who holds it: the agent and its pid, the session, or this or another
+	// browser; For is a grant's asking project.
+	Who string `json:"-"`
+	For string `json:"-"`
+	// The sub line: the session, the access a grant opened, when and how it
+	// was approved, and where a grant's holder may write from now on (an
+	// unlock says who unlocked it instead).
+	Session   string    `json:"-"`
+	Access    string    `json:"-"`
+	GrantedAt time.Time `json:"-"`
+	How       string    `json:"-"`
+	Confined  string    `json:"-"`
+	By        string    `json:"-"`
+	// Its one action: the route that ends it, the button's word, and the
+	// sentence it confirms with in the page.
+	Action  string `json:"-"`
+	Button  string `json:"-"`
+	Confirm string `json:"-"`
+}
+
+// Icon is the row's kind icon.
+func (o axOpenRow) Icon() string {
+	switch o.Kind {
+	case axOpenUnlock:
+		return "monitor"
+	case axOpenGrant:
+		return "link"
+	}
+	return "bot"
+}
+
+// axOpenKind is one chip of the open list's kind filter.
+type axOpenKind struct {
+	Kind, Label, Href string
+	N                 int
+	On                bool
+}
+
+// axCard is one waiting request as the list draws it: its facts, who
+// asks, what for, the reason on one line, and its warnings as one hint.
+type axCard struct {
+	approval.Facts
+	Who, Asks, ReasonLine, WarnText string
+	LockedChip                      bool
 }
 
 // grantRow is one live read grant on the access page.
@@ -86,6 +167,8 @@ type grantRow struct {
 	// advisory tier's Approve there, approval.DecidedByDialog); absent for
 	// every other decision.
 	Dialog bool `json:"dialog,omitempty"`
+	// decidedBy is the grant's deciding proof, for the open list's words.
+	decidedBy string
 }
 
 // GrantsView is what the access pages need of the daemon's read grants
@@ -150,6 +233,9 @@ type leaseRow struct {
 	PID       int32     `json:"pid"`
 	GrantedAt time.Time `json:"granted_at"`
 	ExpiresAt time.Time `json:"expires_at"`
+	// decidedBy is the deciding proof of the approval behind the lease, for
+	// the open list's words.
+	decidedBy string
 }
 
 // unlockRow is one live console unlock on the access page.
@@ -165,13 +251,15 @@ type accessOneData struct {
 	Request approval.Facts `json:"request"`
 	Status  string         `json:"status"`
 	Page    string         `json:"page,omitempty"`
-	// For is the duration ?for= chose (one of approval.Durations; an invalid
-	// one is ignored, and the owner chooses on the page). PasskeyOptions are
-	// issued only with one: the assertion signs the duration.
+	// For is the duration the passkey options sign, the one the page shows
+	// selected: the one ?for= chose, else the first choice, the default (an
+	// invalid ?for= is ignored). PasskeyOptions are issued only with one: the
+	// assertion signs the duration.
 	For            string          `json:"for,omitempty"`
 	PasskeyOptions json.RawMessage `json:"passkey_options,omitempty"`
-	// PreFor is the duration ?for= chose for a grant whose access is still to
-	// choose: the choose step preselects it rather than signing read-only.
+	// PreFor is that duration for a grant whose access is still to choose:
+	// the page keeps it selected, and issues no options, rather than signing
+	// read-only.
 	PreFor    string            `json:"-"`
 	Terminal  *TerminalApprover `json:"terminal,omitempty"`
 	Durations []string          `json:"durations"`
@@ -217,6 +305,26 @@ type accessOneData struct {
 	// request): the facts above are the request as asked, whose access is the
 	// default, read-only, even when the owner approved read and write.
 	Granted *grantedView `json:"granted,omitempty"`
+
+	// How the card words the request (UX 41): Who is the program the kernel
+	// names (the agent's name, else the program's base name), Asks what it
+	// asks to do, KindWords its kind, and LockedChip whether the head says
+	// locked. Selected is the duration the segments show selected -- For,
+	// or PreFor while the access is still to choose -- and ApproveWords the
+	// Approve button's. CapNote says how long "until its session ends" can
+	// last.
+	Who          string `json:"-"`
+	Asks         string `json:"-"`
+	KindWords    string `json:"-"`
+	LockedChip   bool   `json:"-"`
+	Selected     string `json:"-"`
+	ApproveWords string `json:"-"`
+	CapNote      string `json:"-"`
+	// AccessNote is the access segments' hint, where the request offers a
+	// choice. WarnLines are the warnings as the page's strip says them, one
+	// sentence each.
+	AccessNote string   `json:"-"`
+	WarnLines  []string `json:"-"`
 }
 
 // grantedView is the grant an approved request opened: its access, when it
@@ -252,6 +360,24 @@ func grantedOf(a store.AccessApproval, g store.AccessGrant, now time.Time) *gran
 
 // accessChoice is one access radio: its value and its words.
 type accessChoice struct{ Value, Words string }
+
+// Label is the choice as a segment says it; Words is its hint's sentence.
+func (c accessChoice) Label() string {
+	if c.Value == accessReadWrite {
+		return "Read and write"
+	}
+	return "Read-only"
+}
+
+// accessNote is the access segments' hint: what each choice lets happen, as
+// the choices word it, one sentence each.
+func accessNote(choices []accessChoice) string {
+	parts := make([]string, 0, len(choices))
+	for _, c := range choices {
+		parts = append(parts, axSentence(c.Words))
+	}
+	return strings.Join(parts, " ")
+}
 
 // accessChoices words a request's access choices, the default first:
 // read-only, then read and write with what it adds.
@@ -292,6 +418,47 @@ func chosenAccess(r *http.Request, f approval.Facts) string {
 // durationChoice is one duration radio: its value and its words.
 type durationChoice struct{ Value, Words string }
 
+// axCapWords is how durationWords marks a length max_lease cuts short.
+const axCapWords = " (the max_lease cap)"
+
+// Label is the choice as a segment says it: "Until its session ends", "1
+// hour", "4 hours", or a length max_lease cut short as the cap's length
+// ("20m"). The cap itself is the segments' hint (accessOneData.CapNote).
+func (c durationChoice) Label() string {
+	if c.Value == approval.ForSession {
+		return "Until its session ends"
+	}
+	return strings.TrimSuffix(c.Words, axCapWords)
+}
+
+// axApproveWords is the Approve button's words for the duration it signs:
+// "until its session ends", "for 1 hour", "for 20m".
+func axApproveWords(c durationChoice) string {
+	if c.Value == approval.ForSession {
+		return "until its session ends"
+	}
+	return "for " + c.Label()
+}
+
+// axOfferedDuration is the duration the page shows selected for choice, the
+// duration ?for= named ("" for none): the first choice, the default, when it
+// names none. A fixed length the choices leave out (max_lease reaches it
+// sooner) grants what the last choice, the cap, grants, so it reads as that.
+func axOfferedDuration(choice string, choices []durationChoice) durationChoice {
+	if len(choices) == 0 {
+		return durationChoice{}
+	}
+	if choice == "" {
+		return choices[0]
+	}
+	for _, c := range choices {
+		if c.Value == choice {
+			return c
+		}
+	}
+	return choices[len(choices)-1]
+}
+
 // durationChoices words the durations the daemon offers, the default first,
 // as max_lease grants them: the fixed lengths up to the first one that
 // reaches the cap, which reads as the cap when it is cut short. A longer one
@@ -312,7 +479,8 @@ func durationChoices(maxLease string) []durationChoice {
 }
 
 // chosenDuration is the duration ?for= names, "" when it names none or one
-// the daemon does not offer: then the owner chooses on the page.
+// the daemon does not offer: then the first choice, the default, stands
+// (axOfferedDuration).
 func chosenDuration(r *http.Request) string {
 	if v := r.URL.Query().Get("for"); slices.Contains(approval.Durations, v) {
 		return v
@@ -337,6 +505,16 @@ func durationWords(choice, maxLease string) string {
 	default:
 		return fmt.Sprintf("%d hours", int(d/time.Hour))
 	}
+}
+
+// axCapNote is the duration segments' hint: how long "until its session ends"
+// lasts at most, "" when the cap is not known.
+func axCapNote(maxLease string) string {
+	if limit, err := time.ParseDuration(maxLease); err != nil || limit <= 0 {
+		return ""
+	}
+	return "Until its session ends lasts at most " + leaseWords(maxLease) + ", the peer_auth.max_lease cap. " +
+		"Nothing extends it silently: past its end, the agent asks again."
 }
 
 // leaseCut reports whether max_lease (a Go duration) is shorter than d.
@@ -384,8 +562,13 @@ func (s *Service) accessList(w http.ResponseWriter, r *http.Request) {
 	}
 	d := accessListData{Requests: pending, Terminal: s.cfg.Terminal, Durations: approval.Durations, MaxLease: s.maxLease(),
 		LockOn: s.cfg.Approvals != nil, GrantsOn: s.cfg.Grants != nil, Advisory: s.advisory()}
+	creds, err := s.approverCreds(r.Context())
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
 	if d.LockOn {
-		if d.Leases, d.Unlocks, err = s.accessGrants(r.Context()); err != nil {
+		if d.Leases, d.Unlocks, err = s.accessGrants(r.Context(), creds); err != nil {
 			s.serverError(w, r, err)
 			return
 		}
@@ -401,7 +584,26 @@ func (s *Service) accessList(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	d.Cards = axWaitingCards(pending)
+	d.Open = axOpenRows(d.Leases, d.Grants, d.Unlocks, creds)
+	d.OpenShown, d.Kinds, d.OpenKind = axOpenFilter(d.Open, r.URL.Query().Get("open"))
+	d.OpenHint = axOpenHint(d.LockOn, d.GrantsOn)
 	s.render(w, r, "access", pageData{Title: "Access requests", Active: "access", Data: d})
+}
+
+// approverCreds is every enrolled approver by its store id: the names the
+// open list says an approval or an unlock was made with. Approver
+// credentials are about no project (a table no handle hides).
+func (s *Service) approverCreds(ctx context.Context) (map[string]store.ApproverCredential, error) {
+	creds, err := store.ApproverCredentials(ctx, s.db(ctx), "")
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]store.ApproverCredential, len(creds))
+	for _, c := range creds {
+		out[c.ID] = c
+	}
+	return out, nil
 }
 
 // readGrants lists the live read grants: metadata about confidential
@@ -413,10 +615,11 @@ func (s *Service) readGrants(ctx context.Context) ([]grantRow, error) {
 	}
 	rows := make([]grantRow, 0, len(live))
 	for _, g := range live {
-		host := approval.RelayName(ctx, s.writeDB(), g.RelayID)
+		host := approval.RelayName(ctx, s.db(ctx), g.RelayID)
 		row := grantRow{ID: g.ID, Project: g.Project, From: g.FromProject, PID: g.PeerPID, GrantedAt: g.GrantedAt, ExpiresAt: g.ExpiresAt,
-			Agent: approval.AgentLabelOn("", g.PeerPID, host), Access: g.Access, Dialog: g.DecidedBy == approval.DecidedByDialog}
-		if a, err := store.AccessApprovalByID(ctx, s.writeDB(), g.ApprovalID); err == nil {
+			Agent: approval.AgentLabelOn("", g.PeerPID, host), Access: g.Access, Dialog: g.DecidedBy == approval.DecidedByDialog,
+			decidedBy: g.DecidedBy}
+		if a, err := store.AccessApprovalByID(ctx, s.db(ctx), g.ApprovalID); err == nil {
 			row.Session, row.Agent = a.SessionName, approval.AgentLabelOn(a.Program, g.PeerPID, host)
 		}
 		rows = append(rows, row)
@@ -425,35 +628,33 @@ func (s *Service) readGrants(ctx context.Context) ([]grantRow, error) {
 }
 
 // accessGrants lists what is open right now: the agent trees' live leases and
-// every browser's live console unlocks. Both are metadata about locked
-// projects (slugs, ids, times), read from tables no handle hides.
-func (s *Service) accessGrants(ctx context.Context) ([]leaseRow, []unlockRow, error) {
+// every browser's live console unlocks, the unlocks named by creds. Both are
+// metadata about locked projects (slugs, ids, times), read through the
+// request's handle from tables no handle hides (store's viewExempt), so a
+// locked project's rows are listed for the owner to end.
+func (s *Service) accessGrants(ctx context.Context, creds map[string]store.ApproverCredential) ([]leaseRow, []unlockRow, error) {
 	now := time.Now()
-	leases, err := store.LiveAccessLeases(ctx, s.writeDB(), now)
+	leases, err := store.LiveAccessLeases(ctx, s.db(ctx), now)
 	if err != nil {
 		return nil, nil, err
 	}
 	lrows := make([]leaseRow, 0, len(leases))
 	for _, l := range leases {
-		host := approval.RelayName(ctx, s.writeDB(), l.RelayID)
+		host := approval.RelayName(ctx, s.db(ctx), l.RelayID)
 		row := leaseRow{ID: l.ID, Project: l.Project, PID: l.PeerPID, GrantedAt: l.GrantedAt, ExpiresAt: l.ExpiresAt,
 			Agent: approval.AgentLabelOn("", l.PeerPID, host)}
-		if a, err := store.AccessApprovalByID(ctx, s.writeDB(), l.ApprovalID); err == nil {
-			row.Session, row.Agent = a.SessionName, approval.AgentLabelOn(a.Program, l.PeerPID, host)
+		if a, err := store.AccessApprovalByID(ctx, s.db(ctx), l.ApprovalID); err == nil {
+			row.Session, row.Agent, row.decidedBy = a.SessionName, approval.AgentLabelOn(a.Program, l.PeerPID, host), a.DecidedBy
 		}
 		lrows = append(lrows, row)
 	}
-	unlocks, err := store.AllLiveConsoleUnlocks(ctx, s.writeDB(), now)
-	if err != nil {
-		return nil, nil, err
-	}
-	creds, err := store.ApproverCredentials(ctx, s.writeDB(), "")
+	unlocks, err := store.AllLiveConsoleUnlocks(ctx, s.db(ctx), now)
 	if err != nil {
 		return nil, nil, err
 	}
 	names := make(map[string]string, len(creds))
-	for _, c := range creds {
-		names[c.ID] = c.Name
+	for id, c := range creds {
+		names[id] = c.Name
 	}
 	var mine string
 	if rc := reachOf(ctx); rc != nil {
@@ -472,6 +673,235 @@ func (s *Service) accessGrants(ctx context.Context) ([]leaseRow, []unlockRow, er
 			ThisBrowser: mine != "" && u.TokenHash == mine})
 	}
 	return lrows, urows, nil
+}
+
+// What decided an approval, as the approval services record it in
+// decided_by beside an approver's store id: the terminal path's commit as
+// the daemon's account (approval's decidedByDaemon) and the advisory tier's
+// bearer key (approval's decidedByKey). The dialog's is
+// approval.DecidedByDialog.
+const (
+	axDecidedByTerminal  = "daemon-account"
+	axDecidedByBearerKey = "bearer-key"
+)
+
+// axHowApproved words what decided an approval, for the open list's sub line:
+// "from a terminal", "with the passkey <name>", "with Touch ID (<name>)".
+func axHowApproved(decidedBy string, creds map[string]store.ApproverCredential) string {
+	switch decidedBy {
+	case "":
+		return ""
+	case axDecidedByTerminal:
+		return "from a terminal"
+	case axDecidedByBearerKey:
+		return "with the bearer key"
+	case approval.DecidedByDialog:
+		return "in the agent's approval dialog"
+	}
+	c, ok := creds[decidedBy]
+	switch {
+	case !ok:
+		return "with an approver since removed"
+	case c.Kind == store.ApproverTouchID && c.Name != "":
+		return "with Touch ID (" + c.Name + ")"
+	case c.Kind == store.ApproverTouchID:
+		return "with Touch ID"
+	case c.Name != "":
+		return "with the passkey " + c.Name
+	}
+	return "with a passkey"
+}
+
+// axOpenRows is what is open right now as one list: every live lease, read
+// grant and console unlock, what ends first first (then by kind and id, so
+// the order is stable), each with its words and the route that ends it.
+func axOpenRows(leases []leaseRow, grants []grantRow, unlocks []unlockRow, creds map[string]store.ApproverCredential) []axOpenRow {
+	rows := make([]axOpenRow, 0, len(leases)+len(grants)+len(unlocks))
+	for _, l := range leases {
+		who := l.Agent
+		if who == "" {
+			who = fmt.Sprintf("pid %d", l.PID)
+		}
+		rows = append(rows, axOpenRow{Kind: axOpenLease, ID: l.ID, Project: l.Project, ExpiresAt: l.ExpiresAt, Who: who,
+			Session: l.Session, GrantedAt: l.GrantedAt, How: axHowApproved(l.decidedBy, creds),
+			Action: "/console/access/leases/" + l.ID + "/revoke", Button: "Revoke",
+			Confirm: "Revoke this lease? " + who + " loses " + l.Project + " at once, and asks again to get it back."})
+	}
+	for _, g := range grants {
+		who, session := g.Agent, g.Session
+		switch {
+		case who != "":
+		case g.Session != "":
+			who, session = g.Session, ""
+		default:
+			who = fmt.Sprintf("pid %d", g.PID)
+		}
+		row := axOpenRow{Kind: axOpenGrant, ID: g.ID, Project: g.Project, For: g.From, ExpiresAt: g.ExpiresAt, Who: who,
+			Session: session, Access: "read-only", GrantedAt: g.GrantedAt, How: axHowApproved(g.decidedBy, creds),
+			Action: "/console/access/grants/" + g.ID + "/revoke", Button: "Revoke",
+			Confirm: "Revoke this grant? " + who + " can no longer read " + g.Project +
+				", and its writes stay confined: a revoke does not unread what it read."}
+		if g.Access == store.GrantAccessWrite {
+			row.Access = "read and write"
+		}
+		if g.From != "" {
+			row.Confined = "writes only into " + g.From + " from now on"
+			if g.Access == store.GrantAccessWrite {
+				row.Confined = "writes only into " + g.From + " and " + g.Project + " from now on"
+			}
+		}
+		rows = append(rows, row)
+	}
+	for _, u := range unlocks {
+		who, where := "Another browser", "that browser"
+		if u.ThisBrowser {
+			who, where = "This browser", "this browser"
+		}
+		rows = append(rows, axOpenRow{Kind: axOpenUnlock, ID: u.ID, Project: u.Project, ExpiresAt: u.ExpiresAt, Who: who, By: u.By,
+			Action: "/console/access/unlocks/" + u.ID + "/end", Button: "Lock again",
+			Confirm: "Lock " + u.Project + " again? It closes in " + where + " until it is unlocked again."})
+	}
+	slices.SortStableFunc(rows, func(a, b axOpenRow) int {
+		if c := a.ExpiresAt.Compare(b.ExpiresAt); c != 0 {
+			return c
+		}
+		if c := strings.Compare(a.Kind, b.Kind); c != 0 {
+			return c
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
+	return rows
+}
+
+// axOpenFilter is the open list as the page shows it under ?open=: past
+// axOpenFilterAt rows it offers a chip for all of them and one per kind
+// present, and kind (one of those) keeps that kind's rows. At or under it the
+// list is short enough to read whole, and ?open= is ignored.
+func axOpenFilter(rows []axOpenRow, kind string) ([]axOpenRow, []axOpenKind, string) {
+	if len(rows) <= axOpenFilterAt {
+		return rows, nil, ""
+	}
+	counts := make(map[string]int, 3)
+	for _, r := range rows {
+		counts[r.Kind]++
+	}
+	if counts[kind] == 0 {
+		kind = ""
+	}
+	kinds := []axOpenKind{{Label: "All", Href: "/console/access", N: len(rows), On: kind == ""}}
+	for _, k := range []struct{ kind, label string }{{axOpenLease, "Leases"}, {axOpenGrant, "Grants"}, {axOpenUnlock, "Unlocks"}} {
+		if n := counts[k.kind]; n > 0 {
+			kinds = append(kinds, axOpenKind{Kind: k.kind, Label: k.label, Href: "/console/access?open=" + k.kind, N: n, On: kind == k.kind})
+		}
+	}
+	if kind == "" {
+		return rows, kinds, ""
+	}
+	shown := make([]axOpenRow, 0, counts[kind])
+	for _, r := range rows {
+		if r.Kind == kind {
+			shown = append(shown, r)
+		}
+	}
+	return shown, kinds, kind
+}
+
+// axOpenHint says what each kind of row in the open list is, for the halves
+// this daemon has: leases and unlocks with a lock, grants with read grants.
+func axOpenHint(lock, grants bool) string {
+	var parts []string
+	if lock {
+		parts = append(parts, "A lease opens a locked project to one agent and the programs it started.")
+	}
+	if grants {
+		parts = append(parts, "A grant opens a confidential project to one agent, read-only unless you chose read and write.")
+	}
+	if lock {
+		parts = append(parts, "An unlock opens a locked project in one browser, never to an agent.")
+	}
+	return strings.Join(append(parts, "Each ends on its own; Revoke or Lock again ends it now."), " ")
+}
+
+// axWaitingCards are the waiting requests as the list draws them.
+func axWaitingCards(pending []approval.Facts) []axCard {
+	cards := make([]axCard, 0, len(pending))
+	for _, f := range pending {
+		texts := make([]string, 0, len(f.Warnings))
+		for _, w := range f.Warnings {
+			texts = append(texts, axSentence(w.Text))
+		}
+		cards = append(cards, axCard{Facts: f, Who: axWho(f), Asks: axAsks(f), ReasonLine: axReasonLine(f.Reason),
+			WarnText: strings.Join(texts, " "), LockedChip: axLocked(f)})
+	}
+	return cards
+}
+
+// axWho names the asking program as the kernel names it: the agent's name
+// ("Claude Code 2.1.319"), else the program's base name; "" when the daemon
+// knows no program. Program is a path on the daemon's machine (or a relay's),
+// never this console's browser's.
+func axWho(f approval.Facts) string {
+	if f.Agent != "" {
+		return f.Agent
+	}
+	if f.Program == "" {
+		return ""
+	}
+	return path.Base(f.Program)
+}
+
+// axAsks is what a request asks to do with its project: move into it, or
+// read it, or read and write it (a lock's lease reads and writes; a grant
+// asks for what AskedAccess says, read-only when it says nothing).
+func axAsks(f approval.Facts) string {
+	switch {
+	case f.Kind == store.AccessKindMove:
+		return "move into"
+	case f.AskedAccess == accessReadWrite, f.AskedAccess == "" && f.Access == accessReadWrite:
+		return "read and write"
+	}
+	return "read"
+}
+
+// axKindWords is a request's kind as the request's card says it.
+func axKindWords(f approval.Facts) string {
+	switch {
+	case f.Kind == store.AccessKindRefresh:
+		return "a refresh of a lease it holds"
+	case f.Kind == store.AccessKindMove:
+		return "a move into a fenced project, for good"
+	case f.Kind == store.AccessKindGrant && len(f.AccessChoices) > 0:
+		return "a grant of a confidential project: read-only, or read and write as you choose"
+	case f.Kind == store.AccessKindGrant:
+		return "a read-only grant of a confidential project"
+	}
+	return "a first request"
+}
+
+// axLocked reports whether a request's project is locked: a lock's own
+// request (or its refresh) always is; a grant or a move says so in Locked.
+func axLocked(f approval.Facts) bool {
+	return f.Kind == store.AccessKindRequest || f.Kind == store.AccessKindRefresh || f.Locked
+}
+
+// axReasonLine is an agent's reason on one line, its whitespace runs folded to
+// one space: the waiting list's excerpt, which the page cuts to the row's
+// width (the request's own page quotes it whole).
+func axReasonLine(reason string) string { return strings.Join(strings.Fields(reason), " ") }
+
+// axSentence is a warning's text as a sentence of a hint: its first letter
+// upper case, ending with a period.
+func axSentence(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	r, n := utf8.DecodeRuneInString(s)
+	s = string(unicode.ToUpper(r)) + s[n:]
+	if !strings.HasSuffix(s, ".") {
+		s += "."
+	}
+	return s
 }
 
 func (s *Service) accessOne(w http.ResponseWriter, r *http.Request) {
@@ -504,10 +934,25 @@ func (s *Service) accessOne(w http.ResponseWriter, r *http.Request) {
 		InDialog: a.DecidedBy == approval.DecidedByDialog}
 	d.Choices = durationChoices(d.MaxLease)
 	d.Accesses, d.Access = accessChoices(facts), chosenAccess(r, facts)
+	d.AccessNote = accessNote(d.Accesses)
+	for _, warn := range facts.Warnings {
+		d.WarnLines = append(d.WarnLines, axSentence(warn.Text))
+	}
+	d.Who, d.Asks, d.KindWords, d.LockedChip = axWho(facts), axAsks(facts), axKindWords(facts), axLocked(facts)
+	d.CapNote = axCapNote(d.MaxLease)
 	if d.ForGood = a.Kind == store.AccessKindMove && !facts.Locked; d.ForGood {
 		// A move no lock covers lasts for good: there is no duration to
 		// choose, and the proof signs the default.
 		d.Choices = []durationChoice{{Value: approval.ForSession, Words: forGoodWords}}
+		d.CapNote = ""
+	}
+	// The duration the page opens with selected: the one ?for= chose, else
+	// the first, the default (UX 41, D14). Under passkeys it is the one the
+	// options sign, so the owner sees it selected before any passkey prompt.
+	sel := axOfferedDuration(chosenDuration(r), d.Choices)
+	d.Selected, d.ApproveWords = sel.Value, axApproveWords(sel)
+	if d.ForGood {
+		d.ApproveWords = "the move"
 	}
 	if status == store.ApprovalPending && access.PeerAuthenticated(r.Context()) && wantsJSON(r) {
 		d.Challenge = base64.StdEncoding.EncodeToString(a.Challenge)
@@ -536,17 +981,19 @@ func (s *Service) accessOne(w http.ResponseWriter, r *http.Request) {
 		// origin to verify them on, and one enrolled -- so the page never
 		// offers a passkey the remedy does not, nor a link with no origin.
 		d.PasskeyReady = s.cfg.Approvals.Ways(r.Context(), "").Passkey
-		// The options only once the duration is chosen: they sign it, with
-		// the facts this page shows.
-		if d.For = chosenDuration(r); d.ForGood {
+		// The options sign the duration the page shows selected (Selected),
+		// with the facts it shows (Addendum 6). A move no lock covers signs
+		// the default.
+		if d.For = d.Selected; d.ForGood {
 			d.For = approval.ForSession
 		}
 		if d.For != "" && len(d.Accesses) > 1 && d.Access == "" {
 			// A grant offering read and write never skips its access step:
 			// the in-session dialog that sends the owner here with ?for=
 			// chose only how long, and signing that would approve read-only
-			// whatever the owner meant (P13, 2026-11-14). The choose step
-			// keeps the duration chosen.
+			// whatever the owner meant (P13, 2026-11-14). Its access
+			// segments wait with neither chosen, the duration stays
+			// selected, and no options are issued until the owner chooses.
 			d.PreFor, d.For = d.For, ""
 		}
 		if d.For != "" {

@@ -767,11 +767,11 @@ applies and a terminal on the server, and exits 1. A client whose
 `--passkey` opens the request's passkey page (the `page` the daemon names) in
 the default browser - `open` on macOS, `xdg-open` on Linux, `rundll32` on
 Windows - or prints the address when no browser could be opened. With `--for`
-(a duration the daemon offers), the page opens with it chosen
-(`/console/access/<id>?for=1h`): it shows that duration read-only, with a link
-to choose another; without `--for`, the page asks. A grant that offers read and
-write opens with its access chosen only with `--access`: without it the page
-asks the access, with the duration preselected, so no passkey ever signs
+(a duration the daemon offers), the page opens with it selected
+(`/console/access/<id>?for=1h`) among the durations it offers; without
+`--for`, the first, until the session ends, is selected. A grant that offers
+read and write opens with its access chosen only with `--access`: without it
+the page asks the access, with the duration selected, so no passkey ever signs
 read-only by default (the in-session dialog's passkey link works the same way).
 The passkey signs the duration, the access and the facts shown, so its approval
 binds all three. A daemon that offers

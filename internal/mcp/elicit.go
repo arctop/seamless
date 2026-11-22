@@ -493,9 +493,9 @@ func (s *Server) passkeyWait(ctx, dctx context.Context, session mcpserver.Client
 
 // passkeyDialog sends the owner to the request's passkey page: a URL
 // elicitation with id elicitID. duration is the one the dialog's form chose,
-// which page carries (pageFor), "" when the page asks it; capped is the lease
-// cap it is worded against. ok is false when the client did not take it
-// (nothing shown).
+// which page carries (pageFor), "" when the page selects its first; capped is
+// the lease cap it is worded against. ok is false when the client did not
+// take it (nothing shown).
 func (s *Server) passkeyDialog(ctx context.Context, session mcpserver.ClientSession, t dialogTarget, elicitID, page,
 	duration string, capped time.Duration) (urlAnswer, bool) {
 	// Only the approval takes the passkey: the page denies without one.
@@ -507,8 +507,8 @@ func (s *Server) passkeyDialog(ctx context.Context, session mcpserver.ClientSess
 		"opens. Opening it grants nothing by itself."
 	if f, err := s.cfg.Approvals.Facts(ctx, t.ID); err == nil {
 		// The warning count and what is asked first, as in the form
-		// (dialogLead); the page shows every fact, and asks how long unless
-		// the form did.
+		// (dialogLead); the page shows every fact, and selects how long:
+		// what the form chose, else its first duration.
 		msg = passkeyMessage(f, decide)
 	}
 	res, err := s.mcp.RequestURLElicitation(ctx, session, elicitID, page, msg)
@@ -532,8 +532,8 @@ func (s *Server) passkeyDialog(ctx context.Context, session mcpserver.ClientSess
 }
 
 // pageFor is the passkey page with the duration the dialog's form chose
-// (?for=): the page shows it read-only, and its options sign it. "" leaves
-// the page as it is, and the page asks.
+// (?for=): the page shows it selected, and its options sign it. "" leaves
+// the page as it is, and the page selects its first duration.
 func pageFor(page, duration string) string {
 	if duration == "" {
 		return page

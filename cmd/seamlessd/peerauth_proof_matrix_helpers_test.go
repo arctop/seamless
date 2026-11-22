@@ -553,8 +553,8 @@ func pmReadAccess(base, key, ref string) (pmAccessOne, error) {
 }
 
 // pmReadAccessFor reads request ref's page with the duration ?for= chose:
-// the passkey options it carries sign that duration ("" chooses none, and
-// the page carries none).
+// the passkey options it carries sign that duration ("" names none, and the
+// page's options sign the first, until the session ends: UX 41).
 func pmReadAccessFor(base, key, ref, duration string) (pmAccessOne, error) {
 	path := "/console/access/" + url.PathEscape(ref) + "?format=json"
 	if duration != "" {
