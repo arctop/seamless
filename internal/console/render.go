@@ -650,7 +650,7 @@ func (s *Service) renderFragment(w http.ResponseWriter, r *http.Request, name st
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = buf.WriteTo(w)
+	_, _ = w.Write(uniqueHintIDs(buf.Bytes()))
 }
 
 // renderReader writes a library entity's reader fragment -- the

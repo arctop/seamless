@@ -422,6 +422,7 @@
         !e.metaKey && !e.ctrlKey && !e.altKey) {
       var keysSheet = document.getElementById('keys');
       if (keysSheet && !keysSheet.hidden) return;
+      if (window.SeamPanel && window.SeamPanel.isOpen()) return;
       e.preventDefault();
       e.stopPropagation();
       var filter = pageFilter();

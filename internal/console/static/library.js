@@ -229,6 +229,7 @@
   // This listener runs before the shell's, so it has to step aside itself.
   function shellHoldsKey() {
     if (document.querySelector('.chord-hint')) return true;
+    if (window.SeamPanel && window.SeamPanel.isOpen()) return true;
     var ids = ['cmdk', 'keys'];
     for (var i = 0; i < ids.length; i++) {
       var el = document.getElementById(ids[i]);
