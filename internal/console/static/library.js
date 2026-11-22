@@ -6,7 +6,12 @@
    and the switch is instant. j / k move the selection; on the Gardener, a
    applies the open proposal and x dismisses it. The delegated handlers stay
    inert without #lib-reader, but can enhance one inserted by an in-place
-   mutation response later. */
+   mutation response later.
+
+   On an item's own page (item_shared.html: a memory, a note or a task alone,
+   no rail), k and j open the previous and next item of the list it is in by
+   pressing the page's own links, which load in place (navigation.js); and
+   Waits on someone... in a task's title row opens its form below. */
 (function () {
   'use strict';
 
@@ -256,9 +261,40 @@
       return;
     }
     if (e.key !== 'j' && e.key !== 'k') return;
-    if (!items().length) return;
+    if (!items().length) {
+      stepItemPage(e);
+      return;
+    }
     e.preventDefault();
     stepSelection(e.key === 'j' ? 1 : -1);
+  });
+
+  // An item's own page: k / j press its previous / next link, a plain link
+  // the shared navigation client loads in place. A held key does not repeat,
+  // and an end of the list (no link) leaves the key alone.
+  function stepItemPage(e) {
+    var which = e.key === 'j' ? 'next' : 'prev';
+    var link = document.querySelector('.item-page a[data-item-step="' + which + '"]');
+    if (!link) return;
+    e.preventDefault();
+    if (e.repeat) return;
+    link.click();
+  }
+
+  // A task's own page: Waits on someone... in the title row opens the form
+  // under the body (#item-wait) and puts the cursor in its first field.
+  // Without script the link scrolls to it.
+  document.addEventListener('click', function (e) {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button === 1) return;
+    var opener = e.target.closest ? e.target.closest('a[data-open-wait]') : null;
+    if (!opener) return;
+    var box = document.querySelector('#item-wait details[data-task-wait]');
+    if (!box) return;
+    e.preventDefault();
+    box.open = true;
+    box.scrollIntoView({ block: 'nearest' });
+    var first = box.querySelector('input[name="who"]');
+    if (first) first.focus({ preventScroll: true });
   });
 
   function enhanceReader(initial) {

@@ -17,12 +17,12 @@ import (
 
 // The detail handlers here serve a single entity four ways: JSON for the CLI,
 // an HTML fragment for the in-page detail pane (?peek=1), a reader fragment
-// for the library screens' in-place swap (?reader=1), and -- by default -- the
-// entity's library
-// page with that entity open in the reader (a shareable, no-JS URL). Entity
-// references across the console link to these routes; on split list screens
-// (sessions) a data-peek link loads the ?peek=1 fragment into the pane without
-// a page navigation.
+// for the library screens' in-place swap (?reader=1), and -- by default -- for
+// a memory, a note and a task, the item's own page (itempage.go: the item
+// alone in one reading frame, a shareable, no-JS URL). Entity references
+// across the console link to these routes; on split list screens (sessions) a
+// data-peek link loads the ?peek=1 fragment into the pane without a page
+// navigation.
 
 // memoryRef is a compact pointer to another memory (a supersession neighbor),
 // enough to render a peek link.
@@ -199,6 +199,13 @@ func (s *Service) memoryDetail(w http.ResponseWriter, r *http.Request) {
 		s.notFound(w, r, "No memory with id "+id+".")
 		return
 	}
+	// The memory's own page shows how it is in use: its numbers are as fresh
+	// as the Memories list's were (the JSON and the fragments read them as
+	// they are, as they always did).
+	q := r.URL.Query()
+	if !wantsJSON(r) && q.Get("peek") != "1" && q.Get("reader") != "1" {
+		s.freshRetrievalStats(ctx)
+	}
 	d, err := s.memoryDetailData(ctx, m)
 	if err != nil {
 		s.serverError(w, r, err)
@@ -208,11 +215,11 @@ func (s *Service) memoryDetail(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, d)
 		return
 	}
-	if r.URL.Query().Get("peek") == "1" {
+	if q.Get("peek") == "1" {
 		s.renderFragment(w, r, "memory", d)
 		return
 	}
-	// The reader fragment (?reader=1) and the Memories screen read the
+	// The reader fragment (?reader=1) and the memory's own page read the
 	// library's state from the URL (memories.go).
 	s.memoryLibraryPage(w, r, d)
 }
@@ -302,7 +309,7 @@ func (s *Service) noteDetail(w http.ResponseWriter, r *http.Request) {
 		s.renderFragment(w, r, "note", d)
 		return
 	}
-	// The reader fragment (?reader=1) and the Notes screen read the
+	// The reader fragment (?reader=1) and the note's own page read the
 	// library's state from the URL (library.go).
 	s.noteLibraryPage(w, r, d)
 }
@@ -537,8 +544,8 @@ func (s *Service) taskDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// The reader and the page carry the Tasks page's state (taskQuery): the
-	// reader's actions return to the task with it, and the page's rail is the
-	// list under it.
+	// reader's actions return to the task with it, and the page's place and
+	// its k / j follow the list it names.
 	if r.URL.Query().Get("reader") == "1" {
 		q, err := parseTaskQuery(r.URL.Query())
 		if err != nil {
@@ -553,14 +560,7 @@ func (s *Service) taskDetail(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	data, ok := s.tasksPageFor(w, r, q)
-	if !ok {
-		return
-	}
-	d.Next = q.listNext(d.ID)
-	data.Selected = &d
-	data.View = newTaskView(q, data, "/console/tasks/"+d.ID)
-	s.render(w, r, "tasks", pageData{Title: taskPageTitle(t), Active: "tasks", Data: data})
+	s.taskItemPage(w, r, t, d, q)
 }
 
 // taskPageTitle is a task page's tab title: the task's own title, so two tabs

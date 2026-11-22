@@ -189,7 +189,7 @@ func TestMemoryReader_RanksFactsAndRefusesToEchoTheDescription(t *testing.T) {
 
 	// A memory whose body says something the description does not.
 	full := writeMemory(t, mgr, core.KindGotcha, "seamless", "has-body", "a real description")
-	page := getPeek(t, mux, "/console/memories/"+full.ID)
+	page := getPeek(t, mux, "/console/memories/"+full.ID+"?reader=1")
 	require.Equal(t, http.StatusOK, page.Code)
 	body := page.Body.String()
 	require.Contains(t, body, `class="mv2-facts"`)
@@ -214,7 +214,7 @@ func TestMemoryReader_RanksFactsAndRefusesToEchoTheDescription(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	page = getPeek(t, mux, "/console/memories/"+echo.ID)
+	page = getPeek(t, mux, "/console/memories/"+echo.ID+"?reader=1")
 	require.Equal(t, http.StatusOK, page.Code)
 	body = page.Body.String()
 	require.Contains(t, body, `class="mv2-nobody"`)
@@ -225,4 +225,12 @@ func TestMemoryReader_RanksFactsAndRefusesToEchoTheDescription(t *testing.T) {
 	// that is a different pane answering a different question.)
 	sheet := body[strings.Index(body, `<article class="reader-sheet"`):]
 	require.Equal(t, 1, strings.Count(sheet, "Backfill the dedupe store from the outbox after an outage"))
+
+	// The memory's own page says it the same way: the lead once, then why
+	// there is no body, and the same since-surfaced chip as the reader.
+	own := getPeek(t, mux, "/console/memories/"+echo.ID).Body.String()
+	frame := own[strings.Index(own, `<div class="item-page"`):]
+	require.Contains(t, frame, `class="mv2-nobody"`)
+	require.Equal(t, 1, strings.Count(frame, "Backfill the dedupe store from the outbox after an outage"))
+	require.Contains(t, frame, `<span class="mv2-fact-hi" title="Has never entered an agent context">never<span>surfaced</span></span>`)
 }

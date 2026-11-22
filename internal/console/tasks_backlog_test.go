@@ -527,18 +527,22 @@ func TestBkGateSet_OriginFollowAndCallers(t *testing.T) {
 func TestBkReaderKeepsTheFilters(t *testing.T) {
 	db, mux := newConsole(t)
 	id := bkTask(t, db, "example-ops", "", "bk kept", nil)
+	next := `name="next" value="/console/tasks/` + id + `?project=example-ops&amp;sort=newest"`
 	for _, path := range []string{"/console/tasks/" + id + "?project=example-ops&sort=newest", "/console/tasks/" + id + "?reader=1&project=example-ops&sort=newest"} {
 		body := getHTMLBody(t, mux, path)
-		next := `name="next" value="/console/tasks/` + id + `?project=example-ops&amp;sort=newest"`
 		require.Contains(t, between(t, body, `data-task-act="done"`, "<form", "</form>"), next, path)
-		require.Contains(t, between(t, body, "star-form", "<form", "</form>"), next+" data-lib-next", path)
+		require.Contains(t, between(t, body, "star-form", "<form", "</form>"), next, path)
 		require.Contains(t, between(t, body, "data-task-wait", "<details", "</details>"), next, path)
 	}
-	page := getHTMLBody(t, mux, "/console/tasks/"+id+"?project=example-ops")
-	require.Contains(t, page, `<a class="" href="/console/tasks/`+id+`?project=example-ops&amp;sort=newest" data-lib-here>Newest first</a>`)
-	require.Contains(t, page, `<a class="on" href="/console/tasks/`+id+`?project=example-ops" data-lib-here>Oldest first</a>`)
+	// The reader's star is the one library.js follows after a swap.
+	reader := getHTMLBody(t, mux, "/console/tasks/"+id+"?reader=1&project=example-ops&sort=newest")
+	require.Contains(t, between(t, reader, "star-form", "<form", "</form>"), next+" data-lib-next")
+	// The list's sort keeps its filters.
+	list := getHTMLBody(t, mux, "/console/tasks?project=example-ops")
+	require.Contains(t, list, `<a class="" href="/console/tasks?project=example-ops&amp;sort=newest" data-lib-here>Newest first</a>`)
+	require.Contains(t, list, `<a class="on" href="/console/tasks?project=example-ops" data-lib-here>Oldest first</a>`)
 	// The default list carries no state, so the actions keep their own way back.
-	page = getHTMLBody(t, mux, "/console/tasks/"+id)
+	page := getHTMLBody(t, mux, "/console/tasks/"+id)
 	require.NotContains(t, between(t, page, `data-task-act="done"`, "<form", "</form>"), `name="next"`)
 }
 

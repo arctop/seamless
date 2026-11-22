@@ -205,13 +205,16 @@ type tasksData struct {
 	Projects []taskProjectCount `json:"projects"`
 	// Filter is the state the page was read with, as its URL names it.
 	Filter taskFilterJSON `json:"filter"`
-	// Selected is the task open in the reader: the requested one on a
-	// /console/tasks/{id} page, or the most relevant one on the list URL
-	// (SelectedAuto, which the client pins into the URL).
+	// Selected is the task open in the reader: the most relevant one on the
+	// list URL (SelectedAuto, which the client pins into the URL). A task's
+	// own URL draws its item page instead (Item).
 	Selected     *taskDetail `json:"-"`
 	SelectedAuto bool        `json:"-"`
 	// View is the page's controls (taskView). HTML only.
 	View *taskView `json:"-"`
+	// Item is a task's own page (itempage.go): set, the screen draws it
+	// instead of the library. HTML only.
+	Item *itemPage `json:"-"`
 }
 
 // listsAny reports a row in any rail.

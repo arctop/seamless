@@ -51,20 +51,19 @@ func TestTasksPage_GatesAndGatedSteps(t *testing.T) {
 	require.Equal(t, []string{"owner"}, whoWaits["ship the release"], "a step behind a gate waits on the gate's who")
 	require.Equal(t, []string{"sitting:security"}, whoWaits["run the drill"])
 
-	req := httptest.NewRequest(http.MethodGet, "/console/tasks/"+behind.ID, nil)
+	list := getHTMLBody(t, mux, "/console/tasks")
+	require.Contains(t, list, `id="rg-gates"`)
+	require.Contains(t, list, `id="rg-gated"`)
+	require.Contains(t, list, "3 waiting on people", "the header counts the gates and the steps they hold, as the board does")
+	require.Contains(t, list, "waits on owner: sign the release")
+	for _, path := range []string{"/console/tasks/" + behind.ID, "/console/tasks/" + behind.ID + "?reader=1"} {
+		require.Contains(t, getHTMLBody(t, mux, path), "gate &middot; waits on owner: sign the release",
+			"%s: the task marks a dependency that is a gate", path)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/console/tasks/"+own.ID+"?peek=1", nil)
 	req.Header.Set("Authorization", "Bearer "+testKey)
 	rr := do(mux, req)
-	require.Equal(t, http.StatusOK, rr.Code)
-	page := rr.Body.String()
-	require.Contains(t, page, `id="rg-gates"`)
-	require.Contains(t, page, `id="rg-gated"`)
-	require.Contains(t, page, "3 waiting on people", "the header counts the gates and the steps they hold, as the board does")
-	require.Contains(t, page, "waits on owner: sign the release")
-	require.Contains(t, page, "gate &middot; waits on owner: sign the release", "the reader marks a dependency that is a gate")
-
-	req = httptest.NewRequest(http.MethodGet, "/console/tasks/"+own.ID+"?peek=1", nil)
-	req.Header.Set("Authorization", "Bearer "+testKey)
-	rr = do(mux, req)
 	require.Equal(t, http.StatusOK, rr.Code)
 	peek := rr.Body.String()
 	require.Contains(t, peek, `data-gate="open"`)

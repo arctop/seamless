@@ -1,4 +1,5 @@
 {{define "content"}}
+{{- with .Data.Item}}{{template "item-frame" .}}{{else}}
 {{with .Data}}
 {{$sel := .Selected}}
 {{$qs := .QS}}
@@ -78,7 +79,7 @@
           <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/memories/{{.ID}}{{$qs}}" data-title="{{.Name}}" data-context="{{.ScopeLabel}} / {{.Kind}}" data-memory-kind="{{.Kind}}"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
             <span class="ri-title mono">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Name}}</span>
             {{if .Description}}<span class="ri-desc">{{.Description}}</span>{{end}}
-            <span class="ri-meta">{{if $g.All}}<span class="ri-chip">{{.ScopeLabel}}</span> <span class="ri-chip ri-kind" data-kind="{{.Kind}}" title="{{.KindGloss}}">{{.Kind}}</span> {{end}}<span title="{{ts .Updated}}">updated {{ago .Updated}}</span>{{if $.Level.AtLeast "standard"}}{{if .Injects}} &middot; surfaced {{.Injects}}&times;{{else}} &middot; never surfaced{{end}}{{end}}{{with agentPill .Harness .Model}} {{.}}{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
+            <span class="ri-meta">{{if $g.All}}<span class="ri-chip">{{.ScopeLabel}}</span> <span class="ri-chip ri-kind" data-kind="{{.Kind}}" title="{{.KindGloss}}">{{.Kind}}</span> {{end}}<span>updated {{agoTime .Updated}}</span>{{if $.Level.AtLeast "standard"}}{{if .Injects}} &middot; surfaced {{.Injects}}&times;{{else}} &middot; never surfaced{{end}}{{end}}{{with agentPill .Harness .Model}} {{.}}{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
           </a>
           {{end}}
           </div>
@@ -94,7 +95,7 @@
           {{range .Inactive}}
           <a class="rail-item dim{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/memories/{{.ID}}{{$qs}}" data-title="{{.Name}}" data-context="Historical / {{.Kind}}" data-memory-kind="{{.Kind}}"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
             <span class="ri-title mono"><i class="kdot" data-kind="{{.Kind}}" title="{{.Kind}}: {{.KindGloss}}"></i>{{.Name}}</span>
-            <span class="ri-meta">{{.Status}}{{if .ReplacedBy}} by {{.ReplacedBy}}{{end}} &middot; <span title="{{ts .Updated}}">{{ago .Updated}}</span>{{with agentPill .Harness .Model}} {{.}}{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
+            <span class="ri-meta">{{.Status}}{{if .ReplacedBy}} by {{.ReplacedBy}}{{end}} &middot; {{agoTime .Updated}}{{with agentPill .Harness .Model}} {{.}}{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
           </a>
           {{end}}
         </div>
@@ -120,25 +121,12 @@
 {{end}}
 </div><!-- .lib-page -->
 {{end}}
+{{- end}}
 {{end}}
 
 {{define "memory-reader"}}
 <article class="reader-sheet" data-memory-kind="{{.Kind}}">
-  {{if ne .Status "active"}}
-  <aside class="reader-status-banner {{if eq .Status "superseded"}}warn{{else}}muted{{end}}" role="note">
-    {{icon "archive"}}
-    <div><strong>This memory is {{.Status}}.</strong>
-      {{- with .Restore.Live}} It is historical; continue with <a href="/console/memories/{{.ID}}{{$.QS}}">{{.Name}}</a>, the active memory that replaced it. It can be restored once that one is no longer active.
-      {{- else}}{{if .ReplacedByID}} <a href="/console/memories/{{.ReplacedByID}}{{.QS}}">{{.ReplacedBy}}</a> replaced it and is no longer active either.{{end}} It no longer reaches agents: briefings and recall leave it out, and its history stays readable here.{{end}}
-      {{- with .Restore.Blocked}} <span class="reader-status-held">{{.}}{{if $.Restore.ToHeld}} <a href="/console/held">Open Held</a>{{end}}</span>{{end}}</div>
-    {{if .Restore.Offered}}
-    <form class="reader-status-act" method="post" action="/console/memories/{{.ID}}/restore">
-      <input type="hidden" name="next" value="/console/memories/{{.ID}}{{.QS}}">
-      <button class="ract" type="submit" title="Bring it back into briefings and recall">{{icon "undo-2"}}Restore</button>
-    </form>
-    {{end}}
-  </aside>
-  {{end}}
+  {{template "memory-status-banner" .}}
   <header class="reader-head">
     <div class="reader-eyebrow">
       <span class="kind" title="{{.KindGloss}}">{{.Kind}}</span>
@@ -166,14 +154,14 @@
     </h2>
     {{if .Description}}<p class="reader-desc">{{.Description}}</p>{{end}}
     <div class="mv2-facts">
-      {{if $.Level.AtLeast "standard"}}<span class="mv2-fact-hi" title="Time-decayed demand score in [0,1): recall hits, prompt matches, explicit reads. Feeds briefing ordering and recall ranking.{{with .UtilityParts}} Breakdown &mdash; read {{printf "%.1f" .Read}} &middot; recall {{printf "%.1f" .Recall}} &middot; prompt {{printf "%.1f" .Prompt}}{{end}}">{{printf "%.2f" .Utility}}<span>utility</span></span>{{end}}
-      <span class="mv2-fact-hi"{{if .SurfacedTone}} data-tone="{{.SurfacedTone}}"{{end}} title="{{if .LastInjected}}Last entered agent context {{ts .LastInjected}}{{else}}Has never entered an agent context{{end}}">{{if .LastInjected}}{{.SurfacedAge}}<span>since surfaced</span>{{else}}never<span>surfaced</span>{{end}}</span>
+      {{template "memory-utility" .}}
+      {{template "memory-surfaced-chip" .}}
       <span class="mv2-facts-rest">
         {{if .Injects}}<span title="How many times this memory entered an agent's context: briefings, prompt-matched recall, recall answers">surfaced {{.Injects}}&times;</span>{{end}}
         <span title="Explicit memory_read lookups. Near-zero by design: a briefing already carries the body (counted under surfaced), so agents rarely read a memory again that they already have.">read {{.Reads}}&times;</span>
         {{if .Source}}<span>source {{if .SourceID}}<a href="/console/sessions/{{.SourceID}}">{{.Source}}</a>{{else}}{{.Source}}{{end}}</span>{{end}}
-        <span title="{{ts .Updated}}">updated {{ago .Updated}}</span>
-        <span title="{{ts .Created}}">created {{ago .Created}}</span>
+        <span>updated {{agoTime .Updated}}</span>
+        <span>created {{agoTime .Created}}</span>
       </span>
     </div>
     {{with .SurfacedTo}}
@@ -212,3 +200,118 @@
 {{end}}
 
 {{define "memory-surfaced-session"}}{{if .ID}}<a class="mono" href="/console/sessions/{{.ID}}" title="Surfaced {{.Times}}&times;, last {{ts .Last}}">{{.Name}}</a>{{else}}<span class="faint" title="Surfaced {{.Times}}&times; outside any session, last {{ts .Last}}">no session</span>{{end}}{{end}}
+
+{{/* The inactive banner of the reader and of the memory's own page: what it
+     is, what replaced it, and Restore while it can be restored. */}}
+{{define "memory-status-banner"}}{{if ne .Status "active"}}
+  <aside class="reader-status-banner {{if eq .Status "superseded"}}warn{{else}}muted{{end}}" role="note">
+    {{icon "archive"}}
+    <div><strong>This memory is {{.Status}}.</strong>
+      {{- with .Restore.Live}} It is historical; continue with <a href="/console/memories/{{.ID}}{{$.QS}}">{{.Name}}</a>, the active memory that replaced it. It can be restored once that one is no longer active.
+      {{- else}}{{if .ReplacedByID}} <a href="/console/memories/{{.ReplacedByID}}{{.QS}}">{{.ReplacedBy}}</a> replaced it and is no longer active either.{{end}} It no longer reaches agents: briefings and recall leave it out, and its history stays readable here.{{end}}
+      {{- with .Restore.Blocked}} <span class="reader-status-held">{{.}}{{if $.Restore.ToHeld}} <a href="/console/held">Open Held</a>{{end}}</span>{{end}}</div>
+    {{if .Restore.Offered}}
+    <form class="reader-status-act" method="post" action="/console/memories/{{.ID}}/restore">
+      <input type="hidden" name="next" value="/console/memories/{{.ID}}{{.QS}}">
+      <button class="ract" type="submit" title="Bring it back into briefings and recall">{{icon "undo-2"}}Restore</button>
+    </form>
+    {{end}}
+  </aside>
+  {{end}}{{end}}
+
+{{/* How long since the memory last surfaced, toned by the staleness horizon
+     (surfacedStaleness), in the reader and on the memory's page. */}}
+{{define "memory-surfaced-chip"}}<span class="mv2-fact-hi"{{if .SurfacedTone}} data-tone="{{.SurfacedTone}}"{{end}} title="{{if .LastInjected}}Last entered agent context {{ts .LastInjected}}{{else}}Has never entered an agent context{{end}}">{{if .LastInjected}}{{.SurfacedAge}}<span>since surfaced</span>{{else}}never<span>surfaced</span>{{end}}</span>{{end}}
+
+{{/* The utility score, a Standard-level fact (screens.go's surface "the
+     utility score in the reader"), in the reader and on the memory's page. */}}
+{{define "memory-utility"}}{{if $.Level.AtLeast "standard"}}<span class="mv2-fact-hi" title="Time-decayed demand score in [0,1): recall hits, prompt matches, explicit reads. Feeds briefing ordering and recall ranking.{{with .UtilityParts}} Breakdown &mdash; read {{printf "%.1f" .Read}} &middot; recall {{printf "%.1f" .Recall}} &middot; prompt {{printf "%.1f" .Prompt}}{{end}}">{{printf "%.2f" .Utility}}<span>utility</span></span>{{end}}{{end}}
+
+{{/* A memory's own page: the blocks item_shared.html's item-frame asks the
+     Memories screen for (itempage.go's memoryItem). Every action returns to
+     this page, the list's query kept. */}}
+{{define "item-banner"}}{{template "memory-status-banner" .Memory}}{{end}}
+
+{{define "item-actions"}}{{with .Memory}}
+        <a class="ract" href="{{.EditURL}}" title="Open {{.AbsPath}}">{{icon "pencil"}}Edit in editor</a>
+        {{- if .CanArchive}}
+        <form method="post" action="/console/memories/{{.ID}}/archive">
+          <input type="hidden" name="next" value="/console/memories/{{.ID}}{{.QS}}">
+          <button class="ract danger" type="submit" data-confirm="Archive {{.Name}}? It leaves briefings and recall; its history stays readable here, and you can restore it." data-confirm-label="Archive it">{{icon "archive"}}Archive</button>
+        </form>
+        {{- end}}
+{{end}}{{end}}
+
+{{define "item-facts"}}{{with .Memory}}
+      <span class="item-kind" title="{{.KindGloss}}">{{.Kind}}</span>
+      <span class="badge {{if eq .Status "active"}}ok{{else if eq .Status "superseded"}}warn{{end}}">{{.Status}}</span>
+      {{- with agentPill .Harness .Model}} {{.}}{{end}}
+      {{- with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}
+      {{- with .MayContain}} <span class="kind faint" data-may-contain title="Provenance stamp: the agent that wrote this held content from these confidential or sealed projects. It names projects and approvals, never content.">{{mayContain .}}</span>{{end}}
+      {{- range .Tags}} <span class="badge">{{.}}</span>{{end}}
+      {{- if .Source}}
+      <span class="item-fact item-source">written in {{if .SourceID}}<a href="/console/sessions/{{.SourceID}}">{{.Source}}</a>{{else}}<span>{{.Source}}</span>{{end}}</span>{{end}}
+      <span class="item-fact">updated {{agoTime .Updated}}</span>
+      <span class="item-fact">created {{agoTime .Created}}</span>
+{{end}}{{end}}
+
+{{define "item-main"}}{{with .Memory}}
+      {{- if not .BodyLoaded}}<div class="peek-note">Body unavailable</div>
+      {{- else if .BodyIsEcho}}
+      <div class="mv2-nobody">
+        {{icon "file-text"}}
+        <span>No body beyond the description yet &mdash; captured mid-session.{{if .SourceID}} <a href="/console/sessions/{{.SourceID}}">Open source session {{.Source}}</a> for the full context, or{{end}} <a href="{{.EditURL}}" title="{{.AbsPath}}">edit in editor</a> to expand it.</span>
+      </div>
+      {{- else}}<div class="prose doc">{{.Body}}</div>{{end}}
+{{end}}{{end}}
+
+{{define "item-side"}}{{with .Memory}}{{$m := .}}
+      <section class="item-card" data-item-card="in-use">
+        <h2 class="item-card-hd">In use</h2>
+        <div class="item-stats">
+          {{- if .Injects}}
+          <span class="item-stat" title="How many times this memory entered an agent's context: briefings, prompt-matched recall, recall answers"><strong>{{.Injects}}&times;</strong><span>surfaced to agents</span></span>
+          {{- end}}
+          {{template "memory-surfaced-chip" .}}
+          {{template "memory-utility" .}}
+        </div>
+        <p class="item-card-sub"><span title="Explicit memory_read lookups. Near-zero by design: a briefing already carries the body (counted under surfaced), so agents rarely read a memory again that they already have.">read {{.Reads}}&times;</span>{{if .LastInjected}} &middot; last surfaced {{agoTime .LastInjected}}{{end}}</p>
+        {{- with .SurfacedTo}}
+        <div class="item-sessions" id="surfaced-to">
+          {{range .Latest}}{{template "memory-surfaced-session" .}} {{end}}
+          {{- if .More}}<details class="item-sessions-more"><summary>+ {{len .More}} more</summary>{{range .More}}{{template "memory-surfaced-session" .}} {{end}}</details>{{end}}
+          {{- if .Earlier}} <span class="faint">and {{.Earlier}} earlier</span>{{end}}
+        </div>
+        {{- end}}
+      </section>
+      {{- if .ReplacedByID}}
+      <section class="item-card" data-item-card="replaced-by">
+        <h2 class="item-card-hd">Replaced by</h2>
+        <a class="mono" href="/console/memories/{{.ReplacedByID}}{{.QS}}">{{.ReplacedBy}}</a>
+      </section>
+      {{- end}}
+      {{- with .Supersedes}}
+      <section class="item-card" data-item-card="replaces">
+        <h2 class="item-card-hd">Replaces</h2>
+        <ul class="item-list">
+          {{- range .}}
+          <li><a class="mono" href="/console/memories/{{.ID}}{{$m.QS}}">{{.Name}}</a> <span class="kind" title="{{.KindGloss}}">{{.Kind}}</span></li>
+          {{- end}}
+        </ul>
+      </section>
+      {{- end}}
+      {{- with .More}}
+      <section class="item-card" data-item-card="more">
+        <h2 class="item-card-hd">{{$m.MoreTitle}}</h2>
+        <ul class="item-list">
+          {{- range .}}
+          <li><a class="mono" href="/console/memories/{{.ID}}">{{.Name}}</a></li>
+          {{- end}}
+        </ul>
+        <a class="item-all" href="{{$m.MoreAll.Href}}">{{$m.MoreAll.Label}}{{icon "arrow-right"}}</a>
+      </section>
+      {{- end}}
+      <section class="item-card item-path" data-item-card="file">
+        <span class="path" title="{{.AbsPath}}">{{.FilePath}}</span>{{copyBtn .FilePath}}
+      </section>
+{{end}}{{end}}

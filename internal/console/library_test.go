@@ -117,13 +117,15 @@ func TestNotesLibrary_DetailPageAndReaderFragment(t *testing.T) {
 	n := writeNote(t, mgr, "seamless", "n-doc", "Doc Note", "full document body")
 	writeNote(t, mgr, "seamless", "n-other", "Other Note", "other body")
 
-	// The detail URL renders the same library page with this note selected.
+	// The detail URL renders the note's own page: the note alone, no library
+	// beside it (plan:console-ux-pass UX 26).
 	page := getPeek(t, mux, "/console/notes/"+n.ID)
 	require.Equal(t, http.StatusOK, page.Code)
 	body := page.Body.String()
-	require.Contains(t, body, `id="lib-reader"`)
+	require.Contains(t, body, `<div class="item-page" data-item="note" data-item-id="`+n.ID+`"`)
 	require.Contains(t, body, "full document body")
-	require.Contains(t, body, `id="ri-`+n.ID+`" href="/console/notes/`+n.ID+`"`)
+	require.NotContains(t, body, `id="lib-reader"`)
+	require.NotContains(t, body, `class="rail-item`)
 	require.NotContains(t, body, "data-auto-url=", "an explicit selection is not client-pinned")
 
 	// ?reader=1 returns just the reader fragment for the in-place swap.
@@ -142,20 +144,31 @@ func TestMemoriesLibrary_DetailAndReaderFragment(t *testing.T) {
 	_, mgr, mux := newConsoleWithFiles(t)
 	m := writeMemory(t, mgr, core.KindGotcha, "seamless", "lib-mem", "a memory description")
 
+	// The detail URL renders the memory's own page: the memory alone, in its
+	// kind's color, no library beside it (plan:console-ux-pass UX 26).
 	page := getPeek(t, mux, "/console/memories/"+m.ID)
 	require.Equal(t, http.StatusOK, page.Code)
 	body := page.Body.String()
-	require.Contains(t, body, `id="lib-reader"`)
+	require.Contains(t, body, `<div class="item-page" data-item="memory" data-item-id="`+m.ID+`" data-memory-kind="gotcha">`)
 	require.Contains(t, body, "body of lib-mem")
-	require.Contains(t, body, `aria-current="page"`)
-	require.NotContains(t, body, `class="rail-subgroup-hd"`, "Recent draws one list, not the kind tree")
-	require.Contains(t, body, `<span class="ri-chip ri-kind" data-kind="gotcha"`, "each row names its kind instead")
-	require.Contains(t, body, `data-context="seamless / gotcha"`)
-	grouped := getPeek(t, mux, "/console/memories/"+m.ID+"?group=project").Body.String()
+	require.NotContains(t, body, `id="lib-reader"`)
+	require.NotContains(t, body, `class="rail-item`)
+	require.NotContains(t, body, `class="mv2-bar"`, "nor the list's bar")
+	require.Contains(t, getPeek(t, mux, "/console/memories/"+m.ID+"?group=project").Body.String(), `<div class="item-page"`,
+		"a list's grouping on the URL draws the same page")
+
+	// The list draws the library: one list on Recent, each row naming its kind.
+	list := getPeek(t, mux, "/console/memories").Body.String()
+	require.Contains(t, list, `id="lib-reader"`)
+	require.Contains(t, list, `aria-current="page"`)
+	require.NotContains(t, list, `class="rail-subgroup-hd"`, "Recent draws one list, not the kind tree")
+	require.Contains(t, list, `<span class="ri-chip ri-kind" data-kind="gotcha"`, "each row names its kind instead")
+	require.Contains(t, list, `data-context="seamless / gotcha"`)
+	grouped := getPeek(t, mux, "/console/memories?group=project").Body.String()
 	require.Contains(t, grouped, `class="rail-subgroup-hd"`, "grouped, memory kind boundaries are explicit")
-	require.Contains(t, body, `class="reader-sheet" data-memory-kind="gotcha"`)
-	require.Contains(t, body, `class="menu-k">Sort<`, "the compact bar still names its sort control")
-	require.Contains(t, body, `<strong>Recent</strong>`, "the sort menu shows the active choice without opening")
+	require.Contains(t, list, `class="reader-sheet" data-memory-kind="gotcha"`)
+	require.Contains(t, list, `class="menu-k">Sort<`, "the compact bar still names its sort control")
+	require.Contains(t, list, `<strong>Recent</strong>`, "the sort menu shows the active choice without opening")
 
 	frag := getPeek(t, mux, "/console/memories/"+m.ID+"?reader=1")
 	require.Equal(t, http.StatusOK, frag.Code)
@@ -261,10 +274,14 @@ func libInject(t *testing.T, db *sql.DB, session, project string, at time.Time, 
 	require.NoError(t, err)
 }
 
-// libMain is a page's library markup, without the layout's chrome.
+// libMain is a page's library markup, or an item's own page, without the
+// layout's chrome.
 func libMain(t *testing.T, body string) string {
 	t.Helper()
 	start := strings.Index(body, `<div class="lib-page"`)
+	if start == -1 {
+		start = strings.Index(body, `<div class="item-page"`)
+	}
 	require.NotEqual(t, -1, start, "no library page")
 	end := strings.Index(body[start:], "</main>")
 	require.NotEqual(t, -1, end, "unterminated library page")
@@ -396,7 +413,8 @@ func TestLibFiltersCombine(t *testing.T) {
 
 // Star, archive and sort keep the library's state: the rail rows, the star's
 // and the archive's way back, the sort links and the reader fragment all carry
-// it, and the two writes return where they were sent.
+// it, and the two writes return where they were sent. A memory's own page
+// keeps it too: its next link, its star and its archive.
 func TestLibStateSurvivesStarArchiveSort(t *testing.T) {
 	_, mgr, mux := newConsoleWithFiles(t)
 	base := time.Now().UTC().Add(-time.Hour)
@@ -406,16 +424,24 @@ func TestLibStateSurvivesStarArchiveSort(t *testing.T) {
 	const qs = "?kind=gotcha&project=pay&q=pay&sort=name"
 	esc := strings.ReplaceAll(qs, "&", "&amp;")
 
-	main := libMain(t, getHTMLBody(t, mux, "/console/memories/"+a.ID+qs))
-	require.Contains(t, main, `id="ri-`+b.ID+`" href="/console/memories/`+b.ID+esc+`"`, "a rail row keeps the state")
-	require.Contains(t, main, `<input type="hidden" name="next" value="/console/memories/`+a.ID+esc+`" data-lib-next>`,
-		"the star returns to this memory with every filter")
-	require.Contains(t, main, `<input type="hidden" name="next" value="/console/memories`+esc+`">`,
-		"the archive returns to the filtered list")
-	require.Contains(t, main, `href="/console/memories/`+a.ID+`?kind=gotcha&amp;project=pay&amp;q=pay&amp;sort=recent" data-lib-here>Recent</a>`,
+	// The list opens its newest match, b, in the reader.
+	list := libMain(t, getHTMLBody(t, mux, "/console/memories"+qs))
+	require.Contains(t, list, `id="ri-`+a.ID+`" href="/console/memories/`+a.ID+esc+`"`, "a rail row keeps the state")
+	require.Contains(t, list, `<input type="hidden" name="next" value="/console/memories/`+b.ID+esc+`" data-lib-next>`,
+		"the reader's star returns to this memory with every filter")
+	require.Contains(t, list, `<input type="hidden" name="next" value="/console/memories`+esc+`">`,
+		"the reader's archive returns to the filtered list")
+	require.Contains(t, list, `href="/console/memories/`+b.ID+`?kind=gotcha&amp;project=pay&amp;q=pay&amp;sort=recent" data-lib-here>Recent</a>`,
 		"a sort keeps the filters and the memory being read")
 	frag := getPeek(t, mux, "/console/memories/"+b.ID+qs+"&reader=1").Body.String()
 	require.Contains(t, frag, `value="/console/memories/`+b.ID+esc+`" data-lib-next>`, "so does the fragment the rail swaps in")
+
+	main := libMain(t, getHTMLBody(t, mux, "/console/memories/"+a.ID+qs))
+	require.Contains(t, main, `href="/console/memories/`+b.ID+esc+`" rel="next" data-item-step="next"`,
+		"the page's next memory keeps the state")
+	require.Contains(t, main, `<input type="hidden" name="next" value="/console/memories/`+a.ID+esc+`">`,
+		"the page's star and archive return to this page with every filter")
+	require.Equal(t, 2, strings.Count(main, `<input type="hidden" name="next" value="/console/memories/`+a.ID+esc+`">`))
 
 	rr := postFavorite(mux, "memory", a.ID, url.Values{"favorite": {"1"}, "next": {"/console/memories/" + a.ID + qs}})
 	require.Equal(t, http.StatusSeeOther, rr.Code)
@@ -432,9 +458,22 @@ func TestLibStateSurvivesStarArchiveSort(t *testing.T) {
 	rr = postForm(mux, "/console/memories/"+a.ID+"/archive", url.Values{"next": {"/console/memories" + qs}}.Encode())
 	require.Equal(t, "/console/memories"+qs, rr.Header().Get("Location"))
 
-	// An archive goes back to the Memories list only.
+	// An archive from the memory's own page returns there, its state kept:
+	// the page now shows it archived, with Restore.
+	c := libMemory(t, mgr, core.KindGotcha, "pay", "pay-gamma", base)
+	rr = postForm(mux, "/console/memories/"+c.ID+"/archive", url.Values{"next": {"/console/memories/" + c.ID + qs + "&notice=old"}}.Encode())
+	require.Equal(t, http.StatusSeeOther, rr.Code)
+	loc, err = url.Parse(rr.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "/console/memories/"+c.ID, loc.Path)
+	require.Equal(t, url.Values{"kind": {"gotcha"}, "project": {"pay"}, "q": {"pay"}, "sort": {"name"},
+		"notice": {"Archived pay-gamma."}}, loc.Query())
+
+	// Anywhere else, an archive goes back to the Memories list: another
+	// memory's page is not where the owner archived from.
 	for i, next := range []string{"https://example.com/console/memories?q=x", "//example.com/console/memories",
-		"/console/settings", "/console/memories/" + b.ID, "/console/memories/../settings"} {
+		"/console/settings", "/console/memories/" + b.ID, "/console/memories/../settings",
+		"//example.com/console/memories/" + c.ID} {
 		m := libMemory(t, mgr, core.KindGotcha, "pay", "pay-victim-"+string(rune('a'+i)), base)
 		rr := postForm(mux, "/console/memories/"+m.ID+"/archive", url.Values{"next": {next}}.Encode())
 		require.Equal(t, http.StatusSeeOther, rr.Code)

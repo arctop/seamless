@@ -1,4 +1,5 @@
 {{define "content"}}
+{{- with .Data.Item}}{{template "item-frame" .}}{{else}}
 {{with .Data}}
 {{$sel := .Selected}}
 {{$qs := .QS}}
@@ -62,7 +63,7 @@
           <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/notes/{{.ID}}{{$qs}}" data-title="{{.Title}}" data-context="{{.ScopeLabel}}"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
             <span class="ri-title">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</span>
             {{if .Description}}<span class="ri-desc">{{.Description}}</span>{{end}}
-            <span class="ri-meta">{{if $g.All}}<span class="ri-chip">{{.ScopeLabel}}</span> {{end}}<span title="{{ts .Updated}}">updated {{ago .Updated}}</span>{{with agentPill "" .Model}} {{.}}{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
+            <span class="ri-meta">{{if $g.All}}<span class="ri-chip">{{.ScopeLabel}}</span> {{end}}<span>updated {{agoTime .Updated}}</span>{{with agentPill "" .Model}} {{.}}{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
           </a>
           {{end}}
         </div>
@@ -88,6 +89,7 @@
 {{end}}
 </div><!-- .lib-page -->
 {{end}}
+{{- end}}
 {{end}}
 
 {{define "note-reader"}}
@@ -119,8 +121,8 @@
     </h2>
     {{if .Description}}<p class="reader-desc">{{.Description}}</p>{{end}}
     <div class="reader-facts">
-      <span class="fact" title="{{ts .Updated}}">updated {{ago .Updated}}</span>
-      <span class="fact" title="{{ts .Created}}">created {{ago .Created}}</span>
+      <span class="fact">updated {{agoTime .Updated}}</span>
+      <span class="fact">created {{agoTime .Created}}</span>
       {{if .Words}}<span class="fact">{{.Words}} words</span>{{end}}
       {{if .SourceURL}}<span class="fact"><a href="{{.SourceURL}}" rel="noopener noreferrer" target="_blank">{{icon "link"}} source</a></span>{{end}}
     </div>
@@ -145,3 +147,74 @@
           {{range .Delete.Narrative}}<label class="ract-check" title="This note is plan:{{.}}'s narrative: agents that pick up the plan read it first. Tick to delete it anyway."><input type="checkbox" name="narrative" value="{{.}}" required>Delete the narrative of plan:{{.}}</label>{{end}}
           <button class="ract danger" type="submit" data-confirm="Delete {{.Title}} for good? Its file and index rows go, and nothing brings it back.{{range .Delete.Narrative}} This is plan:{{.}}'s narrative.{{end}}" data-confirm-label="Delete it">{{icon "trash-2"}}Delete</button>
         </form>{{end}}
+
+{{/* A note's own page: the blocks item_shared.html's item-frame asks the
+     Notes screen for (itempage.go's noteItem). Delete returns to the way
+     back, since the note has no page left; every other action returns here. */}}
+{{define "item-banner"}}{{with .Note}}{{with .Delete.Blocked}}
+  <aside class="reader-status-banner muted item-banner" role="note">
+    {{icon "info"}}
+    <div><strong>Held keeps this note.</strong> {{.}} <a href="/console/held">Open Held</a></div>
+  </aside>
+{{- end}}{{end}}{{end}}
+
+{{define "item-actions"}}{{with .Note}}
+        <a class="ract" href="{{.EditURL}}" title="Open {{.AbsPath}}">{{icon "pencil"}}Edit in editor</a>
+        {{- if .Delete.Offered}}
+        {{template "note-delete" .}}
+        {{- end}}
+{{end}}{{end}}
+
+{{define "item-facts"}}{{with .Note}}
+      {{template "note-tags" .Tagged}}
+      {{- with agentPill "" .Model}} {{.}}{{end}}
+      {{- with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}
+      {{- with .MayContain}} <span class="kind faint" data-may-contain title="Provenance stamp: the agent that wrote this held content from these confidential or sealed projects. It names projects and approvals, never content.">{{mayContain .}}</span>{{end}}
+      <span class="item-fact">updated {{agoTime .Updated}}</span>
+      <span class="item-fact">created {{agoTime .Created}}</span>
+      {{- if .Words}}
+      <span class="item-fact">{{.Words}} words &middot; about {{.Minutes}} minute{{if ne .Minutes 1}}s{{end}}</span>{{end}}
+      {{- if .SourceURL}}
+      <a class="item-fact" href="{{.SourceURL}}" rel="noopener noreferrer" target="_blank">{{icon "link"}}source</a>{{end}}
+{{end}}{{end}}
+
+{{define "item-main"}}{{with .Note}}
+      {{- if .BodyLoaded}}<div class="prose doc">{{.Body}}</div>{{else}}<div class="peek-note">Body unavailable</div>{{end}}
+{{end}}{{end}}
+
+{{define "item-side"}}{{with .Note}}{{$n := .}}
+      {{- if gt (len .Outline) 1}}
+      <section class="item-card item-toc" data-item-card="outline">
+        <h2 class="item-card-hd">On this page</h2>
+        <ol class="item-toc-list">
+          {{- range .Outline}}
+          <li class="item-toc-h{{.Level}}"><a href="#{{.ID}}">{{.Text}}</a></li>
+          {{- end}}
+        </ol>
+      </section>
+      {{- end}}
+      {{- range .PartOf}}
+      <section class="item-card" data-item-card="part-of" data-plan="{{.Slug}}">
+        <h2 class="item-card-hd">Part of</h2>
+        <a class="item-card-title" href="{{.Href}}">{{.Title}}</a>
+        <p class="item-card-sub">{{if .Total}}{{.Done}}/{{.Total}} steps done{{else}}no steps yet{{end}}{{if not .Moved.IsZero}} &middot; moved {{agoTime .Moved}}{{end}}{{if .Status}} <span class="badge {{.Tone}}">{{.Status}}</span>{{end}}</p>
+        {{- if .Total}}
+        <div class="item-bar" aria-hidden="true"><span class="done" style="width:{{.Pct}}%"></span></div>
+        {{- end}}
+      </section>
+      {{- end}}
+      {{- with .More}}
+      <section class="item-card" data-item-card="more">
+        <h2 class="item-card-hd">{{$n.MoreTitle}}</h2>
+        <ul class="item-list">
+          {{- range .}}
+          <li><a href="/console/notes/{{.ID}}">{{.Title}}</a></li>
+          {{- end}}
+        </ul>
+        <a class="item-all" href="{{$n.MoreAll.Href}}">{{$n.MoreAll.Label}}{{icon "arrow-right"}}</a>
+      </section>
+      {{- end}}
+      <section class="item-card item-path" data-item-card="file">
+        <span class="path" title="{{.AbsPath}}">{{.FilePath}}</span>{{copyBtn .FilePath}}
+      </section>
+{{end}}{{end}}

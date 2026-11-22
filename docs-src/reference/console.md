@@ -344,7 +344,7 @@ a superseded or archived memory finds it here too, with its status.
 | `Cmd/Ctrl+K` | Search or jump to a section |
 | `/` | Focus this screen's filter; open the palette where there is none |
 | `g` then a key | Go to a section (pressing `g` shows every key it can take, until your next key or `Esc`): `a` Access requests, `k` Approvers, `o` Overview, `n` Now, `i` Interactions, `f` Mishaps, `d` Diary, `w` Projects, `p` Plans, `t` Tasks, `s` Sessions, `b` Locks, `m` Memories, `e` Notes, `r` Retrieval, `g` Gardener, `h` Held, `l` Labs, `x` Trials, `y` System, `v` Privacy, `c` Devices, `,` Settings |
-| `j` / `k` | Next / previous item in a library rail |
+| `j` / `k` | Next / previous item in a library rail, or, on [an item's own page](#item-page), in the list it is in |
 | `p` | Open the project switcher on Memories and Notes |
 | `a` / `x` | On the Gardener: apply / dismiss the open proposal. An apply that cannot be undone asks in the page first; press `a` again to confirm |
 | `[` | Collapse or expand the sidebar |
@@ -471,8 +471,9 @@ Every route answers in the shape the caller asked for:
 The event page composes its full page from the same `detail-body` block its
 peek fragment renders, so the two cannot drift. Session and project
 deliberately do not: their fragments are compact summaries of much richer
-bespoke pages. Memory, note, task, plan, lab, and trial detail URLs render
-their library screen with that entity open in the reader.
+bespoke pages. Plan, lab, and trial detail URLs render their library screen
+with that entity open in the reader; a memory, a note and a task open on
+[their own page](#item-page).
 
 Strictly-validated query params (`?sort`, `?scope`, `?tab`, `?w`) return a 400
 naming the bad param and listing the valid values, rather than silently falling
@@ -1268,6 +1269,57 @@ reviewed, and `new`, how many arrived since; absent while no report exists),
 each report's `new`, and `locked` while peer_auth leaves locked projects
 out. The list holds the newest 200.
 
+## An item's own page {#item-page}
+
+`/console/memories/{id}`, `/console/notes/{id}`, `/console/tasks/{id}`
+
+A link to one memory, note or task opens that item on a page of its own: the
+item and what is around it, never the list it lives in. The rail and the
+reader stay on [Memories](#memories), [Notes](#notes) and [Tasks](#tasks).
+Every item reads the same way:
+
+- **The way back**, top left: a link to the collection scoped to the item's
+  project ("example-ops's memories"), or to the list the URL names. The browser's
+  Back button works as always.
+- **Its place**, top right: "3 of 12 gotchas in example-ops", with **previous**
+  and **next** (`k` and `j`). When the URL carries a list's state (the
+  parameters the list puts on its links: `?sort=`, `?kind=`, `?project=`,
+  `?q=` and the rest), the place follows that list's order. Without one it is
+  the memory's project and kind, newest first; the note's project, newest
+  first; a plan step's plan, its closed steps in the order they closed and
+  then the rest as the plan card orders them; or an off-plan task's project,
+  as the Tasks list orders it. A list that does not hold the item falls back
+  to that.
+- **Where it lives**: project › Memories › kind, project › Notes, project ›
+  Plans › `plan:<slug>`, or project › Tasks, each a link.
+- **The title row**: a memory's name in mono, or a note's or a task's title,
+  with copy and the star, and the actions where the eye starts: **Edit in
+  editor** and **Archive** for a memory, **Edit in editor** and **Delete**
+  for a note, and for a task the actions its reader offers (**Mark done**,
+  **Waits on someone**, **Drop**, **Reopen**, **Release claim**). Every action
+  returns to this page with the list's state kept. A deleted note has no page
+  left, so Delete returns to the way back.
+- **The lead and the facts**: the description, then one line of facts. A
+  task's line starts with its whole id and **Copy id**, the form you hand an
+  agent.
+- **The body** in one reading column, and **a context column** beside it,
+  which moves under the body on a narrow screen:
+  - a memory: **In use** (how often it surfaced, how long ago, its utility
+    score, the sessions it surfaced to), what replaced it and what it
+    replaces, up to five more of its kind in its project with a link to all,
+    and its file path;
+  - a note: **On this page** (its h2 and h3 headings as links, once there are
+    two), the plans it is **part of** with their progress, more notes in its
+    project, and its file path;
+  - a task: its plan as a small card with every step and this one marked,
+    what it depends on and what it blocks. Its history and earlier versions
+    follow the body.
+
+An archived or superseded memory keeps its banner and **Restore** at the top
+of the page, and a note [Held](#held) keeps says so there. A locked project's
+item answers as it always did, and its items are absent from every other
+item's place. `?format=json`, `?peek=1` and `?reader=1` answer as before.
+
 ## Memories
 
 `/console/memories`, `/console/memories/{id}`
@@ -1310,7 +1362,8 @@ The whole state is in the URL - `?sort=`, `?group=project`, `?kind=`,
 `?project=` (a slug, or `global`), `?fav=1`, `?surfaced=never` and `?q=` - and
 it survives what you do on the page: opening another memory, changing the sort
 (the memory you are reading stays open), starring, archiving (you land on
-the same filtered list) and restoring (you stay on the memory). A value the screen cannot read is a 400 naming the
+the same filtered list, or, from the memory's own page, on that page) and
+restoring (you stay on the memory). A value the screen cannot read is a 400 naming the
 values it takes.
 
 What reaches an agent's context is **surfaced** here, the word the Overview
@@ -1337,9 +1390,9 @@ it is still active, which the banner links instead, or [Held](#held) holds it,
 which the banner says.
 
 Opening `/console/memories` auto-opens the first match (in the tree, the most
-recently updated one); a memory's own URL opens the same screen with it
-selected. Clicking rail items swaps the reader in place (real URLs, browser
-Back works), and `j` / `k` step through the rail.
+recently updated one); a memory's own URL opens [its own page](#item-page).
+Clicking rail items swaps the reader in place (real URLs, browser Back
+works), and `j` / `k` step through the rail.
 
 ## Notes
 
@@ -1364,7 +1417,8 @@ steps. The tags software adds - `created-by:*`, `plan-status:*`, `cc-plan` and
 The reader's actions are the **star** and **Delete**, in the same places as on
 Memories. Delete asks in the page first and removes the note for good. A note
 that is a plan's narrative says so, and also needs the box beside Delete
-ticked; while [Held](#held) holds the note, the reader says why instead.
+ticked; while [Held](#held) holds the note, the reader says why instead. A
+note's own URL opens [its own page](#item-page).
 
 ## Tasks
 
@@ -1412,7 +1466,7 @@ none. Drop and Release claim ask in the page: the button turns into a second
 one to press. While a live claim holds the task the page names its holder and
 offers Release claim first: the console never closes a task over its holder's
 head. Each action returns to the page it came from, its filters kept, with a
-line that says what it did.
+line that says what it did. A task's own URL opens [its own page](#item-page).
 
 The history lists what happened to the task, oldest first, from its
 `task.transition` events: created, claimed, released, reopened, done or

@@ -1,4 +1,5 @@
 {{define "content"}}
+{{- with .Data.Item}}{{template "item-frame" .}}{{else}}
 {{with .Data}}
 {{$sel := .Selected}}
 {{$v := .View}}
@@ -194,6 +195,7 @@
 {{end}}
 </div><!-- .lib-page -->
 {{end}}
+{{- end}}
 {{end}}
 
 {{/* task-ri-lead opens a rail row's meta line: the short id that copies the
@@ -258,3 +260,84 @@
   {{- template "task-revisions" .Revisions}}
 </article>
 {{end}}
+
+{{/* A task's own page: the blocks item_shared.html's item-frame asks the
+     Tasks screen for (itempage.go's taskItem). The whole id comes first, with
+     Copy id: the owner hands a task to an agent by it. Every action returns
+     to this page (task-next: the list's query when the URL named one, else
+     the task's page, the routes' own default). */}}
+{{define "item-banner"}}{{with .Task}}{{template "task-held" .}}{{end}}{{end}}
+
+{{define "item-actions"}}{{with .Task}}{{template "task-actions" .}}
+        {{- if .Actions.WaitOn}}
+        <a class="ract" href="#item-wait" data-open-wait title="Say who must act and what must happen">{{icon "clock"}}Waits on someone&hellip;</a>
+        {{- end}}
+{{end}}{{end}}
+
+{{define "item-facts"}}{{with .Task}}{{$t := .}}
+      <span class="item-id" data-item-whole-id="{{.ID}}"><span class="mono">{{.ID}}</span><button type="button" class="copy-btn item-copy-id" data-copy="{{.ID}}" aria-label="Copy id" title="Copies the whole id, the form an agent takes">{{icon "copy"}}{{icon "check"}}<span>Copy id</span></button></span>
+      {{taskBadge .Word}}
+      {{- if .Kind}}
+      <span class="kind" data-kind="{{.Kind}}" title="A gate: what a person, or an event outside Seamless, must do before the tasks that depend on it go ahead. Nobody claims it; clearing it closes it.">{{.Kind}}</span>{{end}}
+      {{- with .Holder}}
+      <span class="item-fact" data-holder>claimed by {{template "task-session" .}}{{with $t.Lease}} &middot; <span class="task-lease{{if not $t.ClaimLive}} is-lapsed{{end}}">{{timeAs $t.LeaseExpiry .}}</span>{{end}}</span>{{end}}
+      {{- with .Creator}}
+      <span class="item-fact">created by {{template "task-session" .}}</span>{{end}}
+      <span class="item-fact">created {{agoTime .Created}}</span>
+      <span class="item-fact">updated {{agoTime .Updated}}</span>
+      {{- if .Closed}}
+      <span class="item-fact">closed {{agoTime .Closed}}</span>{{end}}
+      {{- with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}
+      {{- with .UpdatedAccount}} <span class="kind faint" data-updated-account="{{.}}" title="Title or body rewritten by a restricted local account (peer_auth.restricted)">updated by account {{.}}</span>{{end}}
+      {{- with .MayContain}} <span class="kind faint" data-may-contain title="Provenance stamp: the agent that wrote this held content from these confidential or sealed projects. It names projects and approvals, never content.">{{mayContain .}}</span>{{end}}
+{{end}}{{end}}
+
+{{define "item-main"}}{{with .Task}}
+      {{- template "task-gate" .}}
+      {{- if .Actions.WaitOn}}
+      <div class="item-wait" id="item-wait">{{template "task-wait" .}}</div>
+      {{- end}}
+      {{if .Body}}<div class="prose doc">{{.Body}}</div>{{else}}<div class="peek-note">No description</div>{{end}}
+      {{- template "task-history" .}}
+      {{- template "task-revisions" .Revisions}}
+{{end}}{{end}}
+
+{{define "item-side"}}{{with .Task}}
+      {{- with .Plan}}
+      <section class="item-card item-plan" data-item-card="plan" data-plan="{{.Slug}}">
+        <h2 class="item-card-hd">The plan</h2>
+        <a class="item-card-title" href="{{.Href}}">{{.Title}}</a>
+        <p class="item-card-sub" data-plan-summary>{{.Done}}/{{.Total}} done{{range .Counts}} &middot; <span data-count="{{.Key}}">{{.Text}}</span>{{end}}</p>
+        <div class="item-bar" aria-hidden="true"><span class="done" style="width:{{.DonePct}}%"></span><span class="doing" style="width:{{.DoingPct}}%"></span></div>
+        <ol class="item-steps">
+          {{- range .Steps}}
+          <li{{if .Current}} aria-current="step"{{end}}>{{if .Current}}<span class="item-step-t">{{.Title}}</span>{{else}}<a class="item-step-t" href="/console/tasks/{{.ID}}">{{.Title}}</a>{{end}}{{taskChip .Word}}</li>
+          {{- end}}
+        </ol>
+        <a class="item-all" href="{{.Href}}">Open the plan{{icon "arrow-right"}}</a>
+      </section>
+      {{- end}}
+      {{- if .DependsOn}}
+      <section class="item-card" data-item-card="depends-on">
+        <h2 class="item-card-hd">Depends on <span class="count">{{.DependsOn}}</span></h2>
+        <ul class="item-list task-refs">
+          {{- range .Deps}}
+          <li><a href="/console/tasks/{{.ID}}">{{.Title}}</a> {{taskBadge .Word}}{{template "task-ref-gate" .}}</li>
+          {{- end}}
+          {{- range .LockedIn}}
+          <li data-locked-blocker="{{.}}" title="Unlock {{.}} in the console to see the task">{{icon "lock"}} a task in locked project {{.}} blocks this one</li>
+          {{- end}}
+        </ul>
+      </section>
+      {{- end}}
+      {{- with .Blocks}}
+      <section class="item-card" data-item-card="blocks">
+        <h2 class="item-card-hd">Blocks <span class="count">{{len .}}</span></h2>
+        <ul class="item-list task-refs">
+          {{- range .}}
+          <li><a href="/console/tasks/{{.ID}}">{{.Title}}</a> {{taskBadge .Word}}</li>
+          {{- end}}
+        </ul>
+      </section>
+      {{- end}}
+{{end}}{{end}}

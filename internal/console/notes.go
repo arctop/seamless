@@ -67,15 +67,18 @@ type notesData struct {
 	Fav     bool   `json:"fav,omitempty"`
 	// Rail is what the HTML rail draws: Groups, or one list.
 	Rail []noteProjectGroup `json:"-"`
-	// Selected is the note open in the reader: the requested one on a
-	// /console/notes/{id} page, or the first match on the list URL
-	// (SelectedAuto, which the client pins into the URL).
+	// Selected is the note open in the reader: the first match on the list
+	// URL (SelectedAuto, which the client pins into the URL). A note's own
+	// URL draws its item page instead (Item).
 	Selected     *noteReader `json:"-"`
 	SelectedAuto bool        `json:"-"`
 	// QS is the library state rail links carry, so a selection change keeps
 	// every filter ("" when all are at their defaults).
 	QS      string `json:"-"`
 	libView `json:"-"`
+	// Item is a note's own page (itempage.go): set, the screen draws it
+	// instead of the library. HTML only.
+	Item *itemPage `json:"-"`
 }
 
 // notesPage assembles the notes list for the given library state.
@@ -172,26 +175,20 @@ func (s *Service) notesList(w http.ResponseWriter, r *http.Request) {
 }
 
 // noteLibraryPage answers a note's own URL in HTML: the reader fragment for
-// the in-place swap (?reader=1), or the Notes screen with the note open, the
-// library's state read from the URL either way.
+// the in-place swap (?reader=1), or the note's own page (itempage.go), the
+// library's state read from the URL either way. The page reads the note and
+// its context alone, never the library.
 func (s *Service) noteLibraryPage(w http.ResponseWriter, r *http.Request, d noteDetail) {
 	ctx := r.Context()
 	lq, ok := s.parseLibRequest(w, r, noteSortKeys, false)
 	if !ok {
 		return
 	}
-	sel := s.noteReaderOf(ctx, d, lq)
 	if r.URL.Query().Get("reader") == "1" {
-		s.renderReader(w, r, "notes", "note-reader", sel)
+		s.renderReader(w, r, "notes", "note-reader", s.noteReaderOf(ctx, d, lq))
 		return
 	}
-	data, err := s.notesPage(ctx, lq)
-	if err != nil {
-		s.serverError(w, r, err)
-		return
-	}
-	data.selectReader(sel, false, lq)
-	s.render(w, r, "notes", pageData{Title: "Note " + d.Title, Active: "notes", Data: data})
+	s.noteItemPage(w, r, d, lq)
 }
 
 // firstNoteID picks the reader's default selection on the list URL: the one
@@ -366,17 +363,22 @@ func (s *Service) planStatusOf(ctx context.Context, p *notePlan) {
 	if row.TasksTotal > 0 {
 		p.Title = fmt.Sprintf("%s: %d of %d steps done", row.Title, row.TasksDone, row.TasksTotal)
 	}
+	p.Status, p.Tone = planStatusWords(row)
+}
+
+// planStatusWords is a plan row's status as a note's plan chip says it, with
+// its tone: a captured plan's own status, else its phase from its steps.
+func planStatusWords(row planRow) (status, tone string) {
 	if row.Status != "" {
-		p.Status, p.Tone = row.Status, planTone(row.Status)
-		return
+		return row.Status, planTone(row.Status)
 	}
-	p.Status = planPhaseWords[row.Phase]
 	switch row.Phase {
 	case planPhaseDone:
-		p.Tone = "ok"
+		tone = "ok"
 	case planPhaseInProgress:
-		p.Tone = "accent"
+		tone = "accent"
 	}
+	return planPhaseWords[row.Phase], tone
 }
 
 // notesListPath is the Notes screen's list URL.

@@ -66,7 +66,7 @@ func TestLibNotePlanChipLinksToPlanWithStatus(t *testing.T) {
 	require.Equal(t, http.StatusOK, getPeek(t, mux, "/console/plans/search-v2").Code)
 
 	page := libMain(t, getHTMLBody(t, mux, "/console/notes/"+capture.ID))
-	require.Contains(t, page, `<span class="badge accent">presented</span>`, "the page's reader is the same reader")
+	require.Contains(t, page, `<span class="badge accent">presented</span>`, "the note's own page shows the plan's status too")
 
 	peek := getPeek(t, mux, "/console/notes/"+capture.ID+"?peek=1").Body.String()
 	require.Contains(t, peek, `<dt>Plan</dt>`)

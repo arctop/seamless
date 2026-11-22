@@ -8569,6 +8569,124 @@ a.ov2-attn-main:hover > .ico-arrow-right { transform: translateX(2px); }
   }
 }
 
+
+/* UX 26: an item's own page (templates/item_shared.html's item-frame): one
+   reading frame for a memory, a note and a task opened from a link. The way
+   back and the item's place in its list on top, where it lives, the title
+   row with its actions, the lead and the facts, then a body column of about
+   72ch beside a context column that stacks under it on a narrow screen. The
+   frame keeps its own column width; base .prose keeps its 340px cap for the
+   peek fragments. Tokens only: the kind accent is --lib-item-accent, which
+   [data-memory-kind] sets. */
+.item-page { --lib-accent: var(--brand); width: 100%; max-width: 1120px; margin: 0 auto; min-width: 0; }
+.item-page[data-item="note"] { --lib-accent: var(--k-decision); }
+.item-page[data-item="task"] { --lib-accent: var(--ok); }
+.item-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 12px; }
+.item-back {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0;
+  padding: 6px 12px 6px 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-pill);
+  color: var(--ink-2); font-size: var(--text-sm); font-weight: 600; text-decoration: none;
+}
+.item-back > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item-back .ico { width: 15px; height: 15px; flex: none; color: var(--muted); }
+.item-back:hover { border-color: var(--lib-accent); color: var(--ink); text-decoration: none; }
+.item-back:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+.item-place { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; color: var(--muted); font-size: var(--text-xs); }
+.item-step {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm); color: var(--ink-2); text-decoration: none;
+}
+.item-step kbd { padding: 0 4px; border-bottom-width: 1px; }
+a.item-step:hover { border-color: var(--lib-accent); color: var(--ink); text-decoration: none; }
+a.item-step:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+.item-step[aria-disabled="true"] { opacity: 0.45; }
+.item-page > .reader-status-banner, .item-page > .task-held { margin: 22px 0 0; }
+.item-head { margin-top: 28px; }
+.item-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: var(--text-sm); color: var(--muted); }
+.item-crumbs a { color: var(--brand-strong); }
+.item-crumbs a.mono { font-family: var(--font-mono); font-size: var(--text-xs); }
+.item-crumbs a.item-crumb-kind { color: var(--lib-item-accent, var(--brand-strong)); font-weight: 600; }
+.item-crumb-sep { color: var(--faint); }
+.item-titlerow { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 16px; margin-top: 10px; }
+.item-page .item-title {
+  flex: 1 1 22rem; min-width: 0; margin: 0; font-size: clamp(var(--text-2xl), 3.4vw, var(--text-3xl));
+  line-height: 1.15; letter-spacing: -0.015em; overflow-wrap: anywhere;
+}
+.item-page .item-title.mono { font-family: var(--font-mono); font-weight: 600; font-size: clamp(var(--text-xl), 2.6vw, var(--text-2xl)); letter-spacing: -0.02em; }
+.item-title .copy-btn { margin-left: 10px; }
+.item-title .star-form { vertical-align: middle; margin-left: 4px; }
+.item-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.item-actions form { margin: 0; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.item-actions .ract { min-height: 34px; padding: 6px 12px; font-size: var(--text-sm); }
+.item-lead { margin: 12px 0 0; max-width: 760px; color: var(--ink-2); font-size: var(--text-lg); line-height: 1.55; text-wrap: pretty; }
+.item-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 16px; font-size: var(--text-xs); color: var(--muted); }
+.item-facts a { color: var(--brand-strong); }
+.item-fact { white-space: nowrap; }
+.item-source a { font-family: var(--font-mono); }
+.item-kind {
+  padding: 1px 9px; border-radius: var(--radius-pill); font-weight: 600;
+  color: var(--lib-item-accent, var(--brand)); background: color-mix(in oklab, var(--lib-item-accent, var(--brand)) 13%, transparent);
+}
+.item-id {
+  display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-width: 0;
+  padding: 4px 4px 4px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-md); background: var(--surface-2);
+}
+.item-id > .mono { font-family: var(--font-mono); font-size: var(--text-base); color: var(--ink); overflow-wrap: anywhere; }
+.item-page .item-copy-id { margin: 0; gap: 5px; padding: 3px 8px; color: var(--brand-strong); font-size: var(--text-xs); font-weight: 600; }
+.item-cols { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 28px 44px; margin-top: 28px; }
+.item-main { flex: 999 1 520px; min-width: 0; max-width: 72ch; padding-top: 22px; border-top: 1px solid var(--border); }
+.item-main > .prose.doc { font-size: var(--text-md); }
+.item-main .prose.doc h2[id], .item-main .prose.doc h3[id] { scroll-margin-top: 16px; }
+.item-main > .reader-links:first-child, .item-main > .item-wait:first-child { margin-top: 0; }
+.item-wait { margin: 0 0 16px; }
+.item-main > .task-history, .item-main > [data-revisions] { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
+.item-side { flex: 1 1 280px; max-width: 340px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.item-card { padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); min-width: 0; }
+.item-card-hd {
+  display: flex; align-items: center; gap: 6px; margin: 0 0 10px; font-family: var(--font-sans);
+  font-size: var(--text-2xs); font-weight: 700; letter-spacing: var(--tracking-wide); text-transform: uppercase; color: var(--faint);
+}
+.item-card-hd .count { color: var(--muted); font-weight: 600; letter-spacing: 0; }
+.item-card-title { display: block; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.item-card-sub { margin: 6px 0 0; font-size: var(--text-xs); color: var(--muted); }
+.item-stats { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.item-stat { display: inline-flex; align-items: baseline; gap: 6px; font-size: var(--text-xs); color: var(--muted); }
+.item-stat strong { font-size: var(--text-xl); font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.item-sessions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; font-size: var(--text-xs); }
+.item-sessions a { padding: 1px 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-pill); color: var(--ink-2); }
+.item-sessions a:hover { border-color: var(--lib-accent); color: var(--ink); text-decoration: none; }
+.item-sessions-more { display: contents; }
+.item-sessions-more > summary { cursor: pointer; list-style: none; padding: 1px 8px; border: 1px dashed var(--border-strong); border-radius: var(--radius-pill); color: var(--muted); }
+.item-sessions-more > summary::-webkit-details-marker { display: none; }
+.item-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; font-size: var(--text-sm); min-width: 0; }
+.item-list li { min-width: 0; overflow-wrap: anywhere; }
+.item-list a.mono { font-family: var(--font-mono); font-size: var(--text-xs); }
+.item-all { display: inline-flex; align-items: center; gap: 4px; margin-top: 10px; font-size: var(--text-xs); color: var(--ink-2); }
+.item-all .ico { width: 12px; height: 12px; }
+.item-path { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-block: 10px; }
+.item-path .path { min-width: 0; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item-toc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: var(--text-sm); }
+.item-toc-list a { display: block; padding: 4px 10px; border-left: 2px solid var(--border-strong); color: var(--ink-2); overflow-wrap: anywhere; }
+.item-toc-list a:hover { border-left-color: var(--lib-accent); color: var(--ink); text-decoration: none; }
+.item-toc-list .item-toc-h3 a { padding-left: 22px; font-size: var(--text-xs); }
+.item-bar { display: flex; height: 4px; margin-top: 10px; border-radius: var(--radius-pill); background: var(--surface-3); overflow: hidden; }
+.item-bar .done { background: var(--ok); }
+.item-bar .doing { background: var(--brand); }
+.item-steps { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: var(--text-sm); }
+.item-steps li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 8px; border-radius: var(--radius-sm); min-width: 0; }
+.item-steps li[aria-current="step"] { background: var(--brand-soft); font-weight: 600; }
+.item-steps .item-step-t { min-width: 0; color: var(--ink-2); overflow-wrap: anywhere; }
+.item-steps li[aria-current="step"] .item-step-t { color: var(--ink); }
+.item-steps .kind { flex: none; }
+@media (max-width: 900px) {
+  .item-main, .item-side { flex-basis: 100%; max-width: none; }
+}
+@media (max-width: 560px) {
+  .item-head { margin-top: 20px; }
+  .item-place { width: 100%; justify-content: space-between; }
+  .item-cols { margin-top: 20px; }
+}
+
 /* UX 27: the project switcher (templates/scope_shared.html, static/scope.js).
    The button names the scope ("In orbital"); the popover is a details menu
    of links: All projects, Recent and Starred, every scope most active first,

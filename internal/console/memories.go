@@ -104,15 +104,18 @@ type memoriesData struct {
 	KindMenu  []libLink `json:"-"`
 	KindLabel string    `json:"-"`
 	NeverLink libLink   `json:"-"`
-	// Selected is the memory open in the reader: the requested one on a
-	// /console/memories/{id} page, or the first match on the list URL
-	// (SelectedAuto, which the client pins into the URL).
+	// Selected is the memory open in the reader: the first match on the
+	// list URL (SelectedAuto, which the client pins into the URL). A
+	// memory's own URL draws its item page instead (Item).
 	Selected     *memoryReader `json:"-"`
 	SelectedAuto bool          `json:"-"`
 	// QS is the library state rail links carry, so a selection change keeps
 	// every filter ("" when all are at their defaults).
 	QS      string `json:"-"`
 	libView `json:"-"`
+	// Item is a memory's own page (itempage.go): set, the screen draws it
+	// instead of the library. HTML only.
+	Item *itemPage `json:"-"`
 }
 
 // memoriesPage assembles the memories list for the given library state.
@@ -282,26 +285,20 @@ func (s *Service) memoriesList(w http.ResponseWriter, r *http.Request) {
 }
 
 // memoryLibraryPage answers a memory's own URL in HTML: the reader fragment
-// for the in-place swap (?reader=1), or the Memories screen with the memory
-// open, the library's state read from the URL either way.
+// for the in-place swap (?reader=1), or the memory's own page (itempage.go),
+// the library's state read from the URL either way. The page reads the
+// memory and its context alone, never the library.
 func (s *Service) memoryLibraryPage(w http.ResponseWriter, r *http.Request, d memoryDetail) {
 	ctx := r.Context()
 	lq, ok := s.parseLibRequest(w, r, memorySortKeys, true)
 	if !ok {
 		return
 	}
-	sel := s.memoryReaderOf(ctx, d, lq)
 	if r.URL.Query().Get("reader") == "1" {
-		s.renderReader(w, r, "memories", "memory-reader", sel)
+		s.renderReader(w, r, "memories", "memory-reader", s.memoryReaderOf(ctx, d, lq))
 		return
 	}
-	data, err := s.memoriesPage(ctx, lq)
-	if err != nil {
-		s.serverError(w, r, err)
-		return
-	}
-	data.selectReader(sel, false, lq)
-	s.render(w, r, "memories", pageData{Title: "Memory " + d.Name, Active: "memories", Data: data})
+	s.memoryItemPage(w, r, d, lq)
 }
 
 // firstMemoryID picks the reader's default selection on the list URL: the
@@ -545,8 +542,8 @@ func (s *Service) memoryArchive(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, errNoFiles)
 		return
 	}
-	back := archiveBack(r.PostFormValue("next"))
 	id := r.PathValue("id")
+	back := archiveBack(r.PostFormValue("next"), id)
 	idx, ok, err := store.MemoryByID(ctx, s.db(ctx), id)
 	if err != nil {
 		s.serverError(w, r, err)
@@ -601,11 +598,15 @@ func (s *Service) memoryArchive(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, withNotice(back, "Archived "+updated.Name+"."), http.StatusSeeOther)
 }
 
-// archiveBack is where an archive returns: next when it is the Memories list
-// with its library state, else the plain list. Only the list: the archived
-// memory's own page would open it again, and any other page is not where the
-// owner archived from.
-func archiveBack(next string) *url.URL {
+// archiveBack is where an archive of memory id returns: next when it is the
+// Memories list or that memory's own page (plan:console-ux-pass UX 26, which
+// then shows it archived, with Restore), with the library state either
+// carries; else the plain list. Any other page is not where the owner
+// archived from.
+func archiveBack(next, id string) *url.URL {
+	if u, err := url.Parse(next); err == nil && id != "" && u.Path == memoriesListPath+"/"+id {
+		return libBack(next, u.Path)
+	}
 	return libBack(next, memoriesListPath)
 }
 

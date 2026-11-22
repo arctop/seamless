@@ -3766,37 +3766,37 @@
           <a class="rail-item selected" id="ri-<id:26>" href="/console/memories/<id:26>" data-title="example-sealed-rule" data-context="example-sealed / gotcha" data-memory-kind="gotcha" aria-current="page">
             <span class="ri-title mono">example-sealed-rule</span>
             <span class="ri-desc">The sealed example vault rotates keys weekly</span>
-            <span class="ri-meta"><span class="ri-chip">example-sealed</span> <span class="ri-chip ri-kind" data-kind="gotcha" title="A trap and how to avoid it, led by its symptom.">gotcha</span> <span title="<time> UTC">updated <age></span></span>
+            <span class="ri-meta"><span class="ri-chip">example-sealed</span> <span class="ri-chip ri-kind" data-kind="gotcha" title="A trap and how to avoid it, led by its symptom.">gotcha</span> <span>updated <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span></span>
           </a>
           
           <a class="rail-item" id="ri-<id:21>" href="/console/memories/<id:21>" data-title="example-confidential-gotcha" data-context="example-confidential / gotcha" data-memory-kind="gotcha">
             <span class="ri-title mono">example-confidential-gotcha</span>
             <span class="ri-desc">The confidential example ledger closes on the fifth</span>
-            <span class="ri-meta"><span class="ri-chip">example-confidential</span> <span class="ri-chip ri-kind" data-kind="gotcha" title="A trap and how to avoid it, led by its symptom.">gotcha</span> <span title="<time> UTC">updated <age></span></span>
+            <span class="ri-meta"><span class="ri-chip">example-confidential</span> <span class="ri-chip ri-kind" data-kind="gotcha" title="A trap and how to avoid it, led by its symptom.">gotcha</span> <span>updated <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span></span>
           </a>
           
           <a class="rail-item" id="ri-<id:3>" href="/console/memories/<id:3>" data-title="example-layout-convention" data-context="example-open-alpha / convention" data-memory-kind="convention">
             <span class="ri-title mono">example-layout-convention</span>
             <span class="ri-desc">Example services keep their configs under deploy/example</span>
-            <span class="ri-meta"><span class="ri-chip">example-open-alpha</span> <span class="ri-chip ri-kind" data-kind="convention" title="A project&#39;s own choice or layout fact: naming, branding, where things live.">convention</span> <span title="<time> UTC">updated <age></span> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
+            <span class="ri-meta"><span class="ri-chip">example-open-alpha</span> <span class="ri-chip ri-kind" data-kind="convention" title="A project&#39;s own choice or layout fact: naming, branding, where things live.">convention</span> <span>updated <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
           </a>
           
           <a class="rail-item" id="ri-<id:4>" href="/console/memories/<id:4>" data-title="example-migration-stage" data-context="example-open-alpha / stage" data-memory-kind="stage">
             <span class="ri-title mono">example-migration-stage</span>
             <span class="ri-desc">The example data migration waits on the owner&#39;s sign-off</span>
-            <span class="ri-meta"><span class="ri-chip">example-open-alpha</span> <span class="ri-chip ri-kind" data-kind="stage" title="Where a piece of work across sessions stands: its status and what it waits on.">stage</span> <span title="<time> UTC">updated <age></span> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
+            <span class="ri-meta"><span class="ri-chip">example-open-alpha</span> <span class="ri-chip ri-kind" data-kind="stage" title="Where a piece of work across sessions stands: its status and what it waits on.">stage</span> <span>updated <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
           </a>
           
           <a class="rail-item" id="ri-<id:6>" href="/console/memories/<id:6>" data-title="example-style-reference" data-context="Shared globally / reference" data-memory-kind="reference">
             <span class="ri-title mono">example-style-reference</span>
             <span class="ri-desc">Where the shared example style guide lives</span>
-            <span class="ri-meta"><span class="ri-chip">Shared globally</span> <span class="ri-chip ri-kind" data-kind="reference" title="A pointer to something outside Seamless, and what is there.">reference</span> <span title="<time> UTC">updated <age></span> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
+            <span class="ri-meta"><span class="ri-chip">Shared globally</span> <span class="ri-chip ri-kind" data-kind="reference" title="A pointer to something outside Seamless, and what is there.">reference</span> <span>updated <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
           </a>
           
           <a class="rail-item" id="ri-<id:2>" href="/console/memories/<id:2>" data-title="example-deploy-gate" data-context="example-open-alpha / constraint" data-memory-kind="constraint">
             <span class="ri-title mono">example-deploy-gate</span>
             <span class="ri-desc">Every example deploy goes through the staging gate first</span>
-            <span class="ri-meta"><span class="ri-chip">example-open-alpha</span> <span class="ri-chip ri-kind" data-kind="constraint" title="A rule any agent must follow, whatever the task. Briefings never drop it.">constraint</span> <span title="<time> UTC">updated <age></span> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
+            <span class="ri-meta"><span class="ri-chip">example-open-alpha</span> <span class="ri-chip ri-kind" data-kind="constraint" title="A rule any agent must follow, whatever the task. Briefings never drop it.">constraint</span> <span>updated <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
           </a>
           
           </div>
@@ -3812,7 +3812,7 @@
           
           <a class="rail-item dim" id="ri-<id:5>" href="/console/memories/<id:5>" data-title="example-cache-gotcha" data-context="Historical / gotcha" data-memory-kind="gotcha">
             <span class="ri-title mono"><i class="kdot" data-kind="gotcha" title="gotcha: A trap and how to avoid it, led by its symptom."></i>example-cache-gotcha</span>
-            <span class="ri-meta">superseded &middot; <span title="<time> UTC"><age></span> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
+            <span class="ri-meta">superseded &middot; <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
           </a>
           
         </div>
@@ -3859,8 +3859,8 @@
         
         <span title="Explicit memory_read lookups. Near-zero by design: a briefing already carries the body (counted under surfaced), so agents rarely read a memory again that they already have.">read 0&times;</span>
         <span>source <a href="/console/sessions/<id:25>"><sess:3></a></span>
-        <span title="<time> UTC">updated <age></span>
-        <span title="<time> UTC">created <age></span>
+        <span>updated <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
+        <span>created <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
       </span>
     </div>
     
@@ -3969,19 +3969,19 @@
           <a class="rail-item selected" id="ri-<id:29>" href="/console/notes/<id:29>" data-title="Example deploy plan" data-context="example-open-alpha" aria-current="page">
             <span class="ri-title">Example deploy plan</span>
             <span class="ri-desc">Captured Claude Code plan example-deploy-plan.md (iteration 1, approved)</span>
-            <span class="ri-meta"><span class="ri-chip">example-open-alpha</span> <span title="<time> UTC">updated <age></span></span>
+            <span class="ri-meta"><span class="ri-chip">example-open-alpha</span> <span>updated <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span></span>
           </a>
           
           <a class="rail-item" id="ri-<id:22>" href="/console/notes/<id:22>" data-title="Confidential example ledger notes" data-context="example-confidential">
             <span class="ri-title">Confidential example ledger notes</span>
             <span class="ri-desc">Inbound description</span>
-            <span class="ri-meta"><span class="ri-chip">example-confidential</span> <span title="<time> UTC">updated <age></span></span>
+            <span class="ri-meta"><span class="ri-chip">example-confidential</span> <span>updated <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span></span>
           </a>
           
           <a class="rail-item" id="ri-<id:8>" href="/console/notes/<id:8>" data-title="Example rollout narrative" data-context="example-open-alpha">
             <span class="ri-title">Example rollout narrative</span>
             <span class="ri-desc">How the example rollout goes</span>
-            <span class="ri-meta"><span class="ri-chip">example-open-alpha</span> <span title="<time> UTC">updated <age></span> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
+            <span class="ri-meta"><span class="ri-chip">example-open-alpha</span> <span>updated <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
           </a>
           
         </div>
@@ -4018,8 +4018,8 @@
     </h2>
     <p class="reader-desc">Captured Claude Code plan example-deploy-plan.md (iteration 1, approved)</p>
     <div class="reader-facts">
-      <span class="fact" title="<time> UTC">updated <age></span>
-      <span class="fact" title="<time> UTC">created <age></span>
+      <span class="fact">updated <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
+      <span class="fact">created <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
       <span class="fact">26 words</span>
       
     </div>

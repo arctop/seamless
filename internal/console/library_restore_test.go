@@ -101,12 +101,17 @@ func lrSupersede(t *testing.T, mgr *files.Manager, old, replacement core.Memory)
 	return out
 }
 
-// lrReaderSheet is the reader article of a library page.
+// lrReaderSheet is the item a page shows: a memory's or a note's own page
+// (the item frame), or a reader fragment (its sheet).
 func lrReaderSheet(t *testing.T, page string) string {
 	t.Helper()
-	i := strings.Index(page, `<article class="reader-sheet"`)
-	require.NotEqual(t, -1, i, "no reader on the page")
-	return page[i:]
+	for _, mark := range []string{`<div class="item-page"`, `<article class="reader-sheet"`} {
+		if i := strings.Index(page, mark); i >= 0 {
+			return page[i:]
+		}
+	}
+	require.FailNow(t, "no item on the page")
+	return ""
 }
 
 var lrRestoreForm = regexp.MustCompile(`<form class="reader-status-act" method="post" action="/console/memories/([0-9A-Z]+)/restore">`)
@@ -511,14 +516,16 @@ func TestLrArchiveWordsAndConfirmsAskInThePage(t *testing.T) {
 
 // Both readers draw the same actions in the same order: Edit in editor, then
 // the one that changes the item's state, in the eyebrow; the star in the
-// title.
+// title. Both items' own pages do too, the actions beside the title.
 func TestLrReadersShareTheActionOrder(t *testing.T) {
 	_, mgr, mux := newConsoleWithFiles(t)
 	m := writeMemory(t, mgr, core.KindGotcha, "example-ops", "disk-alarm", "disk alarm")
 	n := libNote(t, mgr, "example-ops", "disk-notes", "Disk notes", time.Now().UTC(), nil)
 	order := regexp.MustCompile(`(?s)<span class="reader-actions">\s*<a class="ract" href="vscode://file[^"]*"[^>]*>.*?Edit in editor</a>\s*<form method="post" action="/console/(memories|notes)/[0-9A-Z]+/(archive|delete)">.*?</span>.*?<h2 class="reader-title[^"]*">.*?<form class="star-form"`)
+	pageOrder := regexp.MustCompile(`(?s)<h1 class="item-title[^"]*">.*?<form class="star-form".*?</h1>\s*<div class="item-actions">\s*<a class="ract" href="vscode://file[^"]*"[^>]*>.*?Edit in editor</a>\s*<form method="post" action="/console/(memories|notes)/[0-9A-Z]+/(archive|delete)">`)
 	for _, p := range []string{"/console/memories/" + m.ID, "/console/notes/" + n.ID} {
-		require.Regexp(t, order, lrReaderSheet(t, lrGet(t, mux, p).Body.String()), p)
+		require.Regexp(t, order, lrReaderSheet(t, lrGet(t, mux, p+"?reader=1").Body.String()), p)
+		require.Regexp(t, pageOrder, lrReaderSheet(t, lrGet(t, mux, p).Body.String()), p)
 	}
 }
 

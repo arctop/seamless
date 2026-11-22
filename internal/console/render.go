@@ -103,8 +103,10 @@ var peekNames = []string{"memory", "note", "task", "project", "session", "event"
 // the full page render one source (page chrome aside). session and project are
 // absent on purpose: their fragments are deliberate compact summaries of much
 // richer bespoke surfaces (the session workspace, the tabbed project workspace);
-// memory, note, task, and plan are absent because their full pages are the
-// library screens, whose "<entity>-reader" blocks render the richer document view.
+// memory, note and task are absent because their full pages are their own item
+// pages (itempage.go, templates/item_shared.html), and plan because its page is
+// the Plans screen's; each library screen's "<entity>-reader" block renders the
+// richer document view the ?reader=1 fragment serves.
 var entityPeekPages = map[string]bool{"event": true}
 
 // pageData is the envelope every rendered page receives. Data holds the
@@ -660,8 +662,8 @@ func (s *Service) renderReader(w http.ResponseWriter, r *http.Request, page, blo
 // an HTML fragment for a detail-pane fetch (?peek=1), or -- by default -- a full
 // layout-wrapped page (a shareable, no-JS fallback URL). name is the peek entity
 // ("event"); pd.Data is its payload. The library entities (memory, note, task,
-// plan) branch by hand in their handlers instead, because their default page is
-// the shared library screen rather than a bespoke one.
+// plan) branch by hand in their handlers instead: a memory's, a note's and a
+// task's default page is its item page (itempage.go), a plan's the Plans screen.
 func (s *Service) renderDetail(w http.ResponseWriter, r *http.Request, name string, pd pageData) {
 	if wantsJSON(r) {
 		writeJSON(w, http.StatusOK, pd.Data)
