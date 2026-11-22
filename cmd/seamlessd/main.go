@@ -533,6 +533,7 @@ func runServe(args []string) error {
 		hidden := peer.policy.ConsoleHidden()
 		lockedSlugs = func(slug string) bool { return slices.Contains(hidden, slug) }
 	}
+	garden.SetAutoGuard(autoApplyGuard(screen, lockedSlugs))
 	metaFeed := feed.New(feed.Config{
 		DB: db, Events: rec, Socket: cfg.Screening.FeedSocket, Spool: feedSpool,
 		Host: feed.HostName(config.Hostname()), Enabled: screeningOn, Locked: lockedSlugs, Logger: logger,
@@ -1191,4 +1192,20 @@ func healthzHandler(db *sql.DB, instance string, updates func() update.Status) h
 // config loading and database checks. See doctor.go.
 func runDoctor(args []string) error {
 	return doctor(args)
+}
+
+// autoApplyGuard is what automatic apply (gardener.auto_apply, off by
+// default) asks before it applies a new proposal by itself: it leaves the
+// proposal for the owner while write screening's lockdown is on, when
+// screening, on now, would hold the text the apply lands, and for a project
+// peer_auth locks (locked; nil locks none). With the screening feature off,
+// neither screening question holds anything, as for an agent's apply.
+func autoApplyGuard(screen *screening.Service, locked func(string) bool) gardener.AutoGuard {
+	return gardener.AutoGuard{
+		Lockdown: screen.LockdownOn,
+		Holds: func(ctx context.Context, text string) bool {
+			return screen.On(ctx) && screening.Judge(text, "", screen.Rules()).Held()
+		},
+		Locked: locked,
+	}
 }

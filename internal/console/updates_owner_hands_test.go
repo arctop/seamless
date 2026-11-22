@@ -409,8 +409,10 @@ func TestUpdatesReset_AnUnreadableStoreIsTheOwners(t *testing.T) {
 	uohRequireRefused(t, uohPost(t, mux, agent, "/console/settings/updates/reset", ""), agent, "reset")
 }
 
-// The routes judged in one direction only, read from the source: a route
-// added through ownerHandsIf later has to be named here, and tested above.
+// The routes judged conditionally, read from the source: the Gardener's
+// decisions while agents may not apply (settings_gardener_test.go), and the
+// Updates routes in one direction only. A route added through ownerHandsIf
+// later has to be named here, and tested.
 func TestUpdates_TheConditionalOwnerHandsRoutes(t *testing.T) {
 	src, err := os.ReadFile("console.go")
 	require.NoError(t, err)
@@ -420,6 +422,14 @@ func TestUpdates_TheConditionalOwnerHandsRoutes(t *testing.T) {
 		got = append(got, m[1])
 	}
 	require.Equal(t, []string{
+		"/console/gardener/group/dismiss",
+		"/console/gardener/plan/{slug}/apply",
+		"/console/gardener/{id}/apply",
+		"/console/gardener/{id}/dismiss",
+		"/console/gardener/{id}/hide",
+		"/console/gardener/{id}/unhide",
+		"/console/gardener/{id}/retarget",
+		"/console/gardener/{id}/undo",
 		"/console/settings/updates",
 		"/console/settings/updates/reset",
 		"/console/settings/updates/auto",

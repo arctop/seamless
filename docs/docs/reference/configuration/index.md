@@ -58,6 +58,15 @@ with where it was set. `check: false` promises no update traffic at all, so it
 is never one click from untrue, and with checks off nothing installs by itself
 either. See [the update block](#the-update-check).
 
+The `gardener:` block's two switches, `gardener.agents_may_apply` and
+`gardener.auto_apply`, are stored by Settings →
+[Knowledge engine](https://thereisnospoon.org/docs/reference/console/#knowledge-engine) (its Gardener group)
+and simply win over the file until reset, with one exception: an explicit
+`agents_may_apply: false` in the file (or
+`SEAMLESS_GARDENER_AGENTS_MAY_APPLY=false`) is final, and the console shows that
+switch locked. Both take effect at once: every check reads them when it
+decides. See [The gardener](https://thereisnospoon.org/docs/concepts/gardener/).
+
 It exists so you can change what agents get injected - and what they can reach -
 while they are running, and it is the one place where the config file is not the
 last word: check the console before concluding a `briefing:`, `features:`,
@@ -419,6 +428,8 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `gardener.stale_plan_days` | int | `14` |
 | `gardener.stale_stage_days` | int | `14` |
 | `gardener.session_idle_minutes` | int | `45` |
+| `gardener.agents_may_apply` | bool, optional | unset |
+| `gardener.auto_apply` | []string | - |
 | `capture.allowed_ports` | []int | `[80, 443]` |
 | `plan_capture.enabled` | bool | `true` |
 | `plan_capture.auto_task` | bool | `true` |
@@ -868,6 +879,21 @@ gardener:
   # Must be positive; omit the key to retain the built-in 45m default.
   # env: SEAMLESS_GARDENER_SESSION_IDLE_MINUTES
   session_idle_minutes: 45
+  # Whether agents may resolve proposals: gardener_apply's apply, dismiss and
+  # hide, and the console's Gardener decisions from an agent's process. Unset
+  # means on. false leaves every decision to you, and is final: the console
+  # cannot turn it back on (Settings -> Knowledge engine -> Gardener can turn it
+  # off, and wins over an unset or true value until you reset it there). Both
+  # keys stay commented out here: a release older than them would refuse them.
+  # env: SEAMLESS_GARDENER_AGENTS_MAY_APPLY
+  # agents_may_apply: true
+  # The proposal kinds a pass applies by itself the moment it raises one,
+  # recorded as applied automatically and undoable from the console. Only
+  # memory_wanted, tool_error, abandon_plan and ship_plan may be named; any other
+  # kind is refused at load. Empty (the default) applies nothing by itself. The
+  # console's choice wins over this until you reset it there.
+  # env: SEAMLESS_GARDENER_AUTO_APPLY (comma-separated)
+  # auto_apply: [memory_wanted, tool_error]
 
 capture:
   # Destination ports the capture_url tool may dial, enforced in the dialer on

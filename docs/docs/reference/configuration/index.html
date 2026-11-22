@@ -324,6 +324,14 @@ it on when file and env do not say <code>false</code> - but an explicit <code>ch
 with where it was set. <code>check: false</code> promises no update traffic at all, so it
 is never one click from untrue, and with checks off nothing installs by itself
 either. See <a href="#the-update-check">the update block</a>.</p>
+<p>The <code>gardener:</code> block's two switches, <code>gardener.agents_may_apply</code> and
+<code>gardener.auto_apply</code>, are stored by Settings →
+<a href="../../reference/console/#knowledge-engine">Knowledge engine</a> (its Gardener group)
+and simply win over the file until reset, with one exception: an explicit
+<code>agents_may_apply: false</code> in the file (or
+<code>SEAMLESS_GARDENER_AGENTS_MAY_APPLY=false</code>) is final, and the console shows that
+switch locked. Both take effect at once: every check reads them when it
+decides. See <a href="../../concepts/gardener/">The gardener</a>.</p>
 <p>It exists so you can change what agents get injected - and what they can reach -
 while they are running, and it is the one place where the config file is not the
 last word: check the console before concluding a <code>briefing:</code>, <code>features:</code>,
@@ -962,6 +970,16 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 <td><code>45</code></td>
 </tr>
 <tr>
+<td><code>gardener.agents_may_apply</code></td>
+<td>bool, optional</td>
+<td>unset</td>
+</tr>
+<tr>
+<td><code>gardener.auto_apply</code></td>
+<td>[]string</td>
+<td>-</td>
+</tr>
+<tr>
 <td><code>capture.allowed_ports</code></td>
 <td>[]int</td>
 <td><code>[80, 443]</code></td>
@@ -1521,6 +1539,21 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Must be positive; omit the key to retain the built-in 45m default.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_GARDENER_SESSION_IDLE_MINUTES</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">session_idle_minutes</span><span class="p">:</span><span class="w"> </span><span class="m">45</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Whether agents may resolve proposals: gardener_apply&#39;s apply, dismiss and</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># hide, and the console&#39;s Gardener decisions from an agent&#39;s process. Unset</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># means on. false leaves every decision to you, and is final: the console</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># cannot turn it back on (Settings -&gt; Knowledge engine -&gt; Gardener can turn it</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># off, and wins over an unset or true value until you reset it there). Both</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># keys stay commented out here: a release older than them would refuse them.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_GARDENER_AGENTS_MAY_APPLY</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># agents_may_apply: true</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># The proposal kinds a pass applies by itself the moment it raises one,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># recorded as applied automatically and undoable from the console. Only</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># memory_wanted, tool_error, abandon_plan and ship_plan may be named; any other</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># kind is refused at load. Empty (the default) applies nothing by itself. The</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># console&#39;s choice wins over this until you reset it there.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_GARDENER_AUTO_APPLY (comma-separated)</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># auto_apply: [memory_wanted, tool_error]</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">capture</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Destination ports the capture_url tool may dial, enforced in the dialer on</span><span class="w">

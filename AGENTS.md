@@ -1963,7 +1963,8 @@ restore a memory, delete a note, approve a plan, force-release a task's claim, m
 or reopen it, mark a task's gate as handled,
 ask/split/apply/dismiss/retarget a gardener proposal, run a gardener pass now, save or reset the
 briefing settings, switch update checks and automatic updates (or hand both
-back to the config), check for updates now, update now, resume automatic
+back to the config), switch agents' applying of gardener proposals and automatic
+apply (or hand both back to the config), check for updates now, update now, resume automatic
 updates, save or reset the backup schedule and folder, back up now, delete a
 backup, restore one (a passkey ceremony bound to the backup's digest and the
 mode while peer_auth locks a project), cancel a staged restore or dismiss its

@@ -55,6 +55,19 @@ func TestExampleConfigLoads(t *testing.T) {
 		require.Contains(t, text, line)
 	}
 
+	// The gardener's two switches are documented with their env overrides but
+	// commented out: a release older than them would refuse either key.
+	require.Nil(t, cfg.Gardener.AgentsMayApply)
+	require.Nil(t, cfg.Gardener.AutoApply)
+	for _, line := range []string{
+		"  # env: SEAMLESS_GARDENER_AGENTS_MAY_APPLY\n", "  # agents_may_apply: true\n",
+		"  # env: SEAMLESS_GARDENER_AUTO_APPLY (comma-separated)\n", "  # auto_apply: [memory_wanted, tool_error]\n",
+	} {
+		require.Contains(t, text, line)
+	}
+	require.NotContains(t, "\n"+text, "\n  agents_may_apply:", "the agents switch stays commented out")
+	require.NotContains(t, "\n"+text, "\n  auto_apply:", "automatic apply stays commented out")
+
 	// The backup block is documented but commented out whole: a backup: key
 	// pins the file to a release that knows the block, and a rollback to an
 	// older one would refuse it (AGENTS.md "Release discipline").

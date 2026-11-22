@@ -192,7 +192,7 @@ func (s *Service) Request(ctx context.Context, text string, scope RequestScope) 
 	res.Summary = requestSummary(res)
 
 	s.record(ctx, "", map[string]any{
-		"action": "request", "text": truncateRunes(text, 200),
+		"action": ActionRequest, "text": truncateRunes(text, 200),
 		"created": res.Total, "merges": res.ByKind[store.ProposalMerge],
 		"archives": res.ByKind[store.ProposalArchive], "consolidations": res.ByKind[store.ProposalConsolidate],
 		"reprojects": res.ByKind[store.ProposalReproject], "rekinds": res.ByKind[store.ProposalRekind],
@@ -233,7 +233,7 @@ func (s *Service) routeSplit(ctx context.Context, text string, sp *reqSplit, kno
 	}
 	res.Summary = res.Guidance
 	s.record(ctx, "", map[string]any{
-		"action": "request", "text": truncateRunes(text, 200),
+		"action": ActionRequest, "text": truncateRunes(text, 200),
 		"recognized": "split", "source": res.SplitSource,
 	})
 	return res

@@ -154,7 +154,7 @@
         <div><dt>Agents connected</dt><dd>{{if .Setup.Clients}}{{range $i, $c := .Setup.Clients}}{{if $i}}<span class="faint">&middot;</span>{{end}}<span>{{$c.Name}} <small class="faint">last active {{agoPhrase $c.LastSeen}}</small></span>{{end}}{{else}}None yet &mdash; an agent appears here once it starts a session with the hooks installed.{{end}}</dd></div>
         {{with .Embeddings}}<div><dt>Semantic recall</dt><dd>{{if .Enabled}}<span class="badge ok">on</span><span>with <span class="mono">{{.Model}}</span></span>{{else}}<span class="badge warn">off</span><span>{{if .OverriddenOff}}Switched off in this console. Search and recall use keywords only.{{else if .Misconfigured}}The model settings in the config file have a mistake: <span class="mono">{{.Reason}}</span>{{else}}Search and recall use keywords only. Add an OpenAI key (or point Ollama at a local model) in the config file, then restart.{{end}}</span><a href="https://thereisnospoon.org/docs/guides/troubleshooting/#recall-returns-junk-or-misses-what-you-just-wrote" target="_blank" rel="noopener">What this changes &nearr;</a>{{end}}</dd></div>{{end}}
         {{with .Setup.Backups}}<div><dt>Backups</dt><dd>{{if .Failing}}<span class="badge warn">needs attention</span>{{else if .On}}<span class="badge ok">on</span>{{else}}<span class="badge">off</span>{{end}}<span>{{.Line}}</span><a href="/console/settings?s=backups" data-seam-query>Settings &rsaquo; Backups</a></dd></div>{{end}}
-        <div><dt>Gardener</dt><dd>{{if .Gardener.Enabled}}<span class="badge ok">on</span><span>suggests cleanups every {{.Gardener.IntervalMinutes}} minutes</span>{{else}}<span class="badge">suggestions off</span><span>no background suggestions are made; upkeep still runs every {{.Gardener.IntervalMinutes}} minutes (idle sessions reaped, old tool events pruned, retrieval stats refreshed)</span>{{end}}</dd></div>
+        <div><dt>Gardener</dt><dd>{{if .Gardener.Enabled}}<span class="badge ok">on</span><span>suggests cleanups every {{.Gardener.IntervalMinutes}} minutes</span>{{else}}<span class="badge">suggestions off</span><span>no background suggestions are made; upkeep still runs every {{.Gardener.IntervalMinutes}} minutes (idle sessions reaped, old tool events pruned, retrieval stats refreshed)</span>{{end}}<span>{{.GardenerSwitches.SetupLine}}</span><a href="/console/settings?s=engine#settings-gardener">Settings &rsaquo; Knowledge engine &rsaquo; Gardener</a></dd></div>
       </dl>
       <nav class="setup-docs" aria-label="Documentation">
         <a href="https://thereisnospoon.org/docs/quickstart/" target="_blank" rel="noopener">Quickstart &nearr;</a>
@@ -830,6 +830,64 @@
           </article>
         </div>
       </section>
+
+      {{/* The gardener's two switches (settings_gardener.go): who may apply its
+           proposals, and which kinds apply by themselves. Each form carries
+           only its own control's fields, so saving one keeps the other's
+           source. The Gardener screen links here (#settings-gardener). */}}
+      {{with .GardenerSwitches}}
+      <section class="engine-group gardener-switches" id="settings-gardener" aria-labelledby="engine-gardener-title">
+        <header class="engine-group-head">
+          <h3 id="engine-gardener-title">Gardener</h3>
+          <p>Who may apply the gardener&rsquo;s proposals, and which kinds apply by themselves. A change applies at once, with no restart.</p>
+          <span class="settings-access editable">{{icon "settings"}} Editable here</span>
+        </header>
+        {{if .ReadFailed}}<p class="updates-alert" role="alert">{{icon "triangle-alert"}}<span><strong>The stored choices could not be read.</strong> This shows the config file&rsquo;s values, and the Gardener&rsquo;s writes refuse an agent&rsquo;s process until they can be read again.</span></p>{{end}}
+        {{if .Unreadable}}<p class="updates-note">{{icon "info"}}<span>The stored choice was unreadable, so the config file decides. Saving here replaces it.</span></p>{{end}}
+        {{if .Overridden}}
+        <div class="settings-precedence is-override">
+          <span class="state-dot"></span>
+          <span><strong>Set in this console</strong> &mdash; a choice made here wins over the config file until you reset it.</span>
+          <button class="btn small" type="submit" form="gardener-reset">Reset to the config file</button>
+        </div>
+        {{end}}
+
+        <form method="post" action="/console/settings/gardener" aria-labelledby="gardener-agents-title">
+          <h4 id="gardener-agents-title">Agents may apply proposals</h4>
+          <p class="gardener-source"><strong>{{.AgentsLabel}}</strong> &mdash; {{.AgentsNote}}</p>
+          <dl class="setup-facts">
+            <div><dt>Now</dt><dd>{{if .AgentsMayApply}}<span class="badge ok">on</span><span>Agents may apply, dismiss and hide proposals with gardener_apply, and through the Gardener screen.</span>{{else}}<span class="badge">off</span><span>Only you decide: gardener_apply refuses agents, and so do the Gardener&rsquo;s writes from an agent&rsquo;s process. Agents still see the proposals.</span>{{end}}</dd></div>
+          </dl>
+          <div class="updates-actions">
+            {{if .AgentsMayApply}}<input type="hidden" name="agents" value="off">
+            <button class="btn small" type="submit">Turn agents&rsquo; applying off</button>
+            {{else}}<input type="hidden" name="agents" value="on">
+            <button class="btn small primary" type="submit"{{if .AgentsLocked}} disabled title="Set in the config file or environment"{{end}}>Let agents apply proposals</button>{{end}}
+          </div>
+          {{with .LockedNote}}<p class="updates-note">{{icon "lock"}}<span>{{.}}</span></p>{{end}}
+        </form>
+
+        <form method="post" action="/console/settings/gardener" aria-labelledby="gardener-auto-title">
+          <input type="hidden" name="auto_set" value="1">
+          <h4 id="gardener-auto-title">Apply automatically</h4>
+          <p class="gardener-source"><strong>{{.AutoLabel}}</strong> &mdash; {{.AutoNote}}</p>
+          <p class="gardener-source">A new proposal of a kind you check is applied by the pass that raises it, recorded as applied automatically, and listed in the decision history with Undo. It waits for you instead while lockdown is on, when write screening would hold it, and for a locked or fenced project. Every other kind always waits for you.</p>
+          <div class="brief-toggles">
+            {{range .Kinds}}
+            <label class="brief-toggle" data-auto-kind="{{.Kind}}">
+              <input type="checkbox" name="auto" value="{{.Kind}}"{{if .On}} checked{{end}}>
+              <span class="brief-switch" aria-hidden="true"></span>
+              <span><strong>{{.Label}}</strong><small>{{.Sentence}}</small></span>
+            </label>
+            {{end}}
+          </div>
+          <div class="updates-actions">
+            <button class="btn small primary" type="submit">{{icon "check"}} Save automatic apply</button>
+          </div>
+        </form>
+        {{if .Overridden}}<form id="gardener-reset" method="post" action="/console/settings/gardener/reset"></form>{{end}}
+      </section>
+      {{end}}
     </section>
     {{end}}
     </div>

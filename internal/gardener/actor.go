@@ -19,7 +19,9 @@ const (
 	// ByGardener is the gardener's own upkeep: a pending proposal whose memory
 	// went inactive by another route is settled (moot.go).
 	ByGardener = "gardener"
-	// ByAuto is reserved for automatic apply. Nothing writes it yet.
+	// ByAuto is automatic apply (gardener.auto_apply, auto.go): a new
+	// proposal of a kind the owner opted in, applied by the pass that raised
+	// it, and the kept_for_review events of those it left for the owner.
 	ByAuto = "auto"
 )
 

@@ -251,7 +251,12 @@ editable live in the console (Settings -> Briefing injection), which stores a
 runtime override in the DB that wins over file/env until reset and applies from
 the next session start without a daemon restart. `gardener.session_idle_minutes`
 is the single live/idle threshold shared by the session reaper, the console and
-automatic updates' idle gate. The `update:` block (check, check_interval, auto,
+automatic updates' idle gate. The gardener's two switches,
+`gardener.agents_may_apply` (default on) and `gardener.auto_apply` (default
+empty; memory_wanted, tool_error, abandon_plan and ship_plan only), have a
+console override (Settings -> Knowledge engine -> Gardener) that wins until
+reset, except that `agents_may_apply: false` in the file/env is final and locks
+its switch; every check reads them live. The `update:` block (check, check_interval, auto,
 max_defer, min_age) drives the update check and automatic updates; its console
 override (Settings -> Updates) merges the other way round: `check: false` or
 `auto: false` in the file/env is final and locks its toggle (false check means

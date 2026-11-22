@@ -28,6 +28,7 @@ import (
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/features"
+	"github.com/arctop/seamless/internal/gardener"
 	"github.com/arctop/seamless/internal/hooks"
 	"github.com/arctop/seamless/internal/llm"
 	"github.com/arctop/seamless/internal/mcp"
@@ -175,6 +176,9 @@ func doctorOn(args []string, m doctorMachine) error {
 	checks = append(checks, mcpToolsCheck(ctx, cfg, d.current))
 	checks = append(checks, agentClientChecks(cfg, d)...)
 	checks = append(checks, gardenerCheck(cfg))
+	// The settings row it reads dates from migration 001, so any schema
+	// answers it; with no database it reads the file's switches alone.
+	checks = append(checks, gardenerSwitchesCheck(ctx, cfg, d.handle))
 	checks = append(checks, launchdChecks(m.goos, homeDir(), os.Getuid())...)
 	// The settings row loadUpdateView reads dates from migration 001, so an
 	// older schema answers it; with no database it applies no console override.
@@ -1375,6 +1379,58 @@ func gardenerCheck(cfg config.Config) check {
 	return check{statusOK, "gardener", fmt.Sprintf(
 		"enabled (every %dm; dedup>=%.2f, staleness %dd, digest %dd)",
 		g.IntervalMinutes, g.DedupThreshold, g.StalenessDays, g.DigestDays)}
+}
+
+// gardenerSwitchesCheck reports the gardener's two switches in force: whether
+// agents may resolve proposals and which kinds apply by themselves, each with
+// where it was set, the console's stored choice layered over the file's as
+// every check reads it (gardener.ReadSwitches). A config that names a kind
+// automatic apply may not take never gets here: it fails to load, and the
+// config row says why. A stored choice that cannot be read is a warning (the
+// file decides until Settings saves over it); a database that cannot be read
+// is a warning too, since agents' decisions are then refused.
+func gardenerSwitchesCheck(ctx context.Context, cfg config.Config, db *sql.DB) check {
+	const name = "gardener switches"
+	sw := gardener.Effective(cfg.Gardener, config.GardenerOverride{})
+	if db != nil {
+		got, err := gardener.ReadSwitches(ctx, db, cfg.Gardener, nil)
+		if err != nil {
+			return check{statusWarn, name, "the console's stored choice could not be read (" + err.Error() +
+				"); until it can, agents' decisions are refused and nothing applies by itself"}
+		}
+		sw = got
+	}
+	agents := "agents may apply, dismiss and hide proposals"
+	if !sw.AgentsMayApply {
+		agents = "agents may not resolve proposals; every decision is the owner's"
+	}
+	agents += " (" + switchSource(sw.AgentsSource) + ")"
+	auto := "automatic apply off"
+	if len(sw.AutoApply) > 0 {
+		auto = "automatic apply: " + strings.Join(sw.AutoApply, ", ")
+	}
+	auto += " (" + switchSource(sw.AutoSource) + ")"
+	detail := agents + "; " + auto
+	if sw.Unreadable {
+		return check{statusWarn, name, detail + " -- the console's stored choice is unreadable, so the config file decides; " +
+			"saving on Settings -> Knowledge engine -> Gardener replaces it"}
+	}
+	if !sw.AgentsMayApply || len(sw.AutoApply) > 0 {
+		return check{statusInfo, name, detail}
+	}
+	return check{statusOK, name, detail}
+}
+
+// switchSource names where a gardener switch's value came from.
+func switchSource(source string) string {
+	switch source {
+	case gardener.SourceConsole:
+		return "set in the console"
+	case gardener.SourceConfig:
+		return "set in the config file or environment"
+	default:
+		return "default"
+	}
 }
 
 // embedderCheck probes the configured embedder so a misconfiguration (bad key,

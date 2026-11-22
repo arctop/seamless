@@ -158,7 +158,7 @@ func (s *Service) Split(ctx context.Context, source, instruction string) (Reques
 
 	res.Summary = splitSummary(res, source)
 	s.record(ctx, "", map[string]any{
-		"action": "split", "source": source, "plan": planSlug,
+		"action": ActionSplit, "source": source, "plan": planSlug,
 		"created": res.Total, "reprojects": res.ByKind[store.ProposalReproject],
 	})
 	return res, nil

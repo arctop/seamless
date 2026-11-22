@@ -178,6 +178,10 @@ type settingsData struct {
 	Gardener           config.Gardener `json:"gardener"`
 	Briefing           config.Briefing `json:"briefing"`
 	BriefingOverridden bool            `json:"briefingOverridden"`
+	// GardenerSwitches is the gardener's two switches in force, with where
+	// each came from (settings_gardener.go): the Knowledge engine section's
+	// Gardener group edits them, and Your setup states them.
+	GardenerSwitches gardenerPanel `json:"gardenerSwitches"`
 	// Features is the effective optional-feature state, one card per registry
 	// entry in registry order. FeaturesConfig is the same state as the raw
 	// config struct, and FeaturesOverridden reports whether a stored override
@@ -440,6 +444,7 @@ func (s *Service) settings(w http.ResponseWriter, r *http.Request) {
 			Database:           s.databasePanel(),
 			Budgets:            s.cfg.Budgets,
 			Gardener:           s.cfg.GardenerCfg,
+			GardenerSwitches:   s.gardenerPanelFor(ctx),
 			Briefing:           briefing,
 			BriefingOverridden: overridden,
 			Features:           featureCardsFor(featuresCfg, navCounts{Labs: rawCounts.Labs, Trials: rawCounts.Trials, Held: heldCount}, s.cfg.RestrictedAccounts),

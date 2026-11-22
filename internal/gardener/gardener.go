@@ -9,7 +9,10 @@
 // or whose sources all lie in one other project (copy-relocate; both in
 // copies.go), and rolls recent sessions into a monthly digest. Every pass
 // only ever writes a gardener_proposals row for the owner to apply or dismiss
-// -- it never mutates a memory on its own.
+// -- it never mutates a memory on its own. The one exception is the owner's
+// opt-in (gardener.auto_apply, auto.go): a new proposal of a kind the owner
+// named, from the four AutoSafe ones, is applied at the end of the pass that
+// raised it, in the name "auto", and stays undoable.
 //
 // The same schedule also does the daemon's upkeep (Housekeep): it refreshes
 // retrieval stats, latches utility ranking, prunes old tool events, reaps idle
@@ -22,6 +25,7 @@ import (
 	"context"
 	"database/sql"
 	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
@@ -76,6 +80,12 @@ type Config struct {
 	// reads only the mappings THIS machine made: a remote device's repo path
 	// either is not here, or is a different repository with the same path.
 	LocalHost string
+	// AgentsMayApply and AutoApply are the file/env values of the gardener's
+	// two switches (gardener.agents_may_apply, gardener.auto_apply). They are
+	// only the BASE: Switches layers the console's stored override over them
+	// each time a check decides.
+	AgentsMayApply *bool
+	AutoApply      []string
 }
 
 // withDefaults fills non-positive fields from the package defaults.
@@ -111,6 +121,8 @@ func FromConfig(g config.Gardener) Config {
 		StaleStageDays:         g.StaleStageDays,
 		SessionIdle:            time.Duration(g.SessionIdleMinutes) * time.Minute,
 		LocalHost:              config.Hostname(),
+		AgentsMayApply:         g.AgentsMayApply,
+		AutoApply:              slices.Clone(g.AutoApply),
 	}
 }
 
@@ -139,6 +151,9 @@ type Service struct {
 	// beforePasses runs at the start of every proposal pass (tests hold a pass
 	// open with it); nil in production.
 	beforePasses func(context.Context)
+	// guard is what automatic apply asks before it applies a new proposal by
+	// itself (SetAutoGuard, auto.go); the zero value asks nothing.
+	guard AutoGuard
 
 	// mu guards the pass bookkeeping the status line reads (Status).
 	mu sync.Mutex
@@ -256,6 +271,12 @@ type PassResult struct {
 	// Relocations counts the copy-relocate pass's relocate proposals (a stale
 	// copy's archive proposal counts under Archives).
 	Relocations int `json:"relocations"`
+	// AutoApplied counts the new proposals this pass applied by itself
+	// (gardener.auto_apply, auto.go), and KeptForReview the new ones of an
+	// enabled kind it left pending for the owner instead. Both are among the
+	// counts above: a proposal applied by itself was still raised.
+	AutoApplied   int `json:"autoApplied,omitempty"`
+	KeptForReview int `json:"keptForReview,omitempty"`
 	// Failed names the passes that errored, in run order. A failing pass leaves
 	// its count at 0, which is shaped exactly like "nothing to propose"; this is
 	// the only thing that tells the two apart. Read it before trusting a zero.
@@ -336,6 +357,10 @@ func (s *Service) propose(ctx context.Context) (PassResult, error) {
 	if err != nil {
 		return PassResult{}, err
 	}
+	// Every proposal the passes raise is noted, so automatic apply takes this
+	// pass's new ones and nothing older: an undone apply, which returns to the
+	// queue, is never applied again by itself.
+	ctx, created := withCreatedLog(ctx)
 
 	var res PassResult
 	// run records a failing pass by name instead of letting its zero count pass
@@ -370,6 +395,9 @@ func (s *Service) propose(ctx context.Context) (PassResult, error) {
 	res.MemoryWanted = run(PassMemoryWanted, s.proposeMemoryWanted)
 	res.ToolError = run(PassToolError, s.proposeToolError)
 	res.Relocations = run(PassCopyRelocate, s.proposeSourceRelocations)
+	// After every pass, so no pass reads a world an automatic apply changed
+	// mid-run (a task opened for one gap reading as coverage for the next).
+	res.AutoApplied, res.KeptForReview = s.autoApplyNew(ctx, created.list())
 
 	switch {
 	case !res.OK():
@@ -381,7 +409,8 @@ func (s *Service) propose(ctx context.Context) (PassResult, error) {
 	case res.Total() > 0:
 		s.logger.Info("gardener pass complete", "merges", res.Merges, "archives", res.Archives,
 			"digests", res.Digests, "stale_plans", res.StalePlans, "memory_wanted", res.MemoryWanted,
-			"tool_errors", res.ToolError, "relocations", res.Relocations)
+			"tool_errors", res.ToolError, "relocations", res.Relocations,
+			"auto_applied", res.AutoApplied, "kept_for_review", res.KeptForReview)
 	}
 	return res, nil
 }
@@ -519,6 +548,7 @@ func (s *Service) createProposal(ctx context.Context, kind, key string, payload 
 	}
 	seen.mark(key)
 	s.record(ctx, p.ID, map[string]any{"action": "propose", "kind": kind, "key": key})
+	noteCreated(ctx, p.ID, kind)
 	return p.ID, nil
 }
 

@@ -8087,6 +8087,16 @@ a.project-global-line:focus-visible { outline: none; box-shadow: var(--shadow-fo
 .btn[data-armed] { color: var(--danger-ink); background: var(--danger); border-color: var(--danger); }
 .confirm-note { display: inline-block; max-width: 100%; margin-left: 8px; font-size: var(--text-xs); color: var(--danger); vertical-align: middle; }
 
+/* UX 23: Settings > Knowledge engine > Gardener, the gardener's two switches
+   (settings.html #settings-gardener): one form per control, stacked. */
+.gardener-switches { --group-accent: var(--brand); }
+.gardener-switches > form { display: grid; gap: 8px; margin: 0 0 18px; }
+.gardener-switches > form h4 { margin: 0; color: var(--ink-2); font-size: var(--text-sm); }
+.gardener-switches .gardener-source { margin: 0; color: var(--faint); font-size: var(--text-xs); line-height: 1.45; }
+.gardener-switches .gardener-source strong { color: var(--ink-2); }
+.gardener-switches .updates-actions { margin: 4px 0 0; }
+.gardener-switches .settings-precedence { margin-bottom: 14px; }
+
 /* UX 03: the project page. A claim strip words its step (claim lapsed,
    unclaimed) and wraps at phone width; a session's held task reads as its
    title; the Sessions tab ends with the count it shows and a way to all. */

@@ -246,30 +246,121 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#propose-only-is-the-whole-contract">Propose-only is the whole contract</a></li><li class="lvl-2"><a href="#what-it-looks-for">What it looks for</a></li><li class="lvl-2"><a href="#constraints-and-stages-are-exempt-from-staleness">Constraints and stages are exempt from staleness</a></li><li class="lvl-2"><a href="#asking-for-it-in-words">Asking for it in words</a></li><li class="lvl-2"><a href="#where-you-review">Where you review</a></li><li class="lvl-2"><a href="#who-decided">Who decided</a></li><li class="lvl-2"><a href="#saying-no-twice">Saying no, twice</a></li><li class="lvl-2"><a href="#when-it-runs">When it runs</a></li>
+      <li class="lvl-2"><a href="#propose-only-unless-you-opt-in">Propose-only, unless you opt in</a></li><li class="lvl-3"><a href="#agents-may-apply-proposals">Agents may apply proposals</a></li><li class="lvl-3"><a href="#apply-automatically">Apply automatically</a></li><li class="lvl-2"><a href="#what-it-looks-for">What it looks for</a></li><li class="lvl-2"><a href="#constraints-and-stages-are-exempt-from-staleness">Constraints and stages are exempt from staleness</a></li><li class="lvl-2"><a href="#asking-for-it-in-words">Asking for it in words</a></li><li class="lvl-2"><a href="#where-you-review">Where you review</a></li><li class="lvl-2"><a href="#who-decided">Who decided</a></li><li class="lvl-2"><a href="#saying-no-twice">Saying no, twice</a></li><li class="lvl-2"><a href="#when-it-runs">When it runs</a></li>
     </ul>
   </details>
   <p>The Seamless gardener is the background pass that keeps an agent-written memory
 store from rotting: it detects near-duplicate memories by embedding similarity,
 memories gone stale, and captured plans left unapproved (including ones whose
 work quietly shipped), and files each finding as a proposal. Nothing changes
-until a proposal is applied - by you on the console, or by an agent with
-<code>gardener_apply</code> - and every decision records who made it. The gardener has no
-write path of its own.</p>
+until a proposal is applied - by you on the console, by an agent with
+<code>gardener_apply</code> while you let agents apply, or, for the few kinds you opt in,
+by automatic apply - and every decision records who made it. Out of the box the
+gardener has no write path of its own.</p>
 <p>Any store that agents write to accumulates cruft: two memories saying the same
 thing in different words, a runbook for a system that no longer exists, a plan
 abandoned three weeks ago with its steps still open.</p>
 <p>The gardener finds those. Then it stops and asks.</p>
-<h2 id="propose-only-is-the-whole-contract">Propose-only is the whole contract</h2>
+<h2 id="propose-only-unless-you-opt-in">Propose-only, unless you opt in</h2>
 <p><strong>Every pass the gardener makes ends in a proposal for you to review.</strong> It never
-edits, merges, or archives on its own.</p>
+edits, merges, or archives on its own. The one exception is yours to make: four
+kinds that only open a task or retag a plan note can be applied by themselves
+(automatic apply, below). It is off until you turn it on.</p>
 <p>This is not timidity. The entire premise of Seamless is that the knowledge is
 yours and legible - a store that quietly rewrites itself while you sleep is
 exactly the black box the project exists to avoid. If an automated pass can
 decide your constraint is stale and archive it, then you do not actually know
 what your agents will be told tomorrow.</p>
 <p>So the surface is two tools, not one button: <code>gardener_proposals</code> to read what it
-found, <code>gardener_apply</code> to act on one.</p>
+found, <code>gardener_apply</code> to act on one. Two switches decide who may act, each in
+the config file and on the console (Settings, Knowledge engine, <strong>Gardener</strong>):</p>
+<div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nt">gardener</span><span class="p">:</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">agents_may_apply</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w">   </span><span class="c"># the default: agents may resolve proposals</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">auto_apply</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="w">           </span><span class="c"># the default: nothing applies by itself</span><span class="w">
+</span></span></span></code></pre></div>
+<p>A choice made on the console wins over the file until you press <strong>Reset to the
+config file</strong>, with one exception: <code>agents_may_apply: false</code> in the file or the
+environment is final, and the console shows the switch locked. Every check reads
+the switches when it decides, so a change applies without a restart. The
+environment overrides are <code>SEAMLESS_GARDENER_AGENTS_MAY_APPLY</code> (true or false)
+and <code>SEAMLESS_GARDENER_AUTO_APPLY</code> (comma-separated kinds).</p>
+<h3 id="agents-may-apply-proposals">Agents may apply proposals</h3>
+<p><code>gardener.agents_may_apply</code> is on by default: any agent may apply, dismiss or
+hide a proposal with <code>gardener_apply</code>, as before the switch existed. Turned off,
+every decision is yours:</p>
+<ul>
+<li><code>gardener_apply</code> refuses apply, dismiss and hide alike, before it looks at the
+proposal, in the same owner-curation words a restricted account is refused in;</li>
+<li><code>gardener_proposals</code> still lists the queue, and its answer carries
+<code>agentsMayApply: false</code> with a note, so an agent reports what it would decide
+instead of offering to apply;</li>
+<li>the console's Gardener decisions (apply, dismiss, hide, unhide, retarget,
+undo, dismissing a group, applying a plan) refuse a request from an agent's
+process on the peer_auth socket and one from a paired device. Your browser,
+your own terminal and the bearer key keep working.</li>
+</ul>
+<p>Asking in words (<code>gardener_request</code>), planning a split (<code>gardener_split</code>) and
+<strong>Run a pass now</strong> stay open: they only ever propose. The switch stops an
+agent's ordinary calls; it is not a wall against an agent set on getting in,
+since whoever holds the bearer key passes. A restricted account is refused
+either way.</p>
+<h3 id="apply-automatically">Apply automatically</h3>
+<p><code>gardener.auto_apply</code> is empty by default. It may name only these four kinds,
+each reversible from the console, built without an LLM, and only adding or
+retagging:</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Applying it</th>
+<th>Undo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>memory_wanted</code></td>
+<td>opens a task to write the memory agents keep searching for</td>
+<td>drops the task, while nobody has picked it up</td>
+</tr>
+<tr>
+<td><code>tool_error</code></td>
+<td>opens a task to fix the error agents keep hitting</td>
+<td>drops the task, while nobody has picked it up</td>
+</tr>
+<tr>
+<td><code>abandon_plan</code></td>
+<td>retags a captured plan nobody approved as abandoned</td>
+<td>puts its status back</td>
+</tr>
+<tr>
+<td><code>ship_plan</code></td>
+<td>retags a captured plan whose work landed in git as shipped</td>
+<td>puts its status back</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>A config that names any other kind is refused at load, and <code>seamlessd doctor</code>
+says why; the console's form refuses it too. Every other kind is a judgement
+call (archive, merge, digest, reproject, relocate, rekind, merge_plans), and a
+consolidate or a split cannot be undone.</p>
+<p>A proposal of a kind you named is applied at the end of the pass that raised
+it, in the name <code>auto</code>. The decision history lists it under <strong>Applied
+automatically</strong> with Undo, and the Overview counts what was applied since your
+last decision on the Gardener. It waits for you instead, as an ordinary
+proposal, when:</p>
+<ul>
+<li>write screening's lockdown is on;</li>
+<li>write screening would hold the text the apply lands (a task's title and body
+come from what agents searched for or the errors they hit);</li>
+<li>a project it touches is locked, or fenced from the daemon's own read (a
+confidential or sealed project), or it cannot be tied to a project at all.</li>
+</ul>
+<p>Each of those, and an apply that fails, is recorded on a <code>gardener.action</code>
+event (<code>kept_for_review</code>, with a reason code). Only a pass's own new proposals
+are applied by themselves: turning automatic apply on does not sweep the queue,
+and a proposal you undo comes back to you, never to automatic apply.</p>
 <h2 id="what-it-looks-for">What it looks for</h2>
 <div class="table-wrap">
 <table>
@@ -400,8 +491,9 @@ undone from the console.</li>
 <li><strong><code>gardener_proposals</code></strong> - the same, for an agent.</li>
 </ul>
 <h2 id="who-decided">Who decided</h2>
-<p>A proposal is resolved on the console, by an agent through <code>gardener_apply</code>, or
-by the gardener itself when the memory it was about has already gone inactive.
+<p>A proposal is resolved on the console, by an agent through <code>gardener_apply</code>, by
+automatic apply for a kind you opted in, or by the gardener itself when the
+memory it was about has already gone inactive.
 Each decision records who made it, on the proposal and on its <code>gardener.action</code>
 event (<code>by</code>):</p>
 <div class="table-wrap">
@@ -424,6 +516,10 @@ event (<code>by</code>):</p>
 <tr>
 <td><code>gardener</code></td>
 <td>the gardener's upkeep, settling a proposal whose memory went inactive</td>
+</tr>
+<tr>
+<td><code>auto</code></td>
+<td>automatic apply (<code>gardener.auto_apply</code>), applying a new proposal of a kind you named</td>
 </tr>
 <tr>
 <td>unknown</td>
@@ -493,7 +589,7 @@ waiting; it is refused while one runs.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#propose-only-is-the-whole-contract">Propose-only is the whole contract</a></li><li class="lvl-2"><a href="#what-it-looks-for">What it looks for</a></li><li class="lvl-2"><a href="#constraints-and-stages-are-exempt-from-staleness">Constraints and stages are exempt from staleness</a></li><li class="lvl-2"><a href="#asking-for-it-in-words">Asking for it in words</a></li><li class="lvl-2"><a href="#where-you-review">Where you review</a></li><li class="lvl-2"><a href="#who-decided">Who decided</a></li><li class="lvl-2"><a href="#saying-no-twice">Saying no, twice</a></li><li class="lvl-2"><a href="#when-it-runs">When it runs</a></li>
+      <li class="lvl-2"><a href="#propose-only-unless-you-opt-in">Propose-only, unless you opt in</a></li><li class="lvl-3"><a href="#agents-may-apply-proposals">Agents may apply proposals</a></li><li class="lvl-3"><a href="#apply-automatically">Apply automatically</a></li><li class="lvl-2"><a href="#what-it-looks-for">What it looks for</a></li><li class="lvl-2"><a href="#constraints-and-stages-are-exempt-from-staleness">Constraints and stages are exempt from staleness</a></li><li class="lvl-2"><a href="#asking-for-it-in-words">Asking for it in words</a></li><li class="lvl-2"><a href="#where-you-review">Where you review</a></li><li class="lvl-2"><a href="#who-decided">Who decided</a></li><li class="lvl-2"><a href="#saying-no-twice">Saying no, twice</a></li><li class="lvl-2"><a href="#when-it-runs">When it runs</a></li>
     </ul>
   </aside>
   

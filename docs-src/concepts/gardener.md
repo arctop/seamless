@@ -7,9 +7,10 @@ The Seamless gardener is the background pass that keeps an agent-written memory
 store from rotting: it detects near-duplicate memories by embedding similarity,
 memories gone stale, and captured plans left unapproved (including ones whose
 work quietly shipped), and files each finding as a proposal. Nothing changes
-until a proposal is applied - by you on the console, or by an agent with
-`gardener_apply` - and every decision records who made it. The gardener has no
-write path of its own.
+until a proposal is applied - by you on the console, by an agent with
+`gardener_apply` while you let agents apply, or, for the few kinds you opt in,
+by automatic apply - and every decision records who made it. Out of the box the
+gardener has no write path of its own.
 
 Any store that agents write to accumulates cruft: two memories saying the same
 thing in different words, a runbook for a system that no longer exists, a plan
@@ -17,10 +18,12 @@ abandoned three weeks ago with its steps still open.
 
 The gardener finds those. Then it stops and asks.
 
-## Propose-only is the whole contract
+## Propose-only, unless you opt in
 
 **Every pass the gardener makes ends in a proposal for you to review.** It never
-edits, merges, or archives on its own.
+edits, merges, or archives on its own. The one exception is yours to make: four
+kinds that only open a task or retag a plan note can be applied by themselves
+(automatic apply, below). It is off until you turn it on.
 
 This is not timidity. The entire premise of Seamless is that the knowledge is
 yours and legible - a store that quietly rewrites itself while you sleep is
@@ -29,7 +32,78 @@ decide your constraint is stale and archive it, then you do not actually know
 what your agents will be told tomorrow.
 
 So the surface is two tools, not one button: `gardener_proposals` to read what it
-found, `gardener_apply` to act on one.
+found, `gardener_apply` to act on one. Two switches decide who may act, each in
+the config file and on the console (Settings, Knowledge engine, **Gardener**):
+
+```yaml
+gardener:
+  agents_may_apply: true   # the default: agents may resolve proposals
+  auto_apply: []           # the default: nothing applies by itself
+```
+
+A choice made on the console wins over the file until you press **Reset to the
+config file**, with one exception: `agents_may_apply: false` in the file or the
+environment is final, and the console shows the switch locked. Every check reads
+the switches when it decides, so a change applies without a restart. The
+environment overrides are `SEAMLESS_GARDENER_AGENTS_MAY_APPLY` (true or false)
+and `SEAMLESS_GARDENER_AUTO_APPLY` (comma-separated kinds).
+
+### Agents may apply proposals
+
+`gardener.agents_may_apply` is on by default: any agent may apply, dismiss or
+hide a proposal with `gardener_apply`, as before the switch existed. Turned off,
+every decision is yours:
+
+- `gardener_apply` refuses apply, dismiss and hide alike, before it looks at the
+  proposal, in the same owner-curation words a restricted account is refused in;
+- `gardener_proposals` still lists the queue, and its answer carries
+  `agentsMayApply: false` with a note, so an agent reports what it would decide
+  instead of offering to apply;
+- the console's Gardener decisions (apply, dismiss, hide, unhide, retarget,
+  undo, dismissing a group, applying a plan) refuse a request from an agent's
+  process on the peer_auth socket and one from a paired device. Your browser,
+  your own terminal and the bearer key keep working.
+
+Asking in words (`gardener_request`), planning a split (`gardener_split`) and
+**Run a pass now** stay open: they only ever propose. The switch stops an
+agent's ordinary calls; it is not a wall against an agent set on getting in,
+since whoever holds the bearer key passes. A restricted account is refused
+either way.
+
+### Apply automatically
+
+`gardener.auto_apply` is empty by default. It may name only these four kinds,
+each reversible from the console, built without an LLM, and only adding or
+retagging:
+
+| Kind | Applying it | Undo |
+|---|---|---|
+| `memory_wanted` | opens a task to write the memory agents keep searching for | drops the task, while nobody has picked it up |
+| `tool_error` | opens a task to fix the error agents keep hitting | drops the task, while nobody has picked it up |
+| `abandon_plan` | retags a captured plan nobody approved as abandoned | puts its status back |
+| `ship_plan` | retags a captured plan whose work landed in git as shipped | puts its status back |
+
+A config that names any other kind is refused at load, and `seamlessd doctor`
+says why; the console's form refuses it too. Every other kind is a judgement
+call (archive, merge, digest, reproject, relocate, rekind, merge_plans), and a
+consolidate or a split cannot be undone.
+
+A proposal of a kind you named is applied at the end of the pass that raised
+it, in the name `auto`. The decision history lists it under **Applied
+automatically** with Undo, and the Overview counts what was applied since your
+last decision on the Gardener. It waits for you instead, as an ordinary
+proposal, when:
+
+- write screening's lockdown is on;
+- write screening would hold the text the apply lands (a task's title and body
+  come from what agents searched for or the errors they hit);
+- a project it touches is locked, or fenced from the daemon's own read (a
+  confidential or sealed project), or it cannot be tied to a project at all.
+
+Each of those, and an apply that fails, is recorded on a `gardener.action`
+event (`kept_for_review`, with a reason code). Only a pass's own new proposals
+are applied by themselves: turning automatic apply on does not sweep the queue,
+and a proposal you undo comes back to you, never to automatic apply.
 
 ## What it looks for
 
@@ -123,8 +197,9 @@ bypass the review step - what comes back is still a proposal.
 
 ## Who decided
 
-A proposal is resolved on the console, by an agent through `gardener_apply`, or
-by the gardener itself when the memory it was about has already gone inactive.
+A proposal is resolved on the console, by an agent through `gardener_apply`, by
+automatic apply for a kind you opted in, or by the gardener itself when the
+memory it was about has already gone inactive.
 Each decision records who made it, on the proposal and on its `gardener.action`
 event (`by`):
 
@@ -133,6 +208,7 @@ event (`by`):
 | `owner` | you, on the console (the event says `console`); a held agent apply you release from **Held** counts as yours |
 | a session's name | an agent, through `gardener_apply`; `agent` when no session names the call |
 | `gardener` | the gardener's upkeep, settling a proposal whose memory went inactive |
+| `auto` | automatic apply (`gardener.auto_apply`), applying a new proposal of a kind you named |
 | unknown | a decision made before Seamless recorded this, or by an older release |
 
 The decision history shows it on every row, with the outcome and a link to the

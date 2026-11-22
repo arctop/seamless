@@ -60,6 +60,15 @@ with where it was set. `check: false` promises no update traffic at all, so it
 is never one click from untrue, and with checks off nothing installs by itself
 either. See [the update block](#the-update-check).
 
+The `gardener:` block's two switches, `gardener.agents_may_apply` and
+`gardener.auto_apply`, are stored by Settings →
+[Knowledge engine](/reference/console/#knowledge-engine) (its Gardener group)
+and simply win over the file until reset, with one exception: an explicit
+`agents_may_apply: false` in the file (or
+`SEAMLESS_GARDENER_AGENTS_MAY_APPLY=false`) is final, and the console shows that
+switch locked. Both take effect at once: every check reads them when it
+decides. See [The gardener](/concepts/gardener/).
+
 It exists so you can change what agents get injected - and what they can reach -
 while they are running, and it is the one place where the config file is not the
 last word: check the console before concluding a `briefing:`, `features:`,

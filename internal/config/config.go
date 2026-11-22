@@ -555,7 +555,8 @@ type PlanCapture struct {
 	InjectRelated bool `yaml:"inject_related"`
 }
 
-// Gardener configures the propose-only maintenance passes and their ticker.
+// Gardener configures the maintenance passes, their ticker, and who may apply
+// what they propose (AgentsMayApply, AutoApply; gardener.go).
 type Gardener struct {
 	Enabled bool `yaml:"enabled"`
 	// IntervalMinutes is the ticker period between full gardener passes.
@@ -591,6 +592,17 @@ type Gardener struct {
 	// key is absent, so zero is an explicit invalid value rather than a second,
 	// silent spelling of the default.
 	SessionIdleMinutes int `yaml:"session_idle_minutes"`
+	// AgentsMayApply lets agents resolve proposals: gardener_apply's apply,
+	// dismiss and hide, and the console's Gardener writes from an agent's
+	// process. nil (the key unset) means on, the behavior before the switch
+	// existed. false is final: the console cannot turn it back on
+	// (gardener.Effective, gardener.go).
+	AgentsMayApply *bool `yaml:"agents_may_apply"`
+	// AutoApply names the proposal kinds a pass applies by itself the moment
+	// it raises one (automatic apply), in the name "auto". Empty, the default,
+	// applies nothing by itself. Only GardenerAutoApplyKinds may be named:
+	// Validate refuses any other kind.
+	AutoApply []string `yaml:"auto_apply"`
 }
 
 // Defaults returns the built-in configuration. File and env values are layered
@@ -915,6 +927,9 @@ func (c Config) Validate() error {
 	if c.Gardener.SessionIdleMinutes <= 0 || int64(c.Gardener.SessionIdleMinutes) > maxDurationMinutes {
 		return fmt.Errorf("config: gardener.session_idle_minutes must be in [1, %d]", maxDurationMinutes)
 	}
+	if err := ValidateGardenerAutoApply("gardener.auto_apply", c.Gardener.AutoApply); err != nil {
+		return err
+	}
 	for _, dims := range []struct {
 		name string
 		v    int
@@ -1120,6 +1135,10 @@ func (c *Config) applyEnv() error {
 	if err := envFloat("SEAMLESS_GARDENER_DEDUP_THRESHOLD", &c.Gardener.DedupThreshold); err != nil {
 		return err
 	}
+	if err := envBoolPtr("SEAMLESS_GARDENER_AGENTS_MAY_APPLY", &c.Gardener.AgentsMayApply); err != nil {
+		return err
+	}
+	envStrSlice("SEAMLESS_GARDENER_AUTO_APPLY", &c.Gardener.AutoApply)
 	if err := envIntSlice("SEAMLESS_CAPTURE_ALLOWED_PORTS", &c.Capture.AllowedPorts); err != nil {
 		return err
 	}

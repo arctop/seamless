@@ -40,7 +40,15 @@ func (s *Server) handleGardenerProposals(ctx context.Context, req mcp.CallToolRe
 	if err != nil {
 		return errResult("gardener_proposals", err)
 	}
-	return jsonResult(map[string]any{"proposals": visible, "count": len(visible)})
+	out := map[string]any{"proposals": visible, "count": len(visible)}
+	// With the owner's switch off, the listing says so, so an agent reviews
+	// and reports rather than offering to apply what gardener_apply refuses.
+	// On (the default) the answer is exactly what it was before the switch.
+	if barred, _ := s.gardenerAgentsBarred(ctx); barred {
+		out["agentsMayApply"] = false
+		out["note"] = gardenerProposalsBarredNote
+	}
+	return jsonResult(out)
 }
 
 func gardenerRequestTool() mcp.Tool {
@@ -159,7 +167,7 @@ func (s *Server) handleGardenerSplit(ctx context.Context, req mcp.CallToolReques
 
 func gardenerApplyTool() mcp.Tool {
 	return mcp.NewTool("gardener_apply", hintOverwrite(),
-		mcp.WithDescription("Resolve a gardener proposal. action=apply carries out the effect (archive -> retire the memory; merge -> supersede the older by the newer; consolidate -> write a unified memory superseding its sources; digest -> save the summary as a note; reproject -> move the memory to another project; rekind -> reclassify the memory's kind in place; split -> create the child/shared projects, link the family, parent the children, retire the source; memory_wanted -> open a task to write the missing memory; tool_error -> open a task to fix the recurring error; merge_plans -> retag a stranded captured plan's notes onto the plan that holds the steps and settle the capture as merged). A proposal whose memory has gone inactive since it was raised is settled as dismissed instead, with the reason under settled. Rejecting has two strengths: action=dismiss discards this proposal and the evidence behind it, so a pattern that keeps recurring is raised again later; action=hide blocks the pattern permanently, so no recurrence re-raises it. Prefer dismiss unless the suggestion is wrong in principle rather than wrong for now. Both are reversible by the owner from the console."),
+		mcp.WithDescription("Resolve a gardener proposal. action=apply carries out the effect (archive -> retire the memory; merge -> supersede the older by the newer; consolidate -> write a unified memory superseding its sources; digest -> save the summary as a note; reproject -> move the memory to another project; rekind -> reclassify the memory's kind in place; split -> create the child/shared projects, link the family, parent the children, retire the source; memory_wanted -> open a task to write the missing memory; tool_error -> open a task to fix the recurring error; merge_plans -> retag a stranded captured plan's notes onto the plan that holds the steps and settle the capture as merged). A proposal whose memory has gone inactive since it was raised is settled as dismissed instead, with the reason under settled. Rejecting has two strengths: action=dismiss discards this proposal and the evidence behind it, so a pattern that keeps recurring is raised again later; action=hide blocks the pattern permanently, so no recurrence re-raises it. Prefer dismiss unless the suggestion is wrong in principle rather than wrong for now. Both are reversible by the owner from the console. The owner can switch agents' applying off (gardener.agents_may_apply): gardener_proposals then says so, and this tool refuses apply, dismiss and hide alike, leaving every decision to the owner on the console."),
 		mcp.WithString("id", mcp.Required(), mcp.Description("proposal id (ULID)")),
 		mcp.WithString("action", enumOf(gardener.Decisions), mcp.Description("apply (default), dismiss (until it recurs), or hide (forever)")),
 	)
@@ -174,6 +182,12 @@ func (s *Server) handleGardenerApply(ctx context.Context, req mcp.CallToolReques
 	if account := access.AccountOf(ctx); account != "" {
 		return errResult("gardener_apply", ownerCurationRefusal(account,
 			"resolving a gardener proposal (apply, dismiss or hide) is the owner's curation", gardenerCurationRemedy))
+	}
+	// The owner's switch, read now, so a change on Settings applies without a
+	// restart. Refused before the proposal is loaded, like the account rule,
+	// so the answer says nothing about the id it named.
+	if barred, why := s.gardenerAgentsBarred(ctx); barred {
+		return errResult("gardener_apply", errors.New(why))
 	}
 	id := argString(req, "id")
 	if id == "" {
@@ -249,6 +263,39 @@ func (s *Server) handleGardenerApply(ctx context.Context, req mcp.CallToolReques
 		return errResult("gardener_apply", fmt.Errorf("invalid action %q: valid values are %s",
 			action, strings.Join(gardener.Decisions, ", ")))
 	}
+}
+
+// gardenerAgentsBarred reports whether the owner's switch keeps agents from
+// resolving proposals now (gardener.agents_may_apply, effective), and why, in
+// the owner-curation words a restricted account is refused in. Switches that
+// cannot be read bar them: deciding nothing is the safe answer. Without a
+// gardener there is nothing to resolve, and nothing to bar.
+func (s *Server) gardenerAgentsBarred(ctx context.Context) (bool, string) {
+	if s.cfg.Gardener == nil {
+		return false, ""
+	}
+	sw, err := s.cfg.Gardener.Switches(ctx)
+	if err != nil {
+		s.logger.Warn("mcp: the gardener switches could not be read; refusing agents' decisions", "error", err)
+		return true, gardenerAgentsRefusal("whether agents may resolve gardener proposals could not be read, so none is resolved here")
+	}
+	if sw.AgentsMayApply {
+		return false, ""
+	}
+	return true, gardenerAgentsRefusal("the owner has switched agents' applying off (gardener.agents_may_apply), " +
+		"so resolving a gardener proposal (apply, dismiss or hide) is the owner's curation")
+}
+
+// gardenerProposalsBarredNote is what gardener_proposals adds while agents
+// may not resolve proposals.
+const gardenerProposalsBarredNote = "The owner has switched agents' applying off (gardener.agents_may_apply): " +
+	"gardener_apply refuses apply, dismiss and hide. Review these and tell the owner what you would decide; " +
+	"the owner resolves them on the console's Gardener screen."
+
+// gardenerAgentsRefusal is the switch's refusal, in ownerCurationRefusal's
+// shape: who it is not open to, the rule, and what is left.
+func gardenerAgentsRefusal(rule string) string {
+	return "not open to agents: " + rule + " -- " + gardenerCurationRemedy
 }
 
 // gardenerActor names this call's session as the one deciding

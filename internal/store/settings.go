@@ -760,3 +760,66 @@ func SetBackupOverride(ctx context.Context, db *sql.DB, o config.BackupOverride)
 func ClearBackupOverride(ctx context.Context, db *sql.DB) error {
 	return DeleteSetting(ctx, db, SettingBackupConfig)
 }
+
+// SettingGardenerConfig is the settings key holding the console's gardener
+// switches override: a JSON-encoded config.GardenerOverride. A field it sets
+// wins over the file/env value until the owner resets it, except that
+// agents_may_apply: false in the file or environment is final; the merge
+// lives in gardener.Effective. This package only stores the row and hands it
+// back.
+const SettingGardenerConfig = "gardener_config"
+
+// ErrGardenerOverrideInvalid is a stored gardener override that does not
+// decode, or names a kind config.GardenerOverride.Validate refuses (a hand
+// edit, or a newer release's wider list). Readers log it and follow the
+// file/env values; the next console save replaces the row.
+var ErrGardenerOverrideInvalid = errors.New("store: the stored gardener override is unreadable")
+
+// GardenerOverride returns the stored console gardener override and whether a
+// row exists. A missing or blank row is (zero, false, nil). It decodes over
+// nothing: a field the row does not carry stays nil, "no override for that
+// switch".
+//
+// A row that does not decode or does not validate is an error wrapping
+// ErrGardenerOverrideInvalid; any other error is a failed read. Callers tell
+// the two apart: an unreadable row is no choice at all, so the file/env
+// values decide, while a failed read decides nothing (an agent's apply is
+// refused, and nothing is applied automatically).
+func GardenerOverride(ctx context.Context, db *sql.DB) (config.GardenerOverride, bool, error) {
+	raw, found, err := GetSetting(ctx, db, SettingGardenerConfig)
+	if err != nil {
+		return config.GardenerOverride{}, false, err
+	}
+	if !found || strings.TrimSpace(raw) == "" {
+		return config.GardenerOverride{}, false, nil
+	}
+	var o config.GardenerOverride
+	if err := json.Unmarshal([]byte(raw), &o); err != nil {
+		return config.GardenerOverride{}, false, fmt.Errorf("store.GardenerOverride: decode: %w: %w", ErrGardenerOverrideInvalid, err)
+	}
+	if err := o.Validate(); err != nil {
+		return config.GardenerOverride{}, false, fmt.Errorf("store.GardenerOverride: %w: %w", ErrGardenerOverrideInvalid, err)
+	}
+	return o, true, nil
+}
+
+// SetGardenerOverride persists o as the console gardener override, refusing
+// one config.GardenerOverride.Validate refuses, so the row GardenerOverride
+// reads back is always usable. A nil field is left out of the row and
+// overrides nothing.
+func SetGardenerOverride(ctx context.Context, db *sql.DB, o config.GardenerOverride) error {
+	if err := o.Validate(); err != nil {
+		return fmt.Errorf("store.SetGardenerOverride: %w", err)
+	}
+	raw, err := json.Marshal(o)
+	if err != nil {
+		return fmt.Errorf("store.SetGardenerOverride: %w", err)
+	}
+	return SetSetting(ctx, db, SettingGardenerConfig, string(raw))
+}
+
+// ClearGardenerOverride removes the console gardener override, handing both
+// switches back to the file/env values. Clearing twice is a no-op.
+func ClearGardenerOverride(ctx context.Context, db *sql.DB) error {
+	return DeleteSetting(ctx, db, SettingGardenerConfig)
+}

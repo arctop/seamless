@@ -31,7 +31,7 @@ nothing, and their rows say so.
 | Star / unstar an entity | `POST /console/favorites/{kind}/{id}` | Toggles the same starred flag the `favorite_set` MCP tool sets: a starred memory pins into briefings and gets a post-fusion recall boost. For memories and notes the star lives in frontmatter; it never bumps `updated`. |
 | Ask the gardener for proposals | `POST /console/gardener/request` | Interprets a natural-language maintenance request into **pending proposals**. It never mutates a memory. |
 | Plan a project split | `POST /console/gardener/split` | Interprets a split request into a plan batch of **pending proposals** (one split setup plus one reproject per memory). Also never mutates a memory. |
-| Apply one proposal | `POST /console/gardener/{id}/apply` | Carries out that proposal's effect. |
+| Apply one proposal | `POST /console/gardener/{id}/apply` | Carries out that proposal's effect. While agents may not apply proposals (Settings, Knowledge engine, Gardener), this and every other Gardener decision - dismiss, hide, unhide, retarget, undo, dismissing a group, applying a plan - refuse (403) a request from an agent's process on the peer_auth socket and one from a paired device; your browser, your own terminal and the bearer key keep working. |
 | Dismiss a proposal | `POST /console/gardener/{id}/dismiss` | Drops it without acting. The pattern is raised again if new evidence for it arrives after the decision. |
 | Hide a proposal forever | `POST /console/gardener/{id}/hide` | Drops it without acting and blocks the pattern permanently - no recurrence re-raises it. Listed under **Hidden forever**. |
 | Unhide a pattern | `POST /console/gardener/{id}/unhide` | Lifts a forever block. The proposal stays resolved; the gardener may propose the pattern again the next time it recurs. |
@@ -89,6 +89,8 @@ nothing, and their rows say so.
 | Turn automatic updates on or off | `POST /console/settings/updates/auto` | Stores the console's `update.auto` override (`auto=on` or `off`), keeping its `update.check`. It cannot turn automatic updates on while the config file or environment says `update.auto: false`, or locks `update.check: false` (nothing installs without checks). With checks merely off, the choice is kept and applies once they are back on. Off is your decision alone, refused as turning checks off is; on is open to any caller. Only an install that updates itself acts on it: the installer's, or a [peer_auth system daemon](/guides/peer-auth/#updates)'s. |
 | Update now | `POST /console/settings/updates/apply` | Installs the newest release at once, after a confirm: it skips the soak, the wait for idle agents, skipped releases and the backoff, and lifts a hold, whether automatic updates are on, off or paused. Refused while checks are off, on an install that does not update itself, while an update is under way, within a minute of a failed release check, when nothing newer is known, or when the release carries no signed checksums bundle. The daemon restarts to finish. |
 | Resume automatic updates | `POST /console/settings/updates/resume` | Lifts the pause automatic updates put on themselves after rollbacks, and the hold a deliberate downgrade set. Changes no setting; skipped releases stay skipped, and a running backoff runs out. |
+| Save the gardener's switches | `POST /console/settings/gardener` | Stores the console's choice for **Agents may apply proposals** (`agents=on` or `off`, over `gardener.agents_may_apply`) or for **Apply automatically** (`auto_set=1` and one `auto=<kind>` per kind checked, over `gardener.auto_apply`); each control's form carries only its own fields. It cannot turn agents' applying on while the config file or environment says `gardener.agents_may_apply: false` - that is final - and it refuses any kind but `memory_wanted`, `tool_error`, `abandon_plan` and `ship_plan`. Your decision alone in every direction: refused (403) from an agent's process on the peer_auth socket and from a paired device. Applies at once, with no restart; a proposal already waiting is not applied by it. |
+| Reset the gardener's switches | `POST /console/settings/gardener/reset` | Clears that override - both switches - handing them back to the config file. Refused from an agent's process and from a paired device, as saving is. |
 | Save the backup schedule and folder | `POST /console/settings/backups` | Stores the console's `backup:` override: only the values that differ from the settings in force. A new folder is created and tested with a write first. Applies from the next backup. |
 | Reset the backup settings | `POST /console/settings/backups/reset` | Clears that override, handing the schedule and the folder back to the config file (or, without one, the build's default). |
 | Back up now | `POST /console/settings/backups/now` | Writes a backup at once, marked **Made by you**: never skipped, never deleted automatically. With `run=retry` (the failing card's **Try again**) it runs the schedule's backup instead, which is skipped when nothing changed and prunes after itself. Refused while a backup runs or a restore is being prepared. |
@@ -1508,6 +1510,24 @@ split is planned as a split directly - the plan batch appears below like any
 other. When the split's source project cannot be matched, an inline follow-up
 asks you to pick the project and plans the split from there; nothing is retyped.
 
+**Who may decide.** Two switches on Settings (Knowledge engine, **Gardener**)
+govern this queue. **Agents may apply proposals** is on by default
+(`gardener.agents_may_apply`). Turned off, `gardener_apply` refuses an agent's
+apply, dismiss and hide, `gardener_proposals` says the switch is off, and the
+decisions on this screen refuse an agent's process on the peer_auth socket and a
+paired device; your browser, your own terminal and the bearer key keep working.
+It stops an agent's ordinary calls and is not a wall: whoever holds the bearer
+key passes. **Apply automatically** is off by default (`gardener.auto_apply`).
+It names the kinds - from `memory_wanted`, `tool_error`, `abandon_plan` and
+`ship_plan`, each reversible and only opening a task or retagging a plan note -
+that a pass applies by itself the moment it raises one. Such a decision is
+recorded as automatic apply, listed in the decision history with Undo, and
+counted on the Overview (**N proposals applied automatically**, since your last
+decision here). It waits for you instead while write screening's lockdown is
+on, when screening would hold the task text it lands, and for a proposal about a
+locked or fenced project. Only a pass's new proposals are applied by
+themselves: one already waiting, or one you undid, stays for you.
+
 See [The gardener](/concepts/gardener/) for what each proposal type means.
 
 ## Held {#held}
@@ -2144,7 +2164,7 @@ on, and repo paths that resolve to no project are listed as unbound.
 
 `/console/settings?s=engine`
 
-The machinery, in three groups.
+The machinery, in four groups.
 
 **Recall** - the embedder card shows the active provider and model, and when
 embeddings are off, the exact cause, with distinct copy for the owner off switch,
@@ -2168,6 +2188,17 @@ returns.
 database (path, size on disk including the WAL, schema version), and the
 gardener's cadence and policy. Change these through the config file or
 environment, then restart.
+
+**Gardener** (`#settings-gardener`) - editable, and applied at once without a
+restart: **Agents may apply proposals**, on or off, and **Apply
+automatically**, one checkbox per kind it may take with a sentence on what
+applying it does and how Undo takes it back. Each control says where its value
+comes from - this console, the config file or environment, or the default - and
+**Reset to the config file** clears this console's choice for both. A choice
+made here wins over the file until then, except that
+`gardener.agents_may_apply: false` in the file or environment is final: the
+switch shows locked, and saving it on is refused. **Your setup** states both
+switches in one line, with a link here.
 
 See [Configuration](/reference/configuration/) for what each knob does, and
 [Sessions & briefings](/concepts/sessions/) for what they tune.

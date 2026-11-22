@@ -37,6 +37,9 @@ var RestoreKeptSettings = []string{
 	SettingEmbedderMode,
 	SettingUpdateConfig,
 	SettingBackupConfig,
+	// The gardener's switches are the owner's choice of who may decide and
+	// what applies by itself (settings_gardener.go in the console).
+	SettingGardenerConfig,
 	SettingUtilityActivation,
 	SettingLockdown,
 	// The repo map's JSON mirror follows the repo_map table, which a restore

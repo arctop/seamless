@@ -236,7 +236,7 @@ func (s *Service) runPass(ctx context.Context, trigger, by string, fresh bool) {
 		// The owner asked for this pass: its answer is an event, which is also
 		// what refreshes the console page that asked. It carries no counts:
 		// they span every project, locked ones included.
-		payload := map[string]any{"action": "run_now"}
+		payload := map[string]any{"action": ActionRunNow}
 		if len(res.Failed) > 0 {
 			payload["failed"] = res.Failed
 		}

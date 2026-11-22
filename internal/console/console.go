@@ -371,16 +371,22 @@ func (s *Service) Register(mux *http.ServeMux) {
 	handle("GET /console/gardener", s.auth(s.gardenerPage))
 	handle("GET /console/gardener/{id}", s.auth(s.gardenerDetail))
 	handle("GET /console/gardener/decisions", s.auth(s.gardenerDecisions))
+	// The Gardener's decisions are the owner's own while the owner keeps
+	// agents from applying (gardener.agents_may_apply off, effective per
+	// request; settings_gardener.go): an agent's process on the socket and a
+	// paired device are then refused (ownerHandsIf), and the owner's browser,
+	// terminal and bearer key are not. Asking, planning a split and running a
+	// pass only ever propose, so they stay open.
 	post("POST /console/gardener/request", formBodyStandard, s.gardenerRequest)
 	post("POST /console/gardener/split", formBodyStandard, s.gardenerSplit)
-	post("POST /console/gardener/group/dismiss", formBodySmall, s.gardenerGroupDismiss)
-	post("POST /console/gardener/plan/{slug}/apply", formBodySmall, s.gardenerApplyPlan)
-	post("POST /console/gardener/{id}/apply", formBodySmall, s.gardenerApply)
-	post("POST /console/gardener/{id}/dismiss", formBodySmall, s.gardenerDismiss)
-	post("POST /console/gardener/{id}/hide", formBodySmall, s.gardenerHide)
-	post("POST /console/gardener/{id}/unhide", formBodySmall, s.gardenerUnhide)
-	post("POST /console/gardener/{id}/retarget", formBodySmall, s.gardenerRetarget)
-	post("POST /console/gardener/{id}/undo", formBodySmall, s.gardenerUndo)
+	post("POST /console/gardener/group/dismiss", formBodySmall, ownerHandsIf(s.gardenerAgentsBarred, s.gardenerGroupDismiss))
+	post("POST /console/gardener/plan/{slug}/apply", formBodySmall, ownerHandsIf(s.gardenerAgentsBarred, s.gardenerApplyPlan))
+	post("POST /console/gardener/{id}/apply", formBodySmall, ownerHandsIf(s.gardenerAgentsBarred, s.gardenerApply))
+	post("POST /console/gardener/{id}/dismiss", formBodySmall, ownerHandsIf(s.gardenerAgentsBarred, s.gardenerDismiss))
+	post("POST /console/gardener/{id}/hide", formBodySmall, ownerHandsIf(s.gardenerAgentsBarred, s.gardenerHide))
+	post("POST /console/gardener/{id}/unhide", formBodySmall, ownerHandsIf(s.gardenerAgentsBarred, s.gardenerUnhide))
+	post("POST /console/gardener/{id}/retarget", formBodySmall, ownerHandsIf(s.gardenerAgentsBarred, s.gardenerRetarget))
+	post("POST /console/gardener/{id}/undo", formBodySmall, ownerHandsIf(s.gardenerAgentsBarred, s.gardenerUndo))
 	post("POST /console/gardener/run", formBodySmall, s.gardenerRun)
 	handle("GET /console/access", s.auth(s.accessList))
 	handle("GET /console/access/{id}", s.auth(s.accessOne))
@@ -460,6 +466,11 @@ func (s *Service) Register(mux *http.ServeMux) {
 	post("POST /console/settings/updates/auto", formBodySmall, ownerHandsIf(switchedOff("auto"), s.settingsUpdatesAuto))
 	post("POST /console/settings/updates/apply", formBodySmall, s.settingsUpdatesApply)
 	post("POST /console/settings/updates/resume", formBodySmall, s.settingsUpdatesResume)
+	// Settings > Knowledge engine > Gardener: both switches change what may
+	// alter agents' knowledge without the owner's review, so every direction
+	// is the owner's own decision (settings_gardener.go).
+	post("POST /console/settings/gardener", formBodySmall, ownerHands(s.settingsGardenerSave))
+	post("POST /console/settings/gardener/reset", formBodySmall, ownerHands(s.settingsGardenerReset))
 	// Settings > Backups: every route is the owner's own decision, the folder
 	// field's live check included. Under peer_auth with a project locked, a
 	// restore needs a passkey ceremony (/restore/begin, a browser's only).
@@ -1305,6 +1316,7 @@ func (s *Service) attentionCards(ctx context.Context, d overviewData) []attnCard
 			Href:  "/console/retrieval",
 		})
 	}
+	out = append(out, s.autoAppliedCards(ctx)...)
 	// Momentum's finish-line cards close the strip: the only positive entry, so
 	// the problems keep the lead. Gated in the handler rather than the template
 	// because a disabled install must not even run the query; the briefing's
