@@ -33,6 +33,11 @@ var searchJS []byte
 //go:embed static/library.js
 var libraryJS []byte
 
+// scopeJS is the project switcher's script (templates/scope_shared.html).
+//
+//go:embed static/scope.js
+var scopeJS []byte
+
 //go:embed static/charts.js
 var chartsJS []byte
 
@@ -579,6 +584,14 @@ func parseTemplates() (pages, fragments map[string]*template.Template, err error
 		}
 		if name == "tasks" {
 			files = append(files, "templates/task_shared.html")
+		}
+		// An item's own page (item_shared.html) and the project switcher
+		// (scope_shared.html), beside the screens that draw them.
+		if name == "memories" || name == "notes" || name == "tasks" {
+			files = append(files, "templates/item_shared.html")
+		}
+		if name == "memories" || name == "notes" || name == "tasks" || name == "plans" {
+			files = append(files, "templates/scope_shared.html")
 		}
 		if entityPeekPages[name] {
 			files = append(files, "templates/peek_"+name+".html")

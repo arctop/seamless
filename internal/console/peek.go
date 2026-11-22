@@ -303,7 +303,7 @@ func (s *Service) noteDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// The reader fragment (?reader=1) and the Notes screen read the
-	// library's state from the URL (notes.go).
+	// library's state from the URL (library.go).
 	s.noteLibraryPage(w, r, d)
 }
 

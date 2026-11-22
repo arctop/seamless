@@ -82,12 +82,14 @@ var staticFiles = staticSet{
 	"favicon.svg": newStaticFile(svgType, faviconSVG),
 	// The scripts every page loads: the Interactions client (value rendering
 	// and the volume histogram), the command palette, the library screens'
-	// rail and in-place reader, the chart hover readout, the in-place data
-	// navigation (navigation.js, which the live refresh shares) and the
-	// console chrome (sidebar, drawer, shortcuts, toasts).
+	// rail and in-place reader, the project switcher, the chart hover
+	// readout, the in-place data navigation (navigation.js, which the live
+	// refresh shares) and the console chrome (sidebar, drawer, shortcuts,
+	// toasts).
 	"interactions.js": newStaticFile(jsType, interactionsJS),
 	"search.js":       newStaticFile(jsType, searchJS),
 	"library.js":      newStaticFile(jsType, libraryJS),
+	"scope.js":        newStaticFile(jsType, scopeJS),
 	"charts.js":       newStaticFile(jsType, chartsJS),
 	"navigation.js":   newStaticFile(jsType, navigationJS),
 	"shell.js":        newStaticFile(jsType, shellJS),

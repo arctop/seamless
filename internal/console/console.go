@@ -294,6 +294,7 @@ func (s *Service) Register(mux *http.ServeMux) {
 	handle("GET /console/static/interactions.js", staticFiles.serve)
 	handle("GET /console/static/search.js", staticFiles.serve)
 	handle("GET /console/static/library.js", staticFiles.serve)
+	handle("GET /console/static/scope.js", staticFiles.serve)
 	handle("GET /console/static/charts.js", staticFiles.serve)
 	handle("GET /console/static/navigation.js", staticFiles.serve)
 	handle("GET /console/static/shell.js", staticFiles.serve)
