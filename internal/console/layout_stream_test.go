@@ -10,8 +10,10 @@ import (
 // A page in the browser's back/forward cache lets its event stream go: six
 // held streams fill the browser's connections to the console and the next
 // page load waits forever (measured in Chrome over CDP: a tab stalled on its
-// seventh console page). The stream closes on pagehide and opens again on a
-// pageshow from the cache, in the layout and in the Interactions feed.
+// seventh console page). The stream closes on pagehide (letGo) and opens
+// again on a pageshow from the cache (wake, through connect's one-stream
+// guard), in the layout and in the Interactions feed. A hidden page lets it
+// go the same way after a grace (layout_live_test.go).
 func TestLayout_TheEventStreamLetsTheBackForwardCacheGo(t *testing.T) {
 	for name, open := range map[string]string{
 		"templates/layout.html":       "new EventSource('/console/events')",
@@ -21,9 +23,10 @@ func TestLayout_TheEventStreamLetsTheBackForwardCacheGo(t *testing.T) {
 		require.NoError(t, err)
 		s := string(src)
 		require.Equal(t, 1, strings.Count(s, "new EventSource("), "%s: one stream", name)
-		require.Contains(t, s, "function connect() {\n    es = "+open, name)
-		require.Regexp(t, `window\.addEventListener\('pagehide', function \(\) \{ if \(es\) \{ es\.close\(\); es = null;`, s, name)
-		require.Contains(t, s, "window.addEventListener('pageshow', function (e) { if (e.persisted && !es) connect(); });", name)
+		require.Contains(t, s, "function connect() {\n    if (streaming()) return;\n    if (es) es.close();\n    es = "+open, name)
+		require.Contains(t, s, "  function letGo() {\n    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }\n    if (!es) return;\n    es.close(); es = null;", name)
+		require.Contains(t, s, "window.addEventListener('pagehide', letGo);", name)
+		require.Contains(t, s, "window.addEventListener('pageshow', function (e) { if (e.persisted) wake(); });", name)
 	}
 }
 

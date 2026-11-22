@@ -173,7 +173,9 @@
   
   function safe() { return !document.hidden && !fieldFocused() && !selecting() && !paneOpen() && !cmdkOpen(); }
 
-  function showPill() { if (!pill) return; pill.textContent = n + ' update' + (n > 1 ? 's' : '') + ' · tap to refresh'; pill.hidden = false; }
+  
+  
+  function showPill() { if (!pill) return; pill.textContent = (n ? n + ' update' + (n > 1 ? 's' : '') : 'may be out of date') + ' · tap to refresh'; pill.hidden = false; }
   function hidePill() { if (pill) pill.hidden = true; }
   function flashToast(msg) {
     if (!toast) return;
@@ -193,14 +195,25 @@
   
   function actionToastUp() { return !!(toast && !toast.hidden && toast.classList.contains('show') && toast.textContent !== 'Updated'); }
 
-  function apply() {
+  
+  
+  
+  
+  
+  
+  
+  var LIVE_TIMEOUT = 15000;
+  
+  function apply(quiet) {
     if (busy) { again = true; return; }
     busy = true;
     
     
     var headers = { 'X-Seam-Live': '1' };
     if (window.SeamConsole) window.SeamConsole.heldViews(headers);
-    fetch(location.href, { credentials: 'same-origin', headers: headers })
+    var stop = window.AbortController ? new AbortController() : null;
+    var limit = stop ? setTimeout(function () { stop.abort(); }, LIVE_TIMEOUT) : null;
+    fetch(location.href, { credentials: 'same-origin', headers: headers, signal: stop ? stop.signal : undefined })
       .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.text(); })
       .then(function (html) {
         var doc = new DOMParser().parseFromString(html, 'text/html');
@@ -212,7 +225,10 @@
         if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
         setLive(connected); 
         n = 0; pending = false; hidePill();
-        if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
+        
+        if (quiet !== true) {
+          if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
+        }
         
         
         setTimeout(function () {
@@ -225,9 +241,9 @@
         if (window.SeamConsole && window.SeamConsole.stale(error)) { again = true; return; }
         pending = true; showPill(); 
       })
-      .finally(function () { busy = false; if (again) { again = false; schedule(); } });
+      .finally(function () { if (limit) clearTimeout(limit); busy = false; if (again) { again = false; schedule(); } });
   }
-  function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
+  function trigger(quiet) { if (safe()) apply(quiet === true); else { pending = true; showPill(); } }
   function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } 
 
   
@@ -235,10 +251,28 @@
   
   
   
+  
+  
+  
+  
+  
+  
+  
+  
+  var STREAM_GRACE = 10000;
   var es = null;
+  var hideTimer = null;
+  var missed = false; 
+  
+  function streaming() { return !!es && es.readyState !== EventSource.CLOSED; }
   function connect() {
+    if (streaming()) return;
+    if (es) es.close();
     es = new EventSource('/console/events');
-    es.onopen = function () { connected = true; setOrb(true); setLive(true); };
+    es.onopen = function () {
+      connected = true; setOrb(true); setLive(true);
+      if (missed) { missed = false; catchUp(); }
+    };
     es.onmessage = function (ev) {
       
       
@@ -265,11 +299,38 @@
       if (window.SEAM_NO_LIVE_REFRESH) return;
       n++; schedule();
     };
-    es.onerror = function () { connected = false; setOrb(false); setLive(false); };
+    es.onerror = function () { connected = false; setOrb(false); setLive(false); missed = true; };
   }
-  connect();
-  window.addEventListener('pagehide', function () { if (es) { es.close(); es = null; connected = false; } });
-  window.addEventListener('pageshow', function (e) { if (e.persisted && !es) connect(); });
+  function letGo() {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (!es) return;
+    es.close(); es = null; missed = true;
+  }
+  
+  
+  function rest() {
+    if (hideTimer || !es) return;
+    hideTimer = setTimeout(function () { hideTimer = null; if (document.hidden) letGo(); }, STREAM_GRACE);
+  }
+  function wake() {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (!document.hidden) connect();
+  }
+  
+  
+  
+  
+  function catchUp() {
+    document.dispatchEvent(new CustomEvent('seam:stream-resumed'));
+    if (window.SEAM_NO_LIVE_REFRESH) return;
+    trigger(true);
+  }
+  
+  
+  if (document.hidden) missed = true; else connect();
+  document.addEventListener('visibilitychange', function () { if (document.hidden) rest(); else wake(); });
+  window.addEventListener('pagehide', letGo);
+  window.addEventListener('pageshow', function (e) { if (e.persisted) wake(); });
 
   
   
@@ -974,7 +1035,9 @@
   
   function safe() { return !document.hidden && !fieldFocused() && !selecting() && !paneOpen() && !cmdkOpen(); }
 
-  function showPill() { if (!pill) return; pill.textContent = n + ' update' + (n > 1 ? 's' : '') + ' · tap to refresh'; pill.hidden = false; }
+  
+  
+  function showPill() { if (!pill) return; pill.textContent = (n ? n + ' update' + (n > 1 ? 's' : '') : 'may be out of date') + ' · tap to refresh'; pill.hidden = false; }
   function hidePill() { if (pill) pill.hidden = true; }
   function flashToast(msg) {
     if (!toast) return;
@@ -994,14 +1057,25 @@
   
   function actionToastUp() { return !!(toast && !toast.hidden && toast.classList.contains('show') && toast.textContent !== 'Updated'); }
 
-  function apply() {
+  
+  
+  
+  
+  
+  
+  
+  var LIVE_TIMEOUT = 15000;
+  
+  function apply(quiet) {
     if (busy) { again = true; return; }
     busy = true;
     
     
     var headers = { 'X-Seam-Live': '1' };
     if (window.SeamConsole) window.SeamConsole.heldViews(headers);
-    fetch(location.href, { credentials: 'same-origin', headers: headers })
+    var stop = window.AbortController ? new AbortController() : null;
+    var limit = stop ? setTimeout(function () { stop.abort(); }, LIVE_TIMEOUT) : null;
+    fetch(location.href, { credentials: 'same-origin', headers: headers, signal: stop ? stop.signal : undefined })
       .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.text(); })
       .then(function (html) {
         var doc = new DOMParser().parseFromString(html, 'text/html');
@@ -1013,7 +1087,10 @@
         if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
         setLive(connected); 
         n = 0; pending = false; hidePill();
-        if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
+        
+        if (quiet !== true) {
+          if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
+        }
         
         
         setTimeout(function () {
@@ -1026,9 +1103,9 @@
         if (window.SeamConsole && window.SeamConsole.stale(error)) { again = true; return; }
         pending = true; showPill(); 
       })
-      .finally(function () { busy = false; if (again) { again = false; schedule(); } });
+      .finally(function () { if (limit) clearTimeout(limit); busy = false; if (again) { again = false; schedule(); } });
   }
-  function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
+  function trigger(quiet) { if (safe()) apply(quiet === true); else { pending = true; showPill(); } }
   function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } 
 
   
@@ -1036,10 +1113,28 @@
   
   
   
+  
+  
+  
+  
+  
+  
+  
+  
+  var STREAM_GRACE = 10000;
   var es = null;
+  var hideTimer = null;
+  var missed = false; 
+  
+  function streaming() { return !!es && es.readyState !== EventSource.CLOSED; }
   function connect() {
+    if (streaming()) return;
+    if (es) es.close();
     es = new EventSource('/console/events');
-    es.onopen = function () { connected = true; setOrb(true); setLive(true); };
+    es.onopen = function () {
+      connected = true; setOrb(true); setLive(true);
+      if (missed) { missed = false; catchUp(); }
+    };
     es.onmessage = function (ev) {
       
       
@@ -1066,11 +1161,38 @@
       if (window.SEAM_NO_LIVE_REFRESH) return;
       n++; schedule();
     };
-    es.onerror = function () { connected = false; setOrb(false); setLive(false); };
+    es.onerror = function () { connected = false; setOrb(false); setLive(false); missed = true; };
   }
-  connect();
-  window.addEventListener('pagehide', function () { if (es) { es.close(); es = null; connected = false; } });
-  window.addEventListener('pageshow', function (e) { if (e.persisted && !es) connect(); });
+  function letGo() {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (!es) return;
+    es.close(); es = null; missed = true;
+  }
+  
+  
+  function rest() {
+    if (hideTimer || !es) return;
+    hideTimer = setTimeout(function () { hideTimer = null; if (document.hidden) letGo(); }, STREAM_GRACE);
+  }
+  function wake() {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (!document.hidden) connect();
+  }
+  
+  
+  
+  
+  function catchUp() {
+    document.dispatchEvent(new CustomEvent('seam:stream-resumed'));
+    if (window.SEAM_NO_LIVE_REFRESH) return;
+    trigger(true);
+  }
+  
+  
+  if (document.hidden) missed = true; else connect();
+  document.addEventListener('visibilitychange', function () { if (document.hidden) rest(); else wake(); });
+  window.addEventListener('pagehide', letGo);
+  window.addEventListener('pageshow', function (e) { if (e.persisted) wake(); });
 
   
   
@@ -1763,7 +1885,9 @@
   
   function safe() { return !document.hidden && !fieldFocused() && !selecting() && !paneOpen() && !cmdkOpen(); }
 
-  function showPill() { if (!pill) return; pill.textContent = n + ' update' + (n > 1 ? 's' : '') + ' · tap to refresh'; pill.hidden = false; }
+  
+  
+  function showPill() { if (!pill) return; pill.textContent = (n ? n + ' update' + (n > 1 ? 's' : '') : 'may be out of date') + ' · tap to refresh'; pill.hidden = false; }
   function hidePill() { if (pill) pill.hidden = true; }
   function flashToast(msg) {
     if (!toast) return;
@@ -1783,14 +1907,25 @@
   
   function actionToastUp() { return !!(toast && !toast.hidden && toast.classList.contains('show') && toast.textContent !== 'Updated'); }
 
-  function apply() {
+  
+  
+  
+  
+  
+  
+  
+  var LIVE_TIMEOUT = 15000;
+  
+  function apply(quiet) {
     if (busy) { again = true; return; }
     busy = true;
     
     
     var headers = { 'X-Seam-Live': '1' };
     if (window.SeamConsole) window.SeamConsole.heldViews(headers);
-    fetch(location.href, { credentials: 'same-origin', headers: headers })
+    var stop = window.AbortController ? new AbortController() : null;
+    var limit = stop ? setTimeout(function () { stop.abort(); }, LIVE_TIMEOUT) : null;
+    fetch(location.href, { credentials: 'same-origin', headers: headers, signal: stop ? stop.signal : undefined })
       .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.text(); })
       .then(function (html) {
         var doc = new DOMParser().parseFromString(html, 'text/html');
@@ -1802,7 +1937,10 @@
         if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
         setLive(connected); 
         n = 0; pending = false; hidePill();
-        if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
+        
+        if (quiet !== true) {
+          if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
+        }
         
         
         setTimeout(function () {
@@ -1815,9 +1953,9 @@
         if (window.SeamConsole && window.SeamConsole.stale(error)) { again = true; return; }
         pending = true; showPill(); 
       })
-      .finally(function () { busy = false; if (again) { again = false; schedule(); } });
+      .finally(function () { if (limit) clearTimeout(limit); busy = false; if (again) { again = false; schedule(); } });
   }
-  function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
+  function trigger(quiet) { if (safe()) apply(quiet === true); else { pending = true; showPill(); } }
   function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } 
 
   
@@ -1825,10 +1963,28 @@
   
   
   
+  
+  
+  
+  
+  
+  
+  
+  
+  var STREAM_GRACE = 10000;
   var es = null;
+  var hideTimer = null;
+  var missed = false; 
+  
+  function streaming() { return !!es && es.readyState !== EventSource.CLOSED; }
   function connect() {
+    if (streaming()) return;
+    if (es) es.close();
     es = new EventSource('/console/events');
-    es.onopen = function () { connected = true; setOrb(true); setLive(true); };
+    es.onopen = function () {
+      connected = true; setOrb(true); setLive(true);
+      if (missed) { missed = false; catchUp(); }
+    };
     es.onmessage = function (ev) {
       
       
@@ -1855,11 +2011,38 @@
       if (window.SEAM_NO_LIVE_REFRESH) return;
       n++; schedule();
     };
-    es.onerror = function () { connected = false; setOrb(false); setLive(false); };
+    es.onerror = function () { connected = false; setOrb(false); setLive(false); missed = true; };
   }
-  connect();
-  window.addEventListener('pagehide', function () { if (es) { es.close(); es = null; connected = false; } });
-  window.addEventListener('pageshow', function (e) { if (e.persisted && !es) connect(); });
+  function letGo() {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (!es) return;
+    es.close(); es = null; missed = true;
+  }
+  
+  
+  function rest() {
+    if (hideTimer || !es) return;
+    hideTimer = setTimeout(function () { hideTimer = null; if (document.hidden) letGo(); }, STREAM_GRACE);
+  }
+  function wake() {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (!document.hidden) connect();
+  }
+  
+  
+  
+  
+  function catchUp() {
+    document.dispatchEvent(new CustomEvent('seam:stream-resumed'));
+    if (window.SEAM_NO_LIVE_REFRESH) return;
+    trigger(true);
+  }
+  
+  
+  if (document.hidden) missed = true; else connect();
+  document.addEventListener('visibilitychange', function () { if (document.hidden) rest(); else wake(); });
+  window.addEventListener('pagehide', letGo);
+  window.addEventListener('pageshow', function (e) { if (e.persisted) wake(); });
 
   
   
@@ -2547,7 +2730,9 @@
   
   function safe() { return !document.hidden && !fieldFocused() && !selecting() && !paneOpen() && !cmdkOpen(); }
 
-  function showPill() { if (!pill) return; pill.textContent = n + ' update' + (n > 1 ? 's' : '') + ' · tap to refresh'; pill.hidden = false; }
+  
+  
+  function showPill() { if (!pill) return; pill.textContent = (n ? n + ' update' + (n > 1 ? 's' : '') : 'may be out of date') + ' · tap to refresh'; pill.hidden = false; }
   function hidePill() { if (pill) pill.hidden = true; }
   function flashToast(msg) {
     if (!toast) return;
@@ -2567,14 +2752,25 @@
   
   function actionToastUp() { return !!(toast && !toast.hidden && toast.classList.contains('show') && toast.textContent !== 'Updated'); }
 
-  function apply() {
+  
+  
+  
+  
+  
+  
+  
+  var LIVE_TIMEOUT = 15000;
+  
+  function apply(quiet) {
     if (busy) { again = true; return; }
     busy = true;
     
     
     var headers = { 'X-Seam-Live': '1' };
     if (window.SeamConsole) window.SeamConsole.heldViews(headers);
-    fetch(location.href, { credentials: 'same-origin', headers: headers })
+    var stop = window.AbortController ? new AbortController() : null;
+    var limit = stop ? setTimeout(function () { stop.abort(); }, LIVE_TIMEOUT) : null;
+    fetch(location.href, { credentials: 'same-origin', headers: headers, signal: stop ? stop.signal : undefined })
       .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.text(); })
       .then(function (html) {
         var doc = new DOMParser().parseFromString(html, 'text/html');
@@ -2586,7 +2782,10 @@
         if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
         setLive(connected); 
         n = 0; pending = false; hidePill();
-        if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
+        
+        if (quiet !== true) {
+          if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
+        }
         
         
         setTimeout(function () {
@@ -2599,9 +2798,9 @@
         if (window.SeamConsole && window.SeamConsole.stale(error)) { again = true; return; }
         pending = true; showPill(); 
       })
-      .finally(function () { busy = false; if (again) { again = false; schedule(); } });
+      .finally(function () { if (limit) clearTimeout(limit); busy = false; if (again) { again = false; schedule(); } });
   }
-  function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
+  function trigger(quiet) { if (safe()) apply(quiet === true); else { pending = true; showPill(); } }
   function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } 
 
   
@@ -2609,10 +2808,28 @@
   
   
   
+  
+  
+  
+  
+  
+  
+  
+  
+  var STREAM_GRACE = 10000;
   var es = null;
+  var hideTimer = null;
+  var missed = false; 
+  
+  function streaming() { return !!es && es.readyState !== EventSource.CLOSED; }
   function connect() {
+    if (streaming()) return;
+    if (es) es.close();
     es = new EventSource('/console/events');
-    es.onopen = function () { connected = true; setOrb(true); setLive(true); };
+    es.onopen = function () {
+      connected = true; setOrb(true); setLive(true);
+      if (missed) { missed = false; catchUp(); }
+    };
     es.onmessage = function (ev) {
       
       
@@ -2639,11 +2856,38 @@
       if (window.SEAM_NO_LIVE_REFRESH) return;
       n++; schedule();
     };
-    es.onerror = function () { connected = false; setOrb(false); setLive(false); };
+    es.onerror = function () { connected = false; setOrb(false); setLive(false); missed = true; };
   }
-  connect();
-  window.addEventListener('pagehide', function () { if (es) { es.close(); es = null; connected = false; } });
-  window.addEventListener('pageshow', function (e) { if (e.persisted && !es) connect(); });
+  function letGo() {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (!es) return;
+    es.close(); es = null; missed = true;
+  }
+  
+  
+  function rest() {
+    if (hideTimer || !es) return;
+    hideTimer = setTimeout(function () { hideTimer = null; if (document.hidden) letGo(); }, STREAM_GRACE);
+  }
+  function wake() {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (!document.hidden) connect();
+  }
+  
+  
+  
+  
+  function catchUp() {
+    document.dispatchEvent(new CustomEvent('seam:stream-resumed'));
+    if (window.SEAM_NO_LIVE_REFRESH) return;
+    trigger(true);
+  }
+  
+  
+  if (document.hidden) missed = true; else connect();
+  document.addEventListener('visibilitychange', function () { if (document.hidden) rest(); else wake(); });
+  window.addEventListener('pagehide', letGo);
+  window.addEventListener('pageshow', function (e) { if (e.persisted) wake(); });
 
   
   
@@ -4404,7 +4648,9 @@
   
   function safe() { return !document.hidden && !fieldFocused() && !selecting() && !paneOpen() && !cmdkOpen(); }
 
-  function showPill() { if (!pill) return; pill.textContent = n + ' update' + (n > 1 ? 's' : '') + ' · tap to refresh'; pill.hidden = false; }
+  
+  
+  function showPill() { if (!pill) return; pill.textContent = (n ? n + ' update' + (n > 1 ? 's' : '') : 'may be out of date') + ' · tap to refresh'; pill.hidden = false; }
   function hidePill() { if (pill) pill.hidden = true; }
   function flashToast(msg) {
     if (!toast) return;
@@ -4424,14 +4670,25 @@
   
   function actionToastUp() { return !!(toast && !toast.hidden && toast.classList.contains('show') && toast.textContent !== 'Updated'); }
 
-  function apply() {
+  
+  
+  
+  
+  
+  
+  
+  var LIVE_TIMEOUT = 15000;
+  
+  function apply(quiet) {
     if (busy) { again = true; return; }
     busy = true;
     
     
     var headers = { 'X-Seam-Live': '1' };
     if (window.SeamConsole) window.SeamConsole.heldViews(headers);
-    fetch(location.href, { credentials: 'same-origin', headers: headers })
+    var stop = window.AbortController ? new AbortController() : null;
+    var limit = stop ? setTimeout(function () { stop.abort(); }, LIVE_TIMEOUT) : null;
+    fetch(location.href, { credentials: 'same-origin', headers: headers, signal: stop ? stop.signal : undefined })
       .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.text(); })
       .then(function (html) {
         var doc = new DOMParser().parseFromString(html, 'text/html');
@@ -4443,7 +4700,10 @@
         if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
         setLive(connected); 
         n = 0; pending = false; hidePill();
-        if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
+        
+        if (quiet !== true) {
+          if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
+        }
         
         
         setTimeout(function () {
@@ -4456,9 +4716,9 @@
         if (window.SeamConsole && window.SeamConsole.stale(error)) { again = true; return; }
         pending = true; showPill(); 
       })
-      .finally(function () { busy = false; if (again) { again = false; schedule(); } });
+      .finally(function () { if (limit) clearTimeout(limit); busy = false; if (again) { again = false; schedule(); } });
   }
-  function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
+  function trigger(quiet) { if (safe()) apply(quiet === true); else { pending = true; showPill(); } }
   function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } 
 
   
@@ -4466,10 +4726,28 @@
   
   
   
+  
+  
+  
+  
+  
+  
+  
+  
+  var STREAM_GRACE = 10000;
   var es = null;
+  var hideTimer = null;
+  var missed = false; 
+  
+  function streaming() { return !!es && es.readyState !== EventSource.CLOSED; }
   function connect() {
+    if (streaming()) return;
+    if (es) es.close();
     es = new EventSource('/console/events');
-    es.onopen = function () { connected = true; setOrb(true); setLive(true); };
+    es.onopen = function () {
+      connected = true; setOrb(true); setLive(true);
+      if (missed) { missed = false; catchUp(); }
+    };
     es.onmessage = function (ev) {
       
       
@@ -4496,11 +4774,38 @@
       if (window.SEAM_NO_LIVE_REFRESH) return;
       n++; schedule();
     };
-    es.onerror = function () { connected = false; setOrb(false); setLive(false); };
+    es.onerror = function () { connected = false; setOrb(false); setLive(false); missed = true; };
   }
-  connect();
-  window.addEventListener('pagehide', function () { if (es) { es.close(); es = null; connected = false; } });
-  window.addEventListener('pageshow', function (e) { if (e.persisted && !es) connect(); });
+  function letGo() {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (!es) return;
+    es.close(); es = null; missed = true;
+  }
+  
+  
+  function rest() {
+    if (hideTimer || !es) return;
+    hideTimer = setTimeout(function () { hideTimer = null; if (document.hidden) letGo(); }, STREAM_GRACE);
+  }
+  function wake() {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (!document.hidden) connect();
+  }
+  
+  
+  
+  
+  function catchUp() {
+    document.dispatchEvent(new CustomEvent('seam:stream-resumed'));
+    if (window.SEAM_NO_LIVE_REFRESH) return;
+    trigger(true);
+  }
+  
+  
+  if (document.hidden) missed = true; else connect();
+  document.addEventListener('visibilitychange', function () { if (document.hidden) rest(); else wake(); });
+  window.addEventListener('pagehide', letGo);
+  window.addEventListener('pageshow', function (e) { if (e.persisted) wake(); });
 
   
   
@@ -5326,7 +5631,9 @@ window.SEAM_NO_LIVE_REFRESH = true;
   
   function safe() { return !document.hidden && !fieldFocused() && !selecting() && !paneOpen() && !cmdkOpen(); }
 
-  function showPill() { if (!pill) return; pill.textContent = n + ' update' + (n > 1 ? 's' : '') + ' · tap to refresh'; pill.hidden = false; }
+  
+  
+  function showPill() { if (!pill) return; pill.textContent = (n ? n + ' update' + (n > 1 ? 's' : '') : 'may be out of date') + ' · tap to refresh'; pill.hidden = false; }
   function hidePill() { if (pill) pill.hidden = true; }
   function flashToast(msg) {
     if (!toast) return;
@@ -5346,14 +5653,25 @@ window.SEAM_NO_LIVE_REFRESH = true;
   
   function actionToastUp() { return !!(toast && !toast.hidden && toast.classList.contains('show') && toast.textContent !== 'Updated'); }
 
-  function apply() {
+  
+  
+  
+  
+  
+  
+  
+  var LIVE_TIMEOUT = 15000;
+  
+  function apply(quiet) {
     if (busy) { again = true; return; }
     busy = true;
     
     
     var headers = { 'X-Seam-Live': '1' };
     if (window.SeamConsole) window.SeamConsole.heldViews(headers);
-    fetch(location.href, { credentials: 'same-origin', headers: headers })
+    var stop = window.AbortController ? new AbortController() : null;
+    var limit = stop ? setTimeout(function () { stop.abort(); }, LIVE_TIMEOUT) : null;
+    fetch(location.href, { credentials: 'same-origin', headers: headers, signal: stop ? stop.signal : undefined })
       .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.text(); })
       .then(function (html) {
         var doc = new DOMParser().parseFromString(html, 'text/html');
@@ -5365,7 +5683,10 @@ window.SEAM_NO_LIVE_REFRESH = true;
         if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
         setLive(connected); 
         n = 0; pending = false; hidePill();
-        if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
+        
+        if (quiet !== true) {
+          if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
+        }
         
         
         setTimeout(function () {
@@ -5378,9 +5699,9 @@ window.SEAM_NO_LIVE_REFRESH = true;
         if (window.SeamConsole && window.SeamConsole.stale(error)) { again = true; return; }
         pending = true; showPill(); 
       })
-      .finally(function () { busy = false; if (again) { again = false; schedule(); } });
+      .finally(function () { if (limit) clearTimeout(limit); busy = false; if (again) { again = false; schedule(); } });
   }
-  function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
+  function trigger(quiet) { if (safe()) apply(quiet === true); else { pending = true; showPill(); } }
   function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } 
 
   
@@ -5388,10 +5709,28 @@ window.SEAM_NO_LIVE_REFRESH = true;
   
   
   
+  
+  
+  
+  
+  
+  
+  
+  
+  var STREAM_GRACE = 10000;
   var es = null;
+  var hideTimer = null;
+  var missed = false; 
+  
+  function streaming() { return !!es && es.readyState !== EventSource.CLOSED; }
   function connect() {
+    if (streaming()) return;
+    if (es) es.close();
     es = new EventSource('/console/events');
-    es.onopen = function () { connected = true; setOrb(true); setLive(true); };
+    es.onopen = function () {
+      connected = true; setOrb(true); setLive(true);
+      if (missed) { missed = false; catchUp(); }
+    };
     es.onmessage = function (ev) {
       
       
@@ -5418,11 +5757,38 @@ window.SEAM_NO_LIVE_REFRESH = true;
       if (window.SEAM_NO_LIVE_REFRESH) return;
       n++; schedule();
     };
-    es.onerror = function () { connected = false; setOrb(false); setLive(false); };
+    es.onerror = function () { connected = false; setOrb(false); setLive(false); missed = true; };
   }
-  connect();
-  window.addEventListener('pagehide', function () { if (es) { es.close(); es = null; connected = false; } });
-  window.addEventListener('pageshow', function (e) { if (e.persisted && !es) connect(); });
+  function letGo() {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (!es) return;
+    es.close(); es = null; missed = true;
+  }
+  
+  
+  function rest() {
+    if (hideTimer || !es) return;
+    hideTimer = setTimeout(function () { hideTimer = null; if (document.hidden) letGo(); }, STREAM_GRACE);
+  }
+  function wake() {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (!document.hidden) connect();
+  }
+  
+  
+  
+  
+  function catchUp() {
+    document.dispatchEvent(new CustomEvent('seam:stream-resumed'));
+    if (window.SEAM_NO_LIVE_REFRESH) return;
+    trigger(true);
+  }
+  
+  
+  if (document.hidden) missed = true; else connect();
+  document.addEventListener('visibilitychange', function () { if (document.hidden) rest(); else wake(); });
+  window.addEventListener('pagehide', letGo);
+  window.addEventListener('pageshow', function (e) { if (e.persisted) wake(); });
 
   
   

@@ -113,6 +113,13 @@
     if (!live()) return;
     schedule(Math.max(2000, gap() - (Date.now() - last)));
   });
+  // The layout lets its stream go while the tab is out of sight and catches
+  // up once it is open again (seam:stream-resumed): events went by unseen,
+  // so today refreshes then too, by the same rule.
+  document.addEventListener('seam:stream-resumed', function () {
+    if (!live()) return;
+    schedule(Math.max(2000, gap() - (Date.now() - last)));
+  });
 
   // The morph syncs the split's classes to the server's, which never renders
   // a pane open: an open peek puts its own class back.

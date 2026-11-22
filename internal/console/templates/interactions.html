@@ -445,26 +445,52 @@ window.SEAM_NO_LIVE_REFRESH = true; // this screen is the live feed -- it owns i
       });
   }
 
-  // --- Gap-fill after an SSE reconnect (ascending, since/sinceTs) ---
+  // --- Gap-fill each time the stream opens: newest first, back to the last row seen ---
+  // The stream is let go while the page is out of sight (below), so a gap can
+  // be long: one ascending page from the last row seen would bring back the
+  // oldest rows missed and leave a hole before the newest. The feed keeps at
+  // most maxRows, so the gap-fill asks for the newest rows at or after the
+  // last one seen (afterTs bounds every page; a row already shown is skipped)
+  // and pages back toward it, until it gets there or has a feed's worth. A
+  // newer gap-fill ends an older one's paging.
+  var filling = 0;
   function gapFill() {
     if (!last) return;
-    fetch('/console/interactions?format=json&since=' + encodeURIComponent(last.id) +
-          '&sinceTs=' + encodeURIComponent(last.ts), { headers: { Accept: 'application/json' } })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        (data.rows || []).forEach(handleLive);
-        refreshTabs(); updateEmpty();
-      })
-      .catch(function () {});
+    var mine = ++filling, since = last.ts, got = 0;
+    function page(before) {
+      var url = '/console/interactions?format=json&afterTs=' + encodeURIComponent(since);
+      if (before) url += '&before=' + encodeURIComponent(before.id) + '&beforeTs=' + encodeURIComponent(before.ts);
+      fetch(url, { headers: { Accept: 'application/json' } })
+        .then(function (r) { if (!r.ok) throw new Error('gap-fill failed'); return r.json(); })
+        .then(function (data) {
+          if (mine !== filling) return;
+          var list = data.rows || [];
+          list.forEach(handleLive);
+          got += list.length;
+          refreshTabs(); updateEmpty();
+          if (data.nextTs && data.nextId && got < maxRows) page({ ts: data.nextTs, id: data.nextId });
+        })
+        .catch(function () {});
+    }
+    page(null);
   }
 
   // Start with the live stream only. The page-load timestamp anchors gap-fill,
   // so reconnect recovery never pulls in events from before the user arrived.
-  // As the layout's stream does, this one closes when the page goes into the
-  // back/forward cache (a held stream keeps one of the browser's few
-  // connections to the console) and opens again, gap-filled, if it comes back.
+  // As the layout's stream does, this one is held only while the page is in
+  // sight, one at a time: a held stream keeps one of the few connections a
+  // browser opens to the console. Hidden for STREAM_GRACE (the layout's
+  // length), the page lets it go; put into the back/forward cache, at once.
+  // Shown again, it opens again, gap-filled. Letting it go leaves the live dot
+  // as it was: the stream opens again the moment the page is shown.
+  var STREAM_GRACE = 10000;
   var es = null;
+  var hideTimer = null;
+  // A stream the browser gave up on (CLOSED) is no stream: connect replaces it.
+  function streaming() { return !!es && es.readyState !== EventSource.CLOSED; }
   function connect() {
+    if (streaming()) return;
+    if (es) es.close();
     es = new EventSource('/console/events?feed=interactions');
     es.onopen = function () {
       if (liveEl) liveEl.classList.remove('off');
@@ -476,10 +502,24 @@ window.SEAM_NO_LIVE_REFRESH = true; // this screen is the live feed -- it owns i
     };
     es.onerror = function () { if (liveEl) liveEl.classList.add('off'); };
   }
+  function letGo() {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (!es) return;
+    es.close(); es = null;
+  }
+  function rest() {
+    if (hideTimer || !es) return;
+    hideTimer = setTimeout(function () { hideTimer = null; if (document.hidden) letGo(); }, STREAM_GRACE);
+  }
+  function wake() {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (!document.hidden) connect();
+  }
   if (window.EventSource) {
-    connect();
-    window.addEventListener('pagehide', function () { if (es) { es.close(); es = null; } });
-    window.addEventListener('pageshow', function (e) { if (e.persisted && !es) connect(); });
+    if (!document.hidden) connect();
+    document.addEventListener('visibilitychange', function () { if (document.hidden) rest(); else wake(); });
+    window.addEventListener('pagehide', letGo);
+    window.addEventListener('pageshow', function (e) { if (e.persisted) wake(); });
   } else if (liveEl) {
     liveEl.classList.add('off');
   }

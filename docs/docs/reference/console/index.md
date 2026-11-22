@@ -523,7 +523,14 @@ back to a default - so an agent driving the console by URL sees the fix.
 frame, with a ping every 25 seconds. A `retrieval.injected` frame also lists the
 memories it surfaced as `itemIds` (capped at 48), which is what lets a page point
 at exactly what reached an agent. `?feed=interactions` opts into the richer
-transport-level rows the Interactions screen consumes.
+transport-level rows the Interactions screen consumes. A console tab holds its
+stream only while you can see it: 10 seconds after it goes out of sight (a
+background tab or a minimized window) it lets the stream go, because a browser
+opens only a few connections to a console served over plain http (six in
+Chrome) and each open stream keeps one. Shown again, it opens the stream again
+and refreshes once to catch up (the Interactions feed fills in the rows it
+missed), and a live refresh with no answer after 15 seconds gives up and leaves
+the tap-to-refresh pill.
 
 ## Overview
 

@@ -254,7 +254,9 @@
   // Safe to swap content out from under the user right now?
   function safe() { return !document.hidden && !fieldFocused() && !selecting() && !paneOpen() && !cmdkOpen(); }
 
-  function showPill() { if (!pill) return; pill.textContent = n + ' update' + (n > 1 ? 's' : '') + ' · tap to refresh'; pill.hidden = false; }
+  // A catch-up (below) counts no events of its own: it only knows some may
+  // have gone by while the stream was down.
+  function showPill() { if (!pill) return; pill.textContent = (n ? n + ' update' + (n > 1 ? 's' : '') : 'may be out of date') + ' · tap to refresh'; pill.hidden = false; }
   function hidePill() { if (pill) pill.hidden = true; }
   function flashToast(msg) {
     if (!toast) return;
@@ -274,14 +276,25 @@
   // timer ends it, so this holds "Updated" back for one toast at most.
   function actionToastUp() { return !!(toast && !toast.hidden && toast.classList.contains('show') && toast.textContent !== 'Updated'); }
 
-  function apply() {
+  // A refresh with no answer after LIVE_TIMEOUT is given up. Its fetch waits
+  // for one of the few connections a browser opens to the console, and while
+  // every one is held it waits forever: the page stopped updating with no
+  // sign of it (measured in Chrome with six console tabs open). Given up, it
+  // leaves the pill, as any refresh that fails does. A live answer takes well
+  // under a second; 15 s is far past a slow one and still short of the owner
+  // giving up on the page.
+  var LIVE_TIMEOUT = 15000;
+  // quiet: the catch-up refresh, which shows no "Updated" of its own.
+  function apply(quiet) {
     if (busy) { again = true; return; }
     busy = true;
     // The page names the server-versioned views it holds (the Overview's sky),
     // so the answer carries only what changed in them.
     var headers = { 'X-Seam-Live': '1' };
     if (window.SeamConsole) window.SeamConsole.heldViews(headers);
-    fetch(location.href, { credentials: 'same-origin', headers: headers })
+    var stop = window.AbortController ? new AbortController() : null;
+    var limit = stop ? setTimeout(function () { stop.abort(); }, LIVE_TIMEOUT) : null;
+    fetch(location.href, { credentials: 'same-origin', headers: headers, signal: stop ? stop.signal : undefined })
       .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.text(); })
       .then(function (html) {
         var doc = new DOMParser().parseFromString(html, 'text/html');
@@ -293,7 +306,10 @@
         if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
         setLive(connected); // the morph may have swapped the topbar's live indicator
         n = 0; pending = false; hidePill();
-        if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
+        // The catch-up's refresh shows no "Updated" of its own.
+        if (quiet !== true) {
+          if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
+        }
         // strip enter/pulse markers once their animations have played (longest
         // is the count pulse at 450ms) so nothing replays on a later reveal
         setTimeout(function () {
@@ -304,22 +320,40 @@
         // The page did not hold what the answer was drawn against; it has
         // forgotten its held views, so the next refresh is answered whole.
         if (window.SeamConsole && window.SeamConsole.stale(error)) { again = true; return; }
-        pending = true; showPill(); // transient failure: leave the manual affordance
+        pending = true; showPill(); // failed or given up: leave the manual affordance
       })
-      .finally(function () { busy = false; if (again) { again = false; schedule(); } });
+      .finally(function () { if (limit) clearTimeout(limit); busy = false; if (again) { again = false; schedule(); } });
   }
-  function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
+  function trigger(quiet) { if (safe()) apply(quiet === true); else { pending = true; showPill(); } }
   function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } // coalesce write bursts
 
-  // One stream per page, opened by connect. A page the browser keeps in its
-  // back/forward cache must not hold its stream: six held streams fill the
-  // browser's connections to the console, and the next page load then waits
-  // for one forever. So the stream closes when the page is hidden away, and
-  // opens again if the page comes back.
+  // One stream per page at a time, and only while the page is in sight. The
+  // console is served over plain http, where a browser opens only a few
+  // connections to it (six in Chrome) and each open stream keeps one: with
+  // six console tabs open, every other request to the console waited for a
+  // connection forever (measured in Chrome). So a page hidden for
+  // STREAM_GRACE (a background tab, a minimized window) lets its stream go,
+  // and a page put into the back/forward cache lets it go at once; a quick
+  // look at another tab keeps it. Shown again, the page opens a new stream
+  // and, once it is open, catches up once, since events went by unseen
+  // meanwhile. A stream the browser had to open again after an error catches
+  // up the same way. Letting a stream go leaves the orb and the live dots as
+  // they were: the stream opens again the moment the page is shown, and they
+  // follow what that stream does.
+  var STREAM_GRACE = 10000;
   var es = null;
+  var hideTimer = null;
+  var missed = false; // events may have gone by unseen: catch up once the stream opens
+  // A stream the browser gave up on (CLOSED) is no stream: connect replaces it.
+  function streaming() { return !!es && es.readyState !== EventSource.CLOSED; }
   function connect() {
+    if (streaming()) return;
+    if (es) es.close();
     es = new EventSource('/console/events');
-    es.onopen = function () { connected = true; setOrb(true); setLive(true); };
+    es.onopen = function () {
+      connected = true; setOrb(true); setLive(true);
+      if (missed) { missed = false; catchUp(); }
+    };
     es.onmessage = function (ev) {
       // Ignore transport-level rows (tool.call / hook.prompt): those live on the
       // Interactions screen and would fire a refresh on every tool call. A page
@@ -346,11 +380,38 @@
       if (window.SEAM_NO_LIVE_REFRESH) return;
       n++; schedule();
     };
-    es.onerror = function () { connected = false; setOrb(false); setLive(false); };
+    es.onerror = function () { connected = false; setOrb(false); setLive(false); missed = true; };
   }
-  connect();
-  window.addEventListener('pagehide', function () { if (es) { es.close(); es = null; connected = false; } });
-  window.addEventListener('pageshow', function (e) { if (e.persisted && !es) connect(); });
+  function letGo() {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (!es) return;
+    es.close(); es = null; missed = true;
+  }
+  // rest starts the grace as the page is hidden; wake ends it, and opens the
+  // stream again, as the page is shown.
+  function rest() {
+    if (hideTimer || !es) return;
+    hideTimer = setTimeout(function () { hideTimer = null; if (document.hidden) letGo(); }, STREAM_GRACE);
+  }
+  function wake() {
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (!document.hidden) connect();
+  }
+  // The catch-up, once the stream is open again. A page script that keeps its
+  // own view live (SEAM_NO_LIVE_REFRESH) can redraw itself on
+  // seam:stream-resumed; any other page refreshes once, through trigger, so
+  // it waits for the same safe moment as any live refresh, with no toast.
+  function catchUp() {
+    document.dispatchEvent(new CustomEvent('seam:stream-resumed'));
+    if (window.SEAM_NO_LIVE_REFRESH) return;
+    trigger(true);
+  }
+  // A page opened out of sight (a tab opened in the background) connects once
+  // it is shown.
+  if (document.hidden) missed = true; else connect();
+  document.addEventListener('visibilitychange', function () { if (document.hidden) rest(); else wake(); });
+  window.addEventListener('pagehide', letGo);
+  window.addEventListener('pageshow', function (e) { if (e.persisted) wake(); });
 
   // Flush a deferred refresh once the moment turns safe again (tab refocus, pane
   // or palette close, selection cleared). Cheap poll, decoupled from those events.

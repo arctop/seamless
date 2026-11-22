@@ -88,6 +88,15 @@
     scheduleRefresh(600);
   });
 
+  // The layout lets its stream go while the tab is out of sight and catches
+  // up once it is open again (seam:stream-resumed): a backup may have started
+  // or ended unseen, so the section draws itself again, and a backup still
+  // running is followed from there (enhance, follow).
+  document.addEventListener('seam:stream-resumed', function () {
+    if (!section() || (tracker && tracker.mode === 'restart')) return;
+    scheduleRefresh(600);
+  });
+
   /* ---- Following a restore, and a backup under way ----------------------- */
 
   function stopTracking() {
