@@ -474,9 +474,9 @@
       </header>
 
       <div class="registry-overview" aria-label="Workspace registry summary">
-        <span>{{icon "box"}}<strong>{{len .Projects}}</strong> projects</span>
-        <span>{{icon "link"}}<strong>{{len .RepoMap}}</strong> repo routes</span>
-        <span>{{icon "git-fork"}}<strong>{{len .FamilyEditors}}</strong> families</span>
+        <span>{{icon "box"}}<strong>{{len .Projects}}</strong> {{if eq (len .Projects) 1}}project{{else}}projects{{end}}</span>
+        <span>{{icon "link"}}<strong>{{len .RepoMap}}</strong> {{if eq (len .RepoMap) 1}}repo route{{else}}repo routes{{end}}</span>
+        <span>{{icon "git-fork"}}<strong>{{len .FamilyEditors}}</strong> {{if eq (len .FamilyEditors) 1}}family{{else}}families{{end}}</span>
       </div>
 
       <section class="registry-panel family-manager" data-family-manager>

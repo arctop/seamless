@@ -11,7 +11,7 @@
 <script>
 
 
-(function(){var d=document.documentElement;d.classList.add('js','reveal');try{var t=localStorage.getItem('seamless-theme');if(t==='dark'||t==='light')d.setAttribute('data-theme',t);if(localStorage.getItem('seamless-sidebar')==='collapsed')d.setAttribute('data-sidebar','collapsed');}catch(e){}})();
+(function(){var d=document.documentElement;d.classList.add('js','reveal');try{var t=localStorage.getItem('seamless-theme');if(t==='dark'||t==='light')d.setAttribute('data-theme',t);if(localStorage.getItem('seamless-sidebar')==='collapsed')d.setAttribute('data-sidebar','collapsed');if(localStorage.getItem('seamless-sky')==='folded')d.setAttribute('data-sky','folded');}catch(e){}})();
 </script>
 
 <script type="speculationrules">
@@ -547,7 +547,7 @@
 
   
   <header class="ov2-titlebar topbar">
-    <h1><svg class="ico ico-layout-dashboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>Overview</h1><details class="page-about"><summary aria-label="About this page" title="About this page"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary><p class="page-about-pop" role="note">The check-in page: what needs you, whether stored knowledge is reaching your agents, who is working right now, and what just happened.</p></details>
+    <h1><svg class="ico ico-layout-dashboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>Overview</h1><details class="page-about"><summary aria-label="About this page" title="About this page"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary><p class="page-about-pop" role="note">The check-in page: what needs you, the work in motion and who is doing it, whether stored knowledge is reaching your agents, and what just happened.</p></details>
     <span class="live ov2-title-live"><span class="live-dot"></span>system live</span>
     <span class="ov2-title-spacer"></span>
     
@@ -604,21 +604,9 @@
 
   
   
-  <section class="ov-health lead" aria-label="Is it working"><a class="ov-health-fact" data-tone="ok" href="/console/sessions" title="Agent clients that have recorded sessions here"><svg class="ico ico-terminal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg><span>Working with Claude Code (last active <age>)</span></a><span class="ov-health-sep" aria-hidden="true">&middot;</span><a class="ov-health-fact" href="/console/events/<id:37>" title="<time> UTC"><svg class="ico ico-arrow-down-to-line" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17V3"/><path d="m6 11 6 6 6-6"/><path d="M19 21H5"/></svg><span>last briefing delivered <age></span></a><span class="ov-health-sep" aria-hidden="true">&middot;</span><a class="ov-health-fact" href="/console/settings?s=setup"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg><span>version 0.0.0-dg</span></a></section>
-  
-
-  
-  <section class="checkin" id="checkin" data-live-skip hidden aria-label="Since you were last here">
-    <span class="checkin-ico"><svg class="ico ico-history" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></span>
-    <div class="checkin-body"></div>
-    <button type="button" class="checkin-x" data-checkin-dismiss aria-label="Dismiss"><svg class="ico ico-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
-  </section>
-
-  
-  
-  <section class="ov2-attn" aria-label="Needs attention">
+  <section class="ov2-attn" id="needs" aria-label="Needs you">
     <header class="ov2-attn-head">
-      <span class="ov2-attn-label">Needs attention<strong>1</strong></span>
+      <span class="ov2-attn-label">Needs you<strong>1</strong></span>
       <span class="ov2-attn-nav" hidden>
         <button type="button" class="ov2-attn-btn" data-attn-prev aria-label="Scroll to earlier cards"><svg class="ico ico-chevron-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
         <button type="button" class="ov2-attn-btn" data-attn-next aria-label="Scroll to later cards"><svg class="ico ico-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
@@ -626,11 +614,14 @@
     </header>
     <div class="ov2-attn-rail" data-attn-rail>
       
-      <a class="ov2-attn-card" data-sev="danger" href="/console/events/<id:38>">
-        <span class="ov2-attn-ico"><svg class="ico ico-triangle-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span>
-        <span class="ov2-attn-copy"><strong>1 agent-reported mishap</strong><span title="latest <age> in example-open-alpha · review recurrence">latest <age> in example-open-alpha · review recurrence</span></span>
-        <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-      </a>
+      <div class="ov2-attn-card" data-sev="danger" data-need="mishaps">
+        <a class="ov2-attn-main" href="/console/mishaps">
+          <span class="ov2-attn-ico"><svg class="ico ico-triangle-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span>
+          <span class="ov2-attn-copy"><strong>1 mishap to review</strong><span title="latest <age> in example-open-alpha · review recurrence, then mark them reviewed">latest <age> in example-open-alpha · review recurrence, then mark them reviewed</span></span>
+          <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        </a>
+        
+      </div>
       
     </div>
   </section>
@@ -638,13 +629,74 @@
 
   
   
+  <section class="ov-health lead" aria-label="Is it working"><a class="ov-health-fact" data-tone="ok" href="/console/sessions" title="Agent clients that have recorded sessions here"><svg class="ico ico-terminal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg><span>Working with Claude Code (last active <age>)</span></a><span class="ov-health-sep" aria-hidden="true">&middot;</span><a class="ov-health-fact" href="/console/events/<id:37>" title="<time> UTC"><svg class="ico ico-arrow-down-to-line" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17V3"/><path d="m6 11 6 6 6-6"/><path d="M19 21H5"/></svg><span>last briefing delivered <age></span></a><span class="ov-health-sep" aria-hidden="true">&middot;</span><a class="ov-health-fact" href="/console/settings?s=setup"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg><span>version 0.0.0-dg</span></a></section>
+  
 
+  
+  <section class="checkin" id="checkin" data-live-skip hidden data-checkin-offer="memories sessions notes gardener mishaps" aria-label="Since you were last here">
+    <span class="checkin-ico"><svg class="ico ico-history" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></span>
+    <div class="checkin-body"></div>
+    <button type="button" class="checkin-x" data-checkin-dismiss aria-label="Dismiss"><svg class="ico ico-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+  </section>
+
+  
+  
+  <section class="ov2-motion" id="motion" aria-labelledby="motion-title">
+    <header class="ov2-motion-head">
+      <h2 id="motion-title">Work in motion</h2>
+      <span class="ov2-motion-sum">1 live &middot; 0 in flight &middot; 5 ready</span>
+      
+    </header>
+    <div class="ov2-motion-cols">
+      <div class="ov2-motion-col" data-motion="plans">
+        <h3>Plans in progress<strong>0</strong></h3>
+        <p class="ov2-motion-none">No plan step is held by a live claim.</p>
+      </div>
+      <div class="ov2-motion-col" data-motion="loose">
+        <h3>Loose ends<strong>0</strong></h3>
+        <p class="ov2-motion-none">Nothing in flight without a live agent.</p>
+      </div>
+      <div class="ov2-motion-col" data-motion="ready">
+        <h3>Ready next<strong>5</strong></h3>
+        
+        <ul class="ov2-motion-list">
+          
+          <li id="mo-rd-<id:10>">
+            <span class="ov2-motion-t"><span>Example: promote the deploy</span></span>
+            <span class="ov2-motion-meta">example-open-alpha</span>
+          </li>
+          
+          <li id="mo-rd-<id:12>">
+            <span class="ov2-motion-t"><span>Example: wave one</span></span>
+            <span class="ov2-motion-meta">example-open-alpha &middot; plan:example-rollout</span>
+          </li>
+          
+          <li id="mo-rd-<id:23>">
+            <span class="ov2-motion-t"><span>Example: close the confidential ledger</span></span>
+            <span class="ov2-motion-meta">example-confidential</span>
+          </li>
+          
+        </ul>
+        <p class="ov2-motion-more">+2 more</p>
+        
+      </div>
+    </div>
+  </section>
+  
+
+  
   
   <section class="ov2-live" aria-label="Sessions live now">
     <span class="ov2-live-label"><span class="live-dot"></span>Live now</span>
-    <a class="ov2-live-sess" href="/console/sessions/<id:1>"><sess:1> <small>example-open-alpha &middot; <age></small></a>
-    <a class="ov2-live-all" href="/console/interactions">Watch interactions <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
+    <a class="ov2-live-sess" href="/console/sessions/<id:1>"><span class="ov2-live-lead" title="example-open-alpha">example-open-alpha</span> <small><sess:1> &middot; <age></small></a>
+    
+    
   </section>
+  
+
+  
+  
+
   
 
   
@@ -655,8 +707,9 @@
       <h2>Knowledge sky</h2>
       <span class="sky-sub">6 active memories, each placed by when it last reached an agent</span>
       <a href="/console/memories">Memories <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
+      <button type="button" class="sky-fold" data-sky-fold aria-expanded="true" aria-controls="sky-body" title="Fold the sky away or show it; this browser remembers"><svg class="ico ico-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><span class="sky-fold-hide">Fold</span><span class="sky-fold-show">Show</span></button>
     </header>
-    <div class="sky-body">
+    <div class="sky-body" id="sky-body">
       <div class="sky-chart">
         <svg class="sky-svg" viewBox="0 0 600 600" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Knowledge sky: 6 active memories in 4 scopes, placed by when each last surfaced to an agent: 5 in the last 24 hours, 0 within 7 days, 0 within 90 days, 0 longer ago, 1 never." data-c="300" data-core="38" data-rim="262"><defs id="sky-defs"><radialGradient id="sky-core-glow"><stop offset="0" class="sky-core-stop0"/><stop offset=".6" class="sky-core-stop1"/><stop offset="1" class="sky-core-stop2"/></radialGradient><radialGradient id="sky-h-constraint"><stop offset="0" style="stop-color:var(--k-constraint);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-constraint);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-constraint);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-convention"><stop offset="0" style="stop-color:var(--k-convention);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-convention);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-convention);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-runbook"><stop offset="0" style="stop-color:var(--k-runbook);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-runbook);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-runbook);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-protocol"><stop offset="0" style="stop-color:var(--k-protocol);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-protocol);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-protocol);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-gotcha"><stop offset="0" style="stop-color:var(--k-gotcha);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-gotcha);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-gotcha);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-decision"><stop offset="0" style="stop-color:var(--k-decision);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-decision);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-decision);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-refuted"><stop offset="0" style="stop-color:var(--k-refuted);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-refuted);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-refuted);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-reference"><stop offset="0" style="stop-color:var(--k-reference);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-reference);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-reference);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-stage"><stop offset="0" style="stop-color:var(--k-stage);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-stage);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-stage);stop-opacity:0"/></radialGradient><path id="sky-lp-0" d="M322.1 578.1A279.0 279.0 0 0 0 343.6 24.4"/><path id="sky-lp-1" d="M74.4 464.1A279.0 279.0 0 0 0 308.0 578.9"/><path id="sky-lp-2" d="M42.2 193.3A279.0 279.0 0 0 0 66.4 452.5"/><path id="sky-lp-3" d="M54.3 183.4A272.0 272.0 0 0 1 257.4 31.3"/></defs><g class="sky-grid" id="sky-grid"><circle class="sky-field" cx="300" cy="300" r="262"/><circle class="sky-tint" data-b="3" cx="300" cy="300" r="233.5" stroke-width="8.6"/><circle class="sky-tint" data-b="4" cx="300" cy="300" r="249.9" stroke-width="24.2"/><circle class="sky-ring" data-b="0" cx="300" cy="300" r="214.0"/><circle class="sky-ring" data-b="1" cx="300" cy="300" r="223.2"/><circle class="sky-ring" data-b="2" cx="300" cy="300" r="229.2"/><circle class="sky-ring" data-b="3" cx="300" cy="300" r="237.8"/><circle class="sky-rim" cx="300" cy="300" r="262"/><path class="sky-spokes" d="M305.7 259.4L336.5 40.5M301.9 341.0L312.1 561.7M266.1 323.0L83.1 447.0M262.7 283.1L61.4 191.8M294.3 259.4L263.5 40.5"/></g><g class="sky-wedges" id="sky-wedges"><path id="sky-w-0" class="sky-wedge" data-w="0" data-p="example-open-alpha" data-a0="0.1396" data-a1="3.0796" d="M336.5 40.5A262.0 262.0 0 0 1 316.2 561.5L302.4 337.9A38.0 38.0 0 0 0 305.3 262.4Z"/><path id="sky-w-1" class="sky-wedge" data-w="1" data-p="" data-a0="3.0953" data-a1="4.1009" d="M312.1 561.7A262.0 262.0 0 0 1 85.5 450.4L268.9 321.8A38.0 38.0 0 0 0 301.8 338.0Z"/><path id="sky-w-2" class="sky-wedge" data-w="2" data-p="example-confidential" data-a0="4.1166" data-a1="5.1223" d="M83.1 447.0A262.0 262.0 0 0 1 59.7 195.6L265.1 284.9A38.0 38.0 0 0 0 268.5 321.3Z"/><path id="sky-w-3" class="sky-wedge" data-w="3" data-p="example-sealed" data-a0="5.1380" data-a1="6.1436" d="M61.4 191.8A262.0 262.0 0 0 1 263.5 40.5L294.7 262.4A38.0 38.0 0 0 0 265.4 284.3Z"/></g><g class="sky-ticks" id="sky-ticks"><text class="sky-tick" data-b="0" x="300" y="86.0">24h</text><text class="sky-tick" data-b="1" x="300" y="76.8">7d</text><text class="sky-tick" data-b="2" x="300" y="70.8">90d</text><text class="sky-tick" data-b="4" x="300" y="50.1">never</text></g><g class="sky-labels" id="sky-labels"><text class="sky-label" data-w="0"><textPath href="#sky-lp-0" startOffset="50%" text-anchor="middle">example-open-alpha<tspan class="sky-count" dx="5">3</tspan></textPath></text><text class="sky-label" data-w="1"><textPath href="#sky-lp-1" startOffset="50%" text-anchor="middle">global<tspan class="sky-count" dx="5">1</tspan></textPath></text><text class="sky-label" data-w="2"><textPath href="#sky-lp-2" startOffset="50%" text-anchor="middle">example-confidential<tspan class="sky-count" dx="5">1</tspan></textPath></text><text class="sky-label" data-w="3"><textPath href="#sky-lp-3" startOffset="50%" text-anchor="middle">example-sealed<tspan class="sky-count" dx="5">1</tspan></textPath></text></g><g class="sky-core" id="sky-core" data-sky-core><circle class="sky-core-glow" cx="300" cy="300" r="72.2"/><circle class="sky-core-ring" cx="300" cy="300" r="32"/><text class="sky-core-n" x="300" y="303">5</text><text class="sky-core-l" x="300" y="316">last 24h</text></g><g class="sky-stars" id="sky-stars"><g id="s-<id:2>" class="st warm new" style="transform:translate(<xy>);--d:<phase>" data-x="<n>" data-y="<n>" data-k="constraint" data-b="0" data-p="example-open-alpha" data-n="example-deploy-gate" data-d="Every example deploy goes through the staging gate first" data-g="deploy example" data-t="<unix>" data-c="<unix>" data-i="7" data-r="3"><circle class="dot" r="3.95"/><path class="spk" d="M-8.0 0H8.0M0 -8.0V8.0"/></g><g id="s-<id:3>" class="st warm new" style="transform:translate(<xy>);--d:<phase>" data-x="<n>" data-y="<n>" data-k="convention" data-b="0" data-p="example-open-alpha" data-n="example-layout-convention" data-d="Example services keep their configs under deploy/example" data-t="<unix>" data-c="<unix>" data-i="4" data-r="1"><circle class="dot" r="3.75"/><path class="spk" d="M-7.7 0H7.7M0 -7.7V7.7"/></g><g id="s-<id:4>" class="st warm new" style="transform:translate(<xy>);--d:<phase>" data-x="<n>" data-y="<n>" data-k="stage" data-b="0" data-p="example-open-alpha" data-n="example-migration-stage" data-d="The example data migration waits on the owner&#39;s sign-off" data-g="migration" data-t="<unix>" data-c="<unix>" data-i="4"><circle class="dot" r="3.40"/><path class="spk" d="M-7.4 0H7.4M0 -7.4V7.4"/></g><g id="s-<id:6>" class="st warm new" style="transform:translate(<xy>);--d:<phase>" data-x="<n>" data-y="<n>" data-k="reference" data-b="0" data-p="" data-n="example-style-reference" data-d="Where the shared example style guide lives" data-t="<unix>" data-c="<unix>" data-i="7"><circle class="dot" r="3.61"/><path class="spk" d="M-7.6 0H7.6M0 -7.6V7.6"/></g><g id="s-<id:21>" class="st warm new" style="transform:translate(<xy>);--d:<phase>" data-x="<n>" data-y="<n>" data-k="gotcha" data-b="0" data-p="example-confidential" data-n="example-confidential-gotcha" data-d="The confidential example ledger closes on the fifth" data-t="<unix>" data-c="<unix>" data-i="3"><circle class="dot" r="3.40"/><path class="spk" d="M-7.4 0H7.4M0 -7.4V7.4"/></g><g id="s-<id:26>" class="st new" style="transform:translate(<xy>)" data-x="<n>" data-y="<n>" data-k="gotcha" data-b="4" data-p="example-sealed" data-n="example-sealed-rule" data-d="The sealed example vault rotates keys weekly" data-c="<unix>"><circle class="dot" r="1.50"/><path class="spk" d="M-5.5 0H5.5M0 -5.5V5.5"/></g></g><g class="sky-fx" data-live-skip></g></svg>
         <div class="sky-tip" data-live-skip hidden></div>
@@ -711,7 +764,7 @@
           <h3 class="sky-eyebrow">Scopes <span>4</span></h3>
           <div class="sky-scopes">
             
-            <button type="button" class="sky-scope" data-sky-scope="example-open-alpha" data-name="example-open-alpha" data-href="/console/projects/example-open-alpha?tab=memories" aria-pressed="false">
+            <button type="button" class="sky-scope" data-sky-scope="example-open-alpha" data-name="example-open-alpha" aria-pressed="false">
               <span class="sky-scope-name">example-open-alpha</span>
               <b>3</b>
               <span class="sky-mix" aria-hidden="true"><i data-b="0" style="width:100.0%"></i></span>
@@ -723,13 +776,13 @@
               <span class="sky-mix" aria-hidden="true"><i data-b="0" style="width:100.0%"></i></span>
             </button>
             
-            <button type="button" class="sky-scope" data-sky-scope="example-confidential" data-name="example-confidential" data-href="/console/projects/example-confidential?tab=memories" aria-pressed="false">
+            <button type="button" class="sky-scope" data-sky-scope="example-confidential" data-name="example-confidential" aria-pressed="false">
               <span class="sky-scope-name">example-confidential</span>
               <b>1</b>
               <span class="sky-mix" aria-hidden="true"><i data-b="0" style="width:100.0%"></i></span>
             </button>
             
-            <button type="button" class="sky-scope" data-sky-scope="example-sealed" data-name="example-sealed" data-href="/console/projects/example-sealed?tab=memories" aria-pressed="false">
+            <button type="button" class="sky-scope" data-sky-scope="example-sealed" data-name="example-sealed" aria-pressed="false">
               <span class="sky-scope-name">example-sealed</span>
               <b>1</b>
               <span class="sky-mix" aria-hidden="true"><i data-b="4" style="width:100.0%"></i></span>
@@ -758,49 +811,47 @@
   
   
 
-  
-
   <section class="ov2-panel" aria-label="Recent activity">
-    <header class="ov2-panel-head"><h2>Recent activity</h2><a href="/console/interactions">Full interaction stream <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a></header>
+    <header class="ov2-panel-head"><h2>Recent activity</h2></header>
     
     <div class="ov2-ledger">
       
-      <a id="<id:39>" class="ov2-evt" data-sev="inject" href="/console/events/<id:39>">
+      <a id="<id:38>" class="ov2-evt" data-sev="inject" href="/console/events/<id:38>">
         <time title="<time> UTC"><age></time>
         <span class="kindchip" title="retrieval.injected"><svg class="ico ico-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg>Context injected</span>
         <p>context injected</p>
         <span class="ov2-evt-scope">global</span>
       </a>
       
+      <a id="<id:39>" class="ov2-evt" data-sev="system" href="/console/events/<id:39>">
+        <time title="<time> UTC"><age></time>
+        <span class="kindchip" title="session.ended"><svg class="ico ico-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>Session ended</span>
+        <p>session ended <span class="mono-id"><id:44>~8</span></p>
+        <span class="ov2-evt-scope">example-confidential</span>
+      </a>
+      
       <a id="<id:40>" class="ov2-evt" data-sev="system" href="/console/events/<id:40>">
         <time title="<time> UTC"><age></time>
         <span class="kindchip" title="session.ended"><svg class="ico ico-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>Session ended</span>
         <p>session ended <span class="mono-id"><id:45>~8</span></p>
-        <span class="ov2-evt-scope">example-confidential</span>
-      </a>
-      
-      <a id="<id:41>" class="ov2-evt" data-sev="system" href="/console/events/<id:41>">
-        <time title="<time> UTC"><age></time>
-        <span class="kindchip" title="session.ended"><svg class="ico ico-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>Session ended</span>
-        <p>session ended <span class="mono-id"><id:46>~8</span></p>
         <span class="ov2-evt-scope">example-open-beta</span>
       </a>
       
-      <a id="<id:42>" class="ov2-evt" data-sev="system" href="/console/events/<id:42>">
+      <a id="<id:41>" class="ov2-evt" data-sev="system" href="/console/events/<id:41>">
         <time title="<time> UTC"><age></time>
         <span class="kindchip" title="session.ended"><svg class="ico ico-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>Session ended</span>
         <p>session ended <span class="mono-id"><id:25>~8</span></p>
         <span class="ov2-evt-scope">example-sealed</span>
       </a>
       
-      <a id="<id:43>" class="ov2-evt" data-sev="system" href="/console/events/<id:43>">
+      <a id="<id:42>" class="ov2-evt" data-sev="system" href="/console/events/<id:42>">
         <time title="<time> UTC"><age></time>
         <span class="kindchip" title="session.ended"><svg class="ico ico-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>Session ended</span>
         <p>session ended <span class="mono-id"><id:20>~8</span></p>
         <span class="ov2-evt-scope">example-confidential</span>
       </a>
       
-      <a id="<id:44>" class="ov2-evt" data-sev="system" href="/console/events/<id:44>">
+      <a id="<id:43>" class="ov2-evt" data-sev="system" href="/console/events/<id:43>">
         <time title="<time> UTC"><age></time>
         <span class="kindchip" title="session.ended"><svg class="ico ico-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>Session ended</span>
         <p>session ended <span class="mono-id"><id:27>~8</span></p>
@@ -1316,6 +1367,29 @@
   window.addEventListener('load', sync);
   document.addEventListener('seam:content-updated', sync);
   sync();
+
+  
+
+  var SKY = 'seamless-sky';
+  var root = document.documentElement;
+  function skyFolded() { return root.getAttribute('data-sky') === 'folded'; }
+  function syncSky() {
+    document.querySelectorAll('[data-sky-fold]').forEach(function (b) {
+      b.setAttribute('aria-expanded', skyFolded() ? 'false' : 'true');
+    });
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-sky-fold]');
+    if (!b) return;
+    var fold = !skyFolded();
+    if (fold) root.setAttribute('data-sky', 'folded');
+    else root.removeAttribute('data-sky');
+    try { localStorage.setItem(SKY, fold ? 'folded' : 'open'); } catch (err) {}
+    syncSky();
+    if (!fold) window.dispatchEvent(new Event('resize'));
+  });
+  document.addEventListener('seam:content-updated', syncSky);
+  syncSky();
 })();
 </script>
 <script src="/console/static/sky.js?v=<hash:17>"></script>
@@ -3872,11 +3946,11 @@
   <h2><span class="sess-group-title">Completed <span class="count">5</span></span><span class="sess-group-note">Findings retained for future work</span></h2>
   <div class="sess-list">
     
-    <div id="<id:45>" class="sess-row row-link" data-href="/console/sessions/<id:45>" data-peek>
+    <div id="<id:44>" class="sess-row row-link" data-href="/console/sessions/<id:44>" data-peek>
       <div class="sess-main">
         <span class="sess-state completed" aria-hidden="true"></span>
         <div class="sess-copy">
-          <div class="id-line"><a class="sess-headline is-prompt" href="/console/sessions/<id:45>" data-peek>Which day of the month the confidential ledger closes on?</a><button type="button" class="copy-btn" data-copy="<id:45>" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button><span class="agent-pill cc" title="Claude Code">cc</span><span class="kind faint" title="Ran on another machine">dg-host.example</span></div>
+          <div class="id-line"><a class="sess-headline is-prompt" href="/console/sessions/<id:44>" data-peek>Which day of the month the confidential ledger closes on?</a><button type="button" class="copy-btn" data-copy="<id:44>" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button><span class="agent-pill cc" title="Claude Code">cc</span><span class="kind faint" title="Ran on another machine">dg-host.example</span></div>
           <div class="find sess-name"><span class="mono">cc/dg-claud-e62f1f8d52a16194</span> &middot; its first prompt</div>
           <div class="find">(auto) session ended, no summary harvested</div>
         </div>
@@ -3885,11 +3959,11 @@
       <span class="when" title="<time> UTC"><age></span>
     </div>
     
-    <div id="<id:46>" class="sess-row row-link" data-href="/console/sessions/<id:46>" data-peek>
+    <div id="<id:45>" class="sess-row row-link" data-href="/console/sessions/<id:45>" data-peek>
       <div class="sess-main">
         <span class="sess-state completed" aria-hidden="true"></span>
         <div class="sess-copy">
-          <div class="id-line"><a href="/console/sessions/<id:46>" data-peek>cc/dg-claud-84915c73e46aa6d5</a><button type="button" class="copy-btn" data-copy="<id:46>" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button><span class="agent-pill cc" title="Claude Code">cc</span><span class="kind faint" title="Ran on another machine">dg-host.example</span></div>
+          <div class="id-line"><a href="/console/sessions/<id:45>" data-peek>cc/dg-claud-84915c73e46aa6d5</a><button type="button" class="copy-btn" data-copy="<id:45>" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button><span class="agent-pill cc" title="Claude Code">cc</span><span class="kind faint" title="Ran on another machine">dg-host.example</span></div>
           <div class="find">(auto) session ended, no summary harvested</div>
         </div>
       </div>
@@ -4803,7 +4877,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
           <header class="level-card-head"><h3>Standard</h3></header>
           <p class="level-card-line">Curate knowledge and follow the work.</p>
           <div class="level-card-items"><span class="level-card-lead">Adds</span><ul><li>Now</li><li>Projects</li><li>Plans</li><li>Tasks</li><li>Labs</li><li>Trials</li><li>System</li><li>Privacy</li><li>Settings: Briefing and Workspaces</li></ul>
-            <ul class="level-card-details"><li>Overview: the observation window, the vitals, and the workspaces table and the knowledge rail</li><li>Memories: the Reach and Utility sorts, how often each memory surfaced, the Never surfaced filter, and the utility score in the reader</li><li>Gardener: the Type and Source filters, the project-split example, the Hidden forever list, Retarget on a proposal, and Hide forever on a proposal</li><li>Sessions: the Retained filter, the Sort menu, and a session&#39;s review signals</li><li>Search: the Updated window and the Sort control</li><li>Settings › Features: the precedence line and the agent tool names</li></ul></div>
+            <ul class="level-card-details"><li>Overview: the observation window, the vitals, and the projects table and the knowledge rail</li><li>Memories: the Reach and Utility sorts, how often each memory surfaced, the Never surfaced filter, and the utility score in the reader</li><li>Gardener: the Type and Source filters, the project-split example, the Hidden forever list, Retarget on a proposal, and Hide forever on a proposal</li><li>Sessions: the Retained filter, the Sort menu, and a session&#39;s review signals</li><li>Search: the Updated window and the Sort control</li><li>Settings › Features: the precedence line and the agent tool names</li></ul></div>
           <button class="btn small primary" type="submit">Use Standard</button>
         </form>
         

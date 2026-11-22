@@ -221,7 +221,9 @@ func (s *Service) lkDecided(w http.ResponseWriter, r *http.Request, l core.RepoL
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
-	http.Redirect(w, r, "/console/locks?notice="+url.QueryEscape(notice), http.StatusSeeOther)
+	// A form that names a next (the Overview's inline Approve) goes back there
+	// with the notice; without one, Locks, as always (ownerNext).
+	http.Redirect(w, r, ownerNext(r.PostFormValue("next"), "/console/locks?notice="+url.QueryEscape(notice), "notice", notice), http.StatusSeeOther)
 }
 
 // lockRelease is POST /console/locks/{id}/release: the owner's force-release

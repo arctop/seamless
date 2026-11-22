@@ -600,13 +600,19 @@
     var when = document.createElement('strong');
     when.textContent = awayLabel(away);
     var w = windowFor(away);
+    // A count links its screen only where this level's sidebar shows it: the
+    // page names those screens in data-checkin-offer (a page drawn before it
+    // carried the list links every count, as it always did).
+    var offer = box.getAttribute('data-checkin-offer');
+    var keys = offer === null ? null : offer.split(' ');
+    function offered(key) { return keys === null || keys.indexOf(key) >= 0; }
     var items = [
-      [d.memoriesWritten, 'memory written', 'memories written', '/console/memories?sort=recent'],
-      [d.sessions, 'session started', 'sessions started', '/console/sessions?w=' + w],
-      [d.tasksClosed, 'task closed', 'tasks closed', '/console/tasks'],
-      [d.notesWritten, 'note written', 'notes written', '/console/notes'],
-      [d.proposals, 'proposal to review', 'proposals to review', '/console/gardener'],
-      [d.mishaps, 'mishap reported', 'mishaps reported', '']
+      [d.memoriesWritten, 'memory written', 'memories written', '/console/memories?sort=recent', 'memories'],
+      [d.sessions, 'session started', 'sessions started', '/console/sessions?w=' + w, 'sessions'],
+      [d.tasksClosed, 'task closed', 'tasks closed', '/console/tasks', 'tasks'],
+      [d.notesWritten, 'note written', 'notes written', '/console/notes', 'notes'],
+      [d.proposals, 'proposal to review', 'proposals to review', '/console/gardener', 'gardener'],
+      [d.mishaps, 'mishap reported', 'mishaps reported', '/console/mishaps', 'mishaps']
     ].filter(function (it) { return it[0] > 0; });
     if (!items.length) {
       lead.appendChild(document.createTextNode('Quiet since you were last here '));
@@ -617,7 +623,7 @@
       lead.appendChild(document.createTextNode('Since you were last here '));
       lead.appendChild(when);
       body.appendChild(lead);
-      items.forEach(function (it) { body.appendChild(chip(it[0], it[1], it[2], it[3])); });
+      items.forEach(function (it) { body.appendChild(chip(it[0], it[1], it[2], offered(it[4]) ? it[3] : '')); });
     }
     box.hidden = false;
   }

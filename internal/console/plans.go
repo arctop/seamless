@@ -501,7 +501,13 @@ func (s *Service) planApprove(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
-	http.Redirect(w, r, "/console/plans/"+slug, http.StatusSeeOther)
+	// A form that names a next (the Overview's inline Approve) goes back there
+	// with a notice; without one, the plan's page, as always (ownerNext).
+	msg := "Approved plan:" + slug + "."
+	if !approved {
+		msg = "plan:" + slug + " was already approved."
+	}
+	http.Redirect(w, r, ownerNext(r.PostFormValue("next"), "/console/plans/"+slug, "notice", msg), http.StatusSeeOther)
 }
 
 // answerLockedPlan answers a lookup of a plan this request's handle does not

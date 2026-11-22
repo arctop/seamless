@@ -12,7 +12,10 @@ package console
 // everywhere it appears.
 
 import (
+	"context"
+	"net/url"
 	"slices"
+	"strings"
 
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/features"
@@ -184,6 +187,60 @@ func beforeTail(visible, extra []screen) []screen {
 	return slices.Concat(visible[:at:at], extra, visible[at:])
 }
 
+// offeredScreens is the sidebar's screen list for one request: the screens
+// the feature state and level make visible, with the Held screen while
+// restricted accounts' proposals wait there, the Devices screen on a server
+// that pairs devices, and the access screens while a project is locked or
+// read grants are on. The sidebar is drawn from it (withChrome), and the
+// Overview offers a link only into a screen on it (linkOffer).
+func (s *Service) offeredScreens(feats config.Features, lvl level) []screen {
+	return withAccessScreens(withDevicesScreen(s.withProposalScreen(visibleScreens(feats, lvl), feats, lvl),
+		s.cfg.Devices != nil), s.cfg.Approvals != nil, s.cfg.Grants != nil)
+}
+
+// linkOffer answers, for one request, whether a console link is offered: a
+// link into a screen the sidebar hides at this level, or into a Settings
+// section the Settings menu hides, is not (plan:console-ux-pass UX 12). Such
+// a screen still opens by URL, under the level banner; a page simply does not
+// send the owner there. A path no screen owns (an event page) is offered at
+// every level.
+type linkOffer struct {
+	visible []screen
+	lvl     level
+}
+
+// linkOfferFor is the request's linkOffer.
+func (s *Service) linkOfferFor(ctx context.Context) linkOffer {
+	lvl := s.consoleLevel(ctx).Level
+	return linkOffer{visible: s.offeredScreens(s.effectiveFeatures(ctx), lvl), lvl: lvl}
+}
+
+// knownScreens is every screen a console path can belong to: the registry,
+// the lock-only screens and the Devices screen.
+func knownScreens() []screen { return slices.Concat(screens, lockScreens, []screen{devicesScreen}) }
+
+// offers reports whether href is a link this request offers. Anything but a
+// console path is not.
+func (o linkOffer) offers(href string) bool {
+	u, err := url.Parse(href)
+	if err != nil || !strings.HasPrefix(u.Path, "/console/") {
+		return false
+	}
+	sc, ok := screenForPath(knownScreens(), u.Path)
+	if !ok {
+		return true
+	}
+	if !slices.ContainsFunc(o.visible, func(v screen) bool { return v.ID == sc.ID }) {
+		return false
+	}
+	if sc.ID == "settings" {
+		if sec, found := settingsSectionByID(u.Query().Get("s")); found && o.lvl < sec.Min {
+			return false
+		}
+	}
+	return true
+}
+
 // screenRegistry returns the ordered screens. The slice is a copy, so a caller
 // cannot mutate the registry.
 func screenRegistry() []screen { return slices.Clone(screens) }
@@ -332,7 +389,7 @@ type surface struct {
 var surfaces = []surface{
 	{Where: "Overview", Template: "overview.html", Label: "the observation window", Min: levelStandard},
 	{Where: "Overview", Template: "overview.html", Label: "the vitals", Min: levelStandard},
-	{Where: "Overview", Template: "overview.html", Label: "the workspaces table and the knowledge rail", Min: levelStandard},
+	{Where: "Overview", Template: "overview.html", Label: "the projects table and the knowledge rail", Min: levelStandard},
 	{Where: "Memories", Template: "memories.html", Label: "the Reach and Utility sorts", Min: levelStandard},
 	{Where: "Memories", Template: "memories.html", Label: "how often each memory surfaced", Min: levelStandard},
 	{Where: "Memories", Template: "memories.html", Label: "the Never surfaced filter", Min: levelStandard},

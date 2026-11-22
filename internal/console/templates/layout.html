@@ -8,12 +8,12 @@
 <link rel="icon" type="image/svg+xml" href="{{static "favicon.svg"}}">
 <link rel="stylesheet" href="{{static "console.css"}}">
 <script>
-/* Apply a chosen theme and the sidebar state before first paint, so neither
-   flashes. Only an explicit Light or Dark sets data-theme: with no choice
+/* Apply a chosen theme, the sidebar state and a folded Knowledge sky before
+   first paint, so none of them flashes. Only an explicit Light or Dark sets data-theme: with no choice
    (System) the stylesheet follows the OS through prefers-color-scheme, which
    resolves before paint with no script at all. Both are per-browser
    conveniences, never server state. */
-(function(){var d=document.documentElement;d.classList.add('js','reveal');try{var t=localStorage.getItem('seamless-theme');if(t==='dark'||t==='light')d.setAttribute('data-theme',t);if(localStorage.getItem('seamless-sidebar')==='collapsed')d.setAttribute('data-sidebar','collapsed');}catch(e){}})();
+(function(){var d=document.documentElement;d.classList.add('js','reveal');try{var t=localStorage.getItem('seamless-theme');if(t==='dark'||t==='light')d.setAttribute('data-theme',t);if(localStorage.getItem('seamless-sidebar')==='collapsed')d.setAttribute('data-sidebar','collapsed');if(localStorage.getItem('seamless-sky')==='folded')d.setAttribute('data-sky','folded');}catch(e){}})();
 </script>
 {{/* Hover prefetch for console pages (Chromium; ignored elsewhere). It only
      fetches the document, never runs it, and skips the SSE stream, sign-out,

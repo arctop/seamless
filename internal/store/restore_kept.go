@@ -58,6 +58,9 @@ var restoredSettings = []string{
 	SettingCorpusArmed,
 	SettingCorpusBaseline,
 	SettingCorpusReviewed,
+	// When the owner last marked the agents' mishaps reviewed: a point in the
+	// event log being restored, so it comes back with it.
+	SettingMishapsReviewed,
 }
 
 // keptTables are the tables a restore replaces wholesale with today's rows: who

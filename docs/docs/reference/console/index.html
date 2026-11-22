@@ -311,7 +311,7 @@ nothing, and their rows say so.</p>
 <tr>
 <td>Approve a lock declaration</td>
 <td><code>POST /console/locks/{id}/approve</code></td>
-<td>Makes a restricted account's waiting declaration an active lock, which agents may then hold. Refused for a lock already active (409), from an agent's process on the peer_auth socket, and from a paired device.</td>
+<td>Makes a restricted account's waiting declaration an active lock, which agents may then hold. With <code>next=</code> a console page (the Overview's <strong>Approve</strong>), it returns there; a lock decision without one returns to Locks. Refused for a lock already active (409), from an agent's process on the peer_auth socket, and from a paired device.</td>
 </tr>
 <tr>
 <td>Discard a lock declaration</td>
@@ -321,7 +321,7 @@ nothing, and their rows say so.</p>
 <tr>
 <td>Approve a captured plan</td>
 <td><code>POST /console/plans/{slug}/approve</code></td>
-<td>The escape hatch for a Claude Code approval whose <code>PostToolUse</code> never fired: flips the <code>cc-plan</code> note to <code>plan-status:approved</code> and creates the tracking task, exactly as the hook would have. Only applies to a CC capture.</td>
+<td>The escape hatch for a Claude Code approval whose <code>PostToolUse</code> never fired: flips the <code>cc-plan</code> note to <code>plan-status:approved</code> and creates the tracking task, exactly as the hook would have. Only applies to a CC capture. Returns to the plan's page, or with <code>next=</code> a console page (the Overview's <strong>Approve</strong>) there, with a notice.</td>
 </tr>
 <tr>
 <td>Star / unstar an entity</td>
@@ -434,278 +434,67 @@ nothing, and their rows say so.</p>
 <td>Changes how far a project's knowledge travels. A tightening that would cut existing context first renders a confirmation step; nothing is written until it is confirmed.</td>
 </tr>
 <tr>
-<td>Begin a lock change</td>
-<td><code>POST /console/lock/{project}/begin</code></td>
-<td>Only under <a href="../../guides/peer-auth/#lock-from-the-console-or-force-lock-in-the-file">peer_auth</a>, and only from a signed-in browser. <code>action=lock</code> or <code>remove</code>. Refuses first a change that could not apply - a force-locked project, a lock already on, no console lock to remove, a project that is not confidential or sealed, no passkey enrolled - then returns a WebAuthn challenge naming this ceremony, the project and the direction. Writes nothing. A begin never waits for room: at most 4 ceremonies wait at once for one project and direction, and 32 in all, so a begin past 4 displaces the oldest of its project and direction, and one past 32 the oldest of the project and direction holding the most. A displaced ceremony's finish says it expired.</td>
-</tr>
-<tr>
-<td>Lock a project, or remove its lock</td>
-<td><code>POST /console/lock/{project}/finish</code></td>
-<td>Verifies the passkey assertion for that ceremony, then stores the lock or removes it. Turning a lock on ends, in the same transaction, the project's agent leases, read grants and console unlocks, so every agent and browser asks again. It removes only a lock the console set: one <code>peer_auth.force_locked</code> holds stays. Seamless then restarts to apply the change. A finish for a ceremony that began and then failed records <code>access.console_lock_failed</code> under the ceremony's own project and direction, with why: the finish named another project or direction, the passkey's answer did not verify, the passkey is not enrolled, its counter did not increase, another use of it was recorded first, or the project changed since. A finish naming no waiting ceremony records nothing.</td>
-</tr>
-<tr>
-<td>Begin a passkey unlock</td>
-<td><code>POST /console/unlock/{project}/begin</code></td>
-<td>Only for a project peer_auth locks, and only from the signed-in browser that proves its unlock key. Records a waiting <a href="../../guides/peer-auth/#leases-and-the-process-tree">console unlock</a> bound to this browser's cookie and key, sets the <code>seamless_unlock</code> cookie when the browser holds no live unlock yet, and returns the passkey challenge. Refused while no passkey is enrolled; the terminal path still works. Opens nothing yet. A begin never waits for room: at most 4 passkey unlocks wait at once for one project, and 32 in all, so a begin past 4 displaces the project's oldest, and one past 32 the oldest of the project holding the most. Terminal unlocks are counted apart.</td>
-</tr>
-<tr>
-<td>Unlock a project in this browser</td>
-<td><code>POST /console/unlock/{project}/finish</code></td>
-<td>Verifies the passkey assertion for that waiting unlock, from the browser that began it, and makes it live: this browser reads the project for three hours, or less when <code>peer_auth.max_lease</code> is shorter. It is never a lease: no agent reads the project through it.</td>
-</tr>
-<tr>
-<td>Begin a terminal unlock</td>
-<td><code>POST /console/unlock/{project}/terminal</code></td>
-<td><strong>Approve from a terminal</strong>: the passkey begin's gates, without needing a passkey. Records a waiting unlock bound to this browser and returns a pairing code with the <code>seamlessd console-open --unlock</code> command that approves it, run as the daemon's account within ten minutes. The code only names that unlock, so it is not a secret. Opens nothing until the command runs. Capped as the passkey begin is, apart from it: at most 4 wait for one project, and 32 in all.</td>
-</tr>
-<tr>
-<td>Ask for access</td>
-<td><code>POST /console/access/request</code></td>
-<td>The agent's ask, not your decision: <code>seam access request</code>, run from the agent's own shell, files an <a href="../../guides/peer-auth/#requests">access request</a> for a locked project or, with <a href="../../guides/peer-auth/#read-grants-and-the-advisory-tier">access requests</a> on, what the agent's conversation and a confidential or sealed project no lock covers call for: a grant, or a move into the project. With <code>write=true</code> it asks for a read-and-write grant or a move, a locked project's included, whose approval opens the lock too. It writes a waiting request, with the agent's reason of at most 200 characters, and opens nothing. An agent that already holds the access is answered with it.</td>
-</tr>
-<tr>
-<td>Approve an access request</td>
-<td><code>POST /console/access/{id}/approve</code></td>
-<td>Your decision: writes the agent's lease on a locked project, or a grant, for <code>duration=</code> (until the session ends, 1 hour or 4 hours), and only while the request's facts still match <code>digest=</code>, the digest of the facts you were shown. A grant is read-only unless <code>access=read-write</code> on a request that offers the choice. A move request is approved for good: it ends the conversation's session and opens its continuation in the project, and <code>duration=</code> bounds only a locked project's lock. Under peer_auth it takes a proof: a passkey assertion from the request's page, or a Touch ID signature from Seamless Approve (<code>proof=touchid</code>), accepted on the peer_auth socket only and never for a move. In the advisory tier - access requests without peer_auth - a decision with no passkey is the bearer key's, which is what <code>seam approve</code> sends. A paired device's approval with no passkey or Touch ID proof is refused, peer_auth on or off: the bearer key's decision is never a device's.</td>
-</tr>
-<tr>
-<td>Deny an access request</td>
-<td><code>POST /console/access/{id}/deny</code></td>
-<td>Closes a waiting request with no lease, grant or move; the project stays closed to that agent, and a move's agent stays where it works. Refused over the peer_auth socket and from a paired device, but for <a href="../../guides/peer-auth/#your-own-decisions-through-a-relay">your own hands through a relay</a>: deny on the console, or with <code>seam approve</code> in your own terminal on the server.</td>
-</tr>
-<tr>
-<td>Revoke an agent's lease</td>
-<td><code>POST /console/access/leases/{id}/revoke</code></td>
-<td><strong>Revoke</strong> under Agent leases on <code>/console/access</code>: ends that lease before its expiry and records an <code>access.revoked</code> event. Refused over the peer_auth socket and from a paired device, but for <a href="../../guides/peer-auth/#your-own-decisions-through-a-relay">your own hands through a relay</a>.</td>
-</tr>
-<tr>
-<td>Revoke a read grant</td>
-<td><code>POST /console/access/grants/{id}/revoke</code></td>
-<td><strong>Revoke</strong> under Read grants: ends a live grant, read-only or read and write, before its expiry. Its holder stays write-confined, since a revoke does not unread what it read. Refused over the peer_auth socket and from a paired device, but for <a href="../../guides/peer-auth/#your-own-decisions-through-a-relay">your own hands through a relay</a>.</td>
-</tr>
-<tr>
-<td>Lock a console unlock again</td>
-<td><code>POST /console/access/unlocks/{id}/end</code></td>
-<td><strong>Lock again</strong> on <code>/console/access</code>, or <strong>Lock it again</strong> on the unlock page: ends any browser's live console unlock, by id. Refused over the peer_auth socket and from a paired device, but for <a href="../../guides/peer-auth/#your-own-decisions-through-a-relay">your own hands through a relay</a>.</td>
-</tr>
-<tr>
-<td>Begin a passkey enrollment</td>
-<td><code>POST /console/approvers/passkey/begin</code></td>
-<td>Only under peer_auth: <code>name=</code> the passkey (1 to 64 characters on one line). Returns the WebAuthn creation options, excluding every passkey already <a href="../../guides/peer-auth/#enroll-an-approver">enrolled</a>. Holds the enrollment in memory and stores nothing. Refused over the peer_auth socket and from a paired device, since a passkey is created in a browser. A begin never waits for room: at most 16 enrollments wait at once for their browser, and 16 more whose passkey exists and waits for its code, so a begin past 16 displaces the oldest still waiting for its browser, and never one waiting for its code. A displaced enrollment's next step says it expired.</td>
-</tr>
-<tr>
-<td>Create the passkey</td>
-<td><code>POST /console/approvers/passkey/finish</code></td>
-<td>Verifies the browser's new passkey and returns its key's fingerprint with the <code>seamlessd approvers enroll-code</code> command that mints its code. Still stores nothing: the passkey waits for that code. Past 16 waiting for their code, it displaces the oldest of them. Refused from a paired device.</td>
-</tr>
-<tr>
-<td>Enroll the passkey</td>
-<td><code>POST /console/approvers/passkey/confirm</code></td>
-<td><code>code=</code> the one-time code that command minted for this key. Stores the passkey and uses up the code in one transaction. A code that is mistyped, expired, used or minted for another key leaves the passkey waiting, so it can be typed again. Refused from a paired device.</td>
-</tr>
-<tr>
-<td>Enroll a Touch ID key</td>
-<td><code>POST /console/approvers/touchid/enroll</code></td>
-<td>Seamless Approve's call, from the app <code>seam touchid enroll</code> opens, accepted on the peer_auth socket only - never with the TCP key or the console cookie. Stores the Mac's new Touch ID key, proven by an enrollment code minted for that key and the key's signature over it. An earlier Touch ID key of the same Mac that signs its own retirement is retired in the same step. No console route removes any other credential: that is <code>seamlessd approvers remove</code>.</td>
-</tr>
-<tr>
-<td>Begin a passkey sign-in</td>
-<td><code>POST /console/signin/begin</code></td>
-<td>Only with <code>console.sign_in: passkey</code>, and only from a browser that proves its key (the login page sets it up). Returns the WebAuthn challenge, bound to that key and to a ticket that works once. Writes nothing. A 404 while the key signs browsers in.</td>
-</tr>
-<tr>
-<td>Sign in with a passkey</td>
-<td><code>POST /console/signin/finish</code></td>
-<td>Verifies the assertion for that challenge, from the browser that began it, records the passkey's use, and sets a fresh random sign-in cookie that counts only with this browser's key, for 7 days. A cookie the browser held before ends with it.</td>
-</tr>
-<tr>
-<td>Begin adding a passkey</td>
-<td><code>POST /console/passkeys/add/begin</code></td>
-<td>Only with <code>console.sign_in: passkey</code>: the public Add a passkey page asks for the new passkey's <code>name=</code>. Returns the WebAuthn creation options. Writes nothing.</td>
-</tr>
-<tr>
-<td>Add a passkey, waiting</td>
-<td><code>POST /console/passkeys/add/finish</code></td>
-<td>Verifies the device's new passkey and stores it as waiting, with a short code, for 10 minutes. It adds nothing: <code>seamlessd approvers approve --code</code>, on the server, adds exactly that passkey. It never waits for room: at most 4 wait at once from one address (an IPv6 address counts by its /64, and every loopback address is one), and 32 from every address but loopback, whose 4 are its own. One past its address's 4 displaces that address's oldest, and one past the 32 the oldest of the address holding the most; a displaced passkey's code names nothing, and its page says to add it again. So someone looping on the page from one computer crowds out only their own, and no number of other hosts reaches a passkey added on the server itself. Behind a proxy every request comes from the proxy's address.</td>
-</tr>
-<tr>
-<td>Begin a terminal sign-in</td>
-<td><code>POST /console/signin/terminal/begin</code></td>
-<td>Only with <code>console.sign_in: passkey</code>, and only from a browser that proves its key: <strong>Show a code</strong> on the login page. Sets a fresh random sign-in cookie bound to that key and stores it waiting, with a short code, for 10 minutes, with the address the request came from and its User-Agent (printable ASCII with each run of spaces as one, at most 256 characters), which the answer also carries for the page to show beside the code. It signs nothing in: <code>seamlessd console-open --sign-in --code</code>, on the server (as the daemon's account under peer_auth, at a terminal), shows those and when it began, asks, and on a yes signs in exactly the browser that showed that code, for 7 days. It never waits for room: at most 4 wait at once from one address (an IPv6 address counts by its /64, and every loopback address is one), and 32 from every address but loopback, whose 4 are its own. A begin past its address's 4 displaces that address's oldest code, and one past the 32 the oldest of the address holding the most; a displaced code approves nothing, and its page says to show a new one. So someone looping on <strong>Show a code</strong> from one computer crowds out only their own, and no number of other hosts reaches a code a browser on the server itself showed. Behind a proxy every request comes from the proxy's address. A 404 while the key signs browsers in.</td>
-</tr>
-<tr>
-<td>Get a pairing code</td>
-<td><code>POST /console/devices/code</code></td>
-<td>Only on a server that serves other computers (TLS, a bind beyond loopback, or a <code>server_url</code> naming another host). Mints a one-time pairing code, valid for 10 minutes and for one computer, and shows it once, in this answer, with the client one-liners, which carry the server certificate's fingerprint when it serves TLS; only its hash is stored. Without peer_auth the code is the approval; under peer_auth the pairing it starts waits for a passkey. At most 16 codes wait at once. Refused (409, <code>pairing needs TLS here</code>) where the server's address is plain http to another host. Refused (409, <code>server_url names a user</code>) where it names a user. Refused from an agent's process on the peer_auth socket, and from a paired device, peer_auth on or off.</td>
-</tr>
-<tr>
-<td>Begin a device approval</td>
-<td><code>POST /console/devices/{id}/approve/begin</code></td>
-<td>Only under peer_auth, from a signed-in browser, for a pairing that waits, or for a relay that waits for its approval in place: active, paired with its one-time code alone, and mapped in <code>peer_auth.relays</code>. Returns the WebAuthn challenge, bound to that device's id, kind, name, fingerprint and key (and, in place, to its status and that purpose), and a ticket. Writes nothing.</td>
-</tr>
-<tr>
-<td>Approve a device</td>
-<td><code>POST /console/devices/{id}/approve/finish</code></td>
-<td>Verifies the passkey assertion for that ticket over the device as it stands, records the passkey's use, and pairs the device: a relay's certificate is accepted from its next request, and a key device collects its own key, once, on its next status. A relay waiting in place is approved where it stands, the same device id and certificate, in one compare-and-set that refuses a relay revoked meanwhile; its requests are judged from the next one on, and an <code>access.device_paired</code> event marked <code>in_place</code> records it.</td>
-</tr>
-<tr>
-<td>Revoke a device, or deny a pairing</td>
-<td><code>POST /console/devices/{id}/revoke</code></td>
-<td>Revokes a paired device: its credential is refused from its next request, and the requests it is making end. A pairing that waits is denied instead. Refused from an agent's process on the peer_auth socket, and from a paired device, peer_auth on or off.</td>
-</tr>
-<tr>
-<td>Save briefing settings</td>
-<td><code>POST /console/settings/briefing</code></td>
-<td>Writes the briefing knobs as a runtime <strong>override row</strong> in the DB. It never writes the config file.</td>
-</tr>
-<tr>
-<td>Reset briefing settings</td>
-<td><code>POST /console/settings/briefing/reset</code></td>
-<td>Clears the override row, reverting to the file/env configuration.</td>
-</tr>
-<tr>
-<td>Preview a briefing</td>
-<td><code>POST /console/settings/briefing/preview</code></td>
-<td>A read, not a write: it POSTs only to carry the Briefing form's unsaved values, which it checks with the save's own validation, and answers with the briefing a new session in the chosen project would start with. Writes no settings row and records no event. A locked project is not previewed.</td>
-</tr>
-<tr>
-<td>Force utility ranking for a scope</td>
-<td><code>POST /console/settings/utility</code></td>
-<td>Sets or clears the owner's per-scope force: <code>on</code> and <code>off</code> win over the gardener's readiness latch, <code>auto</code> defers to it again.</td>
-</tr>
-<tr>
-<td>Switch embeddings off or back on</td>
-<td><code>POST /console/settings/embeddings/mode</code></td>
-<td>Stores or clears the embedder off switch. It is read at serve start, so the change applies from the next restart - the page says so.</td>
-</tr>
-<tr>
-<td>Re-embed everything</td>
-<td><code>POST /console/settings/embeddings/reembed</code></td>
-<td>Starts a background pass that re-embeds every memory and note with the active model. It changes vectors, never content.</td>
-</tr>
-<tr>
-<td>Choose the console level</td>
-<td><code>POST /console/settings/level</code></td>
-<td>Stores the <a href="#choose-how-much-you-see">experience level</a> as a row that wins over file and env. Presentation only: nothing an agent receives changes.</td>
-</tr>
-<tr>
-<td>Reset the console level</td>
-<td><code>POST /console/settings/level/reset</code></td>
-<td>Clears that row, back to the file/env level.</td>
-</tr>
-<tr>
-<td>Dismiss the welcome card</td>
-<td><code>POST /console/settings/level/welcome</code></td>
-<td>Records that the Home welcome card was seen, without choosing a level. With the card's write-screening box ticked, it also turns that feature on, as a level choice with the box ticked does.</td>
-</tr>
-<tr>
-<td>Save optional features</td>
-<td><code>POST /console/settings/features</code></td>
-<td>Writes the feature switches as a stored <strong>override row</strong> in the DB. It changes what is exposed - console screens and the matching agent tools - and deletes nothing.</td>
-</tr>
-<tr>
-<td>Reset optional features</td>
-<td><code>POST /console/settings/features/reset</code></td>
-<td>Clears the override row, reverting to the file/env configuration - which, unless you set the keys there, means every optional feature is off again. Still deletes nothing.</td>
-</tr>
-<tr>
-<td>Turn update checks on or off</td>
-<td><code>POST /console/settings/updates</code></td>
-<td>Stores the console's <code>update.check</code> override (<code>check=on</code> or <code>off</code>). It cannot turn checks on while the config file or environment says <code>update.check: false</code> - that is final, and the form says so. Off is your decision alone: refused (403) from an agent's process on the peer_auth socket and from a paired device, whatever checks are now; on is open to them. Installs nothing.</td>
-</tr>
-<tr>
-<td>Reset update checks</td>
-<td><code>POST /console/settings/updates/reset</code></td>
-<td>Clears that override - both switches - handing them back to the config file (or, without one, the build's default). A build that is not a published release does not check by default, so there a reset that drops this console's <code>check=on</code> turns checks off, and automatic updates with them: it is refused like turning them off, unless the file or environment locks checks off already. It is refused even where the file's <code>update.check: true</code> would keep them on, since the console cannot see the file's update block under its own override. Every other reset, and every reset on a release build, is open to any caller.</td>
-</tr>
-<tr>
-<td>Check for updates now</td>
-<td><code>POST /console/settings/updates/check</code></td>
-<td>Asks GitHub's release list once, right away - refused while checks are off or within a minute of the last check. Reads; installs nothing.</td>
-</tr>
-<tr>
-<td>Turn automatic updates on or off</td>
-<td><code>POST /console/settings/updates/auto</code></td>
-<td>Stores the console's <code>update.auto</code> override (<code>auto=on</code> or <code>off</code>), keeping its <code>update.check</code>. It cannot turn automatic updates on while the config file or environment says <code>update.auto: false</code>, or locks <code>update.check: false</code> (nothing installs without checks). With checks merely off, the choice is kept and applies once they are back on. Off is your decision alone, refused as turning checks off is; on is open to any caller. Only an install that updates itself acts on it: the installer's, or a <a href="../../guides/peer-auth/#updates">peer_auth system daemon</a>'s.</td>
-</tr>
-<tr>
-<td>Update now</td>
-<td><code>POST /console/settings/updates/apply</code></td>
-<td>Installs the newest release at once, after a confirm: it skips the soak, the wait for idle agents, skipped releases and the backoff, and lifts a hold, whether automatic updates are on, off or paused. Refused while checks are off, on an install that does not update itself, while an update is under way, within a minute of a failed release check, when nothing newer is known, or when the release carries no signed checksums bundle. The daemon restarts to finish.</td>
-</tr>
-<tr>
-<td>Resume automatic updates</td>
-<td><code>POST /console/settings/updates/resume</code></td>
-<td>Lifts the pause automatic updates put on themselves after rollbacks, and the hold a deliberate downgrade set. Changes no setting; skipped releases stay skipped, and a running backoff runs out.</td>
-</tr>
-<tr>
-<td>Save the gardener's switches</td>
-<td><code>POST /console/settings/gardener</code></td>
-<td>Stores the console's choice for <strong>Agents may apply proposals</strong> (<code>agents=on</code> or <code>off</code>, over <code>gardener.agents_may_apply</code>) or for <strong>Apply automatically</strong> (<code>auto_set=1</code> and one <code>auto=&lt;kind&gt;</code> per kind checked, over <code>gardener.auto_apply</code>); each control's form carries only its own fields. It cannot turn agents' applying on while the config file or environment says <code>gardener.agents_may_apply: false</code> - that is final - and it refuses any kind but <code>memory_wanted</code>, <code>tool_error</code>, <code>abandon_plan</code> and <code>ship_plan</code>. Your decision alone in every direction: refused (403) from an agent's process on the peer_auth socket and from a paired device. Applies at once, with no restart; a proposal already waiting is not applied by it.</td>
-</tr>
-<tr>
-<td>Reset the gardener's switches</td>
-<td><code>POST /console/settings/gardener/reset</code></td>
-<td>Clears that override - both switches - handing them back to the config file. Refused from an agent's process and from a paired device, as saving is.</td>
-</tr>
-<tr>
-<td>Save the backup schedule and folder</td>
-<td><code>POST /console/settings/backups</code></td>
-<td>Stores the console's <code>backup:</code> override: only the values that differ from the settings in force. A new folder is created and tested with a write first. Applies from the next backup.</td>
-</tr>
-<tr>
-<td>Reset the backup settings</td>
-<td><code>POST /console/settings/backups/reset</code></td>
-<td>Clears that override, handing the schedule and the folder back to the config file (or, without one, the build's default).</td>
-</tr>
-<tr>
-<td>Back up now</td>
-<td><code>POST /console/settings/backups/now</code></td>
-<td>Writes a backup at once, marked <strong>Made by you</strong>: never skipped, never deleted automatically. With <code>run=retry</code> (the failing card's <strong>Try again</strong>) it runs the schedule's backup instead, which is skipped when nothing changed and prunes after itself. Refused while a backup runs or a restore is being prepared.</td>
-</tr>
-<tr>
-<td>Delete a backup</td>
-<td><code>POST /console/settings/backups/delete</code></td>
-<td><code>ref=</code> a backup from the list, never a path. Removes the file from its folder, after a confirm.</td>
-</tr>
-<tr>
-<td>Begin a restore's passkey ceremony</td>
-<td><code>POST /console/settings/backups/restore/begin</code></td>
-<td>Only while <a href="../../guides/peer-auth/#restore">peer_auth</a> locks a project, and only from a signed-in browser. Returns a WebAuthn challenge bound to the backup file's SHA-256, which the server reads from the file itself, and to the mode. Writes nothing. A begin never waits for room: at most 4 ceremonies wait at once for one backup and mode, and 32 in all, so a begin past 4 displaces the oldest for its backup and mode, and one past 32 the oldest of the backup and mode holding the most. A displaced ceremony's finish says it expired.</td>
-</tr>
-<tr>
-<td>Restore a backup</td>
-<td><code>POST /console/settings/backups/restore</code></td>
-<td><code>ref=</code> and <code>mode=replace</code> or <code>merge</code>. Verifies the backup and prepares the restore while Seamless serves, then restarts to finish it. A replace saves today's data as a backup first. Refused while a backup, another restore or an update is under way. Under the passkey gate it also needs the ceremony's <code>id</code> and <code>response</code>, and the file's digest must still match.</td>
-</tr>
-<tr>
-<td>Cancel a staged restore</td>
-<td><code>POST /console/settings/backups/restore/cancel</code></td>
-<td>Drops a restore that is waiting for its restart. Nothing changes.</td>
-</tr>
-<tr>
-<td>Dismiss a restore's result</td>
-<td><code>POST /console/settings/backups/restore/dismiss</code></td>
-<td>Hides the last restore's result card. Changes no data.</td>
-</tr>
-<tr>
-<td>Save a project family</td>
-<td><code>POST /console/settings/families/save</code></td>
-<td>Creates a family or replaces one family's name and member set - the same <code>project_families</code> setting <code>seamlessd family</code> manages. Members come from a closed picker of registered projects, so a typo cannot create an inert member.</td>
-</tr>
-<tr>
-<td>Delete a project family</td>
-<td><code>POST /console/settings/families/delete</code></td>
-<td>Removes the whole family. Its projects lose the sibling-findings channel; nothing else about them changes.</td>
-</tr>
-<tr>
-<td>Sign in / sign out</td>
-<td><code>POST /console/login</code>, <code>POST /console/logout</code></td>
-<td>Sets or clears the console cookie. Touches no data.</td>
+<td>Mark the mishaps reviewed</td>
+<td><code>POST /console/mishaps/reviewed</code></td>
+<td><a href="#mishaps">Mishaps</a>: <strong>Mark reviewed</strong> stores when you reviewed the reports, through the newest one the page drew (<code>through=</code> its time; now when absent, never later than now). The Overview's mishap card then counts only the reports after it, and is gone until one arrives. The stamp never moves back: a mark through an older report writes nothing and says so. Records <code>mishaps.reviewed</code> with <code>by: console</code>. Refused from an agent's process on the peer_auth socket, and from a paired device.</td>
 </tr>
 </tbody>
 </table>
 </div>
+<p>| Begin a lock change | <code>POST /console/lock/{project}/begin</code> | Only under <a href="../../guides/peer-auth/#lock-from-the-console-or-force-lock-in-the-file">peer_auth</a>, and only from a signed-in browser. <code>action=lock</code> or <code>remove</code>. Refuses first a change that could not apply - a force-locked project, a lock already on, no console lock to remove, a project that is not confidential or sealed, no passkey enrolled - then returns a WebAuthn challenge naming this ceremony, the project and the direction. Writes nothing. A begin never waits for room: at most 4 ceremonies wait at once for one project and direction, and 32 in all, so a begin past 4 displaces the oldest of its project and direction, and one past 32 the oldest of the project and direction holding the most. A displaced ceremony's finish says it expired. |
+| Lock a project, or remove its lock | <code>POST /console/lock/{project}/finish</code> | Verifies the passkey assertion for that ceremony, then stores the lock or removes it. Turning a lock on ends, in the same transaction, the project's agent leases, read grants and console unlocks, so every agent and browser asks again. It removes only a lock the console set: one <code>peer_auth.force_locked</code> holds stays. Seamless then restarts to apply the change. A finish for a ceremony that began and then failed records <code>access.console_lock_failed</code> under the ceremony's own project and direction, with why: the finish named another project or direction, the passkey's answer did not verify, the passkey is not enrolled, its counter did not increase, another use of it was recorded first, or the project changed since. A finish naming no waiting ceremony records nothing. |
+| Begin a passkey unlock | <code>POST /console/unlock/{project}/begin</code> | Only for a project peer_auth locks, and only from the signed-in browser that proves its unlock key. Records a waiting <a href="../../guides/peer-auth/#leases-and-the-process-tree">console unlock</a> bound to this browser's cookie and key, sets the <code>seamless_unlock</code> cookie when the browser holds no live unlock yet, and returns the passkey challenge. Refused while no passkey is enrolled; the terminal path still works. Opens nothing yet. A begin never waits for room: at most 4 passkey unlocks wait at once for one project, and 32 in all, so a begin past 4 displaces the project's oldest, and one past 32 the oldest of the project holding the most. Terminal unlocks are counted apart. |
+| Unlock a project in this browser | <code>POST /console/unlock/{project}/finish</code> | Verifies the passkey assertion for that waiting unlock, from the browser that began it, and makes it live: this browser reads the project for three hours, or less when <code>peer_auth.max_lease</code> is shorter. It is never a lease: no agent reads the project through it. |
+| Begin a terminal unlock | <code>POST /console/unlock/{project}/terminal</code> | <strong>Approve from a terminal</strong>: the passkey begin's gates, without needing a passkey. Records a waiting unlock bound to this browser and returns a pairing code with the <code>seamlessd console-open --unlock</code> command that approves it, run as the daemon's account within ten minutes. The code only names that unlock, so it is not a secret. Opens nothing until the command runs. Capped as the passkey begin is, apart from it: at most 4 wait for one project, and 32 in all. |
+| Ask for access | <code>POST /console/access/request</code> | The agent's ask, not your decision: <code>seam access request</code>, run from the agent's own shell, files an <a href="../../guides/peer-auth/#requests">access request</a> for a locked project or, with <a href="../../guides/peer-auth/#read-grants-and-the-advisory-tier">access requests</a> on, what the agent's conversation and a confidential or sealed project no lock covers call for: a grant, or a move into the project. With <code>write=true</code> it asks for a read-and-write grant or a move, a locked project's included, whose approval opens the lock too. It writes a waiting request, with the agent's reason of at most 200 characters, and opens nothing. An agent that already holds the access is answered with it. |
+| Approve an access request | <code>POST /console/access/{id}/approve</code> | Your decision: writes the agent's lease on a locked project, or a grant, for <code>duration=</code> (until the session ends, 1 hour or 4 hours), and only while the request's facts still match <code>digest=</code>, the digest of the facts you were shown. A grant is read-only unless <code>access=read-write</code> on a request that offers the choice. A move request is approved for good: it ends the conversation's session and opens its continuation in the project, and <code>duration=</code> bounds only a locked project's lock. Under peer_auth it takes a proof: a passkey assertion from the request's page, or a Touch ID signature from Seamless Approve (<code>proof=touchid</code>), accepted on the peer_auth socket only and never for a move. In the advisory tier - access requests without peer_auth - a decision with no passkey is the bearer key's, which is what <code>seam approve</code> sends. A paired device's approval with no passkey or Touch ID proof is refused, peer_auth on or off: the bearer key's decision is never a device's. |
+| Deny an access request | <code>POST /console/access/{id}/deny</code> | Closes a waiting request with no lease, grant or move; the project stays closed to that agent, and a move's agent stays where it works. Refused over the peer_auth socket and from a paired device, but for <a href="../../guides/peer-auth/#your-own-decisions-through-a-relay">your own hands through a relay</a>: deny on the console, or with <code>seam approve</code> in your own terminal on the server. |
+| Revoke an agent's lease | <code>POST /console/access/leases/{id}/revoke</code> | <strong>Revoke</strong> under Agent leases on <code>/console/access</code>: ends that lease before its expiry and records an <code>access.revoked</code> event. Refused over the peer_auth socket and from a paired device, but for <a href="../../guides/peer-auth/#your-own-decisions-through-a-relay">your own hands through a relay</a>. |
+| Revoke a read grant | <code>POST /console/access/grants/{id}/revoke</code> | <strong>Revoke</strong> under Read grants: ends a live grant, read-only or read and write, before its expiry. Its holder stays write-confined, since a revoke does not unread what it read. Refused over the peer_auth socket and from a paired device, but for <a href="../../guides/peer-auth/#your-own-decisions-through-a-relay">your own hands through a relay</a>. |
+| Lock a console unlock again | <code>POST /console/access/unlocks/{id}/end</code> | <strong>Lock again</strong> on <code>/console/access</code>, or <strong>Lock it again</strong> on the unlock page: ends any browser's live console unlock, by id. Refused over the peer_auth socket and from a paired device, but for <a href="../../guides/peer-auth/#your-own-decisions-through-a-relay">your own hands through a relay</a>. |
+| Begin a passkey enrollment | <code>POST /console/approvers/passkey/begin</code> | Only under peer_auth: <code>name=</code> the passkey (1 to 64 characters on one line). Returns the WebAuthn creation options, excluding every passkey already <a href="../../guides/peer-auth/#enroll-an-approver">enrolled</a>. Holds the enrollment in memory and stores nothing. Refused over the peer_auth socket and from a paired device, since a passkey is created in a browser. A begin never waits for room: at most 16 enrollments wait at once for their browser, and 16 more whose passkey exists and waits for its code, so a begin past 16 displaces the oldest still waiting for its browser, and never one waiting for its code. A displaced enrollment's next step says it expired. |
+| Create the passkey | <code>POST /console/approvers/passkey/finish</code> | Verifies the browser's new passkey and returns its key's fingerprint with the <code>seamlessd approvers enroll-code</code> command that mints its code. Still stores nothing: the passkey waits for that code. Past 16 waiting for their code, it displaces the oldest of them. Refused from a paired device. |
+| Enroll the passkey | <code>POST /console/approvers/passkey/confirm</code> | <code>code=</code> the one-time code that command minted for this key. Stores the passkey and uses up the code in one transaction. A code that is mistyped, expired, used or minted for another key leaves the passkey waiting, so it can be typed again. Refused from a paired device. |
+| Enroll a Touch ID key | <code>POST /console/approvers/touchid/enroll</code> | Seamless Approve's call, from the app <code>seam touchid enroll</code> opens, accepted on the peer_auth socket only - never with the TCP key or the console cookie. Stores the Mac's new Touch ID key, proven by an enrollment code minted for that key and the key's signature over it. An earlier Touch ID key of the same Mac that signs its own retirement is retired in the same step. No console route removes any other credential: that is <code>seamlessd approvers remove</code>. |
+| Begin a passkey sign-in | <code>POST /console/signin/begin</code> | Only with <code>console.sign_in: passkey</code>, and only from a browser that proves its key (the login page sets it up). Returns the WebAuthn challenge, bound to that key and to a ticket that works once. Writes nothing. A 404 while the key signs browsers in. |
+| Sign in with a passkey | <code>POST /console/signin/finish</code> | Verifies the assertion for that challenge, from the browser that began it, records the passkey's use, and sets a fresh random sign-in cookie that counts only with this browser's key, for 7 days. A cookie the browser held before ends with it. |
+| Begin adding a passkey | <code>POST /console/passkeys/add/begin</code> | Only with <code>console.sign_in: passkey</code>: the public Add a passkey page asks for the new passkey's <code>name=</code>. Returns the WebAuthn creation options. Writes nothing. |
+| Add a passkey, waiting | <code>POST /console/passkeys/add/finish</code> | Verifies the device's new passkey and stores it as waiting, with a short code, for 10 minutes. It adds nothing: <code>seamlessd approvers approve --code</code>, on the server, adds exactly that passkey. It never waits for room: at most 4 wait at once from one address (an IPv6 address counts by its /64, and every loopback address is one), and 32 from every address but loopback, whose 4 are its own. One past its address's 4 displaces that address's oldest, and one past the 32 the oldest of the address holding the most; a displaced passkey's code names nothing, and its page says to add it again. So someone looping on the page from one computer crowds out only their own, and no number of other hosts reaches a passkey added on the server itself. Behind a proxy every request comes from the proxy's address. |
+| Begin a terminal sign-in | <code>POST /console/signin/terminal/begin</code> | Only with <code>console.sign_in: passkey</code>, and only from a browser that proves its key: <strong>Show a code</strong> on the login page. Sets a fresh random sign-in cookie bound to that key and stores it waiting, with a short code, for 10 minutes, with the address the request came from and its User-Agent (printable ASCII with each run of spaces as one, at most 256 characters), which the answer also carries for the page to show beside the code. It signs nothing in: <code>seamlessd console-open --sign-in --code</code>, on the server (as the daemon's account under peer_auth, at a terminal), shows those and when it began, asks, and on a yes signs in exactly the browser that showed that code, for 7 days. It never waits for room: at most 4 wait at once from one address (an IPv6 address counts by its /64, and every loopback address is one), and 32 from every address but loopback, whose 4 are its own. A begin past its address's 4 displaces that address's oldest code, and one past the 32 the oldest of the address holding the most; a displaced code approves nothing, and its page says to show a new one. So someone looping on <strong>Show a code</strong> from one computer crowds out only their own, and no number of other hosts reaches a code a browser on the server itself showed. Behind a proxy every request comes from the proxy's address. A 404 while the key signs browsers in. |
+| Get a pairing code | <code>POST /console/devices/code</code> | Only on a server that serves other computers (TLS, a bind beyond loopback, or a <code>server_url</code> naming another host). Mints a one-time pairing code, valid for 10 minutes and for one computer, and shows it once, in this answer, with the client one-liners, which carry the server certificate's fingerprint when it serves TLS; only its hash is stored. Without peer_auth the code is the approval; under peer_auth the pairing it starts waits for a passkey. At most 16 codes wait at once. Refused (409, <code>pairing needs TLS here</code>) where the server's address is plain http to another host. Refused (409, <code>server_url names a user</code>) where it names a user. Refused from an agent's process on the peer_auth socket, and from a paired device, peer_auth on or off. |
+| Begin a device approval | <code>POST /console/devices/{id}/approve/begin</code> | Only under peer_auth, from a signed-in browser, for a pairing that waits, or for a relay that waits for its approval in place: active, paired with its one-time code alone, and mapped in <code>peer_auth.relays</code>. Returns the WebAuthn challenge, bound to that device's id, kind, name, fingerprint and key (and, in place, to its status and that purpose), and a ticket. Writes nothing. |
+| Approve a device | <code>POST /console/devices/{id}/approve/finish</code> | Verifies the passkey assertion for that ticket over the device as it stands, records the passkey's use, and pairs the device: a relay's certificate is accepted from its next request, and a key device collects its own key, once, on its next status. A relay waiting in place is approved where it stands, the same device id and certificate, in one compare-and-set that refuses a relay revoked meanwhile; its requests are judged from the next one on, and an <code>access.device_paired</code> event marked <code>in_place</code> records it. |
+| Revoke a device, or deny a pairing | <code>POST /console/devices/{id}/revoke</code> | Revokes a paired device: its credential is refused from its next request, and the requests it is making end. A pairing that waits is denied instead. Refused from an agent's process on the peer_auth socket, and from a paired device, peer_auth on or off. |
+| Save briefing settings | <code>POST /console/settings/briefing</code> | Writes the briefing knobs as a runtime <strong>override row</strong> in the DB. It never writes the config file. |
+| Reset briefing settings | <code>POST /console/settings/briefing/reset</code> | Clears the override row, reverting to the file/env configuration. |
+| Preview a briefing | <code>POST /console/settings/briefing/preview</code> | A read, not a write: it POSTs only to carry the Briefing form's unsaved values, which it checks with the save's own validation, and answers with the briefing a new session in the chosen project would start with. Writes no settings row and records no event. A locked project is not previewed. |
+| Force utility ranking for a scope | <code>POST /console/settings/utility</code> | Sets or clears the owner's per-scope force: <code>on</code> and <code>off</code> win over the gardener's readiness latch, <code>auto</code> defers to it again. |
+| Switch embeddings off or back on | <code>POST /console/settings/embeddings/mode</code> | Stores or clears the embedder off switch. It is read at serve start, so the change applies from the next restart - the page says so. |
+| Re-embed everything | <code>POST /console/settings/embeddings/reembed</code> | Starts a background pass that re-embeds every memory and note with the active model. It changes vectors, never content. |
+| Choose the console level | <code>POST /console/settings/level</code> | Stores the <a href="#choose-how-much-you-see">experience level</a> as a row that wins over file and env. Presentation only: nothing an agent receives changes. |
+| Reset the console level | <code>POST /console/settings/level/reset</code> | Clears that row, back to the file/env level. |
+| Dismiss the welcome card | <code>POST /console/settings/level/welcome</code> | Records that the Home welcome card was seen, without choosing a level. With the card's write-screening box ticked, it also turns that feature on, as a level choice with the box ticked does. |
+| Save optional features | <code>POST /console/settings/features</code> | Writes the feature switches as a stored <strong>override row</strong> in the DB. It changes what is exposed - console screens and the matching agent tools - and deletes nothing. |
+| Reset optional features | <code>POST /console/settings/features/reset</code> | Clears the override row, reverting to the file/env configuration - which, unless you set the keys there, means every optional feature is off again. Still deletes nothing. |
+| Turn update checks on or off | <code>POST /console/settings/updates</code> | Stores the console's <code>update.check</code> override (<code>check=on</code> or <code>off</code>). It cannot turn checks on while the config file or environment says <code>update.check: false</code> - that is final, and the form says so. Off is your decision alone: refused (403) from an agent's process on the peer_auth socket and from a paired device, whatever checks are now; on is open to them. Installs nothing. |
+| Reset update checks | <code>POST /console/settings/updates/reset</code> | Clears that override - both switches - handing them back to the config file (or, without one, the build's default). A build that is not a published release does not check by default, so there a reset that drops this console's <code>check=on</code> turns checks off, and automatic updates with them: it is refused like turning them off, unless the file or environment locks checks off already. It is refused even where the file's <code>update.check: true</code> would keep them on, since the console cannot see the file's update block under its own override. Every other reset, and every reset on a release build, is open to any caller. |
+| Check for updates now | <code>POST /console/settings/updates/check</code> | Asks GitHub's release list once, right away - refused while checks are off or within a minute of the last check. Reads; installs nothing. |
+| Turn automatic updates on or off | <code>POST /console/settings/updates/auto</code> | Stores the console's <code>update.auto</code> override (<code>auto=on</code> or <code>off</code>), keeping its <code>update.check</code>. It cannot turn automatic updates on while the config file or environment says <code>update.auto: false</code>, or locks <code>update.check: false</code> (nothing installs without checks). With checks merely off, the choice is kept and applies once they are back on. Off is your decision alone, refused as turning checks off is; on is open to any caller. Only an install that updates itself acts on it: the installer's, or a <a href="../../guides/peer-auth/#updates">peer_auth system daemon</a>'s. |
+| Update now | <code>POST /console/settings/updates/apply</code> | Installs the newest release at once, after a confirm: it skips the soak, the wait for idle agents, skipped releases and the backoff, and lifts a hold, whether automatic updates are on, off or paused. Refused while checks are off, on an install that does not update itself, while an update is under way, within a minute of a failed release check, when nothing newer is known, or when the release carries no signed checksums bundle. The daemon restarts to finish. |
+| Resume automatic updates | <code>POST /console/settings/updates/resume</code> | Lifts the pause automatic updates put on themselves after rollbacks, and the hold a deliberate downgrade set. Changes no setting; skipped releases stay skipped, and a running backoff runs out. |
+| Save the gardener's switches | <code>POST /console/settings/gardener</code> | Stores the console's choice for <strong>Agents may apply proposals</strong> (<code>agents=on</code> or <code>off</code>, over <code>gardener.agents_may_apply</code>) or for <strong>Apply automatically</strong> (<code>auto_set=1</code> and one <code>auto=&lt;kind&gt;</code> per kind checked, over <code>gardener.auto_apply</code>); each control's form carries only its own fields. It cannot turn agents' applying on while the config file or environment says <code>gardener.agents_may_apply: false</code> - that is final - and it refuses any kind but <code>memory_wanted</code>, <code>tool_error</code>, <code>abandon_plan</code> and <code>ship_plan</code>. Your decision alone in every direction: refused (403) from an agent's process on the peer_auth socket and from a paired device. Applies at once, with no restart; a proposal already waiting is not applied by it. |
+| Reset the gardener's switches | <code>POST /console/settings/gardener/reset</code> | Clears that override - both switches - handing them back to the config file. Refused from an agent's process and from a paired device, as saving is. |
+| Save the backup schedule and folder | <code>POST /console/settings/backups</code> | Stores the console's <code>backup:</code> override: only the values that differ from the settings in force. A new folder is created and tested with a write first. Applies from the next backup. |
+| Reset the backup settings | <code>POST /console/settings/backups/reset</code> | Clears that override, handing the schedule and the folder back to the config file (or, without one, the build's default). |
+| Back up now | <code>POST /console/settings/backups/now</code> | Writes a backup at once, marked <strong>Made by you</strong>: never skipped, never deleted automatically. With <code>run=retry</code> (the failing card's <strong>Try again</strong>) it runs the schedule's backup instead, which is skipped when nothing changed and prunes after itself. Refused while a backup runs or a restore is being prepared. |
+| Delete a backup | <code>POST /console/settings/backups/delete</code> | <code>ref=</code> a backup from the list, never a path. Removes the file from its folder, after a confirm. |
+| Begin a restore's passkey ceremony | <code>POST /console/settings/backups/restore/begin</code> | Only while <a href="../../guides/peer-auth/#restore">peer_auth</a> locks a project, and only from a signed-in browser. Returns a WebAuthn challenge bound to the backup file's SHA-256, which the server reads from the file itself, and to the mode. Writes nothing. A begin never waits for room: at most 4 ceremonies wait at once for one backup and mode, and 32 in all, so a begin past 4 displaces the oldest for its backup and mode, and one past 32 the oldest of the backup and mode holding the most. A displaced ceremony's finish says it expired. |
+| Restore a backup | <code>POST /console/settings/backups/restore</code> | <code>ref=</code> and <code>mode=replace</code> or <code>merge</code>. Verifies the backup and prepares the restore while Seamless serves, then restarts to finish it. A replace saves today's data as a backup first. Refused while a backup, another restore or an update is under way. Under the passkey gate it also needs the ceremony's <code>id</code> and <code>response</code>, and the file's digest must still match. |
+| Cancel a staged restore | <code>POST /console/settings/backups/restore/cancel</code> | Drops a restore that is waiting for its restart. Nothing changes. |
+| Dismiss a restore's result | <code>POST /console/settings/backups/restore/dismiss</code> | Hides the last restore's result card. Changes no data. |
+| Save a project family | <code>POST /console/settings/families/save</code> | Creates a family or replaces one family's name and member set - the same <code>project_families</code> setting <code>seamlessd family</code> manages. Members come from a closed picker of registered projects, so a typo cannot create an inert member. |
+| Delete a project family | <code>POST /console/settings/families/delete</code> | Removes the whole family. Its projects lose the sibling-findings channel; nothing else about them changes. |
+| Sign in / sign out | <code>POST /console/login</code>, <code>POST /console/logout</code> | Sets or clears the console cookie. Touches no data. |</p>
 <p><strong>Your decisions come through a paired device only as your own hands.</strong> On a
 server that serves other computers, a request that comes with a paired device's
 credential - a relay's certificate or a device key - is refused (403) on every
@@ -1016,7 +805,7 @@ out, and the version (which says when a newer release is out) - plus the
 Updates and Backups settings.</p>
 <p><strong>Standard</strong> adds following the work: Now, Projects, Plans, and Tasks (and Labs
 and Trials when that feature is on), the Overview's window, vitals, and
-workspaces, the Briefing and Workspaces settings, and the finer controls on the
+projects table, the Briefing and Workspaces settings, and the finer controls on the
 screens Basic already had.</p>
 <p><strong>Advanced</strong> is every screen and every knob: Interactions (the tool-call
 transport), Retrieval (the analytics), Context, the Knowledge engine settings,
@@ -1283,7 +1072,7 @@ there. See <a href="../../reference/configuration/">Configuration</a>.</p>
 <td>shown</td>
 </tr>
 <tr>
-<td><strong>Overview: the workspaces table and the knowledge rail</strong></td>
+<td><strong>Overview: the projects table and the knowledge rail</strong></td>
 <td>-</td>
 <td>shown</td>
 <td>shown</td>
@@ -1437,30 +1226,58 @@ at exactly what reached an agent. <code>?feed=interactions</code> opts into the 
 transport-level rows the Interactions screen consumes.</p>
 <h2 id="overview">Overview</h2>
 <p><code>/console/</code></p>
-<p>The landing page and the health check. It carries:</p>
+<p>The check-in page. It answers what waits on you first, then what is in motion,
+then whether stored knowledge is reaching your agents. Top to bottom:</p>
 <ul>
-<li><strong>Counts</strong> - active memories (broken down by kind), notes, sessions, and tasks
-by status.</li>
-<li><strong>Retrieval health</strong> over a selectable window (<code>?w=24h|7d|30d|all</code>): injection
-volume, a trend chart, the <strong>reach rate</strong> (distinct active memories that
-actually surfaced, over all active memories), sessions reached, and the
-most-injected memories.</li>
-<li><strong>Coverage</strong> - the share of in-window sessions that retained anything, with a
-per-channel breakdown (findings, memories, notes, trials) and a windowed trend.
-The channels overlap, so the shares need not sum to 100%.</li>
-<li><strong>Projects at a glance</strong> - the top projects by recent activity, drawn from the
-same batched query the Projects board uses, so a row here reconciles with a row
-there exactly.</li>
-<li><strong>Agent-reported mishaps</strong> - while any report exists, the attention strip's
-first card counts the mishaps agents reported at <code>session_end</code> (the newest
-six) and names the latest one's type, age and project. With one report it
-opens that report's event page; with more, the <a href="#mishaps">Mishaps</a> screen.</li>
-<li><strong>Going stale</strong> - the attention strip's knowledge card counts the active
-memories with no update, injection, or read in <code>gardener.staleness_days</code>
-(90 days by default, the gardener's own staleness horizon), exactly the rows
-<a href="#retrieval">Retrieval</a>'s quiet-knowledge list shows, and states the horizon.
-Changing the setting moves the card, the list and their labels together.</li>
-<li><strong>Knowledge sky</strong> - a star chart of every active memory, with no cap. Each
+<li><strong>The level chooser</strong> - on a fresh installation, the one-time welcome card
+(see <a href="#choose-how-much-you-see">Choose how much you see</a>).</li>
+<li><strong>Needs you</strong> - one card per thing that waits on you, most urgent first.
+First what an agent is blocked on right now: access requests waiting for
+you (while a project is locked or access requests are on), writes held for
+your review (with write screening on, or restricted accounts' proposals),
+lock declarations waiting for you (with repo locks on), open gates waiting
+on you (then gates waiting on someone else, named), captured plans
+presented and awaiting your approval, claims that lapsed, and tasks marked in
+progress with no claim. Then your own queues: mishaps to review, an update
+that failed, rolled back or paused itself, and backups that are failing,
+stopped, missing, or older than a week. Then the knowledge queue: gardener
+proposals, what automatic apply applied, memories going stale, and, with
+momentum on, plans at the finish line. Each card is one sentence with its
+count and a link to the screen that answers it; a card for a screen your
+level does not show names it without a link. Where one step settles a
+card, that step is on it - <strong>Mark as handled</strong> for one gate, <strong>Approve</strong>
+for one plan or one lock declaration, <strong>Release claim</strong> for one lapsed or
+claimless claim - posting to the same route the task, plan or lock page
+posts to, and coming back here: the strip redraws in place, without a
+reload. Access requests and held writes are decided on their own pages
+(an approval is a passkey ceremony; a held write is read first). A card
+whose optional feature is off does not exist.</li>
+<li><strong>Agent-reported mishaps</strong> - the mishap card counts every report since you
+last marked them reviewed on the <a href="#mishaps">Mishaps</a> screen (every report
+before your first review), at the true count, names the latest report's
+type, age and project, and opens the Mishaps screen. <strong>Mark reviewed</strong> there
+clears it until a new report arrives.</li>
+<li><strong>Going stale</strong> - the knowledge card counts the active memories with no
+update, injection, or read in <code>gardener.staleness_days</code> (90 days by default,
+the gardener's own staleness horizon), exactly the rows
+<a href="#retrieval">Retrieval</a>'s quiet-knowledge list shows, states the horizon,
+and opens that list. Changing the setting moves the card, the list and their
+labels together.</li>
+<li><strong>Work in motion</strong> - the model <a href="#now">Now</a> draws, as one row: the plans a
+live claim holds a step of, with the agents holding them; the loose ends
+(in progress, but no live agent carries them); and what an agent could claim
+next, three of each with their true counts.</li>
+<li><strong>Live now</strong> - up to six live agents, each led by the task it holds with a
+live claim, else by its project, then how many more, and <strong>All N live</strong> to
+Now.</li>
+<li><strong>Vitals</strong> (Standard and up) - see below - closed by the health line.</li>
+<li><strong>Recently active projects</strong> (Standard and up) - the top projects by recent
+activity, drawn from the same batched query the Projects board uses, so a
+row here reconciles with a row there exactly, beside the most reused
+knowledge.</li>
+<li><strong>Knowledge sky</strong> - a star chart of every active memory, with no cap,
+below the projects. <strong>Fold</strong> puts it away; this browser remembers, and a
+folded sky stays folded on every visit. Each
 project scope (global included) owns a wedge sized by its share of memories,
 largest first. Distance from the centre is when the memory last surfaced to an
 agent: the core holds the last 24 hours, rings mark 7 days and the staleness
@@ -1473,7 +1290,7 @@ a starred memory, spikes mark one written today, and today's stars twinkle as
 the chart appears.
 Beside the chart, a readout states the same picture as text: each ring's
 count, the going-stale count (memories with no update, injection, or read
-within the staleness horizon: always the attention card's count and the rows
+within the staleness horizon: always the stale card's count and the rows
 Retrieval's quiet-knowledge list shows), and every
 scope with its ring mix as a bar. Point at a star for its name and description
 (the pointer snaps to the nearest star); click it for a card with its facts and
@@ -1490,24 +1307,47 @@ only what changed, and search, filters, and the selection survive it. The
 refresh downloads only what changed, too: the stars that changed, arrived, or
 left since the chart the page holds, and nothing of the sky when nothing in
 it did. It is HTML only - the JSON answer carries no sky.</li>
-<li><strong>Recent activity</strong> - the last twelve events, each linking to its detail page.</li>
+<li><strong>Recent activity</strong> - the latest events, each linking to its detail page.</li>
 </ul>
-<p>The four judged vitals at the top (memory reach, knowledge continuity, context
+<p>At Basic the health line comes right after the cards: which agent clients are
+working here, whether semantic recall is on, when the last briefing went out,
+a warning while there is no backup or the newest is older than a week, and the
+version.</p>
+<p>The four judged vitals (memory reach, knowledge continuity, context
 injections, sessions reached) are drill-down links carrying the selected
 window: reach, injections, and sessions reached land on the Retrieval screen
 whose hero and delivery funnel are the same numbers over the same report, and
 continuity lands on the Sessions list filtered to <code>?retained=no</code> - the
 sessions that kept nothing. An empty-state card stays linked, because the
-destination explains why there is nothing.</p>
+destination explains why there is nothing. Below Advanced, where Retrieval is
+not in the sidebar, the three Retrieval vitals are plain cards.</p>
+<p><strong>No link above your level.</strong> A link whose screen your level's sidebar does
+not show - Projects, Plans, Tasks, Locks and Now at Basic, Retrieval and Interactions
+below Advanced - is not offered as a link anywhere on this page: the card,
+the row or the count says the same thing as plain text. The screen still opens
+by URL, under the level note.</p>
 <p>Live sessions are counted TTL-aware (active <em>and</em> heartbeated within the idle
-threshold), so the headline matches the Sessions screen rather than the raw
-<code>active</code> count that an idle session inflates until the reaper runs.</p>
+threshold, or holding a live claim), so the headline matches the Sessions
+screen rather than the raw <code>active</code> count that an idle session inflates until
+the reaper runs.</p>
+<p><code>?format=json</code> answers the page's model at every level: <code>Attention</code> is the
+needs-you list, each item with its <code>Kind</code> (a stable key: <code>access</code>, <code>held</code>,
+<code>lock-declarations</code>, <code>gates</code>, <code>gates-others</code>, <code>plan-approval</code>,
+<code>claims-lapsed</code>, <code>claims-unclaimed</code>, <code>mishaps</code>, <code>updates</code>, <code>backups</code>,
+<code>proposals</code>, <code>auto-applied</code>, <code>stale</code>, <code>finish-line</code>), <code>Count</code>, <code>Title</code>,
+<code>Sub</code>, <code>Href</code>, <code>Blocking</code> when an agent is blocked on it, and its <code>Action</code>
+(the route it posts and its fields) when one step settles it; <code>Motion</code> is
+Work in motion; <code>Live</code>, <code>LiveTotal</code> and <code>LiveMore</code> are the live strip.</p>
 <h3 id="since-you-were-last-here">Since you were last here</h3>
 <p>When you come back to the Overview after at least five minutes away, a line
-above everything else answers the check-in question -- what changed while I was
-gone? -- with linked counts: memories written, sessions started, tasks closed,
-notes written, gardener proposals raised, and mishaps reported since you last
-looked (&quot;Quiet since you were last here 3h ago&quot; when nothing was recorded).</p>
+under the cards answers the check-in question -- what changed while I was
+gone? -- with counts: memories written, sessions started, tasks closed, notes
+written, gardener proposals raised, and mishaps reported since you last
+looked (&quot;Quiet since you were last here 3h ago&quot; when nothing was recorded).
+Each count links its screen - the mishaps count the <a href="#mishaps">Mishaps</a> screen</p>
+<ul>
+<li>where your level shows it.</li>
+</ul>
 <p>&quot;Last looked&quot; is a per-browser stamp, set whenever a console tab is hidden or
 left; the counts come from <code>GET /console/since?t=&lt;unix ms&gt;</code>, which answers JSON
 only and refuses a missing, malformed, future, or older-than-90-days <code>t</code> with a
@@ -2198,21 +2038,34 @@ no card.</p>
 <p><code>/console/mishaps</code></p>
 <p>Every mishap agents reported at <code>session_end</code>, newest first, for a recurrence
 review: which kinds keep happening, and which memories fail to prevent them. It
-has no sidebar entry; the Overview's mishap card and the palette's Jump to open
-it.</p>
+has no sidebar entry; the Overview's mishap card, the check-in's mishap count and
+the palette's Jump to open it.</p>
 <ul>
-<li><strong>Type chips</strong> - All, then each type with its count - <code>shell-trap</code>,
+<li>
+<p><strong>Type chips</strong> - All, then each type with its count - <code>shell-trap</code>,
 <code>wrong-target</code>, <code>live-state</code>, <code>ignored-warning</code>, <code>fabricated</code>, <code>other</code> - and
 <strong>untyped</strong>: reports that named no type, among them every report written
 before types existed. The counts cover the project and window in view
-whatever type is selected; point at a chip for what its type means.</li>
-<li><strong>Reports</strong> - each with its type (or <code>untyped</code>), its text with the type
+whatever type is selected; point at a chip for what its type means.</p>
+</li>
+<li>
+<p><strong>Reports</strong> - each with its type (or <code>untyped</code>), its text with the type
 prefix taken off, its project (click it to keep only that scope's reports),
 the session that reported it with its agent, and the memories it named.
-Click a row to open its event beside the list.</li>
-<li><strong>Memories named</strong> - every memory the reports in view named, with how many
+Click a row to open its event beside the list.</p>
+</li>
+<li>
+<p><strong>Memories named</strong> - every memory the reports in view named, with how many
 named it. A memory many reports name is one that is not preventing its
-mishap.</li>
+mishap.</p>
+</li>
+<li>
+<p><strong>Your review</strong> - how many reports arrived since you last marked them
+reviewed, whatever the filters, with <strong>Mark reviewed</strong>, and a <strong>new</strong> mark
+on each of those reports. Marking them reviewed clears the Overview's
+mishap card until another report arrives; it marks through the newest
+report the page drew, so one that arrives while you read stays new.</p>
+</li>
 </ul>
 <p>Filters: <code>?type=</code> (a type, or <code>untyped</code>), <code>?project=</code> (a slug, or <code>global</code>),
 and the window <code>?w=24h|7d|30d|all</code> (all time by default) or <code>?days=N</code>. A value
@@ -2220,7 +2073,9 @@ the page cannot read is a 400 naming what it takes. <code>?format=json</code> an
 <code>total</code>, <code>types</code> (each with its <code>count</code> and <code>meaning</code>), <code>shown</code> (the reports the
 filters select), <code>mishaps</code> (each with <code>type</code>, <code>text</code>, the recorded
 <code>description</code>, <code>project</code>, <code>sessionId</code>, <code>session</code> and <code>memories</code>), <code>memories</code>
-(each with its <code>count</code>), and <code>locked</code> while peer_auth leaves locked projects
+(each with its <code>count</code>), <code>review</code> (<code>at</code>, when you last marked the reports
+reviewed, and <code>new</code>, how many arrived since; absent while no report exists),
+each report's <code>new</code>, and <code>locked</code> while peer_auth leaves locked projects
 out. The list holds the newest 200.</p>
 <h2 id="memories">Memories</h2>
 <p><code>/console/memories</code>, <code>/console/memories/{id}</code></p>

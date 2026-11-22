@@ -237,8 +237,7 @@ func (s *Service) withChrome(ctx context.Context, pd pageData) pageData {
 	pd.Features = s.effectiveFeatures(ctx)
 	lvl := s.consoleLevel(ctx)
 	pd.Level, pd.LevelOverridden = lvl.Level, lvl.Overridden
-	pd.Screens = withAccessScreens(withDevicesScreen(s.withProposalScreen(visibleScreens(pd.Features, pd.Level), pd.Features, pd.Level),
-		s.cfg.Devices != nil), s.cfg.Approvals != nil, s.cfg.Grants != nil)
+	pd.Screens = s.offeredScreens(pd.Features, pd.Level)
 	pd.Nav = s.navCounts(ctx, pd.Features)
 	pd.NavGroups = navGroups(pd.Screens, pd.Active, pd.Nav)
 	pd.VisibleScopes = strings.Join(slices.DeleteFunc(searchScopesFor(pd.Features, pd.Level),
@@ -546,6 +545,8 @@ func evtIcon(kind string) string {
 		return "sprout"
 	case kind == "recall.miss":
 		return "search"
+	case kind == "mishaps.reviewed":
+		return "check"
 	default:
 		return "activity"
 	}

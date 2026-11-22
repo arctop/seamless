@@ -1978,7 +1978,8 @@ apply (or hand both back to the config), check for updates now, update now, resu
 updates, save or reset the backup schedule and folder, back up now, delete a
 backup, restore one (a passkey ceremony bound to the backup's digest and the
 mode while peer_auth locks a project), cancel a staged restore or dismiss its
-result, and -- with write screening on -- release or discard a held write,
+result, mark the agents' reported mishaps reviewed, and -- with write
+screening on -- release or discard a held write,
 clear a session's mark, switch lockdown, re-run the review, mark a flagged item
 safe and accept a file changed outside Seamless. Keep pages self-contained and dependency-free so an agent can edit
 them without a toolchain.

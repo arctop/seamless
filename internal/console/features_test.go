@@ -267,7 +267,7 @@ func TestOverviewFinishLineCard_FollowsTheMomentumFeature(t *testing.T) {
 	seed("midway", "first of many", core.TaskOpen, 20)
 	seed("midway", "second of many", core.TaskDone, 21)
 	page = getPeek(t, mux, "/console/").Body.String()
-	require.NotContains(t, page, "midway")
+	require.NotContains(t, page, "midway -- ", "no finish-line card: Work in motion may still list its ready steps")
 }
 
 // The maturity-stage pills are a momentum surface on the project board and

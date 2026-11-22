@@ -246,15 +246,17 @@ func TestMishapsPage_RendersChipsRowsAndMemories(t *testing.T) {
 	require.Contains(t, empty, "No live-state mishaps reported yet.")
 }
 
-// The Overview's attention card names the latest report's type, and opens
-// the Mishaps screen once there is more than one report.
+// The Overview's mishap card counts every report not yet reviewed, at its
+// true count, names the latest report's type, and opens the Mishaps screen,
+// where Mark reviewed clears it.
 func TestOverview_MishapCardOpensTheMishapsScreen(t *testing.T) {
 	db, mux := newConsole(t)
-	f := seedMishapFleet(t, db)
+	seedMishapFleet(t, db)
 	body := getHTMLBody(t, mux, "/console/")
-	require.Contains(t, body, `<a class="ov2-attn-card" data-sev="danger" href="/console/mishaps">`)
+	require.Contains(t, body, `<div class="ov2-attn-card" data-sev="danger" data-need="mishaps">`)
+	require.Contains(t, body, `<a class="ov2-attn-main" href="/console/mishaps">`)
+	require.Contains(t, body, "6 mishaps to review", "every report, the nine-day-old one included")
 	require.Contains(t, body, "latest shell-trap ")
-	_ = f
 
 	var ov struct {
 		Mishaps []struct {

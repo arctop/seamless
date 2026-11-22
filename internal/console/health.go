@@ -21,7 +21,8 @@ type healthFact struct {
 
 // healthFacts builds the strip: which agent clients are working with this
 // installation, whether semantic recall is on, when the last briefing went out,
-// and the version -- with what the update check knows about it (versionFact).
+// a warning while backups are missing or old (backupFact), and the version --
+// with what the update check knows about it (versionFact).
 // Every fact is omitted when nothing backs it -- a fresh installation says
 // less, never a confident zero -- and a read failure costs the facts it feeds,
 // never the page.
@@ -65,10 +66,37 @@ func (s *Service) healthFacts(ctx context.Context) []healthFact {
 			Href: "/console/events/" + b.EventID, Title: ts(b.At),
 		})
 	}
+	if f, ok := s.backupFact(time.Now()); ok {
+		out = append(out, f)
+	}
 	if f, ok := s.versionFact(time.Now()); ok {
 		out = append(out, f)
 	}
 	return out
+}
+
+// backupFact warns while there is no backup at all, or the newest is older
+// than a week (backupOldAfter), linked to Settings > Backups. Backups that are
+// current say nothing here: the line is for what to look at. ok is false
+// while no backup service runs in this process, and when nothing is wrong.
+func (s *Service) backupFact(now time.Time) (healthFact, bool) {
+	if s.cfg.Backups == nil {
+		return healthFact{}, false
+	}
+	st := s.cfg.Backups.Status()
+	f := healthFact{Icon: "archive", Href: backupsSectionHref, Tone: "warn"}
+	switch {
+	case st.LastBackup == nil:
+		if st.Running != nil {
+			return healthFact{}, false
+		}
+		f.Text, f.Title = "no backup yet", "Seamless has made no backup of this installation"
+	case now.Sub(st.LastBackup.At) > backupOldAfter:
+		f.Text, f.Title = "newest backup "+ago(st.LastBackup.At)+" old", "The newest backup was made "+ts(st.LastBackup.At)
+	default:
+		return healthFact{}, false
+	}
+	return f, true
 }
 
 // agoPhrase is ago() as a phrase: "4m ago", or "just now".

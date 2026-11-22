@@ -62,6 +62,10 @@ type mishapsData struct {
 	// Locked names the locked projects this request does not read, whose
 	// reports the page leaves out: names only. nil while nothing is locked.
 	Locked []string `json:"locked,omitempty"`
+	// Review is where the owner's review stands: when the reports were last
+	// marked reviewed and how many came after, whatever the filters. nil
+	// while no report exists at all.
+	Review *mishapsReview `json:"review,omitempty"`
 
 	Chips        []mishapLink `json:"-"`
 	Windows      []mishapLink `json:"-"`
@@ -76,6 +80,16 @@ func (d mishapsData) ShownLabel() string { return plural(d.Shown, "mishap", "mis
 
 // TypeLabel is the selected filter as a phrase, "" for every report.
 func (d mishapsData) TypeLabel() string { return d.Type }
+
+// mishapsReview is the review strip: the stamp (nil before the first review),
+// the reports recorded after it (every report before then), and, for the Mark
+// reviewed form, the newest report's time and the page to come back to.
+type mishapsReview struct {
+	At      *time.Time `json:"at,omitempty"`
+	New     int        `json:"new"`
+	Through string     `json:"-"`
+	Return  string     `json:"-"`
+}
 
 // mishapTypeCount is one type's count; Type "untyped" counts the reports that
 // named no type.
@@ -101,6 +115,9 @@ type mishapListRow struct {
 	Harness     string            `json:"harness,omitempty"`
 	Model       string            `json:"model,omitempty"`
 	Memories    []mishapMemoryRef `json:"memories,omitempty"`
+	// New marks a report recorded after the owner last marked the reports
+	// reviewed (never before the first review).
+	New bool `json:"new,omitempty"`
 	// ProjectHref filters the page to the row's scope, keeping the other filters.
 	ProjectHref string `json:"-"`
 }
@@ -250,6 +267,12 @@ func (s *Service) mishapsPage(w http.ResponseWriter, r *http.Request) {
 		}
 		data.Shown = tally.ByType[key]
 	}
+	review, err := s.mishapsReviewOf(ctx, r)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	data.Review = review
 	sessOf := s.sourceSessionResolver(ctx)
 	data.Mishaps = make([]mishapListRow, 0, len(reports))
 	for _, rep := range reports {
@@ -267,6 +290,7 @@ func (s *Service) mishapsPage(w http.ResponseWriter, r *http.Request) {
 		for _, id := range uniqueIDs(rep.ItemIDs) {
 			row.Memories = append(row.Memories, mems[id])
 		}
+		row.New = review != nil && review.At != nil && rep.At.After(*review.At)
 		data.Mishaps = append(data.Mishaps, row)
 	}
 	data.Memories = make([]mishapMemoryCount, 0, len(tally.ByMemory))
@@ -283,6 +307,106 @@ func (s *Service) mishapsPage(w http.ResponseWriter, r *http.Request) {
 		data.ClearProject = mishapsQuery{typ: q.typ, window: q.window, days: q.days}.href()
 	}
 	s.render(w, r, "mishaps", pageData{Title: "Mishaps", Active: "mishaps", Data: data})
+}
+
+// mishapsReviewOf reads where the review stands, through the request's
+// handle, whatever the page's filters: the stamp, the reports after it, and
+// the newest report, which a Mark reviewed marks the reports reviewed through.
+// nil when no report exists.
+func (s *Service) mishapsReviewOf(ctx context.Context, r *http.Request) (*mishapsReview, error) {
+	db := s.db(ctx)
+	newest, err := store.ListMishaps(ctx, db, store.MishapFilter{Limit: 1})
+	if err != nil || len(newest) == 0 {
+		return nil, err
+	}
+	rv := &mishapsReview{Through: core.FormatTime(newest[0].At), Return: returnPath(r)}
+	at, reviewed, err := store.MishapsReviewedAt(ctx, db)
+	if err != nil {
+		// A stamp that does not read counts every report, as the Overview does.
+		s.logger.Warn("console: mishaps reviewed stamp", "error", err)
+	}
+	if reviewed {
+		rv.At = &at
+	}
+	if rv.New, err = store.CountMishapsAfter(ctx, db, at); err != nil {
+		return nil, err
+	}
+	return rv, nil
+}
+
+// mishapsReviewed is POST /console/mishaps/reviewed: the owner marks the
+// reports reviewed through the newest one the page showed (through, its time
+// as the page sent it; now when absent, and never later than now), and the
+// Overview's mishap item counts only the reports after it. The stamp never
+// moves back: a mark through an older report than the stamp writes nothing
+// and says so. Records mishaps.reviewed with the stamp, how many reports the
+// mark covered, and by: console. Wrapped in ownerHands in Register: clearing
+// the owner's queue is the owner's acknowledgement, so an agent's process
+// cannot hide its own reports from the owner.
+func (s *Service) mishapsReviewed(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	now := time.Now().UTC()
+	through := now
+	if raw := strings.TrimSpace(r.PostFormValue("through")); raw != "" {
+		t, err := core.ParseTime(raw)
+		if err != nil {
+			s.formError(w, r, http.StatusBadRequest, "through must be a report's time, as the Mishaps page sends it")
+			return
+		}
+		if t.Before(now) {
+			through = t
+		}
+	}
+	back := func(msg string) string {
+		dest := safeNext(strings.TrimSpace(r.PostFormValue("return")))
+		if dest == "/console/" {
+			dest = mishapsPath
+		}
+		target, err := url.Parse(dest)
+		if err != nil {
+			target = &url.URL{Path: mishapsPath}
+		}
+		return withNotice(target, msg)
+	}
+	db := s.db(ctx)
+	prev, _, err := store.MishapsReviewedAt(ctx, db)
+	if err != nil {
+		s.logger.Warn("console: mishaps reviewed stamp", "error", err)
+	}
+	before, err := store.CountMishapsAfter(ctx, db, prev)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	stamp, err := store.MarkMishapsReviewed(ctx, s.writeDB(), through)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	after, err := store.CountMishapsAfter(ctx, db, stamp)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	covered := max(before-after, 0)
+	moved := !stamp.Equal(prev)
+	if moved && s.cfg.Events != nil {
+		if _, err := s.eventLog(ctx).Record(ctx, core.Event{
+			Kind:    store.EventMishapsReviewed,
+			Payload: map[string]any{"through": core.FormatTime(stamp), "reports": covered, "by": "console"},
+		}); err != nil {
+			s.logger.Warn("console: record mishaps reviewed", "error", err)
+		}
+	}
+	if wantsJSON(r) {
+		writeJSON(w, http.StatusOK, map[string]any{"reviewedAt": stamp, "reviewed": covered, "new": after})
+		return
+	}
+	msg := "Marked " + plural(covered, "report", "reports") + " reviewed."
+	if !moved {
+		msg = "Already reviewed through that report."
+	}
+	http.Redirect(w, r, back(msg), http.StatusSeeOther)
 }
 
 // mishapMemories resolves every memory the reports and the tally name, by

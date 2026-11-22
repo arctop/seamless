@@ -82,6 +82,9 @@ func TestOverview_EmptyDatabaseRendersNoHollowPanels(t *testing.T) {
 	require.Contains(t, body, `<a class="ov2-vital" href="/console/retrieval?w=24h"`)
 }
 
+// The needs strip (needs.go) puts the owner's queues before the knowledge
+// queue: the mishaps to review lead the gardener's proposals, each card a
+// sentence with its count and its link.
 func TestOverview_AttentionStripOrdersBySeverityAndLinksOut(t *testing.T) {
 	db, mux := newConsole(t)
 	ctx := context.Background()
@@ -106,13 +109,14 @@ func TestOverview_AttentionStripOrdersBySeverityAndLinksOut(t *testing.T) {
 	require.Equal(t, http.StatusOK, page.Code)
 	body := page.Body.String()
 
-	require.Contains(t, body, `class="ov2-attn"`)
-	require.Contains(t, body, "1 agent-reported mishap")
-	require.Contains(t, body, `href="/console/events/`+evID+`"`)
+	require.Contains(t, body, `class="ov2-attn" id="needs"`)
+	require.Contains(t, body, "1 mishap to review")
+	require.Contains(t, body, `<a class="ov2-attn-main" href="/console/mishaps">`, "the card opens the Mishaps screen, where Mark reviewed clears it")
+	require.Contains(t, body, `href="/console/events/`+evID+`"`, "the report itself is in the activity ledger")
 	require.Contains(t, body, "1 gardener proposal waiting")
-	require.Contains(t, body, `href="/console/gardener"`)
+	require.Contains(t, body, `<a class="ov2-attn-main" href="/console/gardener">`)
 
-	// Severity order: danger before warn, always.
+	// The owner's queue before the knowledge queue: danger before warn here.
 	dangerAt := strings.Index(body, `data-sev="danger"`)
 	warnAt := strings.Index(body, `data-sev="warn"`)
 	require.NotEqual(t, -1, dangerAt)
@@ -127,7 +131,7 @@ func TestOverview_AttentionStripOrdersBySeverityAndLinksOut(t *testing.T) {
 	require.Contains(t, body, `class="ov2-attn-nav" hidden`)
 	require.Contains(t, body, `data-attn-prev`)
 	require.Contains(t, body, `data-attn-next`)
-	require.Contains(t, body, "Needs attention<strong>2</strong>")
+	require.Contains(t, body, "Needs you<strong>2</strong>")
 }
 
 func TestOverview_LiveStripListsHeartbeatingSessions(t *testing.T) {
@@ -195,7 +199,7 @@ func TestOverview_StylesStayScopedAndStackResponsively(t *testing.T) {
 	stackAt := strings.Index(block, "@media (max-width: 1100px)")
 	require.NotEqual(t, -1, stackAt)
 	// One column, floored at zero rather than at min-content: a bare 1fr let the
-	// workspaces table widen the whole phone page past the screen.
+	// projects table widen the whole phone page past the screen.
 	require.Contains(t, block[stackAt:], ".ov2-grid { grid-template-columns: minmax(0, 1fr); }")
 
 	// The marketing block is gone, not merely unused.
@@ -221,8 +225,9 @@ func newHealthConsole(t *testing.T, lvl string, emb EmbeddingRuntime) (*sql.DB, 
 	return db, mux
 }
 
-// The Basic Home answers "is it working?" first and carries nothing analytic:
-// health strip, check-in, attention, live, sky, activity -- and nothing else.
+// The Basic Home answers "is it working?" right after what needs you and
+// carries nothing analytic: needs, health strip, check-in, work in motion,
+// live, sky, activity -- and nothing else.
 func TestOverview_BasicHomeIsHealthFirst(t *testing.T) {
 	db, mux := newHealthConsole(t, "basic", EmbeddingRuntime{Enabled: true, Provider: "openai", Model: "text-embedding-3-large"})
 	ctx := context.Background()
@@ -253,12 +258,12 @@ func TestOverview_BasicHomeIsHealthFirst(t *testing.T) {
 
 	for _, gone := range []string{
 		`class="ov2-vitals"`, `class="ov2-window-tabs"`, "sessions observed",
-		`aria-label="Recently active workspaces"`, `class="ov2-rail"`, "Most reused knowledge",
+		`aria-label="Recently active projects"`, `class="ov2-rail"`, "Most reused knowledge",
 		`class="ov-health quiet"`,
 	} {
 		require.NotContains(t, body, gone, "basic Home hides %s", gone)
 	}
-	// The strip leads: it comes before the check-in.
+	// The health strip comes before the check-in.
 	require.Less(t, strings.Index(body, "ov-health lead"), strings.Index(body, `id="checkin"`))
 }
 
@@ -269,7 +274,7 @@ func TestOverview_AdvancedKeepsTheAnalyticsAndAQuietHealthLine(t *testing.T) {
 	body := getPeek(t, mux, "/console/?w=7d").Body.String()
 	for _, want := range []string{
 		`class="ov2-vitals"`, `class="ov2-window-tabs"`, "sessions observed",
-		`aria-label="Recently active workspaces"`, `class="ov2-rail"`, "Most reused knowledge",
+		`aria-label="Recently active projects"`, `class="ov2-rail"`, "Most reused knowledge",
 		`<footer class="ov-health quiet" aria-label="Is it working">`,
 	} {
 		require.Contains(t, body, want)

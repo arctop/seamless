@@ -6,8 +6,9 @@
 // (apply/dismiss/retarget), saving or resetting the briefing settings, and
 // steering updates: switching the background update check and automatic
 // updates, asking it to check now, installing the newest release now, and
-// resuming automatic updates after they paused themselves, and the backups:
-// their schedule and folder, Back up now, deleting one, and restoring one.
+// resuming automatic updates after they paused themselves, the backups:
+// their schedule and folder, Back up now, deleting one, and restoring one,
+// and marking the agents' reported mishaps reviewed.
 // Access is guarded by the same static bearer key as the MCP surface: a browser
 // trades the key for a cookie at /console/login, and the seam CLI presents the
 // key as a bearer token. With console.sign_in: passkey (Config.SignIn) a
@@ -28,6 +29,7 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -334,6 +336,9 @@ func (s *Service) Register(mux *http.ServeMux) {
 	handle("GET /console/diary", s.auth(gated(features.Diary, s.diaryPage)))
 	handle("GET /console/sessions", s.auth(s.sessionsList))
 	handle("GET /console/mishaps", s.auth(s.mishapsPage))
+	// Marking the mishaps reviewed clears the Overview's mishap item: the
+	// owner's acknowledgement, never an agent's (mishaps.go).
+	post("POST /console/mishaps/reviewed", formBodySmall, ownerHands(s.mishapsReviewed))
 	handle("GET /console/sessions/{id}", s.auth(s.sessionDetail))
 	handle("GET /console/sessions/{id}/transcript", s.auth(s.sessionTranscript))
 	handle("GET /console/memories", s.auth(s.memoriesList))
@@ -831,29 +836,54 @@ type kindCount struct {
 	N    int
 }
 
-// attnCard is one entry in the Overview's attention strip: something waiting on
-// the owner, with a severity that orders the strip and a screen that answers it.
-// A bucket with nothing in it produces no card at all -- an empty "0 mishaps"
-// panel would spend the most valuable strip on the page saying nothing.
-type attnCard struct {
-	Sev   string // "danger" | "warn" | "info" | "ok" (the finish-line cards, the strip's only positive entries)
-	Icon  string
-	Title string
-	Sub   string
-	Href  string
-	// Bar is the finish-line card's progress draw (finishBar); empty on every
-	// other card, so the rest of the strip's markup is byte-identical.
-	Bar template.HTML
-}
-
-// liveSessionRow is one chip in the "live now" strip: a session heartbeating
-// inside the configured idle window.
+// liveSessionRow is one chip in the "live now" strip: a live agent (Now's
+// card), led by the task it holds with a live claim, else by its project.
 type liveSessionRow struct {
 	ID      string
 	Name    string
 	Project string
-	Age     string
+	// Lead is what the chip leads with: the held task's title, else Project;
+	// Held says which.
+	Lead string
+	Held bool
+	Age  string
 }
+
+// workMotion is the Overview's Work in motion row, from Now's model
+// (nowWork): the plans in progress with the agents holding their steps, the
+// loose ends, and what is ready next, each a few rows and its true count.
+type workMotion struct {
+	Plans     []motionPlan `json:"plans"`
+	PlansHeld int          `json:"plansInProgress"`
+	Loose     []motionTask `json:"looseEnds"`
+	LooseN    int          `json:"looseTotal"`
+	Ready     []motionTask `json:"readyNext"`
+	ReadyN    int          `json:"readyTotal"`
+	Agents    int          `json:"agentsLive"`
+	InFlight  int          `json:"tasksInFlight"`
+	// NowLinked says whether this request's level offers Now as a link.
+	NowLinked bool `json:"-"`
+}
+
+// motionPlan is a plan in progress: Now's plan card, its link offered or not.
+type motionPlan struct {
+	nowPlanVM
+	Linked bool `json:"-"`
+}
+
+// motionTask is a loose end (with its word) or a ready task.
+type motionTask struct {
+	ID       string    `json:"id"`
+	Title    string    `json:"title"`
+	Project  string    `json:"project"`
+	PlanSlug string    `json:"planSlug,omitempty"`
+	Word     *taskWord `json:"word,omitempty"`
+	Href     string    `json:"href"`
+	Linked   bool      `json:"-"`
+}
+
+// motionRows is how many rows each column of Work in motion shows.
+const motionRows = 3
 
 // vital is one of the four Overview cards: a headline number with its
 // comparison, the denominator that makes it readable, the threshold it is judged
@@ -874,6 +904,9 @@ type vital struct {
 	Spark     spark
 	Href      string
 	HrefTitle string // tooltip naming what the click answers
+	// Linked says whether this request's level offers Href as a link: a
+	// vital whose screen the sidebar hides is a plain card (linkOffer).
+	Linked bool `json:"-"`
 }
 
 // overviewData is the pre-computed payload for the overview page.
@@ -907,11 +940,16 @@ type overviewData struct {
 	Projects         []projectGlanceRow     // top projects by recent activity ("projects at a glance")
 	Mishaps          []mishapRow            // latest agent-reported mishaps (recurrence review rail)
 
-	// Status-page surfaces: what needs attention, what is happening right now,
-	// and the four judged vitals. Each list is empty rather than zero-filled when
-	// its bucket is empty, so the template can drop the whole strip.
-	Attention   []attnCard
-	Live        []liveSessionRow
+	// Status-page surfaces: what needs the owner (the needs-you model,
+	// needs.go), the work in motion, who is live right now, and the four
+	// judged vitals. Each list is empty rather than zero-filled when its bucket
+	// is empty, so the template can drop the whole strip.
+	Attention []attnCard
+	Motion    *workMotion `json:",omitempty"`
+	Live      []liveSessionRow
+	// LiveTotal is every live agent; LiveMore those the chips leave out.
+	LiveTotal   int
+	LiveMore    int
 	Vitals      []vital
 	StaleDays   int // the "going stale" horizon, in days, stated in the card
 	StaleUnseen int // active memories with no update, injection, or read within it: Retrieval's stale list
@@ -936,6 +974,35 @@ type overviewData struct {
 	// Welcome is the one-time level picker (HTML only), shown until the owner
 	// chooses a level or dismisses it; nil once they have.
 	Welcome *welcomeCard `json:"-"`
+
+	// CheckinOffer names the screens the check-in's counts may link to at this
+	// level (shell.js reads it as data-checkin-offer): memories, sessions,
+	// tasks, notes, gardener, mishaps.
+	CheckinOffer string `json:"-"`
+
+	// offer answers which links this request's level offers (Links).
+	offer linkOffer
+}
+
+// Links reports whether the page offers href as a link: a screen the sidebar
+// hides at this level is not linked to (linkOffer).
+func (d overviewData) Links(href string) bool { return d.offer.offers(href) }
+
+// checkinScreens maps each check-in count (shell.js) to its link.
+var checkinScreens = []struct{ key, href string }{
+	{"memories", "/console/memories"}, {"sessions", "/console/sessions"}, {"tasks", "/console/tasks"},
+	{"notes", "/console/notes"}, {"gardener", "/console/gardener"}, {"mishaps", mishapsPath},
+}
+
+// checkinOffer lists the check-in counts whose link offer allows.
+func checkinOffer(offer linkOffer) string {
+	var keys []string
+	for _, c := range checkinScreens {
+		if offer.offers(c.href) {
+			keys = append(keys, c.key)
+		}
+	}
+	return strings.Join(keys, " ")
 }
 
 // welcomeCard is the Home welcome card: the first-run level choice, made
@@ -1155,7 +1222,15 @@ func (s *Service) overview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pending := sumValues(sum.GardenerPending)
-	live := s.liveSessions(ctx, now, 6)
+	// The work in motion: Now's own model, read once for the needs strip's
+	// claims, the Work in motion row and the live strip.
+	work, err := s.nowWork(ctx, now.UTC(), "")
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	offer := s.linkOfferFor(ctx)
+	live, liveMore := liveChips(work, liveChipsShown)
 
 	data := overviewData{
 		Trend:            report.Trend,
@@ -1187,16 +1262,27 @@ func (s *Service) overview(w http.ResponseWriter, r *http.Request) {
 		Projects:         glance,
 		Mishaps:          mishaps,
 		Live:             live,
+		LiveTotal:        len(work.Agents),
+		LiveMore:         liveMore,
 		StaleDays:        staleDays,
 		StaleUnseen:      staleUnseen,
+		offer:            offer,
 	}
-	data.Attention = s.attentionCards(ctx, data)
+	data.Attention = s.needsFor(ctx, needsInput{
+		now: now, next: overviewNext(r), work: work, pending: pending,
+		staleUnseen: staleUnseen, staleDays: staleDays, offer: offer,
+	})
+	data.Motion = motionOf(work, offer)
 	if analytics {
 		data.Vitals = overviewVitals(data, report, covTrend, prior, hasPrior, win)
+		for i := range data.Vitals {
+			data.Vitals[i].Linked = offer.offers(data.Vitals[i].Href)
+		}
 		data.Spotlight = s.memorySpotlight(ctx, now)
 	}
-	data.Sky = s.knowledgeSky(ctx, now, r)
+	data.Sky = s.knowledgeSky(ctx, now, r, offer)
 	if !wantsJSON(r) {
+		data.CheckinOffer = checkinOffer(offer)
 		data.Health = s.healthFacts(ctx)
 		data.HealthLead = lvl < levelStandard
 		if !lvlState.Welcomed {
@@ -1219,7 +1305,10 @@ func (s *Service) overview(w http.ResponseWriter, r *http.Request) {
 // a warning) rather than failing the whole status page. JSON callers never pay
 // for it: the panel is HTML-only. A live or in-place fetch from a page that
 // already holds a chart gets only what changed since (sky_live.go).
-func (s *Service) knowledgeSky(ctx context.Context, now time.Time, r *http.Request) *skyData {
+//
+// A scope's link opens its project, a Standard screen: below that level the
+// readout names the scope without a link (linkOffer).
+func (s *Service) knowledgeSky(ctx context.Context, now time.Time, r *http.Request, offer linkOffer) *skyData {
 	if wantsJSON(r) {
 		return nil
 	}
@@ -1234,6 +1323,13 @@ func (s *Service) knowledgeSky(ctx context.Context, now time.Time, r *http.Reque
 		return nil
 	}
 	sky := buildSky(mems, stats, now, s.staleDays())
+	if sky != nil {
+		for i := range sky.Scopes {
+			if sky.Scopes[i].Href != "" && !offer.offers(sky.Scopes[i].Href) {
+				sky.Scopes[i].Href = ""
+			}
+		}
+	}
 	// The ledger is shared by every request. A chart drawn under a lease or a
 	// console unlock holds a locked project's stars, and a delta from it names
 	// the ones that left -- so it is neither remembered nor diffed against:
@@ -1264,84 +1360,6 @@ func (s *Service) memorySpotlight(ctx context.Context, now time.Time) *spotlight
 			plural(mem.Readers, "session", "sessions"), spotlightWindowDays)
 	}
 	return sp
-}
-
-// attentionCards builds the Overview's attention strip in severity order:
-// mishaps first (something went wrong), then the gardener queue (something is
-// waiting on a decision), then knowledge going quiet (something is drifting).
-// A bucket with nothing in it contributes no card.
-func (s *Service) attentionCards(ctx context.Context, d overviewData) []attnCard {
-	var out []attnCard
-	if n := len(d.Mishaps); n > 0 {
-		latest := d.Mishaps[0]
-		where := "global scope"
-		if latest.Project != "" {
-			where = latest.Project
-		}
-		what := "latest "
-		if latest.Type != "" {
-			what += latest.Type + " "
-		}
-		// One report opens on its own page; several open the Mishaps screen,
-		// where the review counts them by type.
-		href := "/console/events/" + latest.ID
-		if n > 1 {
-			href = mishapsPath
-		}
-		out = append(out, attnCard{
-			Sev: "danger", Icon: "triangle-alert",
-			Title: plural(n, "agent-reported mishap", "agent-reported mishaps"),
-			Sub:   what + ago(latest.When) + " in " + where + " · review recurrence",
-			Href:  href,
-		})
-	}
-	if d.Pending > 0 {
-		sub := "waiting for review"
-		// The oldest pending proposal is what makes the queue feel stale, and
-		// PendingProposals is newest-first, so it is the last row. A failure here
-		// costs the age line, not the card.
-		if props, err := store.PendingProposals(ctx, s.db(ctx), ""); err != nil {
-			s.logger.Warn("console: pending proposals for attention strip", "error", err)
-		} else if len(props) > 0 {
-			sub = "oldest " + ago(props[len(props)-1].CreatedAt) + " · merges, retirements, and digests"
-		}
-		out = append(out, attnCard{
-			Sev: "warn", Icon: "sprout",
-			Title: plural(d.Pending, "gardener proposal waiting", "gardener proposals waiting"),
-			Sub:   sub,
-			Href:  "/console/gardener",
-		})
-	}
-	if d.StaleUnseen > 0 {
-		out = append(out, attnCard{
-			Sev: "info", Icon: "timer",
-			Title: plural(d.StaleUnseen, "memory going stale", "memories going stale"),
-			Sub:   fmt.Sprintf("no update, injection, or read in %dd · consider retiring", d.StaleDays),
-			Href:  "/console/retrieval",
-		})
-	}
-	out = append(out, s.autoAppliedCards(ctx)...)
-	// Momentum's finish-line cards close the strip: the only positive entry, so
-	// the problems keep the lead. Gated in the handler rather than the template
-	// because a disabled install must not even run the query; the briefing's
-	// plan-line emphasis checks the same effective config, so the two surfaces
-	// switch together.
-	if features.Enabled(s.effectiveFeatures(ctx), features.Momentum) {
-		plans, err := store.FinishLinePlans(ctx, s.db(ctx))
-		if err != nil {
-			s.logger.Warn("console: finish-line plans for attention strip", "error", err)
-		}
-		for _, p := range plans {
-			out = append(out, attnCard{
-				Sev: "ok", Icon: "flag",
-				Title: p.Slug + " -- " + p.FinishLinePhrase(),
-				Sub:   "left: " + strings.Join(p.Remaining, " · "),
-				Href:  "/console/plans/" + p.Slug,
-				Bar:   finishBar(p.PlanRollup),
-			})
-		}
-	}
-	return out
 }
 
 // overviewVitals assembles the four judged cards. Each one answers a different
@@ -1414,38 +1432,69 @@ func coverageRateSeries(buckets []store.CoverageBucket) []store.TrendBucket {
 	return out
 }
 
-// liveSessions lists the sessions heartbeating right now, newest first, for the
-// Overview's live strip. Best-effort: the strip is a pulse, not a record, so a
-// query failure drops it rather than failing the page.
-func (s *Service) liveSessions(ctx context.Context, now time.Time, limit int) []liveSessionRow {
-	ttl := s.cfg.SessionIdleTTL
-	if ttl <= 0 {
-		ttl = core.SessionIdleTTL
-	}
-	sessions, err := store.ListSessions(ctx, s.db(ctx), core.SessionActive, now.Add(-ttl), limit*2)
-	if err != nil {
-		s.logger.Warn("console: live sessions", "error", err)
-		return nil
-	}
-	out := make([]liveSessionRow, 0, limit)
-	for _, sess := range sessions {
-		if !sess.LiveAsOf(now, ttl) {
-			continue
-		}
-		name := sess.Name
-		if name == "" {
-			name = shortID(sess.ID)
-		}
-		project := sess.ProjectSlug
-		if project == "" {
-			project = "global"
-		}
-		out = append(out, liveSessionRow{ID: sess.ID, Name: name, Project: project, Age: ago(sess.UpdatedAt)})
+// liveChipsShown is how many live agents the live strip names.
+const liveChipsShown = 6
+
+// liveChips is the live strip: the first limit of Now's agent cards, freshest
+// heartbeat first, each led by the task it holds with a live claim, else by
+// its project, and how many more are live.
+func liveChips(work nowData, limit int) ([]liveSessionRow, int) {
+	out := make([]liveSessionRow, 0, min(limit, len(work.Agents)))
+	for _, a := range work.Agents {
 		if len(out) == limit {
 			break
 		}
+		row := liveSessionRow{ID: a.ID, Name: a.Name, Project: a.Project, Lead: a.Project, Age: ago(a.Beat)}
+		if len(a.Claims) > 0 && a.Claims[0].Title != "" {
+			row.Lead, row.Held = a.Claims[0].Title, true
+		}
+		out = append(out, row)
 	}
-	return out
+	return out, len(work.Agents) - len(out)
+}
+
+// motionOf is the Work in motion row from Now's model: the plans a live claim
+// holds a step of, the loose ends, and the ready queue, a few rows each with
+// their true counts, every link checked against offer. Nil when nothing is
+// in motion: no plan held, no loose end, nothing ready.
+func motionOf(work nowData, offer linkOffer) *workMotion {
+	m := &workMotion{
+		LooseN: len(work.Loose), ReadyN: work.ReadyTotal,
+		Agents: len(work.Agents), InFlight: work.InFlight,
+		NowLinked: offer.offers("/console/now"),
+	}
+	for _, p := range work.Plans {
+		if len(p.Holders) == 0 {
+			continue
+		}
+		m.PlansHeld++
+		if len(m.Plans) < motionRows {
+			m.Plans = append(m.Plans, motionPlan{nowPlanVM: p, Linked: offer.offers(p.Href)})
+		}
+	}
+	task := func(id, title, project, plan string) motionTask {
+		href := "/console/tasks/" + url.PathEscape(id)
+		return motionTask{ID: id, Title: title, Project: project, PlanSlug: plan, Href: href, Linked: offer.offers(href)}
+	}
+	for _, l := range work.Loose {
+		if len(m.Loose) == motionRows {
+			break
+		}
+		t := task(l.ID, l.Title, l.Project, l.PlanSlug)
+		word := l.Word
+		t.Word = &word
+		m.Loose = append(m.Loose, t)
+	}
+	for _, r := range work.UpNext {
+		if len(m.Ready) == motionRows {
+			break
+		}
+		m.Ready = append(m.Ready, task(r.ID, r.Title, r.Project, r.PlanSlug))
+	}
+	if m.PlansHeld == 0 && m.LooseN == 0 && m.ReadyN == 0 {
+		return nil
+	}
+	return m
 }
 
 // orderKinds lists memory kinds in canonical order, dropping absent ones.

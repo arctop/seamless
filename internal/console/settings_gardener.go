@@ -368,7 +368,7 @@ func (s *Service) autoAppliedCards(ctx context.Context) []attnCard {
 		sub = "review or undo them in the decision history"
 	}
 	return []attnCard{{
-		Sev: "info", Icon: "sparkles",
+		Kind: needAutoApplied, Count: n, Sev: "info", Icon: "sparkles",
 		Title: plural(n, "proposal applied automatically", "proposals applied automatically"),
 		Sub:   sub,
 		Href:  "/console/gardener/decisions#gardener-auto",

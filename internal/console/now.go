@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -63,11 +64,20 @@ type nowData struct {
 	Loose      []nowLooseVM `json:"looseEnds"`
 	Plans      []nowPlanVM  `json:"plans"`
 	UpNext     []nowReadyVM `json:"upNext"`
-	Wire       []eventRow   `json:"wire"`
+	// ReadyTotal is every task claimable this instant in scope; UpNext lists
+	// the first of them.
+	ReadyTotal int        `json:"readyTotal"`
+	Wire       []eventRow `json:"wire"`
 
 	// Arcade is the gamification layer: nil while the feature is off, so the
 	// page (HTML and JSON) carries zero trace of it.
 	Arcade *nowArcadeVM `json:"arcade,omitempty"`
+
+	// liveAll counts every live session whatever the scope, and shippedToday
+	// the plans whose last step closed today in scope: what the arcade reads
+	// after nowWork (never in the JSON answer).
+	liveAll      int
+	shippedToday []store.ProjectPlan
 }
 
 // nowScopeVM is one entry of the project filter strip.
@@ -164,6 +174,16 @@ type nowPlanVM struct {
 	// Href is the plan's page when it has one in this project (planPageHref),
 	// else the project's Plans & tasks tab: a card never links to a 404.
 	Href string `json:"href"`
+	// Holders are the live agents holding a step of the plan with a live
+	// claim, in the agent cards' order: the plan is in progress while any
+	// does.
+	Holders []nowHolderVM `json:"holders,omitempty"`
+}
+
+// nowHolderVM is a live agent holding a plan step: its session and name.
+type nowHolderVM struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
 }
 
 // nowReadyVM is one cross-project ready-queue row: claimable this instant.
@@ -230,10 +250,92 @@ func (s *Service) nowPage(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, "now", pageData{Title: "Now", Active: "now", Data: data})
 }
 
-// buildNow assembles the page: the live fleet, its claims, the loose ends, the
-// moving plans, the ready queue, and the wire. The primary queries fail the
-// page; per-card trails and the arcade degrade soft, like every other strip.
+// buildNow assembles the page: the work in motion (nowWork), then each agent
+// card's trail, the wire, the pulse and the arcade. The primary queries fail
+// the page; per-card trails and the arcade degrade soft, like every other
+// strip.
 func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (nowData, error) {
+	data, err := s.nowWork(ctx, now, scope)
+	if err != nil {
+		return nowData{}, err
+	}
+	arcadeOn := features.Enabled(s.effectiveFeatures(ctx), features.Gamification)
+	dayStart := localMidnight(now)
+
+	// Trail + today's contribution from one newest-first read per card.
+	// Best-effort: a trail failure leaves the card, not the page.
+	if s.cfg.Events != nil {
+		for i := range data.Agents {
+			vm := &data.Agents[i]
+			evs, terr := s.eventLog(ctx).LatestBySession(ctx, vm.ID, nowTrailKinds, 100)
+			if terr != nil {
+				s.logger.Warn("console: now agent trail", "session", vm.ID, "error", terr)
+			}
+			for _, e := range evs {
+				if len(vm.Trail) < 3 {
+					vm.Trail = append(vm.Trail, toEventRow(e))
+				}
+			}
+			if arcadeOn {
+				vm.Contrib = nowContribution(evs, dayStart)
+			}
+		}
+	}
+
+	// The wire: the freshest business events, scope-filtered. Best-effort.
+	if wire, werr := s.recentEvents(ctx, 40); werr != nil {
+		s.logger.Warn("console: now wire", "error", werr)
+	} else {
+		for _, row := range wire {
+			if !nowInScope(scope, row.Project) {
+				continue
+			}
+			if len(data.Wire) < 12 {
+				data.Wire = append(data.Wire, row)
+			}
+		}
+	}
+
+	// The pulse: fleet-wide event volume over the last hour, all kinds -- the
+	// system's heartbeat, deliberately unfiltered by scope. Best-effort.
+	var pulseTimes []time.Time
+	if s.cfg.Events != nil {
+		if ts, perr := s.eventLog(ctx).TimestampsSince(ctx, now.Add(-time.Hour), 4000); perr != nil {
+			s.logger.Warn("console: now pulse", "error", perr)
+		} else {
+			pulseTimes = ts
+		}
+	}
+	data.EventsHour = len(pulseTimes)
+	data.Pulse = nowPulseSpark(pulseTimes, now)
+
+	if arcadeOn {
+		data.Arcade = s.nowArcade(ctx, now, dayStart, data.liveAll, data.shippedToday, pulseTimes)
+	}
+	return data, nil
+}
+
+// nowInScope reports whether a project's work is in a Now scope: "" is every
+// scope, "global" the empty project slug (a real scope, displayed as
+// "global" so the chip value round-trips), anything else that project.
+func nowInScope(scope, project string) bool {
+	switch scope {
+	case "":
+		return true
+	case "global":
+		return project == ""
+	default:
+		return project == scope
+	}
+}
+
+// nowWork is the work in motion, the model Now draws and the Overview's Work
+// in motion row and live strip summarize (plan:console-ux-pass UX 12): the
+// live fleet with the claims it holds, the loose ends, the unfinished plans
+// with the agents holding their steps, and the ready queue, read through the
+// request's handle, so a locked project's work is absent. It writes nothing
+// and reads no event trail.
+func (s *Service) nowWork(ctx context.Context, now time.Time, scope string) (nowData, error) {
 	ttl := s.cfg.SessionIdleTTL
 	if ttl <= 0 {
 		ttl = core.SessionIdleTTL
@@ -261,18 +363,7 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 		return nowData{}, fmt.Errorf("now: in-progress tasks: %w", err)
 	}
 
-	// The empty project slug is a real scope; it filters and displays as
-	// "global" so the chip value round-trips.
-	inScope := func(project string) bool {
-		switch scope {
-		case "":
-			return true
-		case "global":
-			return project == ""
-		default:
-			return project == scope
-		}
-	}
+	inScope := func(project string) bool { return nowInScope(scope, project) }
 	scopeName := func(project string) string {
 		if project == "" {
 			return "global"
@@ -349,8 +440,8 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 	}
 	sort.SliceStable(data.Loose, func(i, j int) bool { return data.Loose[i].Since.After(data.Loose[j].Since) })
 
-	arcadeOn := features.Enabled(s.effectiveFeatures(ctx), features.Gamification)
 	dayStart := localMidnight(now)
+	data.liveAll = len(live)
 
 	// One card per live agent, freshest heartbeat first.
 	sort.SliceStable(live, func(i, j int) bool {
@@ -362,6 +453,7 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 	// The Sessions screen's headline (sessionHeadlines) titles a card that
 	// holds no claim by its first prompt; a held claim still heads it below.
 	heads := s.sessionHeadlines(ctx, live, now)
+	holders := map[string][]nowHolderVM{}
 	for _, sess := range live {
 		if !inScope(sess.ProjectSlug) {
 			continue
@@ -388,20 +480,12 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 			vm.Title = vm.Claims[0].Title
 		}
 		vm.Lapsed = lapsedBy[sess.ID]
-		// Trail + today's contribution from one newest-first read. Best-effort:
-		// a trail failure leaves the card, not the page.
-		if s.cfg.Events != nil {
-			evs, terr := s.eventLog(ctx).LatestBySession(ctx, sess.ID, nowTrailKinds, 100)
-			if terr != nil {
-				s.logger.Warn("console: now agent trail", "session", sess.ID, "error", terr)
-			}
-			for _, e := range evs {
-				if len(vm.Trail) < 3 {
-					vm.Trail = append(vm.Trail, toEventRow(e))
+		for _, c := range vm.Claims {
+			if c.PlanSlug != "" {
+				key := nowPlanKey(c.Project, c.PlanSlug)
+				if !slices.ContainsFunc(holders[key], func(h nowHolderVM) bool { return h.ID == vm.ID }) {
+					holders[key] = append(holders[key], nowHolderVM{ID: vm.ID, Name: vm.Name})
 				}
-			}
-			if arcadeOn {
-				vm.Contrib = nowContribution(evs, dayStart)
 			}
 		}
 		data.Agents = append(data.Agents, vm)
@@ -432,14 +516,14 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 	if err != nil {
 		return nowData{}, fmt.Errorf("now: plan rollups: %w", err)
 	}
-	shippedToday := []store.ProjectPlan{}
+	data.shippedToday = []store.ProjectPlan{}
 	for _, p := range rollups {
 		if !inScope(p.Project) {
 			continue
 		}
 		if p.Done >= p.Total {
 			if p.Total > 0 && !p.LastActivity.Before(dayStart) {
-				shippedToday = append(shippedToday, p)
+				data.shippedToday = append(data.shippedToday, p)
 			}
 			continue
 		}
@@ -448,6 +532,7 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 			InFlight: p.InFlight, Claimable: p.Claimable,
 			DonePct: percent(p.Done, p.Total), DoingPct: percent(p.InFlight, p.Total),
 			Moving: now.Sub(p.LastActivity) < 24*time.Hour, Last: p.LastActivity,
+			Holders: holders[nowPlanKey(p.Project, p.Slug)],
 		}
 		if vm.Moving {
 			data.Moving++
@@ -471,7 +556,11 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 		return nowData{}, fmt.Errorf("now: ready tasks: %w", err)
 	}
 	for _, t := range ready {
-		if !inScope(t.ProjectSlug) || len(data.UpNext) >= 12 {
+		if !inScope(t.ProjectSlug) {
+			continue
+		}
+		data.ReadyTotal++
+		if len(data.UpNext) >= 12 {
 			continue
 		}
 		vm := nowReadyVM{ID: t.ID, Title: t.Title, Project: t.ProjectSlug, PlanSlug: t.PlanSlug, Created: t.CreatedAt}
@@ -480,39 +569,12 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 		}
 		data.UpNext = append(data.UpNext, vm)
 	}
-
-	// The wire: the freshest business events, scope-filtered. Best-effort.
-	if wire, werr := s.recentEvents(ctx, 40); werr != nil {
-		s.logger.Warn("console: now wire", "error", werr)
-	} else {
-		for _, row := range wire {
-			if !inScope(row.Project) {
-				continue
-			}
-			if len(data.Wire) < 12 {
-				data.Wire = append(data.Wire, row)
-			}
-		}
-	}
-
-	// The pulse: fleet-wide event volume over the last hour, all kinds -- the
-	// system's heartbeat, deliberately unfiltered by scope. Best-effort.
-	var pulseTimes []time.Time
-	if s.cfg.Events != nil {
-		if ts, perr := s.eventLog(ctx).TimestampsSince(ctx, now.Add(-time.Hour), 4000); perr != nil {
-			s.logger.Warn("console: now pulse", "error", perr)
-		} else {
-			pulseTimes = ts
-		}
-	}
-	data.EventsHour = len(pulseTimes)
-	data.Pulse = nowPulseSpark(pulseTimes, now)
-
-	if arcadeOn {
-		data.Arcade = s.nowArcade(ctx, now, dayStart, len(live), shippedToday, pulseTimes)
-	}
 	return data, nil
 }
+
+// nowPlanKey keys a plan by its project and slug: one slug may name plans in
+// two projects.
+func nowPlanKey(project, slug string) string { return project + "\x00" + slug }
 
 // planPageHref is a plan's page, /console/plans/<slug>, when the plan has one
 // in project: plans.Composition resolves the slug through the request's handle

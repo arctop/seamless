@@ -5,7 +5,7 @@
   {{/* .topbar carries the live pill the SSE refresher toggles (layout.html
        queries `.topbar .live`); keep both classes together if this moves. */}}
   <header class="ov2-titlebar topbar">
-    <h1>{{icon "layout-dashboard"}}Overview</h1>{{about "The check-in page: what needs you, whether stored knowledge is reaching your agents, who is working right now, and what just happened."}}
+    <h1>{{icon "layout-dashboard"}}Overview</h1>{{about "The check-in page: what needs you, the work in motion and who is doing it, whether stored knowledge is reaching your agents, and what just happened."}}
     <span class="live ov2-title-live"><span class="live-dot"></span>system live</span>
     <span class="ov2-title-spacer"></span>
     {{if $.Level.AtLeast "standard"}}
@@ -55,32 +55,22 @@
   </section>
   {{end}}
 
-  {{/* Basic's first question is "is it working?": the health strip leads the
-       page. Above Basic the same facts close the vitals as one quiet line. */}}
-  {{if and .Health .HealthLead}}
-  <section class="ov-health lead" aria-label="Is it working">{{template "overview-health" .Health}}</section>
-  {{end}}
+  {{/* What needs you (needs.go): one item per thing that waits on the owner,
+       most urgent first -- what an agent is blocked on right now, then the
+       owner's queues, then the knowledge queue. Each is a sentence, a count
+       and a link (plain text where the level hides the screen), and, where one
+       action settles it, that action: a form posting to the route the item's
+       own screen posts to, with next back here at #needs, so the shared
+       in-place path follows it and the strip morphs without a reload.
 
-  {{/* "Since you were last here": shell.js fills this from the browser's own
-       last-looked stamp and GET /console/since, so the check-in question --
-       what changed while I was away? -- is answered before any number. Hidden
-       on a first visit and without script; data-live-skip keeps the live morph
-       from wiping what the client rendered. */}}
-  <section class="checkin" id="checkin" data-live-skip hidden aria-label="Since you were last here">
-    <span class="checkin-ico">{{icon "history"}}</span>
-    <div class="checkin-body"></div>
-    <button type="button" class="checkin-x" data-checkin-dismiss aria-label="Dismiss">{{icon "x"}}</button>
-  </section>
-
-  {{/* One scroll-snap rail, never a wrapping grid: the finish-line bucket adds
-       a card per qualifying plan, and a second ragged row would push the vitals
-       below the fold. The chevrons ship hidden; the page script reveals them
-       only while the rail overflows and re-syncs after every live morph, which
-       resets attributes to what is rendered here. */}}
+       One scroll-snap rail, never a wrapping grid: a second ragged row would
+       push the work below the fold. The chevrons ship hidden; the page script
+       reveals them only while the rail overflows and re-syncs after every live
+       morph, which resets attributes to what is rendered here. */}}
   {{if .Attention}}
-  <section class="ov2-attn" aria-label="Needs attention">
+  <section class="ov2-attn" id="needs" aria-label="Needs you">
     <header class="ov2-attn-head">
-      <span class="ov2-attn-label">Needs attention<strong>{{len .Attention}}</strong></span>
+      <span class="ov2-attn-label">Needs you<strong>{{len .Attention}}</strong></span>
       <span class="ov2-attn-nav" hidden>
         <button type="button" class="ov2-attn-btn" data-attn-prev aria-label="Scroll to earlier cards">{{icon "chevron-left"}}</button>
         <button type="button" class="ov2-attn-btn" data-attn-next aria-label="Scroll to later cards">{{icon "chevron-right"}}</button>
@@ -88,39 +78,195 @@
     </header>
     <div class="ov2-attn-rail" data-attn-rail>
       {{range .Attention}}
-      <a class="ov2-attn-card" data-sev="{{.Sev}}" href="{{.Href}}">
-        <span class="ov2-attn-ico">{{icon .Icon}}</span>
-        <span class="ov2-attn-copy"><strong>{{.Title}}</strong><span title="{{.Sub}}">{{.Sub}}</span>{{.Bar}}</span>
-        {{icon "arrow-right"}}
-      </a>
+      <div class="ov2-attn-card" data-sev="{{.Sev}}" data-need="{{.Kind}}"{{if .Blocking}} data-blocking{{end}}>
+        {{if .Linked}}<a class="ov2-attn-main" href="{{.Href}}">{{else}}<span class="ov2-attn-main">{{end}}
+          <span class="ov2-attn-ico">{{icon .Icon}}</span>
+          <span class="ov2-attn-copy"><strong>{{.Title}}</strong><span title="{{.Sub}}">{{.Sub}}</span>{{.Bar}}</span>
+          {{if .Linked}}{{icon "arrow-right"}}{{end}}
+        {{if .Linked}}</a>{{else}}</span>{{end}}
+        {{with .Action}}
+        <form class="ov2-attn-act" method="post" action="{{.Post}}">
+          {{range .Fields}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">{{end}}
+          <button class="btn small" type="submit" data-need-act{{with .Title}} title="{{.}}"{{end}}{{with .Confirm}} data-confirm="{{.}}"{{end}}{{with .ConfirmLabel}} data-confirm-label="{{.}}"{{end}}>{{icon .Icon}}{{.Label}}</button>
+        </form>
+        {{end}}
+      </div>
       {{end}}
     </div>
   </section>
   {{end}}
 
-  {{/* Each vital is a drill-down link into the screen that explains its
-       number, keeping the active window; empty-state cards stay linked because
+  {{/* Basic's first question after what needs you is "is it working?": the
+       health strip follows the needs. Above Basic the same facts close the
+       vitals as one quiet line. */}}
+  {{if and .Health .HealthLead}}
+  <section class="ov-health lead" aria-label="Is it working">{{template "overview-health" .Health}}</section>
+  {{end}}
+
+  {{/* "Since you were last here": shell.js fills this from the browser's own
+       last-looked stamp and GET /console/since, so the check-in question --
+       what changed while I was away? -- is answered right under what needs
+       you. data-checkin-offer names the counts whose screens this level
+       shows; the others are counted without a link. Hidden on a first visit
+       and without script; data-live-skip keeps the live morph from wiping
+       what the client rendered. */}}
+  <section class="checkin" id="checkin" data-live-skip hidden data-checkin-offer="{{.CheckinOffer}}" aria-label="Since you were last here">
+    <span class="checkin-ico">{{icon "history"}}</span>
+    <div class="checkin-body"></div>
+    <button type="button" class="checkin-x" data-checkin-dismiss aria-label="Dismiss">{{icon "x"}}</button>
+  </section>
+
+  {{/* Work in motion: Now's own model (nowWork) as one row -- the plans a
+       live claim holds a step of, with who holds them, the loose ends, and
+       what an agent could claim next -- a few rows each with the true count.
+       A link the level does not offer is plain text. */}}
+  {{with .Motion}}{{$m := .}}
+  <section class="ov2-motion" id="motion" aria-labelledby="motion-title">
+    <header class="ov2-motion-head">
+      <h2 id="motion-title">Work in motion</h2>
+      <span class="ov2-motion-sum">{{.Agents}} live &middot; {{.InFlight}} in flight &middot; {{.ReadyN}} ready</span>
+      {{if .NowLinked}}<a href="/console/now">Now {{icon "arrow-right"}}</a>{{end}}
+    </header>
+    <div class="ov2-motion-cols">
+      <div class="ov2-motion-col" data-motion="plans">
+        <h3>Plans in progress<strong>{{.PlansHeld}}</strong></h3>
+        {{if .Plans}}
+        <ul class="ov2-motion-list">
+          {{range .Plans}}
+          <li id="mo-pl-{{.Project}}-{{.Slug}}">
+            <span class="ov2-motion-t">{{if .Linked}}<a class="mono" href="{{.Href}}">plan:{{.Slug}}</a>{{else}}<span class="mono">plan:{{.Slug}}</span>{{end}}</span>
+            <span class="now-bar"><i class="done" style="width:{{.DonePct}}%"></i><i class="doing" style="width:{{.DoingPct}}%"></i></span>
+            <span class="ov2-motion-meta">{{if .Project}}{{.Project}}{{else}}global{{end}} &middot; {{.Done}}/{{.Total}} done &middot; held by {{range $i, $h := .Holders}}{{if $i}}, {{end}}<a href="/console/sessions/{{$h.ID}}">{{$h.Name}}</a>{{end}}</span>
+          </li>
+          {{end}}
+        </ul>
+        {{if gt .PlansHeld (len .Plans)}}<p class="ov2-motion-more">+{{sub .PlansHeld (len .Plans)}} more{{if .NowLinked}} on <a href="/console/now">Now</a>{{end}}</p>{{end}}
+        {{else}}<p class="ov2-motion-none">No plan step is held by a live claim.</p>{{end}}
+      </div>
+      <div class="ov2-motion-col" data-motion="loose">
+        <h3>Loose ends<strong>{{.LooseN}}</strong></h3>
+        {{if .Loose}}
+        <ul class="ov2-motion-list">
+          {{range .Loose}}
+          <li id="mo-lo-{{.ID}}">
+            <span class="ov2-motion-t">{{if .Linked}}<a href="{{.Href}}">{{.Title}}</a>{{else}}<span>{{.Title}}</span>{{end}}</span>
+            <span class="ov2-motion-meta">{{with .Word}}{{taskChip .}} {{end}}{{if .Project}}{{.Project}}{{else}}global{{end}}{{with .PlanSlug}} &middot; plan:{{.}}{{end}}</span>
+          </li>
+          {{end}}
+        </ul>
+        {{if gt .LooseN (len .Loose)}}<p class="ov2-motion-more">+{{sub .LooseN (len .Loose)}} more{{if $m.NowLinked}} on <a href="/console/now">Now</a>{{end}}</p>{{end}}
+        {{else}}<p class="ov2-motion-none">Nothing in flight without a live agent.</p>{{end}}
+      </div>
+      <div class="ov2-motion-col" data-motion="ready">
+        <h3>Ready next<strong>{{.ReadyN}}</strong></h3>
+        {{if .Ready}}
+        <ul class="ov2-motion-list">
+          {{range .Ready}}
+          <li id="mo-rd-{{.ID}}">
+            <span class="ov2-motion-t">{{if .Linked}}<a href="{{.Href}}">{{.Title}}</a>{{else}}<span>{{.Title}}</span>{{end}}</span>
+            <span class="ov2-motion-meta">{{if .Project}}{{.Project}}{{else}}global{{end}}{{with .PlanSlug}} &middot; plan:{{.}}{{end}}</span>
+          </li>
+          {{end}}
+        </ul>
+        {{if gt .ReadyN (len .Ready)}}<p class="ov2-motion-more">+{{sub .ReadyN (len .Ready)}} more{{if $m.NowLinked}} on <a href="/console/now">Now</a>{{end}}</p>{{end}}
+        {{else}}<p class="ov2-motion-none">Nothing is claimable right now.</p>{{end}}
+      </div>
+    </div>
+  </section>
+  {{end}}
+
+  {{/* Live now: Now's agent cards as chips, each led by the task it holds
+       with a live claim, else by its project; the rest counted, and all of
+       them on Now where the level shows it. */}}
+  {{if .Live}}
+  <section class="ov2-live" aria-label="Sessions live now">
+    <span class="ov2-live-label"><span class="live-dot"></span>Live now</span>
+    {{range .Live}}<a class="ov2-live-sess{{if .Held}} holds{{end}}" href="/console/sessions/{{.ID}}"><span class="ov2-live-lead" title="{{.Lead}}">{{.Lead}}</span> <small>{{.Name}}{{if .Held}} &middot; {{.Project}}{{end}} &middot; {{.Age}}</small></a>{{end}}
+    {{if .LiveMore}}<span class="ov2-live-more">+{{.LiveMore}} more</span>{{end}}
+    {{if .Links "/console/now"}}<a class="ov2-live-all" href="/console/now">All {{.LiveTotal}} live {{icon "arrow-right"}}</a>{{end}}
+  </section>
+  {{end}}
+
+  {{/* Each vital is a drill-down into the screen that explains its number,
+       keeping the active window, where the level shows that screen; below
+       it the vital is a plain card. Empty-state cards stay linked because
        the destination states why there is nothing. */}}
   {{if $.Level.AtLeast "standard"}}
   <section class="ov2-vitals" aria-label="Vitals">
     {{range .Vitals}}
-    <a class="ov2-vital" href="{{.Href}}" title="{{.HrefTitle}}">
-      <span class="ov2-vital-label">{{icon .Icon}}{{.Label}}{{icon "arrow-right"}}</span>
+    {{if .Linked}}<a class="ov2-vital" href="{{.Href}}" title="{{.HrefTitle}}">{{else}}<div class="ov2-vital">{{end}}
+      <span class="ov2-vital-label">{{icon .Icon}}{{.Label}}{{if .Linked}}{{icon "arrow-right"}}{{end}}</span>
       <div class="ov2-vital-num"><strong>{{if .Value}}{{.Value}}{{else}}&mdash;{{end}}</strong>{{deltaChip .Delta}}</div>
       <span class="ov2-vital-sub">{{.Sub}}</span>
       <div class="ov2-vital-foot">{{bandLine .Band}}{{sparkLine .Spark}}</div>
-    </a>
+    {{if .Linked}}</a>{{else}}</div>{{end}}
     {{end}}
   </section>
   {{with .Health}}<footer class="ov-health quiet" aria-label="Is it working">{{template "overview-health" .}}</footer>{{end}}
   {{end}}
 
-  {{if .Live}}
-  <section class="ov2-live" aria-label="Sessions live now">
-    <span class="ov2-live-label"><span class="live-dot"></span>Live now</span>
-    {{range .Live}}<a class="ov2-live-sess" href="/console/sessions/{{.ID}}">{{.Name}} <small>{{.Project}} &middot; {{.Age}}</small></a>{{end}}
-    <a class="ov2-live-all" href="/console/interactions">Watch interactions {{icon "arrow-right"}}</a>
-  </section>
+  {{if $.Level.AtLeast "standard"}}
+  <div class="ov2-grid">
+    <section class="ov2-panel" aria-label="Recently active projects">
+      <header class="ov2-panel-head"><h2>Recently active projects</h2><a href="/console/projects">All projects {{icon "arrow-right"}}</a></header>
+      {{if .Projects}}
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Project</th><th>Context reach</th><th class="num">Sessions</th><th class="num">Open tasks</th></tr></thead>
+          <tbody>
+            {{range .Projects}}
+            <tr id="p-{{.Slug}}" class="row-link" data-href="/console/projects/{{.Slug}}">
+              <td>
+                <span class="ov2-proj">
+                  <a class="mono" href="/console/projects/{{.Slug}}">{{.Slug}}</a>
+                  <small>{{if .Live}}<span class="live-dot"></span>{{.Live}} working now{{else}}active {{ago .LastActive}}{{end}}</small>
+                </span>
+              </td>
+              <td>
+                <span class="ov2-reach">
+                  <span class="ov2-reach-row"><strong>{{if .HasReach}}{{.ReachRate}}%{{else}}&mdash;{{end}}</strong><span>{{.Memories}} memories</span></span>
+                  <span class="ov2-track"><i style="width:{{if .HasReach}}{{.ReachRate}}{{else}}0{{end}}%"></i></span>
+                </span>
+              </td>
+              <td class="num"><strong>{{.Sessions}}</strong><span>sessions</span></td>
+              <td class="num"><strong>{{.OpenTasks}}</strong><span>open</span></td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{else}}<div class="ov2-panel-empty">{{icon "folder-tree"}}<span>No project activity yet &mdash; scopes appear as agents begin working.</span></div>{{end}}
+    </section>
+
+    <aside class="ov2-rail">
+      <section class="ov2-panel" aria-label="Most reused knowledge">
+        <header class="ov2-panel-head"><h2>Most reused knowledge</h2></header>
+        {{if .TopInjected}}
+        <ol class="ov2-reuse">
+          {{range .TopInjected}}<li><a href="/console/memories/{{.ID}}">{{.Name}}</a><strong>{{.Count}}&times;</strong></li>{{end}}
+        </ol>
+        {{else}}<div class="ov2-panel-empty">{{icon "brain"}}<span>No memory has been surfaced yet.</span></div>{{end}}
+      </section>
+      {{with .Spotlight}}
+      <section class="ov2-panel mom-spot" aria-label="Memory of the month">
+        <header class="ov2-panel-head"><h2>Memory of the month</h2></header>
+        {{if .Found}}
+        <a class="mom-spot-body" href="/console/memories/{{.Memory.ItemID}}">
+          <span class="mom-spot-name mono">{{.Memory.Name}}</span>
+          <span class="mom-spot-meta">{{.Memory.Kind}}{{if .Memory.Project}} &middot; {{.Memory.Project}}{{end}}</span>
+          <span class="mom-spot-line">{{.Line}}</span>
+        </a>
+        {{else}}<div class="ov2-panel-empty">{{icon "brain"}}<span>No memory earned reuse in the last 30 days yet.</span></div>{{end}}
+      </section>
+      {{end}}
+      {{if not .Sky}}
+      <section class="ov2-panel" aria-label="Memory fabric">
+        <header class="ov2-panel-head"><h2>Memory fabric</h2>{{if .Memories}}<span class="ov2-panel-total">{{.Memories}} active</span>{{end}}</header>
+        {{if .MemByKind}}{{kindBar .MemByKind}}{{else}}<div class="ov2-panel-empty">{{icon "database"}}<span>No memories yet &mdash; agents write them with memory_write.</span></div>{{end}}
+      </section>
+      {{end}}
+    </aside>
+  </div>
   {{end}}
 
   {{/* The knowledge sky: a star chart of every active memory (constellation.go).
@@ -135,7 +281,12 @@
        back, and the answer carries only what changed since (sky_live.go): a
        keep stub for the whole panel, or the panel with every unchanged part a
        keep stub and only the changed stars, its data-live-base naming the
-       chart it was drawn against. */}}
+       chart it was drawn against.
+
+       It sits below the projects grid, and folds: its button keeps the choice
+       per browser (seamless-sky, applied on the root before paint by
+       layout.html, so a folded sky never flashes open), and a fold lives on
+       the root, outside the live morph's reach. */}}
   {{with .Sky}}
   {{if .Keep}}<section class="ov2-panel sky-panel" id="sky" data-live-keep data-live-base="{{.Base}}"></section>
   {{else}}
@@ -144,8 +295,9 @@
       <h2>Knowledge sky</h2>
       <span class="sky-sub">{{.Total}} active memor{{if eq .Total 1}}y{{else}}ies{{end}}, each placed by when it last reached an agent</span>
       <a href="/console/memories">Memories {{icon "arrow-right"}}</a>
+      <button type="button" class="sky-fold" data-sky-fold aria-expanded="true" aria-controls="sky-body" title="Fold the sky away or show it; this browser remembers">{{icon "chevron-down"}}<span class="sky-fold-hide">Fold</span><span class="sky-fold-show">Show</span></button>
     </header>
-    <div class="sky-body">
+    <div class="sky-body" id="sky-body">
       <div class="sky-chart">
         {{.SVG}}
         <div class="sky-tip" data-live-skip hidden></div>
@@ -206,72 +358,8 @@
   {{end}}
   {{end}}
 
-  {{if $.Level.AtLeast "standard"}}
-  <div class="ov2-grid">
-    <section class="ov2-panel" aria-label="Recently active workspaces">
-      <header class="ov2-panel-head"><h2>Recently active workspaces</h2><a href="/console/projects">All projects {{icon "arrow-right"}}</a></header>
-      {{if .Projects}}
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Workspace</th><th>Context reach</th><th class="num">Sessions</th><th class="num">Open tasks</th></tr></thead>
-          <tbody>
-            {{range .Projects}}
-            <tr id="p-{{.Slug}}" class="row-link" data-href="/console/projects/{{.Slug}}">
-              <td>
-                <span class="ov2-proj">
-                  <a class="mono" href="/console/projects/{{.Slug}}">{{.Slug}}</a>
-                  <small>{{if .Live}}<span class="live-dot"></span>{{.Live}} working now{{else}}active {{ago .LastActive}}{{end}}</small>
-                </span>
-              </td>
-              <td>
-                <span class="ov2-reach">
-                  <span class="ov2-reach-row"><strong>{{if .HasReach}}{{.ReachRate}}%{{else}}&mdash;{{end}}</strong><span>{{.Memories}} memories</span></span>
-                  <span class="ov2-track"><i style="width:{{if .HasReach}}{{.ReachRate}}{{else}}0{{end}}%"></i></span>
-                </span>
-              </td>
-              <td class="num"><strong>{{.Sessions}}</strong><span>sessions</span></td>
-              <td class="num"><strong>{{.OpenTasks}}</strong><span>open</span></td>
-            </tr>
-            {{end}}
-          </tbody>
-        </table>
-      </div>
-      {{else}}<div class="ov2-panel-empty">{{icon "folder-tree"}}<span>No project activity yet &mdash; scopes appear as agents begin working.</span></div>{{end}}
-    </section>
-
-    <aside class="ov2-rail">
-      <section class="ov2-panel" aria-label="Most reused knowledge">
-        <header class="ov2-panel-head"><h2>Most reused knowledge</h2></header>
-        {{if .TopInjected}}
-        <ol class="ov2-reuse">
-          {{range .TopInjected}}<li><a href="/console/memories/{{.ID}}">{{.Name}}</a><strong>{{.Count}}&times;</strong></li>{{end}}
-        </ol>
-        {{else}}<div class="ov2-panel-empty">{{icon "brain"}}<span>No memory has been surfaced yet.</span></div>{{end}}
-      </section>
-      {{with .Spotlight}}
-      <section class="ov2-panel mom-spot" aria-label="Memory of the month">
-        <header class="ov2-panel-head"><h2>Memory of the month</h2></header>
-        {{if .Found}}
-        <a class="mom-spot-body" href="/console/memories/{{.Memory.ItemID}}">
-          <span class="mom-spot-name mono">{{.Memory.Name}}</span>
-          <span class="mom-spot-meta">{{.Memory.Kind}}{{if .Memory.Project}} &middot; {{.Memory.Project}}{{end}}</span>
-          <span class="mom-spot-line">{{.Line}}</span>
-        </a>
-        {{else}}<div class="ov2-panel-empty">{{icon "brain"}}<span>No memory earned reuse in the last 30 days yet.</span></div>{{end}}
-      </section>
-      {{end}}
-      {{if not .Sky}}
-      <section class="ov2-panel" aria-label="Memory fabric">
-        <header class="ov2-panel-head"><h2>Memory fabric</h2>{{if .Memories}}<span class="ov2-panel-total">{{.Memories}} active</span>{{end}}</header>
-        {{if .MemByKind}}{{kindBar .MemByKind}}{{else}}<div class="ov2-panel-empty">{{icon "database"}}<span>No memories yet &mdash; agents write them with memory_write.</span></div>{{end}}
-      </section>
-      {{end}}
-    </aside>
-  </div>
-  {{end}}
-
   <section class="ov2-panel" aria-label="Recent activity">
-    <header class="ov2-panel-head"><h2>Recent activity</h2><a href="/console/interactions">Full interaction stream {{icon "arrow-right"}}</a></header>
+    <header class="ov2-panel-head"><h2>Recent activity</h2>{{if .Links "/console/interactions"}}<a href="/console/interactions">Full interaction stream {{icon "arrow-right"}}</a>{{end}}</header>
     {{if .Recent}}
     <div class="ov2-ledger">
       {{range .Recent}}
@@ -341,6 +429,31 @@
   window.addEventListener('load', sync);
   document.addEventListener('seam:content-updated', sync);
   sync();
+
+  /* The sky folds per browser. The fold is an attribute on the root, set
+     before paint by layout.html's head script, so the live morph (which
+     only touches .main) never undoes it; the button's aria-expanded is
+     re-read from it after every morph. */
+  var SKY = 'seamless-sky';
+  var root = document.documentElement;
+  function skyFolded() { return root.getAttribute('data-sky') === 'folded'; }
+  function syncSky() {
+    document.querySelectorAll('[data-sky-fold]').forEach(function (b) {
+      b.setAttribute('aria-expanded', skyFolded() ? 'false' : 'true');
+    });
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-sky-fold]');
+    if (!b) return;
+    var fold = !skyFolded();
+    if (fold) root.setAttribute('data-sky', 'folded');
+    else root.removeAttribute('data-sky');
+    try { localStorage.setItem(SKY, fold ? 'folded' : 'open'); } catch (err) {}
+    syncSky();
+    if (!fold) window.dispatchEvent(new Event('resize'));
+  });
+  document.addEventListener('seam:content-updated', syncSky);
+  syncSky();
 })();
 </script>
 <script src="{{static "sky.js"}}"></script>

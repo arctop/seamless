@@ -19539,9 +19539,9 @@ nothing, and their rows say so.
 | Mark a gate as handled | `POST /console/tasks/{id}/gate/clear` | **Mark as handled** on a task whose own gate is open, with an optional one-line `note=`: clears the gate as `tasks_update gate_clear` does, recording the owner as who cleared it and the note. A step's gate clears, and the step goes ahead once nothing else blocks it; a gate closes as done, which unblocks the tasks waiting on it. Records `task.transition` with `gate: cleared` and `by: console`. Refused while a live claim holds the task, from an agent's process on the peer_auth socket, and from a paired device. |
 | Say what a task waits on | `POST /console/tasks/{id}/gate` | **Waits on someone** on an open or in-progress task whose own gate is not open: `who=` and `what=` (one line each), with optional `decision=` and `ready_when=`. Sets the task's gate as `tasks_update gate_who` and `gate_what` do, so a ready step leaves the ready queue and waits on people until its gate is marked as handled; a gate already cleared opens again. Records `task.transition` with `gate: set` and `by: console`. Refused, naming the holder, while a live claim holds the task, and on a closed task; setting the gate the task already has writes nothing. |
 | Force-release a repo lock | `POST /console/locks/{id}/release` | [Repo locks](#locks): ends the hold a lock carries, live or lapsed, whoever holds it; the lock stays declared. What `seam lock release --force` sends. Refused when nobody holds it (409), from an agent's process on the peer_auth socket, and from a paired device. |
-| Approve a lock declaration | `POST /console/locks/{id}/approve` | Makes a restricted account's waiting declaration an active lock, which agents may then hold. Refused for a lock already active (409), from an agent's process on the peer_auth socket, and from a paired device. |
+| Approve a lock declaration | `POST /console/locks/{id}/approve` | Makes a restricted account's waiting declaration an active lock, which agents may then hold. With `next=` a console page (the Overview's **Approve**), it returns there; a lock decision without one returns to Locks. Refused for a lock already active (409), from an agent's process on the peer_auth socket, and from a paired device. |
 | Discard a lock declaration | `POST /console/locks/{id}/discard` | Deletes a restricted account's waiting declaration with its repository identities, so the repository may be declared again. An active lock is refused (409): no route removes one. Refused from an agent's process on the peer_auth socket, and from a paired device. |
-| Approve a captured plan | `POST /console/plans/{slug}/approve` | The escape hatch for a Claude Code approval whose `PostToolUse` never fired: flips the `cc-plan` note to `plan-status:approved` and creates the tracking task, exactly as the hook would have. Only applies to a CC capture. |
+| Approve a captured plan | `POST /console/plans/{slug}/approve` | The escape hatch for a Claude Code approval whose `PostToolUse` never fired: flips the `cc-plan` note to `plan-status:approved` and creates the tracking task, exactly as the hook would have. Only applies to a CC capture. Returns to the plan's page, or with `next=` a console page (the Overview's **Approve**) there, with a notice. |
 | Star / unstar an entity | `POST /console/favorites/{kind}/{id}` | Toggles the same starred flag the `favorite_set` MCP tool sets: a starred memory pins into briefings and gets a post-fusion recall boost. For memories and notes the star lives in frontmatter; it never bumps `updated`. |
 | Ask the gardener for proposals | `POST /console/gardener/request` | Interprets a natural-language maintenance request into **pending proposals**. It never mutates a memory. |
 | Plan a project split | `POST /console/gardener/split` | Interprets a split request into a plan batch of **pending proposals** (one split setup plus one reproject per memory). Also never mutates a memory. |
@@ -19564,6 +19564,8 @@ nothing, and their rows say so.
 | Mark a flagged item safe | `POST /console/held/corpus/safe` | `path=` the item's file. Safe as it reads now; a memory is also stamped owner-confirmed. |
 | Accept a file changed outside Seamless | `POST /console/held/corpus/accept` | `path=` the file. Records it as it stands, lifts its quarantine, and stamps a memory owner-confirmed. |
 | Set a project's isolation | `POST /console/projects/{slug}/isolation` | Changes how far a project's knowledge travels. A tightening that would cut existing context first renders a confirmation step; nothing is written until it is confirmed. |
+| Mark the mishaps reviewed | `POST /console/mishaps/reviewed` | [Mishaps](#mishaps): **Mark reviewed** stores when you reviewed the reports, through the newest one the page drew (`through=` its time; now when absent, never later than now). The Overview's mishap card then counts only the reports after it, and is gone until one arrives. The stamp never moves back: a mark through an older report writes nothing and says so. Records `mishaps.reviewed` with `by: console`. Refused from an agent's process on the peer_auth socket, and from a paired device. |
+
 | Begin a lock change | `POST /console/lock/{project}/begin` | Only under [peer_auth](/guides/peer-auth/#lock-from-the-console-or-force-lock-in-the-file), and only from a signed-in browser. `action=lock` or `remove`. Refuses first a change that could not apply - a force-locked project, a lock already on, no console lock to remove, a project that is not confidential or sealed, no passkey enrolled - then returns a WebAuthn challenge naming this ceremony, the project and the direction. Writes nothing. A begin never waits for room: at most 4 ceremonies wait at once for one project and direction, and 32 in all, so a begin past 4 displaces the oldest of its project and direction, and one past 32 the oldest of the project and direction holding the most. A displaced ceremony's finish says it expired. |
 | Lock a project, or remove its lock | `POST /console/lock/{project}/finish` | Verifies the passkey assertion for that ceremony, then stores the lock or removes it. Turning a lock on ends, in the same transaction, the project's agent leases, read grants and console unlocks, so every agent and browser asks again. It removes only a lock the console set: one `peer_auth.force_locked` holds stays. Seamless then restarts to apply the change. A finish for a ceremony that began and then failed records `access.console_lock_failed` under the ceremony's own project and direction, with why: the finish named another project or direction, the passkey's answer did not verify, the passkey is not enrolled, its counter did not increase, another use of it was recorded first, or the project changed since. A finish naming no waiting ceremony records nothing. |
 | Begin a passkey unlock | `POST /console/unlock/{project}/begin` | Only for a project peer_auth locks, and only from the signed-in browser that proves its unlock key. Records a waiting [console unlock](/guides/peer-auth/#leases-and-the-process-tree) bound to this browser's cookie and key, sets the `seamless_unlock` cookie when the browser holds no live unlock yet, and returns the passkey challenge. Refused while no passkey is enrolled; the terminal path still works. Opens nothing yet. A begin never waits for room: at most 4 passkey unlocks wait at once for one project, and 32 in all, so a begin past 4 displaces the project's oldest, and one past 32 the oldest of the project holding the most. Terminal unlocks are counted apart. |
@@ -19903,7 +19905,7 @@ Updates and Backups settings.
 
 **Standard** adds following the work: Now, Projects, Plans, and Tasks (and Labs
 and Trials when that feature is on), the Overview's window, vitals, and
-workspaces, the Briefing and Workspaces settings, and the finer controls on the
+projects table, the Briefing and Workspaces settings, and the finer controls on the
 screens Basic already had.
 
 **Advanced** is every screen and every knob: Interactions (the tool-call
@@ -19988,7 +19990,7 @@ What each level shows, generated from the console's own registries:
 |---|---|---|---|
 | **Overview: the observation window** | - | shown | shown |
 | **Overview: the vitals** | - | shown | shown |
-| **Overview: the workspaces table and the knowledge rail** | - | shown | shown |
+| **Overview: the projects table and the knowledge rail** | - | shown | shown |
 | **Memories: the Reach and Utility sorts** | - | shown | shown |
 | **Memories: how often each memory surfaced** | - | shown | shown |
 | **Memories: the Never surfaced filter** | - | shown | shown |
@@ -20042,30 +20044,58 @@ transport-level rows the Interactions screen consumes.
 
 `/console/`
 
-The landing page and the health check. It carries:
+The check-in page. It answers what waits on you first, then what is in motion,
+then whether stored knowledge is reaching your agents. Top to bottom:
 
-- **Counts** - active memories (broken down by kind), notes, sessions, and tasks
-  by status.
-- **Retrieval health** over a selectable window (`?w=24h|7d|30d|all`): injection
-  volume, a trend chart, the **reach rate** (distinct active memories that
-  actually surfaced, over all active memories), sessions reached, and the
-  most-injected memories.
-- **Coverage** - the share of in-window sessions that retained anything, with a
-  per-channel breakdown (findings, memories, notes, trials) and a windowed trend.
-  The channels overlap, so the shares need not sum to 100%.
-- **Projects at a glance** - the top projects by recent activity, drawn from the
-  same batched query the Projects board uses, so a row here reconciles with a row
-  there exactly.
-- **Agent-reported mishaps** - while any report exists, the attention strip's
-  first card counts the mishaps agents reported at `session_end` (the newest
-  six) and names the latest one's type, age and project. With one report it
-  opens that report's event page; with more, the [Mishaps](#mishaps) screen.
-- **Going stale** - the attention strip's knowledge card counts the active
-  memories with no update, injection, or read in `gardener.staleness_days`
-  (90 days by default, the gardener's own staleness horizon), exactly the rows
-  [Retrieval](#retrieval)'s quiet-knowledge list shows, and states the horizon.
-  Changing the setting moves the card, the list and their labels together.
-- **Knowledge sky** - a star chart of every active memory, with no cap. Each
+- **The level chooser** - on a fresh installation, the one-time welcome card
+  (see [Choose how much you see](#choose-how-much-you-see)).
+- **Needs you** - one card per thing that waits on you, most urgent first.
+  First what an agent is blocked on right now: access requests waiting for
+  you (while a project is locked or access requests are on), writes held for
+  your review (with write screening on, or restricted accounts' proposals),
+  lock declarations waiting for you (with repo locks on), open gates waiting
+  on you (then gates waiting on someone else, named), captured plans
+  presented and awaiting your approval, claims that lapsed, and tasks marked in
+  progress with no claim. Then your own queues: mishaps to review, an update
+  that failed, rolled back or paused itself, and backups that are failing,
+  stopped, missing, or older than a week. Then the knowledge queue: gardener
+  proposals, what automatic apply applied, memories going stale, and, with
+  momentum on, plans at the finish line. Each card is one sentence with its
+  count and a link to the screen that answers it; a card for a screen your
+  level does not show names it without a link. Where one step settles a
+  card, that step is on it - **Mark as handled** for one gate, **Approve**
+  for one plan or one lock declaration, **Release claim** for one lapsed or
+  claimless claim - posting to the same route the task, plan or lock page
+  posts to, and coming back here: the strip redraws in place, without a
+  reload. Access requests and held writes are decided on their own pages
+  (an approval is a passkey ceremony; a held write is read first). A card
+  whose optional feature is off does not exist.
+- **Agent-reported mishaps** - the mishap card counts every report since you
+  last marked them reviewed on the [Mishaps](#mishaps) screen (every report
+  before your first review), at the true count, names the latest report's
+  type, age and project, and opens the Mishaps screen. **Mark reviewed** there
+  clears it until a new report arrives.
+- **Going stale** - the knowledge card counts the active memories with no
+  update, injection, or read in `gardener.staleness_days` (90 days by default,
+  the gardener's own staleness horizon), exactly the rows
+  [Retrieval](#retrieval)'s quiet-knowledge list shows, states the horizon,
+  and opens that list. Changing the setting moves the card, the list and their
+  labels together.
+- **Work in motion** - the model [Now](#now) draws, as one row: the plans a
+  live claim holds a step of, with the agents holding them; the loose ends
+  (in progress, but no live agent carries them); and what an agent could claim
+  next, three of each with their true counts.
+- **Live now** - up to six live agents, each led by the task it holds with a
+  live claim, else by its project, then how many more, and **All N live** to
+  Now.
+- **Vitals** (Standard and up) - see below - closed by the health line.
+- **Recently active projects** (Standard and up) - the top projects by recent
+  activity, drawn from the same batched query the Projects board uses, so a
+  row here reconciles with a row there exactly, beside the most reused
+  knowledge.
+- **Knowledge sky** - a star chart of every active memory, with no cap,
+  below the projects. **Fold** puts it away; this browser remembers, and a
+  folded sky stays folded on every visit. Each
   project scope (global included) owns a wedge sized by its share of memories,
   largest first. Distance from the centre is when the memory last surfaced to an
   agent: the core holds the last 24 hours, rings mark 7 days and the staleness
@@ -20078,7 +20108,7 @@ The landing page and the health check. It carries:
   the chart appears.
   Beside the chart, a readout states the same picture as text: each ring's
   count, the going-stale count (memories with no update, injection, or read
-  within the staleness horizon: always the attention card's count and the rows
+  within the staleness horizon: always the stale card's count and the rows
   Retrieval's quiet-knowledge list shows), and every
   scope with its ring mix as a bar. Point at a star for its name and description
   (the pointer snaps to the nearest star); click it for a card with its facts and
@@ -20095,27 +20125,51 @@ The landing page and the health check. It carries:
   refresh downloads only what changed, too: the stars that changed, arrived, or
   left since the chart the page holds, and nothing of the sky when nothing in
   it did. It is HTML only - the JSON answer carries no sky.
-- **Recent activity** - the last twelve events, each linking to its detail page.
+- **Recent activity** - the latest events, each linking to its detail page.
 
-The four judged vitals at the top (memory reach, knowledge continuity, context
+At Basic the health line comes right after the cards: which agent clients are
+working here, whether semantic recall is on, when the last briefing went out,
+a warning while there is no backup or the newest is older than a week, and the
+version.
+
+The four judged vitals (memory reach, knowledge continuity, context
 injections, sessions reached) are drill-down links carrying the selected
 window: reach, injections, and sessions reached land on the Retrieval screen
 whose hero and delivery funnel are the same numbers over the same report, and
 continuity lands on the Sessions list filtered to `?retained=no` - the
 sessions that kept nothing. An empty-state card stays linked, because the
-destination explains why there is nothing.
+destination explains why there is nothing. Below Advanced, where Retrieval is
+not in the sidebar, the three Retrieval vitals are plain cards.
+
+**No link above your level.** A link whose screen your level's sidebar does
+not show - Projects, Plans, Tasks, Locks and Now at Basic, Retrieval and Interactions
+below Advanced - is not offered as a link anywhere on this page: the card,
+the row or the count says the same thing as plain text. The screen still opens
+by URL, under the level note.
 
 Live sessions are counted TTL-aware (active *and* heartbeated within the idle
-threshold), so the headline matches the Sessions screen rather than the raw
-`active` count that an idle session inflates until the reaper runs.
+threshold, or holding a live claim), so the headline matches the Sessions
+screen rather than the raw `active` count that an idle session inflates until
+the reaper runs.
+
+`?format=json` answers the page's model at every level: `Attention` is the
+needs-you list, each item with its `Kind` (a stable key: `access`, `held`,
+`lock-declarations`, `gates`, `gates-others`, `plan-approval`,
+`claims-lapsed`, `claims-unclaimed`, `mishaps`, `updates`, `backups`,
+`proposals`, `auto-applied`, `stale`, `finish-line`), `Count`, `Title`,
+`Sub`, `Href`, `Blocking` when an agent is blocked on it, and its `Action`
+(the route it posts and its fields) when one step settles it; `Motion` is
+Work in motion; `Live`, `LiveTotal` and `LiveMore` are the live strip.
 
 ### Since you were last here
 
 When you come back to the Overview after at least five minutes away, a line
-above everything else answers the check-in question -- what changed while I was
-gone? -- with linked counts: memories written, sessions started, tasks closed,
-notes written, gardener proposals raised, and mishaps reported since you last
+under the cards answers the check-in question -- what changed while I was
+gone? -- with counts: memories written, sessions started, tasks closed, notes
+written, gardener proposals raised, and mishaps reported since you last
 looked ("Quiet since you were last here 3h ago" when nothing was recorded).
+Each count links its screen - the mishaps count the [Mishaps](#mishaps) screen
+- where your level shows it.
 
 "Last looked" is a per-browser stamp, set whenever a console tab is hidden or
 left; the counts come from `GET /console/since?t=<unix ms>`, which answers JSON
@@ -20720,8 +20774,8 @@ no card.
 
 Every mishap agents reported at `session_end`, newest first, for a recurrence
 review: which kinds keep happening, and which memories fail to prevent them. It
-has no sidebar entry; the Overview's mishap card and the palette's Jump to open
-it.
+has no sidebar entry; the Overview's mishap card, the check-in's mishap count and
+the palette's Jump to open it.
 
 - **Type chips** - All, then each type with its count - `shell-trap`,
   `wrong-target`, `live-state`, `ignored-warning`, `fabricated`, `other` - and
@@ -20736,13 +20790,21 @@ it.
   named it. A memory many reports name is one that is not preventing its
   mishap.
 
+- **Your review** - how many reports arrived since you last marked them
+  reviewed, whatever the filters, with **Mark reviewed**, and a **new** mark
+  on each of those reports. Marking them reviewed clears the Overview's
+  mishap card until another report arrives; it marks through the newest
+  report the page drew, so one that arrives while you read stays new.
+
 Filters: `?type=` (a type, or `untyped`), `?project=` (a slug, or `global`),
 and the window `?w=24h|7d|30d|all` (all time by default) or `?days=N`. A value
 the page cannot read is a 400 naming what it takes. `?format=json` answers
 `total`, `types` (each with its `count` and `meaning`), `shown` (the reports the
 filters select), `mishaps` (each with `type`, `text`, the recorded
 `description`, `project`, `sessionId`, `session` and `memories`), `memories`
-(each with its `count`), and `locked` while peer_auth leaves locked projects
+(each with its `count`), `review` (`at`, when you last marked the reports
+reviewed, and `new`, how many arrived since; absent while no report exists),
+each report's `new`, and `locked` while peer_auth leaves locked projects
 out. The list holds the newest 200.
 
 ## Memories

@@ -23,6 +23,23 @@
   {{range .Chips}}<a class="mishap-chip{{if .Active}} on{{end}}" href="{{.Href}}" data-mishap-type="{{.Key}}" title="{{.Title}}"{{if .Active}} aria-current="true"{{end}}><span>{{.Label}}</span><strong>{{.Count}}</strong></a>{{end}}
 </nav>
 {{with .Locked}}<p class="mishap-locked">{{icon "lock"}}Mishaps in locked projects are not shown: {{joinAnd .}}</p>{{end}}
+{{/* The review: what came in since the owner last marked the reports
+     reviewed, whatever the filters. Mark reviewed clears the Overview's
+     mishap item until a new report arrives; it marks through the newest
+     report this page drew, so one that arrives while you read stays new. */}}
+{{with .Review}}
+<section class="mishap-review" id="mishap-review" data-review-new="{{.New}}" aria-label="Your review">
+  <span class="mishap-review-ico">{{icon "check"}}</span>
+  <p>{{if .New}}<strong>{{.New}}</strong> {{if eq .New 1}}report{{else}}reports{{end}} {{with .At}}new since you marked the reports reviewed {{timeAs . (agoPhrase .)}}{{else}}not reviewed yet{{end}}{{else}}{{with .At}}Marked reviewed {{timeAs . (agoPhrase .)}}: nothing new since.{{end}}{{end}}</p>
+  {{if .New}}
+  <form method="post" action="/console/mishaps/reviewed">
+    <input type="hidden" name="through" value="{{.Through}}">
+    <input type="hidden" name="return" value="{{.Return}}">
+    <button class="btn small" type="submit" title="The Overview counts only the reports that arrive after this">{{icon "check"}}Mark reviewed</button>
+  </form>
+  {{end}}
+</section>
+{{end}}
 
 <div class="list-detail-split ops-split sessions-split">
   <div class="list-pane">
@@ -39,7 +56,7 @@
     {{range .Mishaps}}
     <div id="{{.ID}}" class="sess-row row-link mishap-row" data-href="/console/events/{{.ID}}" data-peek>
       <div class="sess-main">
-        {{if .Type}}<span class="badge mishap-type" data-mishap-type="{{.Type}}" title="{{.Meaning}}">{{.Type}}</span>{{else}}<span class="badge mishap-type is-untyped" data-mishap-type="untyped" title="This report named no type">untyped</span>{{end}}
+        {{if .Type}}<span class="badge mishap-type" data-mishap-type="{{.Type}}" title="{{.Meaning}}">{{.Type}}</span>{{else}}<span class="badge mishap-type is-untyped" data-mishap-type="untyped" title="This report named no type">untyped</span>{{end}}{{if .New}}<span class="badge warn mishap-new" title="Reported after you last marked the reports reviewed">new</span>{{end}}
         <div class="sess-copy">
           <a class="mishap-text" href="/console/events/{{.ID}}" data-peek>{{if .Text}}{{.Text}}{{else}}(no text){{end}}</a>
           <div class="mishap-meta">{{if .SessionID}}<a class="mono-id" href="/console/sessions/{{.SessionID}}" data-peek title="The session that reported it">{{if .Session}}{{.Session}}{{else}}{{shortID .SessionID}}{{end}}</a>{{agentPill .Harness .Model}}{{end}}{{range .Memories}}<span class="mishap-named">{{icon "database"}}{{if .Missing}}<span title="This memory is no longer in the index">{{shortID .ID}}</span>{{else}}<a href="/console/memories/{{.ID}}" data-peek title="A memory this report named">{{.Name}}</a>{{end}}</span>{{end}}</div>

@@ -254,6 +254,11 @@ func eventSummary(e core.Event) string {
 			return "matured to " + stage
 		}
 		return "maturity stage reached"
+	case store.EventMishapsReviewed:
+		if n := payloadInt(p, "reports"); n > 0 {
+			return "marked " + plural(n, "mishap report", "mishap reports") + " reviewed"
+		}
+		return "marked the mishaps reviewed"
 	case store.EventMilestoneReached:
 		// The milestone line is the payload's claim, verbatim: the mint wrote
 		// the exact judged sentence ("100 memories written in seamless") and
