@@ -720,7 +720,9 @@ func TestBackupsRestore_Progress(t *testing.T) {
 	ref := backup.BackupRef{Name: "seamless-studio-20261110T030000Z-auto.tar.gz", CreatedAt: at}
 	steps := func(sec string) []string {
 		var out []string
-		for _, m := range regexp.MustCompile(`<li class="bk-step is-(\w+)"`).FindAllStringSubmatch(sec, -1) {
+		// The shared steps list (kit_shared.html), where Backups' step in
+		// progress ("doing") reads as the one it is on now.
+		for _, m := range regexp.MustCompile(`<li class="steps-item is-(\w+)"`).FindAllStringSubmatch(sec, -1) {
 			out = append(out, m[1])
 		}
 		return out
@@ -729,15 +731,19 @@ func TestBackupsRestore_Progress(t *testing.T) {
 	bc.fb.status.Restore.Staging = &backup.Staging{Mode: backup.ModeReplace, Backup: ref, Step: backup.StepChecking}
 	sec := sectionOf(t, bc.page(t, ""))
 	require.Contains(t, sec, `data-restore-state="staging"`)
-	require.Equal(t, []string{"doing", "todo", "todo", "todo", "todo"}, steps(sec))
+	require.Equal(t, []string{"now", "todo", "todo", "todo", "todo"}, steps(sec))
 	require.Contains(t, sec, "Checking the backup")
 	require.Contains(t, sec, "Saving your previous data as a backup")
 
 	bc.fb.status.Restore.Staging = &backup.Staging{Mode: backup.ModeMerge, Backup: ref, Step: backup.StepSaving}
 	sec = sectionOf(t, bc.page(t, ""))
-	require.Equal(t, []string{"done", "doing", "todo", "todo"}, steps(sec), "a merge saves today's data and has no last step")
+	require.Equal(t, []string{"done", "now", "todo", "todo"}, steps(sec), "a merge saves today's data and has no last step")
 	require.Contains(t, sec, "Saving your current data")
 	require.Contains(t, sec, `aria-current="step"`)
+	require.Contains(t, sec, `<li class="steps-item is-now" aria-current="step"><span class="steps-mark" aria-hidden="true">2</span>`+
+		`<span class="steps-label">Saving your current data</span></li>`, "the step on now is numbered and marked current")
+	require.Contains(t, sec, `<span class="steps-label">Checking the backup<span class="steps-sr"> (done)</span></span>`,
+		"a done step says so to a screen reader, beside its check")
 
 	bc.fb.status.Restore.Staging = nil
 	bc.fb.status.Restore.Pending = &backup.Pending{ID: "r1", Mode: backup.ModeReplace, Backup: ref, Stage: backup.StageStaged, RequestedAt: time.Now()}
@@ -746,7 +752,7 @@ func TestBackupsRestore_Progress(t *testing.T) {
 	sec = sectionOf(t, bc.page(t, ""))
 	require.Contains(t, sec, `data-restore-state="pending"`)
 	require.Contains(t, sec, `data-restore-restart="auto"`)
-	require.Equal(t, []string{"done", "done", "doing", "todo", "todo"}, steps(sec))
+	require.Equal(t, []string{"done", "done", "now", "todo", "todo"}, steps(sec))
 	require.Contains(t, sec, `action="/console/settings/backups/restore/cancel"`)
 	require.Contains(t, sec, `disabled title="A restore is already under way"`, "no second restore meanwhile")
 
@@ -772,7 +778,7 @@ func TestBackupsRestore_Progress(t *testing.T) {
 		Memories: 398, Notes: 94, PreviousDir: "/data/restore/r1/previous"}
 	sec = sectionOf(t, bc.page(t, ""))
 	require.Contains(t, sec, `data-restore-state="archiving"`)
-	require.Equal(t, []string{"done", "done", "done", "done", "doing"}, steps(sec))
+	require.Equal(t, []string{"done", "done", "done", "done", "now"}, steps(sec))
 	require.Contains(t, sec, "(398 memories and 94 notes).")
 	require.Contains(t, sec, "Your previous data is being saved as a backup")
 	require.NotContains(t, sec, `action="/console/settings/backups/restore/dismiss"`, "Dismiss waits for the undo")

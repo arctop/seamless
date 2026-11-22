@@ -319,6 +319,32 @@ the live refresh like the rest of the page.
 Every screen title carries an (i) button that says, in one line, what the screen
 is for.
 
+### Hints, switches that save at once, and time left {#shared-parts}
+
+Settings and the lock screens share a few parts.
+
+- **A hint** is a small (i) beside the thing it explains. It opens on hover,
+  on keyboard focus, or with a tap, which pins it open on a phone. `Esc`, a
+  tap outside it, or opening another hint closes it, so one is open at a time,
+  and an `Esc` that closes a hint leaves open what lies under it. Its words
+  are in the page: a screen reader reads them with the button.
+- **A switch that saves at once** posts as soon as it changes, through the
+  same in-place path as every other console write, and waits, disabled, for
+  Seamless to answer. The toast then names the change ("Momentum is off.")
+  with **Undo**, which posts the values from before it. A save that fails puts
+  the switch back and says why, with **Try again**. Typing never saves: a form
+  with a typed value (a number, a folder) keeps its **Save** bar. A toast with
+  a button stays for eight seconds, and for as long as the pointer or focus is
+  on it.
+- **Time left** on a lease, a grant or an unlock reads "2 h 41 m left". It
+  counts down every 30 seconds while the page is in sight, turns amber from 30
+  minutes, when renewal warnings start, and stops at **ended**. Its tooltip is
+  the end, in your own clock. A lease with no end of its own reads **until the
+  session ends**.
+- **Steps** list a ceremony with more than one step, each done (a check), the
+  one under way, or still to come, numbered: a restore's progress in
+  [Backups](#backups) is one.
+
 ### The command palette
 
 `Cmd/Ctrl+K`, the sidebar's search field, or `/` on a screen with no filter of
@@ -349,7 +375,7 @@ a superseded or archived memory finds it here too, with its status.
 | `a` / `x` | On the Gardener: apply / dismiss the open proposal. An apply that cannot be undone asks in the page first; press `a` again to confirm |
 | `[` | Collapse or expand the sidebar |
 | `?` | The shortcut sheet |
-| `Esc` | Close the palette, a menu, the sheet, or the drawer |
+| `Esc` | Close the palette, a menu, a [hint](#shared-parts), the sheet, or the drawer |
 
 The `g` map is read from the sidebar itself, so a section switched off in
 Settings - or one the [level](#choose-how-much-you-see) leaves out of the
@@ -2376,8 +2402,9 @@ without script:
   [peer_auth gate](/guides/peer-auth/#restore). Without a usable passkey, the
   card names why and shows the terminal command instead, with a copy button.
 
-Then a progress card lists the steps: **Checking the backup**, **Preparing the
-restored data** (replace) or **Saving your current data** (merge), **Restarting
+Then a progress card lists the [steps](#shared-parts), numbered, each done,
+under way or still to come: **Checking the backup**, **Preparing the restored
+data** (replace) or **Saving your current data** (merge), **Restarting
 Seamless**, **Done**, and for a replace, **Saving your previous data as a
 backup**. The page waits through the restart and draws the section again in
 place. **Cancel restore** is offered while a restore is staged. On Windows, the

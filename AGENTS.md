@@ -2031,3 +2031,16 @@ armed button's word, "Confirm" when absent), and `shell.js` arms it on the
 first press and posts on the second. Without script the form posts on the
 first press, so a route behind a confirm must still be safe to call. No
 template calls `confirm()` (`TestSwNoNativeConfirm`).
+
+The shared parts of Settings and the lock screens are built once (UX 33):
+`{{hint "..."}}` and `{{hintFor "<name>" "..."}}` put an explanation one hover
+away instead of a paragraph (ids stay unique per page through render's pass,
+`uniqueHintIDs`); `{{timeLeft .End}}` is a lease's time left, which `shell.js`
+counts down; `templates/kit_shared.html` holds `source-chip` and `steps`; and
+`console.css`'s "UX 33: Shared parts" section styles `.set-row`, `.set-switch`,
+`.set-seg`, `.set-unit` and `.door`. A form whose switches, radios or selects
+save at once carries `data-autosave`: `shell.js` submits it through the shared
+POST path (navigation.js, never a fetch of its own), and the toast offers Undo
+or Try again. Its action must be a route registered through `post()`
+(`TestKtAutosave_FormsPostToRegisteredRoutes`); a form with a typed value keeps
+its Save bar.

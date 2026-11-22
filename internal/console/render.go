@@ -342,6 +342,12 @@ var funcs = template.FuncMap{
 	"about":         pageAbout,
 	"sameHost":      sameHost,
 	"sortLabel":     sortLabel,
+	// The shared parts of Settings and the lock screens (kit.go): an (i)
+	// hint, a named one, a lease's time left, and the source chip's model.
+	"hint":       hint,
+	"hintFor":    hintFor,
+	"timeLeft":   timeLeft,
+	"sourceChip": sourceChip,
 	// static is a static file's link, its version included, and build this
 	// build's id (static.go).
 	"static": staticFiles.url,
@@ -663,7 +669,7 @@ func (s *Service) renderReader(w http.ResponseWriter, r *http.Request, page, blo
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = buf.WriteTo(w)
+	_, _ = w.Write(uniqueHintIDs(buf.Bytes()))
 }
 
 // renderDetail serves an entity detail three ways: JSON for the CLI (wantsJSON),
@@ -720,7 +726,8 @@ func (s *Service) render(w http.ResponseWriter, r *http.Request, page string, pd
 		// render the patch instead of the page.
 		w.Header().Set("Cache-Control", "no-store")
 	}
-	_, _ = buf.WriteTo(w)
+	// Two hints with the same words get ids of their own (kit.go).
+	_, _ = w.Write(uniqueHintIDs(buf.Bytes()))
 }
 
 // The console's own fetches of a page it is showing -- the live refresh in
@@ -840,7 +847,7 @@ func (s *Service) renderErrorPage(w http.ResponseWriter, r *http.Request, status
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	_, _ = buf.WriteTo(w)
+	_, _ = w.Write(uniqueHintIDs(buf.Bytes()))
 }
 
 // badRequest reports a 400 in the caller's preferred format, for a strictly

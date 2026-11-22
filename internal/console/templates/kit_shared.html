@@ -1,6 +1,21 @@
 {{/* The shared parts of Settings and the lock screens (plan:console-ux-pass
-     UX 33), parsed beside every page: "source-chip" (where a setting's value
-     comes from, and its Reset) and "steps" (a ceremony's steps: done, now,
-     todo). Placeholders until UX 33 fills them: no page calls them yet. */}}
-{{define "source-chip"}}{{end}}
-{{define "steps"}}{{end}}
+     UX 33), parsed beside every page render.go's parseTemplates lists. Their
+     look is console.css's "UX 33: Shared parts" section; the hint and the
+     time left are template funcs (kit.go).
+
+     "source-chip" says where a section's values come from, once, in its head:
+       {{template "source-chip" (sourceChip "override" .Note "features-reset")}}
+     The source is "file" (Config file), "override" (Set here, with a Reset
+     button that submits the reset form named by id) or "locked" (Config file
+     decides, with a lock). The note, the precedence sentence, is the chip's
+     hint. sourceChip's optional fourth argument is the data-confirm sentence
+     Reset asks with.
+
+     "steps" draws a ceremony's steps, each done, now or todo:
+       {{template "steps" .Steps}}
+     Its dot is a list of values with Label and State ("done", "now" or
+     "todo"; "doing" reads as "now", Backups' word). A step that needs more
+     than words (a command and its Copy button) writes the same markup by
+     hand: ol.steps > li.steps-item.is-<state> > .steps-mark + .steps-label. */}}
+{{define "source-chip"}}{{with .}}<span class="src-chip is-{{.Source}}">{{if eq .Source "locked"}}{{icon "lock"}}{{else}}<span class="src-chip-dot" aria-hidden="true"></span>{{end}}<span class="src-chip-label">{{.Label}}</span>{{with .Note}}{{hintFor "where this comes from" .}}{{end}}{{with .Reset}}<button class="btn small src-chip-reset" type="submit" form="{{.}}"{{with $.Confirm}} data-confirm="{{.}}" data-confirm-label="Reset it"{{end}}>Reset</button>{{end}}</span>{{end}}{{end}}
+{{define "steps"}}<ol class="steps">{{range $i, $s := .}}{{$state := .State}}{{if eq $state "doing"}}{{$state = "now"}}{{end}}<li class="steps-item is-{{$state}}"{{if eq $state "now"}} aria-current="step"{{end}}><span class="steps-mark" aria-hidden="true">{{if eq $state "done"}}{{icon "check"}}{{else}}{{add $i 1}}{{end}}</span><span class="steps-label">{{.Label}}{{if eq $state "done"}}<span class="steps-sr"> (done)</span>{{end}}</span></li>{{end}}</ol>{{end}}

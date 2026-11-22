@@ -311,21 +311,59 @@
     return true;
   }
 
-  function flash(message, tone) {
+  /* The toast (#live-toast, layout.html). flash(message, tone, action):
+     tone 'error' marks a failure; action, when given, is {label, run}: a
+     button after the words that takes the toast down and runs it (Undo, Try
+     again). The toast keeps role=status, and its button is a real one, in
+     the tab order. A toast with an action stays longer; any toast stays while
+     the pointer or focus is on it, and goes soon after focus leaves it. */
+  var TOAST_MS = 2600;
+  var ACTION_MS = 8000;
+  var TOAST_LINGER_MS = 1500;
+  function holdToast(toast, ms) {
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () {
+      toastTimer = null;
+      if (toast.matches(':hover, :focus-within')) { holdToast(toast, TOAST_LINGER_MS); return; }
+      dropToast(toast);
+    }, ms);
+  }
+  function dropToast(toast) {
+    if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
+    toast.classList.remove('show');
+    setTimeout(function () { if (!toast.classList.contains('show')) toast.hidden = true; }, 300);
+  }
+  function flash(message, tone, action) {
     var toast = document.getElementById('live-toast');
     if (!toast) return;
     toast.textContent = message;
+    var button = null;
+    if (action && action.label && typeof action.run === 'function') {
+      button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'toast-action';
+      button.textContent = action.label;
+      button.addEventListener('click', function () {
+        dropToast(toast);
+        action.run();
+      });
+      toast.appendChild(document.createTextNode(' '));
+      toast.appendChild(button);
+    }
     toast.hidden = false;
     toast.classList.toggle('error', tone === 'error');
     toast.classList.remove('show');
     void toast.offsetWidth;
     toast.classList.add('show');
-    if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () {
-      toast.classList.remove('show');
-      setTimeout(function () { toast.hidden = true; }, 300);
-    }, 2600);
+    holdToast(toast, button ? ACTION_MS : TOAST_MS);
   }
+  (function () {
+    var toast = document.getElementById('live-toast');
+    if (!toast) return;
+    toast.addEventListener('focusout', function (event) {
+      if (!toast.contains(event.relatedTarget) && toast.classList.contains('show')) holdToast(toast, TOAST_LINGER_MS);
+    });
+  })();
 
   function setBusy(on) {
     var main = document.querySelector('.main');
@@ -349,8 +387,12 @@
 
     var method = (options.method || 'GET').toUpperCase();
     var mutation = method !== 'GET';
+    // outcome, when the caller passes one, learns why a load did not land:
+    // the server's ?error= sentence, or this client's own.
+    var outcome = options.outcome || {};
     if (inflight && inflight.mutation) {
-      flash('Another update is still in progress.', 'error');
+      outcome.error = 'Another update is still in progress.';
+      flash(outcome.error, 'error');
       return Promise.resolve(false);
     }
     if (inflight && inflight.controller) inflight.controller.abort();
@@ -401,7 +443,11 @@
         location.assign(finalURL.href);
         return null;
       }
-      if (!response.ok) throw new Error('http ' + response.status);
+      if (!response.ok) {
+        outcome.error = 'Seamless answered with an error (HTTP ' + response.status + ').';
+        throw new Error('http ' + response.status);
+      }
+      outcome.error = finalURL.searchParams.get('error') || '';
       var build = response.headers.get(BUILD_HEADER);
       return response.text().then(function (html) {
         if (seq !== requestSeq) return false;
@@ -412,6 +458,13 @@
         var nextURL = canonicalURL(doc, finalURL.href);
         var canonical = new URL(nextURL, location.href);
         if (!canonical.hash) canonical.hash = finalURL.hash;
+        // A flash is one-shot: shell.js has just shown it from the page drawn
+        // (and stripped it from the entry the page was on), so the address
+        // kept in history never carries it. Kept, the next live refresh,
+        // which fetches location.href, would say it again.
+        ['notice', 'error'].forEach(function (key) {
+          if (canonical.searchParams.has(key)) canonical.searchParams.delete(key);
+        });
         nextURL = canonical.href;
         if (options.history !== 'none') {
           var state = { seamView: 'query' };
@@ -441,6 +494,7 @@
         }
         return load(rawURL, whole);
       }
+      if (!outcome.error) outcome.error = 'Seamless did not answer.';
       flash('Could not update this view. The current data is unchanged.', 'error');
       document.dispatchEvent(new CustomEvent('seam:content-error', { detail: { error: error } }));
       return false;
@@ -504,7 +558,19 @@
         if (typeof value === 'string') body.append(key, value);
       });
     }
-    load(target.href, { method: 'POST', body: body, history: 'push', source: 'mutation' });
+    // A form that saves at once (data-autosave, shell.js) changes no view:
+    // its answer replaces the history entry instead of adding one per
+    // switch. Every in-place POST ends with seam:submitted on the document:
+    // the form, whether it landed with no error, and if not, why.
+    var autosave = form.hasAttribute('data-autosave');
+    var outcome = {};
+    load(target.href, { method: 'POST', body: body, history: autosave ? 'replace' : 'push', source: 'mutation', outcome: outcome })
+      .then(function (landed) {
+        if (landed === null) return; // signed out: the page is leaving for the sign-in
+        document.dispatchEvent(new CustomEvent('seam:submitted', {
+          detail: { form: form, ok: landed === true && !outcome.error, error: outcome.error || '' }
+        }));
+      });
   });
 
   document.addEventListener('change', function (event) {

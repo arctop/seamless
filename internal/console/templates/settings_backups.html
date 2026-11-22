@@ -49,9 +49,7 @@
   <article class="card bk-card bk-progress" id="backup-progress" aria-labelledby="bk-progress-title">
     <h2 id="bk-progress-title">{{icon "history"}}Restoring<span class="h2-meta">{{if eq .Mode "merge"}}bringing back what is missing{{else}}replacing all data{{end}}</span></h2>
     {{if .BackupName}}<p class="bk-lead">The backup from {{clockDate .BackupAt}}</p>{{end}}
-    <ol class="bk-steps">
-      {{range .Steps}}<li class="bk-step is-{{.State}}"{{if eq .State "doing"}} aria-current="step"{{end}}><span class="bk-step-mark" aria-hidden="true">{{if eq .State "done"}}{{icon "check"}}{{end}}</span><span>{{.Label}}</span></li>{{end}}
-    </ol>
+    {{template "steps" .Steps}}
     {{if .Manual}}<p class="bk-gate">{{icon "refresh-cw"}}<span>Restart Seamless within an hour to finish{{if not .ExpiresAt.IsZero}} (by {{clock .ExpiresAt}}){{end}}: <span class="mono">{{.Command}}</span>{{copyBtn .Command}}</span></p>{{end}}
     <p class="bk-wait" role="status" aria-live="polite" data-backups-wait></p>
     {{if .Cancel}}<div class="bk-actions"><form method="post" action="/console/settings/backups/restore/cancel"><button class="btn small" type="submit">Cancel restore</button></form></div>{{end}}

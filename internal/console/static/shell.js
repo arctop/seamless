@@ -811,12 +811,17 @@
   document.addEventListener('seam:content-updated', function () { localClocks(document); });
   if (window.MutationObserver && document.body) {
     new MutationObserver(function (records) {
+      var left = false;
       for (var i = 0; i < records.length; i++) {
         var added = records[i].addedNodes;
         for (var j = 0; j < added.length; j++) {
-          if (added[j].nodeType === 1) localClocks(added[j]);
+          if (added[j].nodeType !== 1) continue;
+          localClocks(added[j]);
+          // A time left swapped in later (a fragment) counts down too.
+          if (!left && (added[j].matches('time[data-left]') || added[j].querySelector('time[data-left]'))) left = true;
         }
       }
+      if (left) tickLeft();
     }).observe(document.body, { childList: true, subtree: true });
   }
 
@@ -873,4 +878,339 @@
   document.addEventListener('keydown', function (e) {
     if (armedBtn && e.key === 'Escape') disarm();
   });
+
+  /* ---- The shared parts (UX 33): hints, switches that save at once, time left */
+
+  function say(message, tone, action) {
+    if (window.SeamConsole && window.SeamConsole.flash) window.SeamConsole.flash(message, tone, action);
+  }
+  function words(el) { return el ? (el.textContent || '').replace(/\s+/g, ' ').trim() : ''; }
+
+  // Hints ({{hint}} and {{hintFor}}, kit.go): an (i) button and its tooltip.
+  // CSS opens one on hover and on keyboard focus. A tap or a click pins it
+  // open (.is-pinned); the same again, Esc, a tap outside, or another hint
+  // opening closes it, so one is open at a time. A hint closed while the
+  // pointer or focus is still on it stays closed (.is-shut) until both have
+  // left it. Esc is taken in the capture phase, before panel.js's, and only
+  // when it closes a hint (preventDefault): one Esc closes the innermost
+  // thing. The live morph resets classes to the server's, so the pinned
+  // hint, kept here by its tooltip's id, is pinned again after each one.
+  var pinnedHint = '';
+  function hintAt(el) { return el && el.closest ? el.closest('.hint') : null; }
+  function hintTip(h) {
+    var b = h.querySelector('.hint-btn');
+    return b ? b.getAttribute('aria-describedby') || '' : '';
+  }
+  function hintOpen(h) {
+    if (h.classList.contains('is-shut')) return false;
+    return h.classList.contains('is-pinned') || h.matches(':hover') || h.contains(document.activeElement);
+  }
+  function shutHint(h) {
+    h.classList.remove('is-pinned');
+    h.classList.add('is-shut');
+    if (hintTip(h) === pinnedHint) pinnedHint = '';
+  }
+  function unpinHint(h) {
+    h.classList.remove('is-pinned');
+    if (hintTip(h) === pinnedHint) pinnedHint = '';
+  }
+  function shutOtherHints(except) {
+    document.querySelectorAll('.hint').forEach(function (h) {
+      if (h !== except && hintOpen(h)) shutHint(h);
+    });
+  }
+  // Keep an open tooltip inside the window: nudged sideways, never clipped.
+  function placeHint(h) {
+    var pop = h.querySelector('.hint-pop');
+    if (!pop) return;
+    pop.style.removeProperty('--hint-dx');
+    var r = pop.getBoundingClientRect();
+    if (!r.width) return;
+    var edge = document.documentElement.clientWidth - 12;
+    var dx = r.right > edge ? edge - r.right : (r.left < 12 ? 12 - r.left : 0);
+    if (dx) pop.style.setProperty('--hint-dx', Math.round(dx) + 'px');
+  }
+  function enterHint(e) {
+    var h = hintAt(e.target);
+    if (!h || h.contains(e.relatedTarget)) return;
+    h.classList.remove('is-shut');
+    shutOtherHints(h);
+    placeHint(h);
+  }
+  document.addEventListener('mouseover', enterHint);
+  document.addEventListener('focusin', enterHint);
+  document.addEventListener('mouseout', function (e) {
+    var h = hintAt(e.target);
+    if (h && !h.contains(e.relatedTarget) && !h.contains(document.activeElement)) h.classList.remove('is-shut');
+  });
+  document.addEventListener('focusout', function (e) {
+    var h = hintAt(e.target);
+    if (h && !h.contains(e.relatedTarget) && !h.matches(':hover')) h.classList.remove('is-shut');
+  });
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('.hint-btn') : null;
+    var h = hintAt(btn);
+    if (h) {
+      e.preventDefault();
+      if (h.classList.contains('is-pinned')) { shutHint(h); return; }
+      shutOtherHints(h);
+      h.classList.remove('is-shut');
+      h.classList.add('is-pinned');
+      pinnedHint = hintTip(h);
+      placeHint(h);
+      return;
+    }
+    if (hintAt(e.target)) return; // a tap on the tooltip itself keeps it
+    document.querySelectorAll('.hint.is-pinned').forEach(unpinHint);
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
+    var open = Array.prototype.filter.call(document.querySelectorAll('.hint'), hintOpen);
+    if (!open.length) return;
+    e.preventDefault();
+    open.forEach(shutHint);
+  }, true);
+  document.addEventListener('seam:content-updated', function () {
+    if (!pinnedHint) return;
+    var h = hintAt(document.getElementById(pinnedHint));
+    if (h) h.classList.add('is-pinned');
+    else pinnedHint = '';
+  });
+
+  // Switches that save at once (D9): a form with data-autosave posts as soon
+  // as one of its switches (checkboxes), radios or selects changes. Typing
+  // in a text or number field never posts. The post is the form's own
+  // submit (requestSubmit), which navigation.js takes as it takes every
+  // owner POST inside .main: X-Seam-Follow, the server's redirect followed in
+  // place, never a fetch of this script's own. While it is out the control
+  // (a radio's whole group) is disabled and aria-busy. navigation.js ends it
+  // with seam:submitted. Saved, the toast names the change ("Momentum is
+  // off.", by the control's data-autosave-label, aria-label or label), with
+  // Undo, which posts the values the form held before the change. Not saved
+  // (no answer, or the server's ?error=), the control goes back and the
+  // toast says why, with Try again. The values a form holds are read when
+  // the page is drawn and after every morph, so they are the server's.
+  var autoValues = window.WeakMap ? new WeakMap() : null;
+  var autoSaving = null;
+  function autoField(el) {
+    return !!el && (el.type === 'checkbox' || el.type === 'radio' || el.tagName === 'SELECT');
+  }
+  function formValues(form) {
+    var out = [];
+    try {
+      new FormData(form).forEach(function (value, key) { if (typeof value === 'string') out.push([key, value]); });
+    } catch (e) {}
+    return out;
+  }
+  function keepAutoValues() {
+    if (!autoValues) return;
+    document.querySelectorAll('form[data-autosave]').forEach(function (form) { autoValues.set(form, formValues(form)); });
+  }
+  // setFormValues puts one field's controls back to the values in list. A
+  // control the server drew disabled (the config file decides) is left alone.
+  function setFormValues(form, list, name) {
+    var mine = list.filter(function (p) { return p[0] === name; }).map(function (p) { return p[1]; });
+    Array.prototype.forEach.call(form.elements, function (el) {
+      if (el.name !== name || (el.disabled && !el.hasAttribute('data-autosave-busy'))) return;
+      if (el.type === 'checkbox' || el.type === 'radio') el.checked = mine.indexOf(el.value) !== -1;
+      else if (el.tagName === 'SELECT' && !el.multiple && mine.length) el.value = mine[0];
+    });
+  }
+  function autoLabel(el, form) {
+    var named = el.closest('[data-autosave-label]');
+    if (named && form.contains(named)) return named.getAttribute('data-autosave-label');
+    var box = el.type === 'radio' ? el.closest('[role="radiogroup"], fieldset') : null;
+    var from = box || el;
+    if (from.getAttribute('aria-label')) return from.getAttribute('aria-label');
+    var by = from.getAttribute('aria-labelledby');
+    if (by) return by.split(/\s+/).map(function (id) { return words(document.getElementById(id)); }).join(' ').trim();
+    if (box && box.tagName === 'FIELDSET') return words(box.querySelector('legend'));
+    var label = !box && el.labels && el.labels[0];
+    return label ? words(label.querySelector('strong') || label) : '';
+  }
+  function choiceWords(el) {
+    if (el.getAttribute('aria-label')) return el.getAttribute('aria-label');
+    var label = el.labels && el.labels[0];
+    return words(label) || el.value;
+  }
+  // describe words a field's state, read now, while the page shows it: the
+  // toast that follows the save may come after a morph.
+  function describe(form, control) {
+    var name = autoLabel(control, form);
+    var field = control.name;
+    var choices = {};
+    if (control.type === 'radio') {
+      Array.prototype.forEach.call(form.elements, function (el) {
+        if (el.type === 'radio' && el.name === field) choices[el.value] = choiceWords(el);
+      });
+    } else if (control.tagName === 'SELECT') {
+      Array.prototype.forEach.call(control.options, function (o) { choices[o.value] = words(o); });
+    }
+    return function (list) {
+      var values = list.filter(function (p) { return p[0] === field; }).map(function (p) { return p[1]; });
+      if (!name) return 'Saved.';
+      if (control.type === 'checkbox') return name + ' is ' + (values.indexOf(control.value) !== -1 ? 'on' : 'off') + '.';
+      return name + ': ' + (choices[values[0]] || values[0] || 'none') + '.';
+    };
+  }
+  function autoGroup(form, control) {
+    if (control.type !== 'radio') return [control];
+    return Array.prototype.filter.call(form.elements, function (el) {
+      return el.type === 'radio' && el.name === control.name && !el.disabled;
+    });
+  }
+  // liveForm finds a form again after a morph that drew it anew.
+  function liveForm(form) {
+    if (form.isConnected) return form;
+    if (form.id) return document.getElementById(form.id);
+    var action = form.getAttribute('action') || '';
+    var same = Array.prototype.filter.call(document.querySelectorAll('form[data-autosave]'), function (f) {
+      return (f.getAttribute('action') || '') === action;
+    });
+    return same.length === 1 ? same[0] : null;
+  }
+  // liveControl finds the control again: the one changed, or, after a morph
+  // drew it anew, the field's control by name.
+  function liveControl(form, save) {
+    if (save.control.isConnected && save.control.form === form) return save.control;
+    var group = Array.prototype.filter.call(form.elements, function (el) { return el.name === save.name && autoField(el); });
+    return group.filter(function (el) { return el.checked; })[0] || group[0] || null;
+  }
+  // focusField gives focus back to a field: a radio group's checked radio,
+  // or the control itself.
+  function focusField(form, control) {
+    var target = control;
+    if (control.type === 'radio') {
+      target = Array.prototype.filter.call(form.elements, function (el) {
+        return el.type === 'radio' && el.name === control.name && el.checked;
+      })[0] || control;
+    }
+    try { target.focus({ preventScroll: true }); } catch (e) {}
+  }
+  function autosave(form, control, from, to, opts) {
+    if (typeof form.requestSubmit !== 'function') return;
+    var name = control.name;
+    if (autoSaving) {
+      // One save at a time: this change goes back, and says so.
+      setFormValues(form, from, name);
+      say('Not saved. Another change is still saving.', 'error', {
+        label: 'Try again', run: function () { retry({ form: form, control: control, name: name, from: from, to: to, undoing: opts.undoing }); }
+      });
+      return;
+    }
+    if (opts.replay) {
+      setFormValues(form, to, name);
+      focusField(form, control);
+    }
+    var group = autoGroup(form, control);
+    var save = {
+      form: form, control: control, name: name, from: from, to: to, undoing: !!opts.undoing,
+      words: describe(form, control), group: group, sent: false,
+      refocus: !!opts.replay || group.indexOf(document.activeElement) !== -1
+    };
+    autoSaving = save;
+    form.requestSubmit();
+    if (!save.sent) {
+      // navigation.js did not take it: a form the browser found invalid, or
+      // one outside .main, which the browser posts itself.
+      autoSaving = null;
+      return;
+    }
+    group.forEach(function (el) {
+      el.setAttribute('data-autosave-busy', '');
+      el.setAttribute('aria-busy', 'true');
+      el.disabled = true;
+    });
+  }
+  // replay posts a field's values again from the toast (Undo, Try again):
+  // focus leaves the toast for the control it is about.
+  function replay(save, from, to, undoing) {
+    var form = liveForm(save.form);
+    var control = form && liveControl(form, save);
+    if (!control) return;
+    autosave(form, control, from, to, { replay: true, undoing: undoing });
+  }
+  function retry(save) { replay(save, save.from, save.to, save.undoing); }
+  document.addEventListener('submit', function (e) {
+    if (autoSaving && e.target === autoSaving.form) autoSaving.sent = e.defaultPrevented;
+  });
+  document.addEventListener('change', function (e) {
+    var el = e.target;
+    var form = el && el.form;
+    if (!form || !form.hasAttribute('data-autosave') || !autoField(el)) return;
+    var before = autoValues && autoValues.get(form);
+    autosave(form, el, before || [], formValues(form), {});
+  });
+  document.addEventListener('seam:submitted', function (e) {
+    var save = autoSaving;
+    var d = e.detail || {};
+    if (!save || d.form !== save.form) return;
+    autoSaving = null;
+    save.group.forEach(function (el) {
+      // A control the morph drew afresh already carries the server's state.
+      if (!el.hasAttribute('data-autosave-busy')) return;
+      el.removeAttribute('data-autosave-busy');
+      el.removeAttribute('aria-busy');
+      el.disabled = false;
+    });
+    var form = liveForm(save.form);
+    if (d.ok) {
+      say(save.words(save.to), 'ok', save.undoing ? null : {
+        label: 'Undo', run: function () { replay(save, save.to, save.from, true); }
+      });
+    } else {
+      if (form) setFormValues(form, save.from, save.name);
+      say('Not saved. ' + (d.error || 'Seamless did not answer.'), 'error', {
+        label: 'Try again', run: function () { retry(save); }
+      });
+    }
+    // A disabled control loses focus; give it back to the field.
+    var active = document.activeElement;
+    var control = form && liveControl(form, save);
+    if (save.refocus && control && (!active || active === document.body)) focusField(form, control);
+    keepAutoValues();
+  });
+  keepAutoValues();
+  document.addEventListener('seam:content-updated', keepAutoValues);
+
+  // Time left (time[data-left], kit.go timeLeft): the server writes the
+  // words, and shell.js counts them down every 30 seconds while the page is
+  // in sight, as kit.go's leftWords does: warn from 30 minutes, when renewal
+  // warnings start, and "ended" at the end, where it stops. A hidden page
+  // keeps no timer (console-streams-held-only-while-visible); shown again,
+  // it counts at once. The title, the end in this browser's clock, is the
+  // time[data-clock] rule's.
+  var LEFT_TICK_MS = 30000;
+  var LEFT_WARN_MS = 30 * 60 * 1000;
+  var leftTimer = 0;
+  function leftWords(ms) {
+    if (ms <= 0) return ['ended', ''];
+    var tone = ms <= LEFT_WARN_MS ? 'warn' : 'ok';
+    var mins = Math.floor(ms / 60000);
+    if (mins < 1) return ['under 1 min left', tone];
+    if (mins < 60) return [mins + ' min left', tone];
+    if (mins < 1440) return [Math.floor(mins / 60) + ' h ' + (mins % 60 ? (mins % 60) + ' m ' : '') + 'left', tone];
+    var hours = Math.floor((mins % 1440) / 60);
+    return [Math.floor(mins / 1440) + ' d ' + (hours ? hours + ' h ' : '') + 'left', tone];
+  }
+  function tickLeft() {
+    if (leftTimer) { clearTimeout(leftTimer); leftTimer = 0; }
+    if (document.visibilityState === 'hidden') return;
+    var counting = 0;
+    var now = Date.now();
+    document.querySelectorAll('time[data-left][datetime]').forEach(function (el) {
+      var end = Date.parse(el.getAttribute('datetime'));
+      if (isNaN(end)) return;
+      var left = leftWords(end - now);
+      var text = el.querySelector('span');
+      if (text && text.textContent !== left[0]) text.textContent = left[0];
+      el.classList.toggle('ok', left[1] === 'ok');
+      el.classList.toggle('warn', left[1] === 'warn');
+      if (left[1]) counting++;
+    });
+    if (counting) leftTimer = setTimeout(tickLeft, LEFT_TICK_MS);
+  }
+  document.addEventListener('visibilitychange', tickLeft);
+  document.addEventListener('seam:content-updated', tickLeft);
+  tickLeft();
 })();
