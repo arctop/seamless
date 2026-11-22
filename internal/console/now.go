@@ -579,23 +579,19 @@ func (s *Service) nowWork(ctx context.Context, now time.Time, scope string) (now
 // two projects.
 func nowPlanKey(project, slug string) string { return project + "\x00" + slug }
 
-// planPageHref is a plan's page, /console/plans/<slug>, when the plan has one
-// in project: plans.Composition resolves the slug through the request's handle
-// and its primary note is in that project (the Diary's rule, diary.Ref's
-// HasPage). The plan route resolves by slug alone and a task-only plan has no
-// page, so "" means link elsewhere, never to a 404.
+// planPageHref is a plan's page in project, its project named (planHref),
+// when the plan has a narrative there: plans.CompositionIn resolves the slug
+// in that project through the request's handle. "" means link elsewhere (the
+// project's steps), never to a 404.
 func (s *Service) planPageHref(ctx context.Context, project, slug string) (string, error) {
 	if slug == "" {
 		return "", nil
 	}
-	primary, _, ok, err := plans.Composition(ctx, s.db(ctx), slug)
-	if err != nil {
+	_, _, ok, err := plans.CompositionIn(ctx, s.db(ctx), project, slug)
+	if err != nil || !ok {
 		return "", err
 	}
-	if !ok || primary.Project != project {
-		return "", nil
-	}
-	return "/console/plans/" + url.PathEscape(slug), nil
+	return planHref(project, slug), nil
 }
 
 // projectTasksHref is a project's Plans & tasks tab, where a plan without a

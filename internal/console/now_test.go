@@ -345,7 +345,7 @@ func TestNwNow_ClampedTitlesKeepTheirWholeText(t *testing.T) {
 func TestNwNow_PlanCardsLinkToThePlan(t *testing.T) {
 	f := nwSeedFleet(t)
 	body := getPeek(t, f.mux, "/console/now").Body.String()
-	require.Contains(t, body, `id="pl-demo-`+f.notedPlan+`" href="/console/plans/`+f.notedPlan+`"`)
+	require.Contains(t, body, `id="pl-demo-`+f.notedPlan+`" href="/console/plans/`+f.notedPlan+`?project=demo"`)
 	require.Contains(t, body, `id="pl-demo-`+f.taskOnlyPlan+`" href="/console/projects/demo?tab=tasks"`)
 
 	rr := getPeek(t, f.mux, "/console/plans/"+f.notedPlan)

@@ -296,6 +296,7 @@ var funcs = template.FuncMap{
 	"hasPrefix":     strings.HasPrefix,
 	"copyBtn":       copyBtn,
 	"agentPill":     agentPill,
+	"planHref":      planHref,
 	"mayContain":    core.MayContainLine,
 	"isoPill":       isolationPill,
 	"evtTone":       evtTone,

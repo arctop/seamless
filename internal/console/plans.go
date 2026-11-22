@@ -239,6 +239,12 @@ func planHref(project, slug string) string {
 	return "/console/plans/" + url.PathEscape(slug) + "?project=" + url.QueryEscape(planProjectParam(project))
 }
 
+// planApproveHref is the escape hatch's route for a plan, its project named,
+// so Approve never has to guess between two projects' captures of one slug.
+func planApproveHref(project, slug string) string {
+	return "/console/plans/" + url.PathEscape(slug) + "/approve?project=" + url.QueryEscape(planProjectParam(project))
+}
+
 // planAnchor is a plan's card id on the board, unique per project and slug:
 // neither a project slug nor a plan slug may hold a colon (validate.Name).
 // The project tab keeps the card's plan-<slug>.

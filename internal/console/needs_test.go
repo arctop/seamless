@@ -273,7 +273,8 @@ func TestNdStrip_OrdersWhatNeedsYou(t *testing.T) {
 
 	plan := ndCard(t, ov.Attention, needPlans)
 	require.Equal(t, "1 plan awaits your approval", plan.Title)
-	require.Equal(t, "/console/plans/rate-limits/approve", plan.Action.Post)
+	require.Equal(t, "/console/plans/rate-limits/approve?project=example-ops", plan.Action.Post, "Approve names the capture's project")
+	require.Equal(t, "/console/plans/rate-limits?project=example-ops", plan.Href)
 	lapsed := ndCard(t, ov.Attention, needLapsed)
 	require.Equal(t, "1 claim lapsed", lapsed.Title)
 	require.Equal(t, "danger", lapsed.Sev)

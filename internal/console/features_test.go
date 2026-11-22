@@ -258,7 +258,7 @@ func TestOverviewFinishLineCard_FollowsTheMomentumFeature(t *testing.T) {
 	page = getPeek(t, mux, "/console/").Body.String()
 	require.Contains(t, page, "nearly -- one step from shipped")
 	require.Contains(t, page, "left: write the docs")
-	require.Contains(t, page, `href="/console/plans/nearly"`)
+	require.Contains(t, page, `href="/console/plans/nearly?project=demo"`, "the plan's page, its project named")
 	require.Contains(t, page, `data-sev="ok"`)
 	require.Contains(t, page, `class="mom-fin-bar"`, "the card carries the progress draw")
 	require.Contains(t, page, `<line class="mom-fin-fill" x1="0" x2="80" y1="2" y2="2" pathLength="1"/>`,

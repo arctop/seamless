@@ -646,7 +646,7 @@ func (d noteDetail) TagView() noteTags {
 	var out noteTags
 	for _, t := range d.Tags {
 		if slug := plans.SlugFromTags([]string{t}); slug != "" {
-			out.Plans = append(out.Plans, notePlan{Slug: slug, Href: "/console/plans/" + url.PathEscape(slug)})
+			out.Plans = append(out.Plans, notePlan{Slug: slug, Href: planHref(d.Project, slug)})
 			continue
 		}
 		if machineTag(t) {

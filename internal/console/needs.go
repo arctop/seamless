@@ -384,9 +384,9 @@ func (s *Service) needPlanApprovals(ctx context.Context, next string) []attnCard
 		card.Sub += " in " + n.Project
 	}
 	card.Sub += " · presented " + agoPhrase(n.Updated)
-	card.Href = "/console/plans/" + url.PathEscape(slug)
+	card.Href = planHref(n.Project, slug)
 	card.Action = &needAction{
-		Label: "Approve", Icon: "check", Post: "/console/plans/" + url.PathEscape(slug) + "/approve",
+		Label: "Approve", Icon: "check", Post: planApproveHref(n.Project, slug),
 		Fields: []needField{{"next", next}},
 		Title:  "Approve the plan, as Claude Code's approval would, and create its tracking task",
 	}
@@ -595,7 +595,7 @@ func (s *Service) needKnowledge(ctx context.Context, in needsInput) []attnCard {
 				Kind: needFinishLine, Sev: "ok", Icon: "flag", Count: p.StepsLeft(),
 				Title: p.Slug + " -- " + p.FinishLinePhrase(),
 				Sub:   "left: " + strings.Join(p.Remaining, " · "),
-				Href:  "/console/plans/" + p.Slug,
+				Href:  planHref(p.Project, p.Slug),
 				Bar:   finishBar(p.PlanRollup),
 			})
 		}

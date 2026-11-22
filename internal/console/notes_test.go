@@ -40,7 +40,7 @@ func TestLibNotePlanChipLinksToPlanWithStatus(t *testing.T) {
 		[]string{"cc-plan", "plan:api-rate-limiting", "plan-status:presented", "created-by:agent", "billing"})
 
 	reader := getPeek(t, mux, "/console/notes/"+capture.ID+"?reader=1").Body.String()
-	require.Contains(t, reader, `<a class="lib-plan-chip" href="/console/plans/api-rate-limiting"`)
+	require.Contains(t, reader, `<a class="lib-plan-chip" href="/console/plans/api-rate-limiting?project=example-api"`, "the note's own project's plan")
 	require.Contains(t, reader, `<span class="mono">plan:api-rate-limiting</span> <span class="badge accent">presented</span>`)
 	require.Contains(t, reader, `<span class="badge">billing</span>`, "a tag written for people stays in view")
 	fold := strings.Index(reader, `<details class="lib-tag-fold">`)
@@ -61,7 +61,7 @@ func TestLibNotePlanChipLinksToPlanWithStatus(t *testing.T) {
 		require.NoError(t, store.CreateTask(ctx, db, task))
 	}
 	composed := getPeek(t, mux, "/console/notes/"+narrative.ID+"?reader=1").Body.String()
-	require.Contains(t, composed, `href="/console/plans/search-v2" title="Plan: search v2: 1 of 2 steps done">`)
+	require.Contains(t, composed, `href="/console/plans/search-v2?project=example-api" title="Plan: search v2: 1 of 2 steps done">`)
 	require.Contains(t, composed, `<span class="badge accent">in progress</span>`, "a composed plan reads its phase")
 	require.Equal(t, http.StatusOK, getPeek(t, mux, "/console/plans/search-v2").Code)
 
@@ -70,7 +70,7 @@ func TestLibNotePlanChipLinksToPlanWithStatus(t *testing.T) {
 
 	peek := getPeek(t, mux, "/console/notes/"+capture.ID+"?peek=1").Body.String()
 	require.Contains(t, peek, `<dt>Plan</dt>`)
-	require.Contains(t, peek, `<a class="lib-plan-chip" href="/console/plans/api-rate-limiting">`)
+	require.Contains(t, peek, `<a class="lib-plan-chip" href="/console/plans/api-rate-limiting?project=example-api">`)
 	require.Contains(t, peek, `>+3</summary>`)
 	require.NotContains(t, peek, `>plan:api-rate-limiting</span> `, "a peek does not look the status up")
 }
@@ -80,7 +80,7 @@ func TestLibNoteTagView(t *testing.T) {
 	got := noteDetail{Tags: []string{"plan:a", "created-by:gardener", "plan-status:shipped", "cc-plan", "agent-cache",
 		"plan:b", "digest", "planning", "created"}}.TagView()
 	require.Equal(t, []string{"a", "b"}, []string{got.Plans[0].Slug, got.Plans[1].Slug})
-	require.Equal(t, "/console/plans/a", got.Plans[0].Href)
+	require.Equal(t, "/console/plans/a?project=global", got.Plans[0].Href, "a global note's plan is the global scope's")
 	require.Equal(t, []string{"created-by:gardener", "plan-status:shipped", "cc-plan", "agent-cache"}, got.Machine)
 	require.Equal(t, []string{"digest", "planning", "created"}, got.Tags)
 	require.Empty(t, noteDetail{}.TagView().Plans)

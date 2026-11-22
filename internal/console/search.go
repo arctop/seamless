@@ -760,7 +760,7 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 			row := searchRow{
 				Kind: "plan", ID: p.Slug, Title: p.Title, Project: p.Project,
 				Identifier: p.Slug,
-				Age:        ago(p.Updated), Updated: p.Updated, Href: "/console/plans/" + p.Slug,
+				Age:        ago(p.Updated), Updated: p.Updated, Href: planHref(p.Project, p.Slug),
 				Favorite: p.Favorite, Account: p.Account, Lexical: true, Peek: true,
 			}
 			row.MatchKind = store.NaturalIdentifierMatch(data.Query, p.Slug)

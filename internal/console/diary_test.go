@@ -395,7 +395,7 @@ func TestDiary_LinkIntegrity(t *testing.T) {
 					}
 					switch th.Project {
 					case l.SharedSlugProjects[0]:
-						require.Equal(t, "/console/plans/"+l.SharedSlug, th.Plan.Href)
+						require.Equal(t, "/console/plans/"+l.SharedSlug+"?project="+l.SharedSlugProjects[0], th.Plan.Href)
 						withPage++
 					case l.SharedSlugProjects[1]:
 						require.Equal(t, "/console/projects/"+l.SharedSlugProjects[1]+"?tab=tasks", th.Plan.Href)
@@ -525,12 +525,15 @@ func dyStrings(t *testing.T, db *sql.DB, query string, args ...any) []string {
 // dyEntityPrefix is the route of an entity link (one item's page, which a
 // peek can show), "" for any other link.
 func dyEntityPrefix(href string) string {
-	if strings.Contains(href, "?") {
+	path, query, _ := strings.Cut(href, "?")
+	// A plan's page names its project (planHref): still the plan's own link.
+	plan := strings.HasPrefix(path, "/console/plans/") && strings.HasPrefix(query, "project=") && !strings.Contains(query, "&")
+	if query != "" && !plan {
 		return ""
 	}
 	for _, p := range []string{"/console/tasks/", "/console/sessions/", "/console/memories/", "/console/notes/",
 		"/console/trials/", "/console/events/", "/console/plans/", "/console/projects/"} {
-		if strings.HasPrefix(href, p) {
+		if strings.HasPrefix(path, p) {
 			return p
 		}
 	}
@@ -826,7 +829,7 @@ func TestDiary_RefHref(t *testing.T) {
 		{"project", diary.Ref{Kind: diary.RefProject, ID: "example-api", Resolved: true}, false, "/console/projects/example-api"},
 		{"a project that is gone", diary.Ref{Kind: diary.RefProject, ID: "example-gone"}, false, ""},
 		{"plan with a page", diary.Ref{Kind: diary.RefPlan, ID: "rollout", Project: "example-api", Resolved: true, HasPage: true}, false,
-			"/console/plans/rollout"},
+			"/console/plans/rollout?project=example-api"},
 		{"task-only plan", diary.Ref{Kind: diary.RefPlan, ID: "rollout", Project: "example-api", Resolved: true}, false,
 			"/console/projects/example-api?tab=tasks"},
 		{"task-only plan, its project gone", diary.Ref{Kind: diary.RefPlan, ID: "rollout", Project: "example-gone", Resolved: true}, false, ""},

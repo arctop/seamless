@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -573,4 +576,30 @@ func TestPvbGroupSteps_DependencyOrder(t *testing.T) {
 		"a self edge or a blocker off the frontier holds nothing")
 	groups := groupSteps([]planStepVM{step("A", 1, "B"), step("B", 2)})
 	require.Equal(t, "B", groups[0].Steps[0].ID, "groupSteps uses it")
+}
+
+// Every plan link the console renders names its project (planHref,
+// planApproveHref): one slug is a plan per project, so a bare
+// /console/plans/<slug> sends a shared slug to the chooser, or Approve to a
+// 409. The one bare link left is Approve's own fallback redirect, kept
+// byte for byte for a request that named no project.
+func TestPvbEveryPlanLinkNamesItsProject(t *testing.T) {
+	bare := regexp.MustCompile(`"/console/plans/"\s*\+|href="/console/plans/\{\{`)
+	goFiles, err := filepath.Glob("*.go")
+	require.NoError(t, err)
+	tmpls, err := filepath.Glob(filepath.Join("templates", "*.html"))
+	require.NoError(t, err)
+	for _, f := range append(goFiles, tmpls...) {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(f)
+		require.NoError(t, err)
+		for i, line := range strings.Split(string(src), "\n") {
+			if !bare.MatchString(line) || strings.Contains(line, "project=") || strings.Contains(line, "fallback := ") {
+				continue
+			}
+			t.Errorf("%s:%d links a plan by its slug alone; use planHref: %s", f, i+1, strings.TrimSpace(line))
+		}
+	}
 }

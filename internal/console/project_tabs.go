@@ -168,9 +168,7 @@ func (tl planTimelineVM) Href() string { return planHref(tl.Project, tl.Slug) }
 
 // ApproveAction is the escape hatch's route for this plan, its project named,
 // so Approve never has to guess between two projects' captures of one slug.
-func (tl planTimelineVM) ApproveAction() string {
-	return "/console/plans/" + url.PathEscape(tl.Slug) + "/approve?project=" + url.QueryEscape(planProjectParam(tl.Project))
-}
+func (tl planTimelineVM) ApproveAction() string { return planApproveHref(tl.Project, tl.Slug) }
 
 // StarAction is the star's route for this plan, its project named, so the
 // star lands on this project's narrative, never on another project's plan of

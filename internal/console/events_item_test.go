@@ -163,7 +163,7 @@ func TestNwEventSubject_EachKindResolves(t *testing.T) {
 		{"session started", core.Event{Kind: core.EventSessionStarted, ProjectSlug: "demo", SessionID: sessID},
 			subjectSession, "cc/nwsess", "/console/sessions/" + sessID},
 		{"plan shipped, with a page", core.Event{Kind: core.EventPlanShipped, ProjectSlug: "demo", ItemID: "nw-plan",
-			Payload: map[string]any{"plan": "nw-plan"}}, subjectPlan, "plan:nw-plan", "/console/plans/nw-plan"},
+			Payload: map[string]any{"plan": "nw-plan"}}, subjectPlan, "plan:nw-plan", "/console/plans/nw-plan?project=demo"},
 		{"plan shipped, steps only", core.Event{Kind: core.EventPlanShipped, ProjectSlug: "demo", ItemID: "nw-steps",
 			Payload: map[string]any{"plan": "nw-steps"}}, subjectPlan, "plan:nw-steps", "/console/projects/demo?tab=tasks"},
 		{"trial, research off", core.Event{Kind: core.EventTrialRecorded, ProjectSlug: "demo", ItemID: trialID,

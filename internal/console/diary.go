@@ -326,7 +326,7 @@ func refHref(ref diary.Ref, projects map[string]bool, research bool) string {
 		// a page in its thread's project.
 		switch {
 		case ref.HasPage:
-			return "/console/plans/" + id
+			return planHref(ref.Project, ref.ID)
 		case ref.Project != "" && projects[ref.Project]:
 			return "/console/projects/" + url.PathEscape(ref.Project) + "?tab=tasks"
 		}

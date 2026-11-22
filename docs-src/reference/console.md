@@ -1490,8 +1490,9 @@ written), each with its holder, its blockers and the gates it waits on, then
 its narrative note, then the notes attached to it (supporting notes and agent
 caches). A plan whose steps exist with no note tagged `plan:<slug>` in its
 project still opens: its page says it has no narrative note yet. Every plan
-link the board, the project tab and the plan's page render names its project;
-a slug that is a plan in more than one project, opened without `?project=`,
+link the console renders names its project (the board, the project tab, the
+plan's page, Overview, Now, the Diary, Search, the Tasks reader, notes and the
+Gardener); a slug that is a plan in more than one project, opened without `?project=`,
 answers a chooser naming each project's plan (with `?format=json`, a 409 that
 names them), never one page holding both. A plan's source reads "captured from
 plan mode" (a Claude Code capture, with its plan file, iteration and agent
