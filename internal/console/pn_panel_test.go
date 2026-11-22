@@ -138,6 +138,7 @@ func TestPnReadsTheItemKindsOnly(t *testing.T) {
 		"/console/trials/01M81BGXDMBN42FMSSS3E2YNBH":              true,
 		"/console/projects/example-ops":                           false,
 		"/console/sessions/01M81BGXDMBN42FMSSS3E2YNBH/transcript": false,
+
 		"/console/events":                              false,
 		"/console/memories":                            false,
 		"/console/memories/":                           false,

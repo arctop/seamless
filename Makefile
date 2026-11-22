@@ -79,6 +79,15 @@ CLIENT        ?= detect
 # their files underneath them mid-edit. Always go through this list.
 GOFILES := git ls-files '*.go'
 
+# gofmt from go.mod's toolchain line, the gofmt CI runs: gofmt's alignment of
+# composite literals changes between Go releases, so a newer go on PATH
+# (go1.27's gofmt, 2026-11-22) passed fmt-check here on a file CI's go1.26
+# then failed. GOTOOLCHAIN fetches that toolchain into the module cache once;
+# when it cannot (offline), the gofmt on PATH stands in, with a warning.
+GO_TOOLCHAIN := $(shell sed -n 's/^toolchain //p' go.mod)
+GOFMT = gofmt_bin=$$(GOTOOLCHAIN=$(GO_TOOLCHAIN) $(GO) env GOROOT 2>/dev/null)/bin/gofmt; \
+	test -x "$$gofmt_bin" || { echo "WARN: no $(GO_TOOLCHAIN) gofmt; using $$(command -v gofmt)" >&2; gofmt_bin=gofmt; }
+
 # The bind address lives in the config (`addr:`) -- that is the single source of
 # truth, because the daemon reads it there and nothing else can override it
 # without becoming a second one. So this Makefile *reads* the port, never owns
@@ -346,11 +355,11 @@ vulncheck:
 	@scripts/vulncheck.sh $(PKG)
 
 fmt:
-	@$(GOFILES) | xargs gofmt -w
+	@$(GOFMT); $(GOFILES) | xargs "$$gofmt_bin" -w
 
 # Report drift instead of fixing it, so `make check` can fail on it.
 fmt-check:
-	@drift=$$($(GOFILES) | xargs gofmt -l); \
+	@$(GOFMT); drift=$$($(GOFILES) | xargs "$$gofmt_bin" -l); \
 	    test -z "$$drift" || { echo "gofmt drift (run 'make fmt'):"; echo "$$drift"; exit 1; }
 
 # The documentation site: markdown in docs-src/ -> static HTML in docs/docs/,

@@ -1969,7 +1969,9 @@ Note for anyone touching gofmt: the go tool's `./...` skips dot-dirs, but gofmt
 walks the filesystem, so a bare `gofmt -l .` descends into `.claude/worktrees/`
 (other agents' checkouts) and reports their drift as yours -- and `gofmt -w .`
 rewrites their files mid-edit. `make fmt` and `make fmt-check` scope to tracked
-files; use them.
+files; use them. They also run go.mod's toolchain gofmt, the one CI runs, not
+the gofmt on PATH: gofmt's alignment changes between Go releases, and a newer
+local go once passed a file that CI's then failed.
 
 ## Console (server-rendered)
 
