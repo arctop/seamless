@@ -2078,7 +2078,11 @@ tr:hover .copy-btn, tr:focus-within .copy-btn,
 .step > .step-row > .kind { align-self: start; }
 .step .meta { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-top: 6px; font-size: var(--text-2xs); color: var(--muted); align-items: center; }
 .step .meta .mono { font-family: var(--font-mono); }
-.step .meta .edge { max-width: 26ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.step .meta .edge { max-width: 26ch; overflow: hidden; white-space: nowrap; }
+/* The chip is a flex box, and text-overflow never reaches a flex box's own
+   text: its words sit in .edge-t, the one place an ellipsis can show. */
+.step .meta .edge .ico { flex: none; }
+.step .meta .edge-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 /* Lease countdown: the client rewrites .v every second and flips these tones. */
 .lease { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }

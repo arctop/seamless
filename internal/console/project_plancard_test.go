@@ -102,6 +102,8 @@ func TestPcGatedStepWaitsAndIsNotClaimable(t *testing.T) {
 	row := opRow(t, card, behind)
 	require.Contains(t, row, `<span class="edge" data-gate-who="owner" title="waits on owner: approve the window">`)
 	require.Contains(t, row, "waits on owner: approve the window</span>", "who and what")
+	require.Contains(t, row, `<span class="edge-t">waits on owner: approve the window</span></span>`,
+		"the words sit in their own span: a flex chip's own text never shows an ellipsis")
 	require.Contains(t, row, `data-word="waiting"`)
 
 	require.Contains(t, card, `<details class="step waiting" id="`+own+`">`, "its own open gate holds it")
@@ -536,4 +538,17 @@ func TestPcLockedProjectIsAbsent(t *testing.T) {
 	card = pcCard(t, rr.Body.String(), "pc-ops")
 	require.Contains(t, card, `<details class="step waiting" id="`+held+`">`, "unlocked, the gate is read: the step waits on it")
 	require.Contains(t, opRow(t, card, gate), "holds 2 steps</span>")
+}
+
+// A step's chips are flex boxes cut at a width, and text-overflow does not
+// reach a flex box's own text: cut there, a blocker's title stopped mid-word
+// with no ellipsis. The ellipsis is the words' span's.
+func TestConsoleCSS_StepChipWordsEndInAnEllipsis(t *testing.T) {
+	css := string(consoleCSS)
+	i := strings.Index(css, ".step .meta .edge-t {")
+	require.GreaterOrEqual(t, i, 0, "the chip's words have a rule")
+	rule := css[i : i+strings.Index(css[i:], "}")]
+	for _, want := range []string{"min-width: 0;", "overflow: hidden;", "text-overflow: ellipsis;"} {
+		require.Contains(t, rule, want)
+	}
 }
