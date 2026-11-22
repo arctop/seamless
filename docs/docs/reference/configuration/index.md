@@ -60,7 +60,7 @@ either. See [the update block](#the-update-check).
 
 The `gardener:` block's two switches, `gardener.agents_may_apply` and
 `gardener.auto_apply`, are stored by Settings →
-[Knowledge engine](https://thereisnospoon.org/docs/reference/console/#knowledge-engine) (its Gardener group)
+[Gardener](https://thereisnospoon.org/docs/reference/console/#settings-gardener)
 and simply win over the file until reset, with one exception: an explicit
 `agents_may_apply: false` in the file (or
 `SEAMLESS_GARDENER_AGENTS_MAY_APPLY=false`) is final, and the console shows that
@@ -882,8 +882,8 @@ gardener:
   # Whether agents may resolve proposals: gardener_apply's apply, dismiss and
   # hide, and the console's Gardener decisions from an agent's process. Unset
   # means on. false leaves every decision to you, and is final: the console
-  # cannot turn it back on (Settings -> Knowledge engine -> Gardener can turn it
-  # off, and wins over an unset or true value until you reset it there). Both
+  # cannot turn it back on (Settings -> Gardener can turn it off, and wins over
+  # an unset or true value until you reset it there). Both
   # keys stay commented out here: a release older than them would refuse them.
   # env: SEAMLESS_GARDENER_AGENTS_MAY_APPLY
   # agents_may_apply: true

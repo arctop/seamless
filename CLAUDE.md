@@ -266,7 +266,7 @@ is the single live/idle threshold shared by the session reaper, the console and
 automatic updates' idle gate. The gardener's two switches,
 `gardener.agents_may_apply` (default on) and `gardener.auto_apply` (default
 empty; memory_wanted, tool_error, abandon_plan and ship_plan only), have a
-console override (Settings -> Knowledge engine -> Gardener) that wins until
+console override (Settings -> Gardener) that wins until
 reset, except that `agents_may_apply: false` in the file/env is final and locks
 its switch; every check reads them live. The `update:` block (check, check_interval, auto,
 max_defer, min_age) drives the update check and automatic updates; its console

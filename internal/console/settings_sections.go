@@ -17,6 +17,7 @@ import (
 
 	"github.com/arctop/seamless/internal/backup"
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/gardener"
 	"github.com/arctop/seamless/internal/update"
 )
 
@@ -50,6 +51,8 @@ var settingsSections = []settingsSection{
 		Blurb: "New releases, and whether this install checks for and installs them"},
 	{ID: "backups", Label: "Backups", Icon: "archive", Min: levelBasic, Anchor: "backups",
 		Blurb: "Automatic backups, the folder they go to, and restoring one"},
+	{ID: "gardener", Label: "Gardener", Icon: "sprout", Min: levelBasic, Anchor: "settings-gardener",
+		Blurb: "Who may apply what the gardener suggests, and what applies by itself"},
 	{ID: "briefing", Label: "Briefing", Icon: "brain", Min: levelStandard, Anchor: "briefing-recipe",
 		Blurb: "What every new agent session starts with"},
 	{ID: "workspaces", Label: "Workspaces", Icon: "folder-tree", Min: levelStandard, Anchor: "workspace-registry",
@@ -209,6 +212,7 @@ func (s *Service) settingsSectionStates(d *settingsData, lvl level, now time.Tim
 		"updates":    sectionNotRunning,
 		"backups":    sectionNotRunning,
 		"briefing":   briefingState(d.Briefing),
+		"gardener":   gardenerState(d.Gardener, d.GardenerSwitches.gardenerSwitches),
 		"workspaces": {Word: plural(len(d.Projects), "project", "projects"), Tone: "quiet"},
 		"engine":     engineState(d.Embeddings),
 	}
@@ -270,6 +274,28 @@ func setupState(short, full string, emb embeddingsPanel) sectionState {
 	}
 	st.Why = strings.Join(why, " ")
 	return st
+}
+
+// gardenerState is the Gardener section's chip: what the gardener may change
+// without the owner. Switches that could not be read come first (agents are
+// barred meanwhile), then suggestions off (no pass proposes anything, so the
+// switches decide nothing), then the kinds that apply by themselves ("2 of 4
+// automatic", accent, as Features' "on" count is), then agents barred ("Only
+// you decide"), else "Proposes only", the Gardener screen's own words for it.
+func gardenerState(cfg config.Gardener, sw gardenerSwitches) sectionState {
+	switch {
+	case sw.ReadFailed:
+		return sectionState{Word: "Unreadable", Tone: "warn",
+			Why: "The stored switches could not be read: the config file's values show, and agents are barred from deciding meanwhile."}
+	case !cfg.Enabled:
+		return sectionState{Word: "Suggestions off", Tone: "quiet",
+			Why: "gardener.enabled is false, so no pass proposes anything."}
+	case len(sw.AutoApply) > 0:
+		return sectionState{Word: fmt.Sprintf("%d of %d automatic", len(sw.AutoApply), len(gardener.AutoSafeKinds())), Tone: "accent"}
+	case !sw.AgentsMayApply:
+		return sectionState{Word: "Only you decide", Tone: "quiet"}
+	}
+	return sectionState{Word: "Proposes only", Tone: "quiet"}
 }
 
 // briefingState names the preset the briefing in force equals, else Custom.

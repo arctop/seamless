@@ -3144,8 +3144,6 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
 .runtime-card::after { content: ""; position: absolute; inset: auto -42px -66px auto; width: 130px; height: 130px; border: 19px solid color-mix(in oklab, var(--brand) 6%, transparent); border-radius: 50%; pointer-events: none; }
 .storage-card { grid-column: span 5; }
 .budgets-card { grid-column: span 7; }
-.gardener-runtime { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(210px, .75fr) minmax(0, 2fr); gap: 22px; padding: 0; }
-.gardener-runtime::after { border-color: color-mix(in oklab, var(--ok) 6%, transparent); }
 .runtime-card-head { position: relative; z-index: 1; display: flex; align-items: center; gap: 10px; margin-bottom: 17px; }
 .runtime-card-head > div { display: flex; flex-direction: column; min-width: 0; }
 .runtime-card-head > div > span, .briefing-title > div > span, .registry-panel-head > div > span {
@@ -3212,20 +3210,6 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
 .reembed-row { position: relative; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
 .reembed-row small { color: var(--faint); font-size: var(--text-2xs); }
 .reembed-row .badge .live-dot { margin-right: 5px; }
-.gardener-cadence {
-  position: relative; z-index: 1; display: flex; flex-direction: column; align-items: flex-start; justify-content: center;
-  padding: 20px; border-right: 1px solid var(--border); background: color-mix(in oklab, var(--ok) 6%, var(--surface));
-}
-.gardener-state { display: flex; align-items: center; gap: 7px; margin: 12px 0 3px; color: var(--ok); font-size: var(--text-xs); font-weight: 650; }
-.gardener-runtime:not(.is-live) .gardener-state { color: var(--faint); }
-.gardener-runtime:not(.is-live) .live-dot { background: var(--faint); animation: none; }
-.gardener-cadence > strong { color: var(--ink); font-family: var(--font-display); font-size: var(--text-2xl); line-height: 1; }
-.gardener-cadence > strong small { margin-left: 3px; color: var(--faint); font-size: var(--text-xs); font-weight: 600; }
-.gardener-cadence > p { margin: 7px 0 0; color: var(--faint); font-size: var(--text-xs); }
-.gardener-rules { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-content: center; gap: 8px; padding: 18px 20px 18px 0; }
-.gardener-rules > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; padding: 9px 11px; border-bottom: 1px solid var(--border); }
-.gardener-rules span { overflow: hidden; color: var(--muted); font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; }
-.gardener-rules strong { color: var(--ink-2); font-family: var(--font-mono); font-size: var(--text-xs); font-weight: 600; white-space: nowrap; }
 
 /* The friendly page a gated route answers with: an explanation and the way
    back, never an error. */
@@ -3488,9 +3472,6 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
 
 @media (max-width: 900px) {
   .storage-card, .budgets-card, .embedder-card, .vectors-card { grid-column: 1 / -1; }
-  .gardener-runtime { grid-template-columns: 1fr; }
-  .gardener-cadence { border-right: 0; border-bottom: 1px solid var(--border); }
-  .gardener-rules { padding: 10px 14px 14px; }
   .brief-group.utility-group { grid-template-columns: 1fr; grid-template-areas: "heading" "copy" "fields" "scopes"; gap: 8px; }
   .brief-group.utility-group > p { max-width: none; margin-bottom: 5px; }
   .workspace-columns { display: none; }
@@ -3507,7 +3488,6 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
   .settings-zone-index { width: 36px; height: 36px; }
   .settings-zone-head > :last-child { grid-column: 2; justify-self: start; }
   .budget-grid { grid-template-columns: 1fr; }
-  .gardener-rules { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .brief-fields.three { grid-template-columns: 1fr; }
   .family-fields, .ceiling-layout { grid-template-columns: 1fr; }
   .brief-actions { position: static; align-items: flex-start; flex-direction: column; }
@@ -3532,7 +3512,6 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
   .runtime-card, .brief-group { padding: 14px; }
   .briefing-workbench form[data-briefing-form] { padding: 9px; }
   .brief-fields.two { grid-template-columns: 1fr; }
-  .gardener-rules { grid-template-columns: 1fr; }
   .brief-actions .btn-row { align-items: stretch; flex-direction: column-reverse; }
   .registry-overview { gap: 5px; }
   .registry-panel-head { align-items: flex-start; }
@@ -7988,15 +7967,6 @@ a.project-global-line:focus-visible { outline: none; box-shadow: var(--shadow-fo
   .gardener-ev-pair { grid-template-columns: 1fr; }
 }
 
-/* UX 23: Settings > Knowledge engine > Gardener, the gardener's two switches
-   (settings_gardener.html #settings-gardener): one form per control, stacked. */
-.gardener-switches { --group-accent: var(--brand); }
-.gardener-switches > form { display: grid; gap: 8px; margin: 0 0 18px; }
-.gardener-switches > form h4 { margin: 0; color: var(--ink-2); font-size: var(--text-sm); }
-.gardener-switches .gardener-source { margin: 0; color: var(--faint); font-size: var(--text-xs); line-height: 1.45; }
-.gardener-switches .gardener-source strong { color: var(--ink-2); }
-.gardener-switches .updates-actions { margin: 4px 0 0; }
-
 /* UX 03: the project page. A claim strip words its step (claim lapsed,
    unclaimed) and wraps at phone width; a session's held task reads as its
    title; the Sessions tab ends with the count it shows and a way to all. */
@@ -9727,6 +9697,37 @@ tbody tr.row-link[data-panel-current] td:first-child { box-shadow: inset 2px 0 0
 /* UX 36: Settings > Updates, Backups and Your setup. */
 
 /* UX 37: Settings > Gardener section. */
+
+/* The section's cards (settings_gardener.html): the agents switch, the kinds
+   that apply by themselves, and the cadence with its tuning folded. Rows are
+   the kit's .set-row; a card stacks them with the kit's gap. */
+.gs-section > .updates-alert, .gs-section > .updates-note { margin: 0 0 12px; }
+.gs-card { display: grid; gap: 8px; margin: 0 0 14px; }
+.gs-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 2px 2px 0; }
+.gs-card-head h3 { margin: 0; color: var(--ink); font-size: var(--text-sm); font-weight: 650; }
+.gs-card-head .hint { vertical-align: 0; }
+.gs-count { margin-left: auto; }
+.gs-foot { margin: 0; padding: 0 2px; color: var(--faint); font-size: var(--text-xs); }
+.gs-card .gs-save { justify-self: start; }
+.js .gs-card .gs-save { display: none; }
+.gs-cadence {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 12px 14px;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--paper) 55%, var(--surface-solid));
+}
+.gs-cadence-ico { display: inline-flex; flex: none; color: var(--faint); }
+.gs-cadence-ico .ico { width: 16px; height: 16px; }
+.gs-cadence.is-live .gs-cadence-ico { color: var(--ok); }
+.gs-cadence-line { flex: 1 1 200px; min-width: 0; color: var(--ink); font-size: var(--text-sm); }
+.gs-cadence-line strong { font-weight: 650; }
+.gs-cadence-chips { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.gs-tuning { flex: 1 1 100%; min-width: 0; }
+.gs-tuning > summary { width: fit-content; color: var(--muted); font-size: var(--text-xs); cursor: pointer; }
+.gs-tuning > summary:focus-visible { outline: none; border-radius: var(--radius-xs); box-shadow: var(--shadow-focus); }
+.gs-tuning dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 4px 16px; margin: 8px 0 0; }
+.gs-tuning dl > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; min-width: 0; padding: 4px 0; border-bottom: 1px solid var(--border); }
+.gs-tuning dt { color: var(--muted); font-size: var(--text-xs); }
+.gs-tuning dd { margin: 0; color: var(--ink); font-family: var(--font-mono); font-size: var(--text-xs); font-weight: 600; white-space: nowrap; }
 
 /* UX 39: Settings > Workspaces filter and toggle. */
 

@@ -30,7 +30,7 @@ nothing, and their rows say so.
 | Star / unstar an entity | `POST /console/favorites/{kind}/{id}` | Toggles the same starred flag the `favorite_set` MCP tool sets: a starred memory pins into briefings and gets a post-fusion recall boost. For memories and notes the star lives in frontmatter; it never bumps `updated`. A plan's star is its narrative note's, in the project `?project=` names (`global` for the global scope); without it, the slug's earliest note in any project. |
 | Ask the gardener for proposals | `POST /console/gardener/request` | Interprets a natural-language maintenance request into **pending proposals**. It never mutates a memory. |
 | Plan a project split | `POST /console/gardener/split` | Interprets a split request into a plan batch of **pending proposals** (one split setup plus one reproject per memory). Also never mutates a memory. |
-| Apply one proposal | `POST /console/gardener/{id}/apply` | Carries out that proposal's effect. While agents may not apply proposals (Settings, Knowledge engine, Gardener), this and every other Gardener decision - dismiss, hide, unhide, retarget, undo, dismissing a group, applying a plan - refuse (403) a request from an agent's process on the peer_auth socket and one from a paired device; your browser, your own terminal and the bearer key keep working. |
+| Apply one proposal | `POST /console/gardener/{id}/apply` | Carries out that proposal's effect. While agents may not apply proposals (Settings, Gardener), this and every other Gardener decision - dismiss, hide, unhide, retarget, undo, dismissing a group, applying a plan - refuse (403) a request from an agent's process on the peer_auth socket and one from a paired device; your browser, your own terminal and the bearer key keep working. |
 | Dismiss a proposal | `POST /console/gardener/{id}/dismiss` | Drops it without acting. The pattern is raised again if new evidence for it arrives after the decision. |
 | Hide a proposal forever | `POST /console/gardener/{id}/hide` | Drops it without acting and blocks the pattern permanently - no recurrence re-raises it. Listed under **Hidden forever**. |
 | Unhide a pattern | `POST /console/gardener/{id}/unhide` | Lifts a forever block. The proposal stays resolved; the gardener may propose the pattern again the next time it recurs. |
@@ -40,7 +40,7 @@ nothing, and their rows say so.
 | Apply a whole rail section | `POST /console/gardener/group/apply` | Applies the proposals one rail section shows (`group=`, and one `id=` for each proposal shown), one at a time, so each keeps its own event and its own Undo in the decision history. Offered only on a section whose every proposal can be undone and none of which asks to be read first (it touches a project fenced since it was raised, or moves a stamped memory into a less fenced project); a batch holding any other is refused before anything is applied. A consolidation or a split never takes part. |
 | Swap which memory a merge keeps | `POST /console/gardener/{id}/swap` | Rewrites a **pending** merge so it keeps the other memory (`keep=` names it, one of the two) and retires the one it kept. Nothing changes until the merge is applied. Records a `gardener.action` event. Merge proposals only. |
 | Undo a decision | `POST /console/gardener/{id}/undo` | Returns a resolved proposal to the queue from **Recently decided** or the **decision history**, inverting whatever its apply did, for the kinds whose apply can be inverted. |
-| Run a gardener pass now | `POST /console/gardener/run` | Runs the background proposal passes now instead of at the next pass, in the background. Like every pass they only propose, except that a new proposal of a kind you named under **Apply automatically** (`gardener.auto_apply`, off by default) is applied by the pass that raised it. Refused while a pass runs, and while `gardener.enabled` is false. |
+| Run a gardener pass now | `POST /console/gardener/run` | Runs the background proposal passes now instead of at the next pass, in the background. Like every pass they only propose, except that a new proposal of a kind you turned on under **Apply by themselves** (`gardener.auto_apply`, off by default) is applied by the pass that raised it. Refused while a pass runs, and while `gardener.enabled` is false. |
 | Release a held write | `POST /console/held/{id}/release` | [Write screening](#held): lands a held agent write exactly as the agent sent it, and marks the memory owner-confirmed. Refused when its target changed after it was held. |
 | Discard a held write | `POST /console/held/{id}/discard` | Lands nothing and erases the held text; the row stays as the record. |
 | Clear a session's outside-text mark | `POST /console/held/sessions/{id}/clear` | The only way the mark comes off: the session's changes to binding rules land without a hold again. |
@@ -92,7 +92,7 @@ nothing, and their rows say so.
 | Turn automatic updates on or off | `POST /console/settings/updates/auto` | Stores the console's `update.auto` override (`auto=on` or `off`), keeping its `update.check`. It cannot turn automatic updates on while the config file or environment says `update.auto: false`, or locks `update.check: false` (nothing installs without checks). With checks merely off, the choice is kept and applies once they are back on. Off is your decision alone, refused as turning checks off is; on is open to any caller. Only an install that updates itself acts on it: the installer's, or a [peer_auth system daemon](https://thereisnospoon.org/docs/guides/peer-auth/#updates)'s. |
 | Update now | `POST /console/settings/updates/apply` | Installs the newest release at once, after a confirm: it skips the soak, the wait for idle agents, skipped releases and the backoff, and lifts a hold, whether automatic updates are on, off or paused. Refused while checks are off, on an install that does not update itself, while an update is under way, within a minute of a failed release check, when nothing newer is known, or when the release carries no signed checksums bundle. The daemon restarts to finish. |
 | Resume automatic updates | `POST /console/settings/updates/resume` | Lifts the pause automatic updates put on themselves after rollbacks, and the hold a deliberate downgrade set. Changes no setting; skipped releases stay skipped, and a running backoff runs out. |
-| Save the gardener's switches | `POST /console/settings/gardener` | Stores the console's choice for **Agents may apply proposals** (`agents=on` or `off`, over `gardener.agents_may_apply`) or for **Apply automatically** (`auto_set=1` and one `auto=<kind>` per kind checked, over `gardener.auto_apply`); each control's form carries only its own fields. It cannot turn agents' applying on while the config file or environment says `gardener.agents_may_apply: false` - that is final - and it refuses any kind but `memory_wanted`, `tool_error`, `abandon_plan` and `ship_plan`. Your decision alone in every direction: refused (403) from an agent's process on the peer_auth socket and from a paired device. Applies at once, with no restart; a proposal already waiting is not applied by it. |
+| Save the gardener's switches | `POST /console/settings/gardener` | Stores the console's choice for **Agents may apply proposals** (`agents=on` or `off`, over `gardener.agents_may_apply`; the section's switch sends `agents_set=1`, with `agents=on` only while it is on, so its absence is off) or for **Apply by themselves** (`auto_set=1` and one `auto=<kind>` per kind switched on, over `gardener.auto_apply`); each control's form carries only its own fields, and each saves the moment a switch changes. It cannot turn agents' applying on while the config file or environment says `gardener.agents_may_apply: false` - that is final - and it refuses any kind but `memory_wanted`, `tool_error`, `abandon_plan` and `ship_plan`. Your decision alone in every direction: refused (403) from an agent's process on the peer_auth socket and from a paired device. Applies at once, with no restart; a proposal already waiting is not applied by it. |
 | Reset the gardener's switches | `POST /console/settings/gardener/reset` | Clears that override - both switches - handing them back to the config file. Refused from an agent's process and from a paired device, as saving is. |
 | Save the backup schedule and folder | `POST /console/settings/backups` | Stores the console's `backup:` override: only the values that differ from the settings in force. A new folder is created and tested with a write first. Applies from the next backup. |
 | Reset the backup settings | `POST /console/settings/backups/reset` | Clears that override, handing the schedule and the folder back to the config file (or, without one, the build's default). |
@@ -498,7 +498,7 @@ Claude Code or Codex and wants to know it works: the work the agents follow
 or decline (Gardener), and an Overview that opens on a health strip - which
 agent clients are working here, whether semantic recall is on, when the last
 briefing went out, and the version (which says when a newer release is out) -
-plus the Updates and Backups settings.
+plus the Updates, Backups and Gardener settings.
 
 **Standard** adds watching the agents live and looking after the server: Now
 (and Labs and Trials when that feature is on), System and Privacy, the
@@ -578,6 +578,7 @@ What each level shows, generated from the console's own registries:
 | **Your setup** - Version, files, and what is connected | shown | shown | shown |
 | **Updates** - New releases, and whether this install checks for and installs them | shown | shown | shown |
 | **Backups** - Automatic backups, the folder they go to, and restoring one | shown | shown | shown |
+| **Gardener** - Who may apply what the gardener suggests, and what applies by itself | shown | shown | shown |
 | **Briefing** - What every new agent session starts with | - | shown | shown |
 | **Workspaces** - Projects, repo routes, and families | - | shown | shown |
 | **Knowledge engine** - Semantic index, ranking, storage, and policy | - | - | shown |
@@ -2063,7 +2064,7 @@ The actions are **apply**, **dismiss**, **hide forever**, **retarget**
 front of you - the pattern comes back if it recurs; hiding answers the pattern
 itself. A proposal changes nothing until it is applied - by you here, by an
 agent with `gardener_apply` while agents may apply proposals, or, for a kind
-you named under **Apply automatically**, by automatic apply - and every
+you turned on under **Apply by themselves**, by automatic apply - and every
 decision records who made it. The newest ten land in **Recently decided** with
 an Undo; the **decision history** (`/console/gardener/decisions`) pages
 through all of them, newest first, with the outcome, who decided (you; an
@@ -2078,14 +2079,14 @@ split is planned as a split directly - the plan batch appears below like any
 other. When the split's source project cannot be matched, an inline follow-up
 asks you to pick the project and plans the split from there; nothing is retyped.
 
-**Who may decide.** Two switches on Settings (Knowledge engine, **Gardener**)
+**Who may decide.** Two switches on [Settings, **Gardener**](#settings-gardener)
 govern this queue. **Agents may apply proposals** is on by default
 (`gardener.agents_may_apply`). Turned off, `gardener_apply` refuses an agent's
 apply, dismiss and hide, `gardener_proposals` says the switch is off, and the
 decisions on this screen refuse an agent's process on the peer_auth socket and a
 paired device; your browser, your own terminal and the bearer key keep working.
 It stops an agent's ordinary calls and is not a wall: whoever holds the bearer
-key passes. **Apply automatically** is off by default (`gardener.auto_apply`).
+key passes. **Apply by themselves** is off by default (`gardener.auto_apply`).
 It names the kinds - from `memory_wanted`, `tool_error`, `abandon_plan` and
 `ship_plan`, each reversible and only opening a task or retagging a plan note -
 that a pass applies by itself the moment it raises one. Such a decision is
@@ -2296,7 +2297,8 @@ run or an update waits: the level (Experience), how many features are on, the
 version (Your setup, amber while semantic recall's settings have a mistake),
 **Up to date**, **v0.7.3 ready**, **Checks off**, **Paused** or **Failed**
 (Updates), when the last backup ran, **Off**, **None yet** or **Failing**
-(Backups), the briefing preset or **Custom**, how many projects (Workspaces),
+(Backups), what the gardener may change without you (Gardener), the briefing
+preset or **Custom**, how many projects (Workspaces),
 and **Semantic** or **Keywords only** (Knowledge engine). Green is fine, amber
 is worth a look, red needs you. A row's tooltip is what the section is for.
 `/console/settings` alone opens
@@ -2702,6 +2704,48 @@ Elsewhere:
 - [System](#system) draws backups as a core part, on, off, failing or
   overdue.
 
+### Gardener {#settings-gardener}
+
+`/console/settings?s=gardener`
+
+Who may act on the gardener's proposals, and which apply by themselves: a
+Basic section, beside the [Gardener](#gardener) screen, whose sentence about
+who may decide links here. Its source chip says **Config file** (the file, the
+environment, or the default) or **Set here**, whose **Reset** hands both
+switches back to the config file; the chip's hint says where each one comes
+from. Both switches save the moment you flip them, with **Undo** in the toast
+(without JavaScript, each card keeps a **Save** button), and apply at once,
+with no restart.
+
+- **Agents may apply proposals**, on by default (`gardener.agents_may_apply`).
+  Off, only you decide: `gardener_apply` refuses an agent's apply, dismiss and
+  hide, and so do the Gardener screen's decisions from an agent's process or a
+  paired device. `agents_may_apply: false` in the config file or environment
+  is final: the switch is disabled, with a **Config file decides** chip beside
+  it.
+- **Apply by themselves**: one switch per kind a pass may apply the moment it
+  raises one - a task for a knowledge gap or for a recurring error, a finished
+  plan marked shipped, a stale captured plan abandoned - each with how Undo
+  takes it back, and a count of how many are on. Every other kind always waits
+  for you. The group's hint says when a kind you turned on waits for you
+  anyway: while lockdown is on, when write screening would hold it, and for a
+  locked or fenced project.
+- **Runs every N min**: the gardener's cadence, with **suggestions on** or
+  **suggestions off** (`gardener.enabled`) and **upkeep always**: idle sessions
+  are reaped, old tool events pruned and retrieval stats refreshed on the same
+  clock either way. **Tuning, from the config file** folds the six values the
+  passes use: the dedup threshold, when a memory and when a captured plan
+  count as stale, the digest window, how long tool events are kept, and when
+  a session counts as idle. They change in the config file or environment,
+  then a restart.
+
+The section's sub-nav state says what the gardener may change without you:
+**Proposes only**, **Only you decide** (agents may not apply), **2 of 4
+automatic**, **Suggestions off**, or **Unreadable** (amber) while the stored
+switches cannot be read. An old link to the switches' place in Knowledge
+engine (`?s=engine#settings-gardener`) opens this section. **Your setup**
+states both switches in one line, with a link here.
+
 ### Briefing
 
 `/console/settings?s=briefing`
@@ -2773,7 +2817,8 @@ resolve to no project are listed under **Repo routes with no project**.
 
 `/console/settings?s=engine`
 
-The machinery, in four groups.
+The machinery, in three groups. The gardener's switches and cadence have a
+section of their own, [Gardener](#settings-gardener).
 
 **Recall** - the embedder card shows the active provider and model, and when
 embeddings are off, why, with distinct copy for the owner off switch, the no-key
@@ -2796,22 +2841,10 @@ A per-scope **force** overrides the latch in either direction; when the global
 mode is `on` or `off`, the table says the per-scope state is dormant until auto
 returns.
 
-**Storage & policy** - read-only, with a lock by its heading: the data folder, the context budgets, the
-database (path, size on disk including the WAL, schema version), and the
-gardener's cadence and policy. Change these through the config file or
-environment, then restart.
-
-**Gardener** (`#settings-gardener`) - editable, and applied at once without a
-restart: **Agents may apply proposals**, on or off, and **Apply
-automatically**, one checkbox per kind it may take with a sentence on what
-applying it does and how Undo takes it back. The group's source chip says
-**Config file** (the file, the environment, or the default) or **Set here**, its
-hint where each switch comes from, and its **Reset** clears this console's
-choice for both. A choice made here wins over the file until then, except that
-`gardener.agents_may_apply: false` in the file or environment is final: the
-switch is disabled with a **Config file decides** chip beside it, and saving it
-on is refused. **Your setup** states both switches in one line, with a link
-here.
+**Storage & policy** - read-only, with a lock by its heading: the data folder,
+the context budgets, and the database (path, size on disk including the WAL,
+schema version). Change these through the config file or environment, then
+restart.
 
 See [Configuration](https://thereisnospoon.org/docs/reference/configuration/) for what each knob does, and
 [Sessions & briefings](https://thereisnospoon.org/docs/concepts/sessions/) for what they tune.

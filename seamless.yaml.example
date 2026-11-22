@@ -416,8 +416,8 @@ gardener:
   # Whether agents may resolve proposals: gardener_apply's apply, dismiss and
   # hide, and the console's Gardener decisions from an agent's process. Unset
   # means on. false leaves every decision to you, and is final: the console
-  # cannot turn it back on (Settings -> Knowledge engine -> Gardener can turn it
-  # off, and wins over an unset or true value until you reset it there). Both
+  # cannot turn it back on (Settings -> Gardener can turn it off, and wins over
+  # an unset or true value until you reset it there). Both
   # keys stay commented out here: a release older than them would refuse them.
   # env: SEAMLESS_GARDENER_AGENTS_MAY_APPLY
   # agents_may_apply: true

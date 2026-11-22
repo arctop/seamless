@@ -36,6 +36,9 @@
 
     {{if eq .Section "briefing"}}{{template "settings-briefing" $}}{{end}}
 
+    {{if eq .Section "gardener"}}{{template "settings-gardener" $}}{{end}}
+
+
     {{if eq .Section "workspaces"}}{{template "settings-workspaces" $}}{{end}}
 
     {{if eq .Section "engine"}}{{template "settings-engine" $}}{{end}}
@@ -47,8 +50,12 @@ window.SEAM_NO_LIVE_REFRESH = true; // preserve unsaved form state on this contr
 (function () {
   // Settings used to be one long page with anchors; a bookmark or an old link
   // may still carry one. Map it to its section, in place (the no-reload path).
-  var legacy = { '#features': 'features', '#briefing-recipe': 'briefing', '#workspace-registry': 'workspaces', '#semantic-index': 'engine', '#runtime-profile': 'engine' };
-  if (legacy[location.hash] && !/[?&]s=/.test(location.search) && window.SeamConsole) window.SeamConsole.load('/console/settings?s=' + legacy[location.hash], { history: 'replace', source: 'query' });
+  var legacy = { '#features': 'features', '#briefing-recipe': 'briefing', '#workspace-registry': 'workspaces', '#semantic-index': 'engine', '#runtime-profile': 'engine', '#settings-gardener': 'gardener' };
+  // A hash maps only when the URL names no section, except the gardener's:
+  // its switches left Knowledge engine, so their old link (s=engine with
+  // #settings-gardener) opens Settings > Gardener on the block.
+  var to = legacy[location.hash], at = /[?&]s=([^&#]*)/.exec(location.search);
+  if (to && (!at || (to === 'gardener' && at[1] === 'engine')) && window.SeamConsole) window.SeamConsole.load('/console/settings?s=' + to + (to === 'gardener' ? location.hash : ''), { history: 'replace', source: 'query' });
 })();
 (function () {
   function snapshot(form) {

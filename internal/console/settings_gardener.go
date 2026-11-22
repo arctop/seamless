@@ -14,11 +14,13 @@ import (
 	"github.com/arctop/seamless/internal/store"
 )
 
-// Settings > Knowledge engine > Gardener: the gardener's two switches. One
-// says whether agents may resolve proposals (gardener.agents_may_apply, on by
+// Settings > Gardener (?s=gardener, a Basic section beside the Gardener
+// screen): the gardener's two switches and its cadence. One switch says
+// whether agents may resolve proposals (gardener.agents_may_apply, on by
 // default); the other names the kinds a pass applies by itself the moment it
-// raises one (gardener.auto_apply, empty by default). The group's source chip
-// says where they come from and offers Reset, as Settings > Updates does. The
+// raises one (gardener.auto_apply, empty by default). Both forms save at once
+// (data-autosave), with Undo in the toast. The section's source chip says
+// where they come from and offers Reset, as Settings > Updates does. The
 // console's choice wins over the file until Reset, except that
 // agents_may_apply: false in the file or environment is final
 // (gardener.Effective). Both routes are the owner's own decision (ownerHands):
@@ -30,10 +32,15 @@ import (
 // reads the stored row when it decides, so a change applies without a
 // restart.
 
-// gardenerSettingsAnchor is the Gardener group's element id on Settings >
-// Knowledge engine: the fragment the Gardener screen links to and the
-// switches' POSTs return to.
-const gardenerSettingsAnchor = "settings-gardener"
+// gardenerSettingsSection and gardenerSettingsAnchor are the Settings
+// section the switches live in and its element id: where the Gardener screen
+// links (gardenerSettingsHref) and the switches' POSTs return to. The anchor
+// is the one the switches had inside Knowledge engine, so the page's legacy
+// map sends an old bookmark to the engine's #settings-gardener here.
+const (
+	gardenerSettingsSection = "gardener"
+	gardenerSettingsAnchor  = "settings-gardener"
+)
 
 // gardenerSwitches is the gardener's switches in force, for the Gardener
 // screen and Settings. AgentsMayApply and AutoApply (in store.ProposalKinds
@@ -95,13 +102,13 @@ func (s *Service) gardenerAgentsBarred(r *http.Request) bool {
 	return !sw.AgentsMayApply
 }
 
-// gardenerPanel is the Settings Gardener group's view of the switches.
+// gardenerPanel is the Settings Gardener section's view of the switches.
 type gardenerPanel struct {
 	gardenerSwitches
 	// AgentsLabel and AgentsNote say who decided the agents switch, and what
 	// that means for the console's own switch; AutoLabel and AutoNote the
 	// same for automatic apply. The JSON answer keeps them; the page says it
-	// with the group's source chip instead (ChipSource, ChipNote).
+	// with the section's source chip instead (ChipSource, ChipNote).
 	AgentsLabel, AgentsNote string
 	AutoLabel, AutoNote     string
 	// Overridden reports a console choice in force for either switch, which
@@ -115,29 +122,36 @@ type gardenerPanel struct {
 	Kinds []gardenerAutoKind
 }
 
-// gardenerAutoKind is one "Apply automatically" checkbox.
+// gardenerAutoKind is one "Apply by themselves" switch. Sentence is the whole
+// sentence (the JSON answer's): What, then Undo. The row shows Undo under the
+// label and keeps What in its hint.
 type gardenerAutoKind struct {
 	Kind, Label, Sentence string
+	What, Undo            string
 	On                    bool
 }
 
-// gardenerAutoWords are the four AutoSafe kinds in the owner's words: a label
-// and one plain sentence on what applying it does and how Undo takes it back.
-var gardenerAutoWords = map[string][2]string{
+// gardenerAutoWords are the four AutoSafe kinds in the owner's words: a label,
+// what applying it does, and how Undo takes it back.
+var gardenerAutoWords = map[string][3]string{
 	store.ProposalAbandonPlan: {"Abandon a stale captured plan",
-		"Retags a captured plan nobody approved as abandoned once it has sat untouched past the cutoff; Undo restores its status."},
+		"Retags a captured plan nobody approved as abandoned once it has sat untouched past the cutoff",
+		"Undo restores its status."},
 	store.ProposalMemoryWanted: {"Open a task for a knowledge gap",
-		"When agents keep searching for something recall cannot find, opens a task to write it; Undo drops the task while nobody has picked it up."},
+		"When agents keep searching for something recall cannot find, opens a task to write it",
+		"Undo drops the task while nobody has picked it up."},
 	store.ProposalToolError: {"Open a task for a recurring error",
-		"When agents keep hitting the same tool or hook error, opens a task to fix it; Undo drops the task while nobody has picked it up."},
+		"When agents keep hitting the same tool or hook error, opens a task to fix it",
+		"Undo drops the task while nobody has picked it up."},
 	store.ProposalShipPlan: {"Mark a finished plan shipped",
-		"Retags a captured plan whose work landed in git without an approval as shipped; Undo restores its status."},
+		"Retags a captured plan whose work landed in git without an approval as shipped",
+		"Undo restores its status."},
 }
 
 // gardenerAgentsLockedText names where a locked agents switch was set.
 const gardenerAgentsLockedText = "gardener.agents_may_apply: false is set in the config file or SEAMLESS_GARDENER_AGENTS_MAY_APPLY; change it there."
 
-// gardenerPanelFor builds the Settings Gardener group.
+// gardenerPanelFor builds the Settings Gardener section's switches.
 func (s *Service) gardenerPanelFor(ctx context.Context) gardenerPanel {
 	sw := s.gardenerSwitches(ctx)
 	p := gardenerPanel{gardenerSwitches: sw,
@@ -165,13 +179,16 @@ func (s *Service) gardenerPanelFor(ctx context.Context) gardenerPanel {
 	}
 	for _, k := range gardener.AutoSafeKinds() {
 		w := gardenerAutoWords[k]
-		p.Kinds = append(p.Kinds, gardenerAutoKind{Kind: k, Label: w[0], Sentence: w[1], On: slices.Contains(sw.AutoApply, k)})
+		p.Kinds = append(p.Kinds, gardenerAutoKind{Kind: k, Label: w[0], Sentence: w[1] + "; " + w[2],
+			What: w[1] + ".", Undo: w[2], On: slices.Contains(sw.AutoApply, k)})
 	}
 	return p
 }
 
 // settingsGardenerSave stores the console's choice for one switch or both.
 // Form field agents, "on" or "off", sets whether agents may apply proposals;
+// agents_set=1 says the form sets it from a checkbox, so agents=on present is
+// on and absent is off (the section's switch posts no field when unchecked);
 // auto_set=1 with zero or more auto=<kind> fields sets the kinds automatic
 // apply takes (none checked: nothing applies by itself). Each control's form
 // carries its own fields, so saving one leaves the other's source as it was;
@@ -183,6 +200,11 @@ func (s *Service) gardenerPanelFor(ctx context.Context) gardenerPanel {
 func (s *Service) settingsGardenerSave(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var agents *bool
+	setValues, set := r.PostForm["agents_set"]
+	if set && (len(setValues) != 1 || setValues[0] != "1") {
+		settingsGardenerFlash(w, r, "agents_set must be given exactly once, as 1")
+		return
+	}
 	if _, present := r.PostForm["agents"]; present {
 		on, refusal := onOffField(r.PostForm, "agents")
 		if refusal != "" {
@@ -190,6 +212,9 @@ func (s *Service) settingsGardenerSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		agents = &on
+	} else if set {
+		off := false
+		agents = &off
 	}
 	var auto *[]string
 	switch values, present := r.PostForm["auto_set"]; {
@@ -208,7 +233,7 @@ func (s *Service) settingsGardenerSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if agents == nil && auto == nil {
-		settingsGardenerFlash(w, r, "nothing to save: send agents=on or off, or auto_set=1 with the kinds to apply automatically")
+		settingsGardenerFlash(w, r, "nothing to save: send agents=on or off (or agents_set=1 with agents=on when on), or auto_set=1 with the kinds to apply automatically")
 		return
 	}
 
@@ -331,11 +356,11 @@ func (s *Service) gardenerOverrideForSave(ctx context.Context) (o config.Gardene
 }
 
 func settingsGardenerFlash(w http.ResponseWriter, r *http.Request, msg string) {
-	settingsBack(w, r, "engine", "error", msg, gardenerSettingsAnchor)
+	settingsBack(w, r, gardenerSettingsSection, "error", msg, gardenerSettingsAnchor)
 }
 
 func settingsGardenerNotice(w http.ResponseWriter, r *http.Request, msg string) {
-	settingsBack(w, r, "engine", "notice", msg, gardenerSettingsAnchor)
+	settingsBack(w, r, gardenerSettingsSection, "notice", msg, gardenerSettingsAnchor)
 }
 
 // autoAppliedCards is the Overview's informational card: how many proposals
@@ -377,7 +402,7 @@ func (s *Service) autoAppliedCards(ctx context.Context) []attnCard {
 	}}
 }
 
-// ChipSource is the Gardener group's source chip: "override" (Set here, with
+// ChipSource is the Gardener section's source chip: "override" (Set here, with
 // Reset, which hands both switches back) while either switch is this
 // console's choice, else "file". agents_may_apply: false in the file is final
 // for its own switch only: its locked chip sits beside that switch.
@@ -388,7 +413,7 @@ func (p gardenerPanel) ChipSource() string {
 	return "file"
 }
 
-// ChipNote is the group chip's hint: where each switch comes from, in one
+// ChipNote is the section chip's hint: where each switch comes from, in one
 // sentence each, then what a choice here does. A switch the file decides is
 // left to its own chip.
 func (p gardenerPanel) ChipNote() string {

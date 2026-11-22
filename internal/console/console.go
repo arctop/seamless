@@ -478,7 +478,7 @@ func (s *Service) Register(mux *http.ServeMux) {
 	post("POST /console/settings/updates/auto", formBodySmall, ownerHandsIf(switchedOff("auto"), s.settingsUpdatesAuto))
 	post("POST /console/settings/updates/apply", formBodySmall, s.settingsUpdatesApply)
 	post("POST /console/settings/updates/resume", formBodySmall, s.settingsUpdatesResume)
-	// Settings > Knowledge engine > Gardener: both switches change what may
+	// Settings > Gardener: both switches change what may
 	// alter agents' knowledge without the owner's review, so every direction
 	// is the owner's own decision (settings_gardener.go).
 	post("POST /console/settings/gardener", formBodySmall, ownerHands(s.settingsGardenerSave))

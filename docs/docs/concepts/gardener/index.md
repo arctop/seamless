@@ -32,7 +32,8 @@ what your agents will be told tomorrow.
 
 So the surface is two tools, not one button: `gardener_proposals` to read what it
 found, `gardener_apply` to act on one. Two switches decide who may act, each in
-the config file and on the console (Settings, Knowledge engine, **Gardener**):
+the config file and on the console
+([Settings, **Gardener**](https://thereisnospoon.org/docs/reference/console/#settings-gardener)):
 
 ```yaml
 gardener:
@@ -40,9 +41,9 @@ gardener:
   auto_apply: []           # the default: nothing applies by itself
 ```
 
-A choice made on the console wins over the file until you press **Reset to the
-config file**, with one exception: `agents_may_apply: false` in the file or the
-environment is final, and the console shows the switch locked. Every check reads
+A choice made on the console wins over the file until you press **Reset** on
+the section's source chip, with one exception: `agents_may_apply: false` in the
+file or the environment is final, and the console shows the switch locked. Every check reads
 the switches when it decides, so a change applies without a restart. The
 environment overrides are `SEAMLESS_GARDENER_AGENTS_MAY_APPLY` (true or false)
 and `SEAMLESS_GARDENER_AUTO_APPLY` (comma-separated kinds).

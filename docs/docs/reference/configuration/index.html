@@ -326,7 +326,7 @@ is never one click from untrue, and with checks off nothing installs by itself
 either. See <a href="#the-update-check">the update block</a>.</p>
 <p>The <code>gardener:</code> block's two switches, <code>gardener.agents_may_apply</code> and
 <code>gardener.auto_apply</code>, are stored by Settings →
-<a href="../../reference/console/#knowledge-engine">Knowledge engine</a> (its Gardener group)
+<a href="../../reference/console/#settings-gardener">Gardener</a>
 and simply win over the file until reset, with one exception: an explicit
 <code>agents_may_apply: false</code> in the file (or
 <code>SEAMLESS_GARDENER_AGENTS_MAY_APPLY=false</code>) is final, and the console shows that
@@ -1542,8 +1542,8 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Whether agents may resolve proposals: gardener_apply&#39;s apply, dismiss and</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># hide, and the console&#39;s Gardener decisions from an agent&#39;s process. Unset</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># means on. false leaves every decision to you, and is final: the console</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># cannot turn it back on (Settings -&gt; Knowledge engine -&gt; Gardener can turn it</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># off, and wins over an unset or true value until you reset it there). Both</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># cannot turn it back on (Settings -&gt; Gardener can turn it off, and wins over</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># an unset or true value until you reset it there). Both</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># keys stay commented out here: a release older than them would refuse them.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_GARDENER_AGENTS_MAY_APPLY</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># agents_may_apply: true</span><span class="w">

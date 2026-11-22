@@ -62,7 +62,7 @@ either. See [the update block](#the-update-check).
 
 The `gardener:` block's two switches, `gardener.agents_may_apply` and
 `gardener.auto_apply`, are stored by Settings →
-[Knowledge engine](/reference/console/#knowledge-engine) (its Gardener group)
+[Gardener](/reference/console/#settings-gardener)
 and simply win over the file until reset, with one exception: an explicit
 `agents_may_apply: false` in the file (or
 `SEAMLESS_GARDENER_AGENTS_MAY_APPLY=false`) is final, and the console shows that

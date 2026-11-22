@@ -112,8 +112,8 @@ type settingsData struct {
 	Briefing           config.Briefing `json:"briefing"`
 	BriefingOverridden bool            `json:"briefingOverridden"`
 	// GardenerSwitches is the gardener's two switches in force, with where
-	// each came from (settings_gardener.go): the Knowledge engine section's
-	// Gardener group edits them, and Your setup states them.
+	// each came from (settings_gardener.go): the Gardener section edits
+	// them, and Your setup states them.
 	GardenerSwitches gardenerPanel `json:"gardenerSwitches"`
 	// Features is the effective optional-feature state, one card per registry
 	// entry in registry order. FeaturesConfig is the same state as the raw

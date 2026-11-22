@@ -1413,7 +1413,7 @@ func gardenerSwitchesCheck(ctx context.Context, cfg config.Config, db *sql.DB) c
 	detail := agents + "; " + auto
 	if sw.Unreadable {
 		return check{statusWarn, name, detail + " -- the console's stored choice is unreadable, so the config file decides; " +
-			"saving on Settings -> Knowledge engine -> Gardener replaces it"}
+			"saving on Settings -> Gardener replaces it"}
 	}
 	if !sw.AgentsMayApply || len(sw.AutoApply) > 0 {
 		return check{statusInfo, name, detail}

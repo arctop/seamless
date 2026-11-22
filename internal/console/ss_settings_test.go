@@ -339,6 +339,7 @@ func TestSsHeads_OneLineAtEverySection(t *testing.T) {
 		{"setup", false, false, "What is running, where it keeps things, and which agents are connected."},
 		{"updates", true, true, "New releases, and whether this install takes them by itself."},
 		{"backups", true, true, "Copies of everything, on a schedule."},
+		{"gardener", true, true, "Who may act on its proposals, and which apply by themselves."},
 		{"briefing", true, true, "What every new agent session starts with."},
 		{"workspaces", true, false, "See which project each repository resolves to"},
 		{"engine", true, false, "How recall finds knowledge, how the briefing ranks it, and where it all lives."},
@@ -358,17 +359,16 @@ func TestSsHeads_OneLineAtEverySection(t *testing.T) {
 		require.Contains(t, head, tc.sentence, "s=%s", tc.id)
 		require.Equal(t, tc.hint, strings.Contains(head, `<span class="hint">`), "s=%s: a hint in the title", tc.id)
 		require.Equal(t, tc.chip, strings.Contains(head, `<span class="src-chip`), "s=%s: the source chip", tc.id)
-		if !tc.chip && tc.id != "engine" {
+		if !tc.chip {
 			require.NotContains(t, body, "src-chip", "s=%s: nothing here is set in the console", tc.id)
 		}
 	}
 
-	// Knowledge engine: the Gardener group's head carries the chip, and the
-	// read-only storage group a lock where its values are shown.
+	// Knowledge engine sets nothing since the gardener's switches left for
+	// Settings > Gardener (UX 37); its read-only storage group carries a lock
+	// where its values are shown.
 	engine := ssSection(t, getPeek(t, mux, "/console/settings?s=engine").Body.String(), "knowledge-engine")
-	require.Equal(t, 1, strings.Count(engine, `<span class="src-chip is-`))
-	gardener := regexp.MustCompile(`(?s)<header class="engine-group-head">\s*<h3 id="engine-gardener-title">.*?</header>`).FindString(engine)
-	require.Contains(t, gardener, `<span class="src-chip is-file">`)
+	require.NotContains(t, engine, `src-chip`)
 	require.Contains(t, engine, `<h3 id="engine-storage-title"><span class="settings-readonly" role="img" aria-label="Read only" title="Read only">`+string(icon("lock"))+`</span>Storage &amp; policy</h3>`)
 	require.NotContains(t, engine, `class="gardener-source"><strong>`, "the per-switch source lines gave way to the chip")
 }
@@ -408,12 +408,14 @@ func TestSsConfigFileDecides_SaidOnce(t *testing.T) {
 	require.Contains(t, head, `<span class="src-chip is-file">`, "the head says where the rest comes from")
 
 	c := newAaConsole(t, config.Gardener{AgentsMayApply: new(false)})
-	page := getPeek(t, c.mux, "/console/settings?s=engine").Body.String()
-	sec = sectionOf(page, "knowledge-engine")
+	page := getPeek(t, c.mux, "/console/settings?s=gardener").Body.String()
+	sec = sectionOf(page, "settings-gardener")
 	require.Equal(t, 1, strings.Count(sec, "Config file decides"))
-	agents := regexp.MustCompile(`(?s)<form method="post" action="/console/settings/gardener" aria-labelledby="gardener-agents-title">.*?</form>`).FindString(sec)
-	require.Contains(t, agents, `disabled>Let agents apply proposals</button>`)
-	require.Contains(t, agents, `<span class="src-chip is-locked">`)
+	agents := regexp.MustCompile(`(?s)<form method="post" action="/console/settings/gardener" class="gs-card gs-agents" data-autosave[^>]*>.*?</form>`).FindString(sec)
+	require.Contains(t, agents, `<input type="checkbox" role="switch" name="agents" value="on" aria-labelledby="gs-agents-label" disabled>`)
+	require.Contains(t, agents, `<span class="src-chip is-locked">`, "beside the switch it decides")
+	head = regexp.MustCompile(`(?s)<header class="settings-section-head">.*?</header>`).FindString(sec)
+	require.Contains(t, head, `<span class="src-chip is-file">`, "the head says where the rest comes from")
 }
 
 // Features' and Briefing's Reset keep the confirm they asked with, word for

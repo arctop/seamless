@@ -1645,8 +1645,9 @@ type gardenerContractView struct {
 }
 
 // gardenerSettingsHref is where the owner chooses who may apply proposals and
-// which kinds apply automatically: Settings, the Gardener controls.
-const gardenerSettingsHref = "/console/settings?s=engine#settings-gardener"
+// which kinds apply automatically: Settings > Gardener, a Basic section like
+// this screen.
+const gardenerSettingsHref = "/console/settings?s=" + gardenerSettingsSection + "#" + gardenerSettingsAnchor
 
 // contractKindWords names an automatically applied kind in the screen's sentence.
 var contractKindWords = map[string]string{

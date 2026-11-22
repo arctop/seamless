@@ -35,12 +35,9 @@ func TestSettingsPartials_EachDefinesItsSection(t *testing.T) {
 		src, err := templateFS.ReadFile(name)
 		require.NoError(t, err, name)
 		define := "settings-" + strings.TrimSuffix(strings.TrimPrefix(name, "templates/settings_"), ".html")
-		if define == "settings-gardener" {
-			define = "settings-gardener-switches"
-		}
 		require.Contains(t, string(src), `{{define "`+define+`"}}`, name)
 	}
-	for _, sec := range []string{"experience", "features", "setup", "updates", "briefing", "workspaces", "engine"} {
+	for _, sec := range []string{"experience", "features", "setup", "updates", "gardener", "briefing", "workspaces", "engine"} {
 		require.Contains(t, string(page), `{{if eq .Section "`+sec+`"}}{{template "settings-`+sec+`" $}}{{end}}`, sec)
 	}
 }

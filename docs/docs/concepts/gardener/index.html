@@ -273,14 +273,15 @@ decide your constraint is stale and archive it, then you do not actually know
 what your agents will be told tomorrow.</p>
 <p>So the surface is two tools, not one button: <code>gardener_proposals</code> to read what it
 found, <code>gardener_apply</code> to act on one. Two switches decide who may act, each in
-the config file and on the console (Settings, Knowledge engine, <strong>Gardener</strong>):</p>
+the config file and on the console
+(<a href="../../reference/console/#settings-gardener">Settings, <strong>Gardener</strong></a>):</p>
 <div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nt">gardener</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">agents_may_apply</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w">   </span><span class="c"># the default: agents may resolve proposals</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">auto_apply</span><span class="p">:</span><span class="w"> </span><span class="p">[]</span><span class="w">           </span><span class="c"># the default: nothing applies by itself</span><span class="w">
 </span></span></span></code></pre></div>
-<p>A choice made on the console wins over the file until you press <strong>Reset to the
-config file</strong>, with one exception: <code>agents_may_apply: false</code> in the file or the
-environment is final, and the console shows the switch locked. Every check reads
+<p>A choice made on the console wins over the file until you press <strong>Reset</strong> on
+the section's source chip, with one exception: <code>agents_may_apply: false</code> in the
+file or the environment is final, and the console shows the switch locked. Every check reads
 the switches when it decides, so a change applies without a restart. The
 environment overrides are <code>SEAMLESS_GARDENER_AGENTS_MAY_APPLY</code> (true or false)
 and <code>SEAMLESS_GARDENER_AUTO_APPLY</code> (comma-separated kinds).</p>

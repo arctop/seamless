@@ -197,26 +197,7 @@
             <p>Sessions, tasks, events, and the vector index live here; durable knowledge stays in markdown files and this database can be rebuilt from them.</p>
             {{end}}
           </article>
-
-          <article class="runtime-card gardener-runtime{{if .Gardener.Enabled}} is-live{{end}}">
-            <div class="gardener-cadence">
-              <span class="runtime-icon ok">{{icon "sprout"}}</span>
-              <div class="gardener-state"><span class="live-dot"></span>{{if .Gardener.Enabled}}Gardener enabled{{else}}Suggestions off{{end}}</div>
-              <strong>every {{.Gardener.IntervalMinutes}}<small>min</small></strong>
-              <p>{{if .Gardener.Enabled}}Background review and upkeep run on this cadence.{{else}}Background review is off (gardener.enabled is false), so no pass proposes anything. Upkeep still runs on this cadence: idle sessions are reaped, old tool events pruned, retrieval stats refreshed.{{end}}</p>
-            </div>
-            <div class="gardener-rules" aria-label="Gardener policy">
-              <div><span>Dedup threshold</span><strong>{{.Gardener.DedupThreshold}}</strong></div>
-              <div><span>Memory staleness</span><strong>{{.Gardener.StalenessDays}}d</strong></div>
-              <div><span>Digest window</span><strong>{{.Gardener.DigestDays}}d</strong></div>
-              <div><span>Tool event retention</span><strong>{{if .Gardener.ToolEventRetentionDays}}{{.Gardener.ToolEventRetentionDays}}d{{else}}off{{end}}</strong></div>
-              <div><span>Stale plan cutoff</span><strong>{{if .Gardener.StalePlanDays}}{{.Gardener.StalePlanDays}}d{{else}}off{{end}}</strong></div>
-              <div><span>Session idle TTL</span><strong>{{if .Gardener.SessionIdleMinutes}}{{.Gardener.SessionIdleMinutes}}m{{else}}45m{{end}}</strong></div>
-            </div>
-          </article>
         </div>
       </section>
-
-      {{template "settings-gardener-switches" $}}
     </section>
 {{end}}{{end}}

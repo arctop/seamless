@@ -470,14 +470,14 @@ func TestLevels_PaletteJumpsFollowTheLevel(t *testing.T) {
 	require.Equal(t, []string{
 		"/console/search",
 		"/console/settings?s=experience", "/console/settings?s=features", "/console/settings?s=setup",
-		"/console/settings?s=updates", "/console/settings?s=backups",
+		"/console/settings?s=updates", "/console/settings?s=backups", "/console/settings?s=gardener",
 	}, jumps(), "basic: no Context, no Standard or Advanced sections; Mishaps is a sidebar row now")
 
 	setLevel(t, db, "advanced")
 	require.Equal(t, []string{
 		"/console/search", "/console/context",
 		"/console/settings?s=experience", "/console/settings?s=features", "/console/settings?s=setup",
-		"/console/settings?s=updates", "/console/settings?s=backups",
+		"/console/settings?s=updates", "/console/settings?s=backups", "/console/settings?s=gardener",
 		"/console/settings?s=briefing", "/console/settings?s=workspaces", "/console/settings?s=engine",
 	}, jumps())
 

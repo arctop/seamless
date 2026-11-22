@@ -183,7 +183,7 @@ func TestAaSettingsGardenerRoutes_AreTheOwners(t *testing.T) {
 
 // aaFlash posts body to the save route with the bearer key and returns the
 // redirect's flash: its kind (notice or error) and text. Every answer lands on
-// the Gardener group of the Knowledge engine section.
+// Settings > Gardener, on the block (?s=gardener#settings-gardener).
 func aaFlash(t *testing.T, c aaConsole, path, body string) (string, string) {
 	t.Helper()
 	rr := postForm(c.mux, path, body)
@@ -191,7 +191,7 @@ func aaFlash(t *testing.T, c aaConsole, path, body string) (string, string) {
 	u, err := url.Parse(rr.Header().Get("Location"))
 	require.NoError(t, err)
 	require.Equal(t, "/console/settings", u.Path)
-	require.Equal(t, "engine", u.Query().Get("s"))
+	require.Equal(t, "gardener", u.Query().Get("s"))
 	require.Equal(t, gardenerSettingsAnchor, u.Fragment)
 	if m := u.Query().Get("error"); m != "" {
 		return "error", m
@@ -217,6 +217,12 @@ func TestAaSettingsGardenerSave(t *testing.T) {
 		"auto_set=2":            "auto_set must be given exactly once, as 1",
 		"auto_set=1&auto=merge": `auto: "merge" cannot be applied automatically`,
 		"auto_set=1&auto=ship_plan&auto=ship_plan": `auto "ship_plan" must be given at most once`,
+		// The switch's marker: once, as 1, and the value it carries is still
+		// on or off, once.
+		"agents_set=2":                     "agents_set must be given exactly once, as 1",
+		"agents_set=1&agents_set=1":        "agents_set must be given exactly once, as 1",
+		"agents_set=1&agents=maybe":        `agents invalid "maybe": valid values are on, off`,
+		"agents_set=1&agents=on&agents=on": "agents must be given exactly once",
 	} {
 		kind, msg := aaFlash(t, c, "/console/settings/gardener", body)
 		require.Equal(t, "error", kind, body)
@@ -285,15 +291,17 @@ func TestAaSettingsGardener_FileFalseLocksTheSwitch(t *testing.T) {
 	require.False(t, sw.AgentsMayApply)
 	require.True(t, sw.AgentsLocked)
 
-	rr := do(c.mux, authedReq(httptest.NewRequest(http.MethodGet, "/console/settings?s=engine", nil)))
+	rr := do(c.mux, authedReq(httptest.NewRequest(http.MethodGet, "/console/settings?s=gardener", nil)))
 	require.Equal(t, http.StatusOK, rr.Code)
 	page := rr.Body.String()
 	require.Contains(t, page, `id="settings-gardener"`)
 	// The file decides this one switch: it is disabled, and its locked chip
-	// beside it says so once, with where to change it in its hint.
-	group := regexp.MustCompile(`(?s)<section class="engine-group gardener-switches" id="settings-gardener".*?</section>`).FindString(page)
+	// beside it says so once, with where to change it in its hint. Its form
+	// offers no Save for a browser without script: nothing there can change.
+	group := regexp.MustCompile(`(?s)<form method="post" action="/console/settings/gardener" class="gs-card gs-agents".*?</form>`).FindString(page)
 	require.NotEmpty(t, group)
-	require.Contains(t, group, `<button class="btn small primary" type="submit" disabled>Let agents apply proposals</button>`)
+	require.Contains(t, group, `<input type="checkbox" role="switch" name="agents" value="on" aria-labelledby="gs-agents-label" disabled>`)
+	require.NotContains(t, group, "gs-save")
 	require.Contains(t, group, `<span class="src-chip is-locked">`)
 	require.Contains(t, group, "gardener.agents_may_apply: false is set in the config file or SEAMLESS_GARDENER_AGENTS_MAY_APPLY; change it there.")
 	require.Equal(t, 1, strings.Count(page, "Config file decides"), "said once in the section")
@@ -305,8 +313,9 @@ func TestAaSettingsGardener_FileFalseLocksTheSwitch(t *testing.T) {
 	require.False(t, c.svc.gardenerSwitches(ctx).AgentsMayApply)
 }
 
-// The Gardener group renders both controls with where each came from, one
-// checkbox per AutoSafe kind, and Your setup states both in one line.
+// The Gardener section renders both controls as switches with where each
+// came from, one switch per AutoSafe kind, and Your setup states both in one
+// line.
 func TestAaSettingsGardener_Renders(t *testing.T) {
 	c := newAaConsole(t, config.Gardener{})
 	get := func(section string) string {
@@ -314,14 +323,14 @@ func TestAaSettingsGardener_Renders(t *testing.T) {
 		require.Equal(t, http.StatusOK, rr.Code)
 		return rr.Body.String()
 	}
-	page := get("engine")
+	page := get("gardener")
 	require.Contains(t, page, `id="settings-gardener"`)
-	require.Contains(t, page, "Turn agents&rsquo; applying off")
-	require.Contains(t, page, `<span class="src-chip is-file">`, "the group's chip says where the switches come from")
+	require.Contains(t, page, `<input type="checkbox" role="switch" name="agents" value="on" aria-labelledby="gs-agents-label" checked>`)
+	require.Contains(t, page, `<span class="src-chip is-file">`, "the section's chip says where the switches come from")
 	require.Contains(t, page, "Agents may apply proposals by default. By default nothing applies by itself.")
 	require.NotContains(t, page, `form="gardener-reset"`, "nothing to reset")
 	for _, k := range gardener.AutoSafeKinds() {
-		require.Contains(t, page, `<input type="checkbox" name="auto" value="`+k+`">`, k)
+		require.Contains(t, page, `<input type="checkbox" role="switch" name="auto" value="`+k+`" aria-labelledby="gs-auto-`+k+`">`, k)
 	}
 	require.Equal(t, len(gardener.AutoSafeKinds()), strings.Count(page, `name="auto" value=`))
 	require.Contains(t, get("setup"), "agents may apply proposals; nothing applies by itself")
@@ -329,9 +338,9 @@ func TestAaSettingsGardener_Renders(t *testing.T) {
 	ctx := context.Background()
 	require.NoError(t, store.SetGardenerOverride(ctx, c.db, config.GardenerOverride{AgentsMayApply: new(false),
 		AutoApply: &[]string{"memory_wanted"}}))
-	page = get("engine")
-	require.Contains(t, page, `<input type="checkbox" name="auto" value="memory_wanted" checked>`)
-	require.Contains(t, page, "Let agents apply proposals")
+	page = get("gardener")
+	require.Contains(t, page, `<input type="checkbox" role="switch" name="auto" value="memory_wanted" aria-labelledby="gs-auto-memory_wanted" checked>`)
+	require.Contains(t, page, `<input type="checkbox" role="switch" name="agents" value="on" aria-labelledby="gs-agents-label">`)
 	require.Contains(t, page, `<span class="src-chip is-override">`)
 	require.Contains(t, page, "Whether agents may apply proposals is set here. The kinds that apply automatically are set here.")
 	require.Contains(t, page, `<button class="btn small src-chip-reset" type="submit" form="gardener-reset">Reset</button>`)

@@ -15,7 +15,7 @@ import (
 const (
 	SourceDefault = "default" // nothing set it: agents may apply, nothing applies by itself
 	SourceConfig  = "config"  // seamless.yaml or a SEAMLESS_GARDENER_* variable
-	SourceConsole = "console" // the console's stored override (Settings, Knowledge engine)
+	SourceConsole = "console" // the console's stored override (Settings, Gardener)
 )
 
 // AutoSafe reports whether automatic apply may take a proposal of kind: one of

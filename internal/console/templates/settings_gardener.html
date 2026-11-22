@@ -1,57 +1,78 @@
-{{/* Settings > the gardener's two switches (settings_gardener.go builds
-     .GardenerSwitches), drawn inside Knowledge engine. Parsed with the
-     settings page (render.go), whose dispatch calls it with the page's
-     data, so $ reads as it does there ($.Level, $.Features, $.Data). */}}
-{{define "settings-gardener-switches"}}{{with .Data}}
-      {{/* The gardener's two switches (settings_gardener.go): who may apply its
-           proposals, and which kinds apply by themselves. Each form carries
-           only its own control's fields, so saving one keeps the other's
-           source. The Gardener screen links here (#settings-gardener). */}}
-      {{with .GardenerSwitches}}
-      <section class="engine-group gardener-switches" id="settings-gardener" aria-labelledby="engine-gardener-title">
-        <header class="engine-group-head">
-          <h3 id="engine-gardener-title">Gardener</h3>
-          <p>Who may apply the gardener&rsquo;s proposals, and which kinds apply by themselves. A change applies at once, with no restart.</p>
-          {{template "source-chip" (sourceChip .ChipSource .ChipNote "gardener-reset")}}
-        </header>
-        {{if .ReadFailed}}<p class="updates-alert" role="alert">{{icon "triangle-alert"}}<span><strong>The stored choices could not be read.</strong> This shows the config file&rsquo;s values, and the Gardener&rsquo;s writes refuse an agent&rsquo;s process until they can be read again.</span></p>{{end}}
-        {{if .Unreadable}}<p class="updates-note">{{icon "info"}}<span>The stored choice was unreadable, so the config file decides. Saving here replaces it.</span></p>{{end}}
+{{/* Settings > Gardener (settings_gardener.go builds .GardenerSwitches; the
+     cadence is .Gardener, the config file's): a Basic section beside the
+     Gardener screen, which links here (#settings-gardener). Parsed with the
+     settings page (render.go), whose dispatch calls it with the page's data,
+     so $ reads as it does there ($.Level, $.Features, $.Data). */}}
+{{define "settings-gardener"}}{{with .Data}}{{$cfg := .Gardener}}
+    {{/* Two switches that save at once (data-autosave, shell.js), each in a
+         form of its own that carries only its own fields, so saving one keeps
+         the other's source. agents_set=1 says the agents form sets that
+         switch: unchecked, the checkbox posts nothing, which reads as off.
+         Each form's Save is for a browser without script (.js hides it). */}}
+    {{with .GardenerSwitches}}
+    <section class="settings-zone settings-section gs-section" id="settings-gardener">
+      <header class="settings-section-head">
+        <div>
+          <h2>Gardener{{hintFor "Gardener" "The gardener only proposes: a proposal changes nothing until it is applied, on the Gardener screen or by an agent. These switches say who may apply one and which kinds apply by themselves. A change applies at once, with no restart."}}</h2>
+          <p>Who may act on its proposals, and which apply by themselves.</p>
+        </div>
+        {{template "source-chip" (sourceChip .ChipSource .ChipNote "gardener-reset")}}
+      </header>
+      {{if .ReadFailed}}<p class="updates-alert" role="alert">{{icon "triangle-alert"}}<span><strong>The stored choices could not be read.</strong> This shows the config file&rsquo;s values, and the Gardener&rsquo;s writes refuse an agent&rsquo;s process until they can be read again.</span></p>{{end}}
+      {{if .Unreadable}}<p class="updates-note">{{icon "info"}}<span>The stored choice was unreadable, so the config file decides. Saving here replaces it.</span></p>{{end}}
 
-        <form method="post" action="/console/settings/gardener" aria-labelledby="gardener-agents-title">
-          <h4 id="gardener-agents-title">Agents may apply proposals</h4>
-          <dl class="setup-facts">
-            <div><dt>Now</dt><dd>{{if .AgentsMayApply}}<span class="badge ok">on</span><span>Agents may apply, dismiss and hide proposals with gardener_apply, and through the Gardener screen.</span>{{else}}<span class="badge">off</span><span>Only you decide: gardener_apply refuses agents, and so do the Gardener&rsquo;s writes from an agent&rsquo;s process. Agents still see the proposals.</span>{{end}}</dd></div>
-          </dl>
-          <div class="updates-actions">
-            {{if .AgentsMayApply}}<input type="hidden" name="agents" value="off">
-            <button class="btn small" type="submit">Turn agents&rsquo; applying off</button>
-            {{else}}<input type="hidden" name="agents" value="on">
-            <button class="btn small primary" type="submit"{{if .AgentsLocked}} disabled{{end}}>Let agents apply proposals</button>{{end}}
+      <form method="post" action="/console/settings/gardener" class="gs-card gs-agents" data-autosave aria-labelledby="gs-agents-label">
+        <input type="hidden" name="agents_set" value="1">
+        <div class="set-row">
+          <div class="set-row-label"><strong id="gs-agents-label">Agents may apply proposals</strong>{{hintFor "Agents may apply proposals" "Off, only you decide: gardener_apply refuses agents, and so do the Gardener screen’s writes from an agent’s process. Agents still see every proposal. It is not a wall: whoever holds the bearer key passes."}}
+            <span class="set-row-sub">{{if .AgentsMayApply}}Agents apply, dismiss and hide proposals. You always can.{{else}}Only you decide. Agents still see the proposals.{{end}}</span></div>
+          <div class="set-row-control">
             {{/* agents_may_apply: false decides this one switch: the chip sits
-                 beside it, once, and the group's chip says where the rest
+                 beside it, once, and the section's chip says where the rest
                  comes from. */}}
             {{with .LockedNote}}{{template "source-chip" (sourceChip "locked" . "")}}{{end}}
+            <label class="set-switch"><input type="checkbox" role="switch" name="agents" value="on" aria-labelledby="gs-agents-label"{{if .AgentsMayApply}} checked{{end}}{{if .AgentsLocked}} disabled{{end}}><span class="brief-switch" aria-hidden="true"></span></label>
           </div>
-        </form>
+        </div>
+        {{if not .AgentsLocked}}<button class="btn small gs-save" type="submit">Save</button>{{end}}
+      </form>
 
-        <form method="post" action="/console/settings/gardener" aria-labelledby="gardener-auto-title">
-          <input type="hidden" name="auto_set" value="1">
-          <h4 id="gardener-auto-title">Apply automatically</h4>
-          <p class="gardener-source">A new proposal of a kind you check is applied by the pass that raises it, recorded as applied automatically, and listed in the decision history with Undo. It waits for you instead while lockdown is on, when write screening would hold it, and for a locked or fenced project. Every other kind always waits for you.</p>
-          <div class="brief-toggles">
-            {{range .Kinds}}
-            <label class="brief-toggle" data-auto-kind="{{.Kind}}">
-              <input type="checkbox" name="auto" value="{{.Kind}}"{{if .On}} checked{{end}}>
-              <span class="brief-switch" aria-hidden="true"></span>
-              <span><strong>{{.Label}}</strong><small>{{.Sentence}}</small></span>
-            </label>
-            {{end}}
+      <form method="post" action="/console/settings/gardener" class="gs-card gs-auto" data-autosave aria-labelledby="gs-auto-title">
+        <input type="hidden" name="auto_set" value="1">
+        <div class="gs-card-head">
+          <h3 id="gs-auto-title">Apply by themselves</h3>{{hintFor "Apply by themselves" "The pass that raises a proposal of a kind you turn on applies it, records it as applied automatically, and lists it with Undo in the decision history. It waits for you instead while lockdown is on, when write screening would hold it, and for a locked or fenced project."}}
+          <span class="badge compact {{if .AutoApply}}accent{{else}}quiet{{end}} gs-count">{{len .AutoApply}} of {{len .Kinds}}</span>
+        </div>
+        <div class="set-rows">
+          {{range .Kinds}}
+          <div class="set-row" data-auto-kind="{{.Kind}}">
+            <div class="set-row-label"><strong id="gs-auto-{{.Kind}}">{{.Label}}</strong>{{hintFor .Label .What}}<span class="set-row-sub">{{.Undo}}</span></div>
+            <div class="set-row-control"><label class="set-switch"><input type="checkbox" role="switch" name="auto" value="{{.Kind}}" aria-labelledby="gs-auto-{{.Kind}}"{{if .On}} checked{{end}}><span class="brief-switch" aria-hidden="true"></span></label></div>
           </div>
-          <div class="updates-actions">
-            <button class="btn small primary" type="submit">{{icon "check"}} Save automatic apply</button>
-          </div>
-        </form>
-        {{if .Overridden}}<form id="gardener-reset" method="post" action="/console/settings/gardener/reset"></form>{{end}}
-      </section>
-      {{end}}
+          {{end}}
+        </div>
+        <p class="gs-foot">Every other kind always waits for you on the <a href="/console/gardener">Gardener screen</a>.</p>
+        <button class="btn small gs-save" type="submit">Save</button>
+      </form>
+      {{if .Overridden}}<form id="gardener-reset" method="post" action="/console/settings/gardener/reset"></form>{{end}}
+
+      {{/* The cadence and its tuning: the config file's, read at start. */}}
+      <div class="gs-card gs-cadence{{if $cfg.Enabled}} is-live{{end}}">
+        <span class="gs-cadence-ico">{{icon "clock"}}</span>
+        <span class="gs-cadence-line">Runs every <strong>{{$cfg.IntervalMinutes}} min</strong>{{if $cfg.Enabled}}{{hintFor "the gardener’s cadence" "Each pass looks for duplicates, stale or unused memories, finished and stale plans, knowledge gaps and recurring errors, and files a proposal for each. Upkeep runs on the same clock even with suggestions off: idle sessions are reaped, old tool events pruned and retrieval stats refreshed. The cadence and the tuning come from the config file, read at start."}}{{else}}{{hintFor "the gardener’s cadence" "gardener.enabled is false, so no pass proposes anything. Upkeep still runs on this clock: idle sessions are reaped, old tool events pruned and retrieval stats refreshed. The cadence and the tuning come from the config file, read at start."}}{{end}}</span>
+        <span class="gs-cadence-chips">{{if $cfg.Enabled}}<span class="badge compact ok">suggestions on</span>{{else}}<span class="badge compact quiet">suggestions off</span>{{end}}<span class="badge compact quiet">upkeep always</span></span>
+        <details class="gs-tuning">
+          <summary>Tuning, from the config file</summary>
+          <dl>
+            <div><dt>Dedup threshold</dt><dd>{{$cfg.DedupThreshold}}</dd></div>
+            <div><dt>Memory stale after</dt><dd>{{$cfg.StalenessDays}} d</dd></div>
+            <div><dt>Digest window</dt><dd>{{$cfg.DigestDays}} d</dd></div>
+            <div><dt>Tool events kept</dt><dd>{{if $cfg.ToolEventRetentionDays}}{{$cfg.ToolEventRetentionDays}} d{{else}}off{{end}}</dd></div>
+            <div><dt>Stale plan after</dt><dd>{{if $cfg.StalePlanDays}}{{$cfg.StalePlanDays}} d{{else}}off{{end}}</dd></div>
+            <div><dt>Session idle after</dt><dd>{{if $cfg.SessionIdleMinutes}}{{$cfg.SessionIdleMinutes}} m{{else}}45 m{{end}}</dd></div>
+          </dl>
+        </details>
+      </div>
+    </section>
+    {{end}}
 {{end}}{{end}}
