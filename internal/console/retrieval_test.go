@@ -197,7 +197,7 @@ func TestRetrievalPage_QuietScopesCollapse(t *testing.T) {
 
 	body := getHTMLBody(t, mux, "/console/retrieval")
 	require.Contains(t, body, `class="retrieval-scope-quiet"`)
-	require.Contains(t, body, "1 quiet scope")
+	require.Contains(t, body, "1 quiet project")
 	require.Contains(t, body, `title="0 of 1 active memories surfaced">beta<small>1</small></a>`)
 	require.Contains(t, body, `href="/console/projects/alpha"`, "the touched scope keeps its full row")
 

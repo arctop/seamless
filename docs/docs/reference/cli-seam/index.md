@@ -8,7 +8,7 @@ search without its last step, so a `seamless.yaml` in the working directory is
 never read ([why](https://thereisnospoon.org/docs/reference/configuration/#where-the-config-comes-from)) - then
 talks to a running `seamlessd` - over MCP at
 `/api/mcp` for most commands, and over the console's JSON endpoints for the
-owner-only actions that do not exist as MCP tools (force-releasing a task lock,
+owner-only actions that do not exist as MCP tools (force-releasing a task claim,
 approving a plan, deciding a locked project's access request). Both paths authenticate with the static bearer key from
 [Configuration](https://thereisnospoon.org/docs/reference/configuration/), so if the key is wrong or the daemon
 is down, every subcommand below fails at the connection.

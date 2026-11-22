@@ -509,7 +509,7 @@ func embeddingWarnings(m Manifest, embedder llm.Embedder, mode Mode) []string {
 		}
 		if !slices.Contains(m.EmbeddingModels, local) {
 			out = append(out, fmt.Sprintf(
-				"restored embeddings were made by %s but this instance embeds with %s; re-embed from the console (Settings -> Embeddings) or semantic recall will miss the restored corpus",
+				"restored embeddings were made by %s but this instance embeds with %s; re-embed from the console (Settings -> Knowledge engine, Re-embed all) or semantic recall will miss the restored corpus",
 				strings.Join(m.EmbeddingModels, ", "), local))
 		}
 	case ModeMerge:

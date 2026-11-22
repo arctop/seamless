@@ -63,6 +63,7 @@
             <form method="post" action="/console/settings/updates" id="updates-check-form" data-autosave>
               {{if .Checking}}<input type="hidden" name="check" value="off">{{end}}
               <label class="set-switch"><input type="checkbox" role="switch" name="check" value="on" aria-label="Check for new releases"{{if .Checking}} checked{{end}}{{if .Locked}} disabled{{end}}><span class="brief-switch" aria-hidden="true"></span></label>
+              {{if not .Locked}}<button class="btn small up-save" type="submit">Save</button>{{end}}
             </form>
           </div>
         </div>
@@ -78,6 +79,7 @@
               {{with .Auto.LockedNote}}{{template "source-chip" (sourceChip "locked" . "")}}{{end}}
               {{if .Auto.On}}<input type="hidden" name="auto" value="off">{{end}}
               <label class="set-switch"><input type="checkbox" role="switch" name="auto" value="on" aria-label="Install updates by themselves"{{if .Auto.On}} checked{{end}}{{if or (not .Auto.Switch) .Auto.Locked}} disabled{{end}}><span class="brief-switch" aria-hidden="true"></span></label>
+              {{if and .Auto.Switch (not .Auto.Locked)}}<button class="btn small up-save" type="submit">Save</button>{{end}}
             </form>
           </div>
         </div>{{end}}

@@ -304,7 +304,7 @@ still exits 0 - the report is the work item.
 
 When the archive's `embedding_models` differ from this instance's embedder, the
 report says so and points at the console's re-embed
-(Settings → Embeddings). Vectors from two models are not comparable, so that
+(Settings → Knowledge engine, **Re-embed all**). Vectors from two models are not comparable, so that
 mismatch does not heal itself.
 
 ## seamlessd backups {#seamlessd_backups}

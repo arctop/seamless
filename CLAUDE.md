@@ -32,8 +32,10 @@ cmd/demoseed/      thin CLI over internal/demokit: the console-fleet seed
                    states the console must show, plan:console-ux-pass;
                    with `-scale`, at the owner's size: about 1,500
                    memories, 700 notes and 55 projects), `-scenes` (the
-                   shared fixture) and `-diary` (the Diary's three weeks
-                   around now, plan:diary)
+                   shared fixture; `-repo` maps the demo repo, `-race` leaves
+                   two steps claimable) and `-diary` (the Diary's three
+                   weeks around now, plan:diary), each into the throwaway
+                   `-data` dir it requires
 cmd/seambench/     agent-scenario benchmark: `run` (headless scenario x condition
                    matrix) + `report` (grade, uplift, version deltas). Driven by
                    `make seambench`; see cmd/seambench/README.md
@@ -259,7 +261,7 @@ env overrides -- env wins over file, file over defaults. The `briefing:` block
 tunes what the SessionStart `<seam-briefing>` auto-injects (section counts,
 recency filters, family cross-over, hard-cap multiplier, and the
 utility-vs-recency index order via utility_mode/utility_weight); those knobs are also
-editable live in the console (Settings -> Briefing injection), which stores a
+editable live in the console (Settings -> Briefing), which stores a
 runtime override in the DB that wins over file/env until reset and applies from
 the next session start without a daemon restart. `gardener.session_idle_minutes`
 is the single live/idle threshold shared by the session reaper, the console and

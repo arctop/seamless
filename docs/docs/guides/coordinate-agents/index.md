@@ -387,9 +387,10 @@ being in its loop.
 |---|---|
 | `/console/tasks` | The backlog outside a plan (plan steps a toggle away), by state, filtered by project, plan or text - the queue at a glance |
 | A task's detail panel | Who claims it, whether the lease is **live** or **lapsed**, its history, and **Release claim** |
-| `/console/sessions` | Which agents are alive, and each one's claimed tasks with remaining lease |
-| A project's detail | The plan timeline - each step's status, holder, and lease |
-| `/console/plans` | Captured plans with status, iteration, and task progress |
+| `/console/now` | Which agents are live, each one's claims with their lease counting down, and the loose ends no live agent carries |
+| `/console/sessions` | Every session by state; a session's page lists the tasks it claims with their lease countdowns |
+| A project's Plans & tasks tab | Each plan's step timeline - each step's status, holder, and lease - and the project's off-plan tasks |
+| `/console/plans` | Every plan, grouped by state (Needs you, In progress, Stalled, Ready, Shipped), with its status and step progress |
 
 The same view without a browser:
 

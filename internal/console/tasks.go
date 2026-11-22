@@ -995,7 +995,10 @@ func countTaskRows(d tasksData) taskCounts {
 			c.Waiting++
 		}
 	}
-	c.Open = len(d.Ready) + len(d.InProgress) + len(d.Blocked) + len(d.Gates) + len(d.Gated)
+	// Open is every unfinished row the list draws, so the head equals its
+	// rows: the plan steps that wait on the owner join Needs you while the
+	// list keeps the other steps out (needSteps), and count with it.
+	c.Open = len(d.Ready) + len(d.InProgress) + len(d.Blocked) + len(d.Gates) + len(d.Gated) + len(d.needSteps)
 	return c
 }
 

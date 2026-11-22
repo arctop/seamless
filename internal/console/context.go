@@ -141,7 +141,7 @@ func (s *Service) contextView(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if selected != "" && !found {
-		s.notFound(w, r, fmt.Sprintf("unknown project scope %q", selected))
+		s.notFound(w, r, fmt.Sprintf("unknown project %q", selected))
 		return
 	}
 	data.Scope = scope
@@ -295,7 +295,7 @@ func (s *Service) buildContextData(ctx context.Context, selected string) (contex
 			MemoriesEnabled: briefing.IncludeSiblingMemories,
 		}
 		if len(members) < 2 {
-			family.Warnings = append(family.Warnings, "Fewer than two scopes; this family currently shares nothing.")
+			family.Warnings = append(family.Warnings, "Fewer than two projects; this family currently shares nothing.")
 		}
 		for _, member := range family.Members {
 			if !member.Registered {
@@ -363,7 +363,7 @@ func (s *Service) buildContextData(ctx context.Context, selected string) (contex
 					fmt.Sprintf("Parent %s is retired; its active memories remain eligible while this edge is enabled.", workspace.ParentSlug))
 			}
 			if workspace.ParentSlug == workspace.Slug {
-				project.Warnings = append(project.Warnings, "This scope points to itself as its parent.")
+				project.Warnings = append(project.Warnings, "This project points to itself as its parent.")
 			}
 		}
 
@@ -396,11 +396,11 @@ func (s *Service) buildContextData(ctx context.Context, selected string) (contex
 		}
 
 		if !workspace.Registered {
-			project.Warnings = append(project.Warnings, "This scope has data or routing metadata but no project registry row.")
+			project.Warnings = append(project.Warnings, "This project has data or routing metadata but no registry row.")
 		}
 		if workspace.Retired && project.LocalMemories > 0 {
 			project.Warnings = append(project.Warnings,
-				fmt.Sprintf("Retired scope still owns %s.", plural(project.LocalMemories, "active memory", "active memories")))
+				fmt.Sprintf("Retired project still owns %s.", plural(project.LocalMemories, "active memory", "active memories")))
 		}
 		allProjects = append(allProjects, project)
 	}
@@ -497,13 +497,13 @@ func contextProjectRole(workspace workspaceScope, parent bool) (role, class, ico
 	case workspace.Retired:
 		return "retired lineage", "", "archive"
 	case !workspace.Registered:
-		return "unregistered scope", "", "triangle-alert"
+		return "unregistered project", "", "triangle-alert"
 	case workspace.ParentSlug != "":
-		return "child scope", "", "box"
+		return "child project", "", "box"
 	case parent:
 		return "shared parent", "grp", "folder-tree"
 	default:
-		return "standalone scope", "", "box"
+		return "standalone project", "", "box"
 	}
 }
 

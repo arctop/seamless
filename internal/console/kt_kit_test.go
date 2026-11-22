@@ -614,3 +614,46 @@ func TestKtHints_ScriptPinsAndCloses(t *testing.T) {
 		"hover and keyboard focus open a hint by CSS")
 	require.Contains(t, css, ".hint.is-shut .hint-pop { display: none; }")
 }
+
+// ktAutosaveNoSubmit lists the data-autosave forms in src with no submit
+// button between their tag and their </form>: without script a switch
+// change posts nothing, so each such form keeps a Save button that only
+// .js hides (Features, Gardener; the Updates switches lacked it until UX 24).
+func ktAutosaveNoSubmit(src string) (faults []string) {
+	for _, loc := range ktFormTag.FindAllStringIndex(src, -1) {
+		tag := src[loc[0]:loc[1]]
+		if !ktAutosave.MatchString(tag) {
+			continue
+		}
+		body := src[loc[1]:]
+		if end := strings.Index(body, "</form>"); end >= 0 {
+			body = body[:end]
+		}
+		if !strings.Contains(body, `type="submit"`) {
+			faults = append(faults, "no submit button, so it cannot save without script: "+tag)
+		}
+	}
+	return faults
+}
+
+// Every form that saves at once still saves without script: the console's
+// forms work with scripts off (AGENTS.md), so each autosave form carries a
+// submit button for that case.
+func TestKtAutosave_FormsSaveWithoutScript(t *testing.T) {
+	err := fs.WalkDir(templateFS, "templates", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		src, rerr := templateFS.ReadFile(path)
+		require.NoError(t, rerr)
+		require.Empty(t, ktAutosaveNoSubmit(string(src)), "%s", path)
+		return nil
+	})
+	require.NoError(t, err)
+
+	// The controls.
+	require.Len(t, ktAutosaveNoSubmit(`<form method="post" action="/console/x" data-autosave><input type="checkbox"></form>`), 1)
+	require.Empty(t, ktAutosaveNoSubmit(`<form method="post" action="/console/x" data-autosave><input type="checkbox"><button type="submit">Save</button></form>`))
+	require.Len(t, ktAutosaveNoSubmit(`<form method="post" action="/console/x" data-autosave></form><button type="submit">Save</button>`), 1,
+		"a button after the form does not count")
+}

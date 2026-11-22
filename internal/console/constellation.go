@@ -446,7 +446,7 @@ func skySlots(n int) int {
 // removes one, never re-seats the rest (a moved node would drop its glide
 // transition).
 func renderSky(scopes []*skyScope, radii [skyBands + 1]float64, bandN [skyBands]int, total, staleDays int) *skyChart {
-	alt := fmt.Sprintf("Knowledge sky: %d active memories in %d scopes, placed by when each last surfaced to an agent: "+
+	alt := fmt.Sprintf("Knowledge sky: %d active memories in %d projects, placed by when each last surfaced to an agent: "+
 		"%d in the last 24 hours, %d within %d days, %d within %d days, %d longer ago, %d never.",
 		total, len(scopes), bandN[bandDay], bandN[bandWeek], staleSurfacedOKDays,
 		bandN[bandMonth], staleDays, bandN[bandStale], bandN[bandNever])

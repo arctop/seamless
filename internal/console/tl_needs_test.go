@@ -93,6 +93,17 @@ func tlNeedsYouMatchesTheNeedsModel(t *testing.T, mux *http.ServeMux) {
 		}
 	}
 	require.Positive(t, steps, "the review fixture's plan steps that wait on the owner are among them")
+
+	// The head's "N open" is the unfinished rows the list draws, those plan
+	// steps included (UX 24: every count equals the rows it leads to).
+	data := bkPage(t, mux, "/console/tasks?format=json&ready=all")
+	page := getHTMLBody(t, mux, "/console/tasks?ready=all")
+	drawn := 0
+	for _, key := range []string{taskGroupNeeds, taskGroupInProgress, taskGroupReady, taskGroupBlocked, taskGroupWaiting} {
+		drawn += len(tlGroupIDs(page, key))
+	}
+	require.Equal(t, drawn, data.Counts.Open, "the head counts the open rows the page draws")
+	require.Contains(t, page, `aria-label="`+strconv.Itoa(drawn)+` open tasks"`)
 }
 
 // The edges of the needs model on a fixture of its own: a gate on the

@@ -4,9 +4,9 @@
 
 <div class="context-page">
   <header class="mv2-bar">
-    <h1>{{icon "share-2"}}Context</h1>{{about "How SessionStart knowledge crosses scope boundaries: global memory, shared parents, sibling families, and split lineage."}}
+    <h1>{{icon "share-2"}}Context</h1>{{about "How SessionStart knowledge crosses project boundaries: global memory, shared parents, sibling families, and split lineage."}}
     <span class="mv2-count" aria-label="Context topology summary">
-      <strong>{{.Summary.Scopes}}</strong>scope{{if ne .Summary.Scopes 1}}s{{end}}<small>{{.Summary.ParentLinks}} parent link{{if ne .Summary.ParentLinks 1}}s{{end}} &middot; {{.Summary.Families}} famil{{if eq .Summary.Families 1}}y{{else}}ies{{end}}{{if .Summary.Lineages}} &middot; {{.Summary.Lineages}} split lineage{{if ne .Summary.Lineages 1}}s{{end}}{{end}}</small>
+      <strong>{{.Summary.Scopes}}</strong>project{{if ne .Summary.Scopes 1}}s{{end}}<small>{{.Summary.ParentLinks}} parent link{{if ne .Summary.ParentLinks 1}}s{{end}} &middot; {{.Summary.Families}} famil{{if eq .Summary.Families 1}}y{{else}}ies{{end}}{{if .Summary.Lineages}} &middot; {{.Summary.Lineages}} split lineage{{if ne .Summary.Lineages 1}}s{{end}}{{end}}</small>
     </span>
     {{if .Summary.Warnings}}<a class="lib-active-filter warn" href="#context-warnings">{{icon "triangle-alert"}}<span>{{.Summary.Warnings}} topology warning{{if ne .Summary.Warnings 1}}s{{end}}</span></a>{{end}}
     <button type="button" class="mv2-filter-toggle" data-filters-toggle aria-expanded="false" aria-controls="mv2-controls">{{icon "sliders"}}<span>Filters</span></button>
@@ -14,14 +14,14 @@
     <div class="mv2-controls" id="mv2-controls">
     <div class="mv2-sort">
       <span class="mv2-sort-label">View</span>
-      <div class="seg" data-seam-query><a class="{{if eq .Scope "all"}}on{{end}}" href="/console/context">All scopes</a></div>
+      <div class="seg" data-seam-query><a class="{{if eq .Scope "all"}}on{{end}}" href="/console/context">All projects</a></div>
     </div>
     {{if .Options}}
     <form class="context-picker" method="get" action="/console/context" data-seam-query>
       <input type="hidden" name="scope" value="project">
       <label for="context-project">Focus project</label>
       <select id="context-project" name="project" required>
-        <option value="" disabled{{if not .Project}} selected{{end}}>Choose a scope&hellip;</option>
+        <option value="" disabled{{if not .Project}} selected{{end}}>Choose a project&hellip;</option>
         {{range .Options}}<option value="{{.Slug}}"{{if .Selected}} selected{{end}}>{{.Label}}{{if not .Registered}} · unregistered{{else if .Retired}} · retired{{end}}</option>{{end}}
       </select>
       <button class="btn small" type="submit">Focus</button>

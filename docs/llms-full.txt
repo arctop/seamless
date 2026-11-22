@@ -7572,9 +7572,10 @@ being in its loop.
 |---|---|
 | `/console/tasks` | The backlog outside a plan (plan steps a toggle away), by state, filtered by project, plan or text - the queue at a glance |
 | A task's detail panel | Who claims it, whether the lease is **live** or **lapsed**, its history, and **Release claim** |
-| `/console/sessions` | Which agents are alive, and each one's claimed tasks with remaining lease |
-| A project's detail | The plan timeline - each step's status, holder, and lease |
-| `/console/plans` | Captured plans with status, iteration, and task progress |
+| `/console/now` | Which agents are live, each one's claims with their lease counting down, and the loose ends no live agent carries |
+| `/console/sessions` | Every session by state; a session's page lists the tasks it claims with their lease countdowns |
+| A project's Plans & tasks tab | Each plan's step timeline - each step's status, holder, and lease - and the project's off-plan tasks |
+| `/console/plans` | Every plan, grouped by state (Needs you, In progress, Stalled, Ready, Shipped), with its status and step progress |
 
 The same view without a browser:
 
@@ -14271,7 +14272,7 @@ search without its last step, so a `seamless.yaml` in the working directory is
 never read ([why](/reference/configuration/#where-the-config-comes-from)) - then
 talks to a running `seamlessd` - over MCP at
 `/api/mcp` for most commands, and over the console's JSON endpoints for the
-owner-only actions that do not exist as MCP tools (force-releasing a task lock,
+owner-only actions that do not exist as MCP tools (force-releasing a task claim,
 approving a plan, deciding a locked project's access request). Both paths authenticate with the static bearer key from
 [Configuration](/reference/configuration/), so if the key is wrong or the daemon
 is down, every subcommand below fails at the connection.
@@ -15901,7 +15902,7 @@ still exits 0 - the report is the work item.
 
 When the archive's `embedding_models` differ from this instance's embedder, the
 report says so and points at the console's re-embed
-(Settings → Embeddings). Vectors from two models are not comparable, so that
+(Settings → Knowledge engine, **Re-embed all**). Vectors from two models are not comparable, so that
 mismatch does not heal itself.
 
 ## seamlessd backups {#seamlessd_backups}
@@ -19553,12 +19554,12 @@ nothing, and their rows say so.
 
 | Action | Route | Effect |
 |---|---|---|
-| Archive a memory | `POST /console/memories/{id}/archive` | Routes through `lifecycle.Archive`: the memory is stamped invalid and leaves briefings, recall and every index. Its file stays on disk with a line saying when it was archived, its history stays readable here, and **Restore a memory** brings it back. Returns to the Memories list `next=` names, its filters kept; any other `next` returns to the plain list. |
+| Archive a memory | `POST /console/memories/{id}/archive` | Routes through `lifecycle.Archive`: the memory is stamped invalid and leaves briefings, recall and every index. Its file stays on disk with a line saying when it was archived, its history stays readable here, and **Restore a memory** brings it back. Records `memory.archived` with `by: console`. Returns to the Memories list or the memory's own page `next=` names, its filters kept; any other `next` returns to the plain list. An archived memory is left as it is. |
 | Restore a memory | `POST /console/memories/{id}/restore` | Routes through `lifecycle.Restore`, under the file's lock: an archived memory, or a superseded one that nothing active replaced, comes back into briefings, recall and the indexes, and the line its retirement added to the body comes off. Refused (409), with nothing written, while a memory that replaced it is still active (the answer names that memory when you can read it), and while [Held](#held) holds it: with write screening on, its file is quarantined or the review flagged it, and, whenever the held queue is served, an agent's change to it waits there. An active memory is left as it is. Records `memory.written` with `restored`. Returns to the memory's own page `next=` names, its filters kept. |
 | Delete a note | `POST /console/notes/{id}/delete` | What `notes_delete` does, under the file's lock: the note's file and its index rows go for good, and `note.written` records it with `deleted`. A plan's narrative (the note a `plan:<slug>` composition leads with) also needs `narrative=<slug>` for each plan it narrates, the box beside **Delete**; without it the delete is refused (409), since a form posts on its first press without script. Refused too while [Held](#held) holds the note: its file is quarantined, or an agent's change to it waits there. Returns to the Notes list `next=` names, its filters kept. |
-| Force-release a task claim | `POST /console/tasks/{id}/release` | The owner override, **Release claim** on a task in progress, which asks in the page first: takes the task's claim from whoever holds it, live or lapsed, and tells the holder, or reopens a task marked in progress with no claim at all, so any agent may claim it. A task no longer in progress has nothing to release: the page says so (a JSON caller gets 409). Not reachable from the agent MCP tools. |
+| Force-release a task claim | `POST /console/tasks/{id}/release` | The owner override, **Release claim** on a task in progress, which asks in the page first on a task's own page, the reading panel and the Tasks list (a lapsed claim's strip on a plan card, Now's loose ends and the Overview's card for one lapsed or claimless claim release at once: no live holder is interrupted): takes the task's claim from whoever holds it, live or lapsed, and tells the holder, or reopens a task marked in progress with no claim at all, so any agent may claim it. Records `task.transition` with `released` and `by: console`. A task no longer in progress has nothing to release: the page says so (a JSON caller gets 409). Not reachable from the agent MCP tools. |
 | Mark a task done, drop it, or reopen it | `POST /console/tasks/{id}/status` | **Mark done**, **Drop** (which asks in the page first) or **Reopen** on a task: `to=done`, `dropped` or `open`, through the update `tasks_update status=` makes, so a closed task unblocks the tasks that depend on it, and the last step of a plan closed as done settles the plan as an agent's close does. Records `task.transition` with `by: console`. Refused, naming the holder, while a live claim holds the task: release the claim first. Reopen is for a done or dropped task (one in progress reopens through **Release claim**); a move to the status the task has writes nothing. |
-| Mark a gate as handled | `POST /console/tasks/{id}/gate/clear` | **Mark as handled** on a task whose own gate is open, with an optional one-line `note=`: clears the gate as `tasks_update gate_clear` does, recording the owner as who cleared it and the note. A step's gate clears, and the step goes ahead once nothing else blocks it; a gate closes as done, which unblocks the tasks waiting on it. Records `task.transition` with `gate: cleared` and `by: console`. Refused while a live claim holds the task, from an agent's process on the peer_auth socket, and from a paired device. |
+| Mark a gate as handled | `POST /console/tasks/{id}/gate/clear` | **Mark as handled** on a task whose own gate is open, with an optional one-line `note=`: clears the gate as `tasks_update gate_clear` does, recording the owner as who cleared it and the note. A step's gate clears, and the step goes ahead once nothing else blocks it; a gate closes as done, which unblocks the tasks waiting on it. Records `task.transition` with `gate: cleared` and `by: console`. Refused (409) on a task with no gate, and refused while a live claim holds the task, from an agent's process on the peer_auth socket, and from a paired device; a gate already handled writes nothing. |
 | Say what a task waits on | `POST /console/tasks/{id}/gate` | **Waits on someone** on an open or in-progress task whose own gate is not open: `who=` and `what=` (one line each), with optional `decision=` and `ready_when=`. Sets the task's gate as `tasks_update gate_who` and `gate_what` do, so a ready step leaves the ready queue and waits on people until its gate is marked as handled; a gate already cleared opens again. Records `task.transition` with `gate: set` and `by: console`. Refused, naming the holder, while a live claim holds the task, and on a closed task; setting the gate the task already has writes nothing. |
 | Force-release a repo lock | `POST /console/locks/{id}/release` | [Repo locks](#locks): ends the hold a lock carries, live or lapsed, whoever holds it; the lock stays declared. What `seam lock release --force` sends. Refused when nobody holds it (409), from an agent's process on the peer_auth socket, and from a paired device. |
 | Approve a lock declaration | `POST /console/locks/{id}/approve` | Makes a restricted account's waiting declaration an active lock, which agents may then hold. With `next=` a console page (the Overview's **Approve**), it returns there; a lock decision without one returns to Locks. Refused for a lock already active (409), from an agent's process on the peer_auth socket, and from a paired device. |
@@ -19574,10 +19575,10 @@ nothing, and their rows say so.
 | Retarget a reproject proposal | `POST /console/gardener/{id}/retarget` | Rewrites a **pending** reproject's destination project before it is applied, and records a `gardener.action` event with the destination before and after. Reproject proposals only. |
 | Apply a whole plan batch | `POST /console/gardener/plan/{slug}/apply` | Applies every pending proposal in a plan, split setup first so the child projects exist before the memories move. Best-effort: it applies what it can, reports how many landed, and leaves the rest pending. |
 | Dismiss a whole rail group | `POST /console/gardener/group/dismiss` | Dismisses every pending proposal in one rail section or split plan, one at a time, so each keeps its own event and stays individually undoable. `src=you` or `src=auto` narrows a section to the rows the Source filter shows. |
-| Apply a whole rail section | `POST /console/gardener/group/apply` | Applies the proposals one rail section shows (`group=`, and one `id=` for each proposal shown), one at a time, so each keeps its own event and its own Undo in the decision history. Offered only on a section whose every proposal can be undone and none of which asks to be read first (it touches a project fenced since it was raised, or moves a stamped memory into a less fenced project); a batch holding any other is refused before anything is applied. A consolidation or a split never takes part. |
+| Apply a whole rail section | `POST /console/gardener/group/apply` | Applies the proposals one rail section shows (`group=`, and one `id=` for each proposal shown), one at a time, so each keeps its own event and its own Undo in the decision history. A proposal raised after the page rendered is never applied unseen, and one decided meanwhile is skipped and counted. Offered only on a section whose every proposal can be undone and none of which asks to be read first (it touches a project fenced since it was raised, or moves a stamped memory into a less fenced project); a batch holding any other is refused before anything is applied. A consolidation or a split never takes part. Past that check it is best-effort: it applies what it can, reports how many landed, and leaves the rest pending. |
 | Swap which memory a merge keeps | `POST /console/gardener/{id}/swap` | Rewrites a **pending** merge so it keeps the other memory (`keep=` names it, one of the two) and retires the one it kept. Nothing changes until the merge is applied. Records a `gardener.action` event. Merge proposals only. |
 | Undo a decision | `POST /console/gardener/{id}/undo` | Returns a resolved proposal to the queue from **Recently decided** or the **decision history**, inverting whatever its apply did, for the kinds whose apply can be inverted. |
-| Run a gardener pass now | `POST /console/gardener/run` | Runs the background proposal passes now instead of at the next pass, in the background. Like every pass they only propose, except that a new proposal of a kind you turned on under **Apply by themselves** (`gardener.auto_apply`, off by default) is applied by the pass that raised it. Refused while a pass runs, and while `gardener.enabled` is false. |
+| Run a gardener pass now | `POST /console/gardener/run` | Runs the background proposal passes now instead of at the next pass, in the background. Like every pass they only propose, except that a new proposal of a kind you turned on under **Apply by themselves** (`gardener.auto_apply`, off by default) is applied by the pass that raised it. Refused while a pass runs, while `gardener.enabled` is false, and where the gardener's schedule is not running on this server. |
 | Release a held write | `POST /console/held/{id}/release` | [Write screening](#held): lands a held agent write exactly as the agent sent it, and marks the memory owner-confirmed. Refused when its target changed after it was held. |
 | Discard a held write | `POST /console/held/{id}/discard` | Lands nothing and erases the held text; the row stays as the record. |
 | Clear a session's outside-text mark | `POST /console/held/sessions/{id}/clear` | The only way the mark comes off: the session's changes to binding rules land without a hold again. |
@@ -19587,7 +19588,6 @@ nothing, and their rows say so.
 | Accept a file changed outside Seamless | `POST /console/held/corpus/accept` | `path=` the file. Records it as it stands, lifts its quarantine, and stamps a memory owner-confirmed. |
 | Set a project's isolation | `POST /console/projects/{slug}/isolation` | Changes how far a project's knowledge travels. A tightening that would cut existing context first renders a confirmation step; nothing is written until it is confirmed. |
 | Mark the mishaps reviewed | `POST /console/mishaps/reviewed` | [Mishaps](#mishaps): **Mark reviewed** stores when you reviewed the reports, through the newest one the page drew (`through=` its time; now when absent, never later than now). The Overview's mishap card then counts only the reports after it, and is gone until one arrives. The stamp never moves back: a mark through an older report writes nothing and says so. Records `mishaps.reviewed` with `by: console`. Refused from an agent's process on the peer_auth socket, and from a paired device. |
-
 | Begin a lock change | `POST /console/lock/{project}/begin` | Only under [peer_auth](/guides/peer-auth/#lock-from-the-console-or-force-lock-in-the-file), and only from a signed-in browser. `action=lock` or `remove`. Refuses first a change that could not apply - a force-locked project, a lock already on, no console lock to remove, a project that is not confidential or sealed, no passkey enrolled - then returns a WebAuthn challenge naming this ceremony, the project and the direction. Writes nothing. A begin never waits for room: at most 4 ceremonies wait at once for one project and direction, and 32 in all, so a begin past 4 displaces the oldest of its project and direction, and one past 32 the oldest of the project and direction holding the most. A displaced ceremony's finish says it expired. |
 | Lock a project, or remove its lock | `POST /console/lock/{project}/finish` | Verifies the passkey assertion for that ceremony, then stores the lock or removes it. Turning a lock on ends, in the same transaction, the project's agent leases, read grants and console unlocks, so every agent and browser asks again. It removes only a lock the console set: one `peer_auth.force_locked` holds stays. Seamless then restarts to apply the change. A finish for a ceremony that began and then failed records `access.console_lock_failed` under the ceremony's own project and direction, with why: the finish named another project or direction, the passkey's answer did not verify, the passkey is not enrolled, its counter did not increase, another use of it was recorded first, or the project changed since. A finish naming no waiting ceremony records nothing. |
 | Begin a passkey unlock | `POST /console/unlock/{project}/begin` | Only for a project peer_auth locks, and only from the signed-in browser that proves its unlock key. Records a waiting [console unlock](/guides/peer-auth/#leases-and-the-process-tree) bound to this browser's cookie and key, sets the `seamless_unlock` cookie when the browser holds no live unlock yet, and returns the passkey challenge. Refused while no passkey is enrolled; the terminal path still works. Opens nothing yet. A begin never waits for room: at most 4 passkey unlocks wait at once for one project, and 32 in all, so a begin past 4 displaces the project's oldest, and one past 32 the oldest of the project holding the most. Terminal unlocks are counted apart. |
@@ -19615,7 +19615,7 @@ nothing, and their rows say so.
 | Save briefing settings | `POST /console/settings/briefing` | Writes the briefing knobs as a runtime **override row** in the DB. It never writes the config file. |
 | Reset briefing settings | `POST /console/settings/briefing/reset` | Clears the override row, reverting to the file/env configuration. |
 | Preview a briefing | `POST /console/settings/briefing/preview` | A read, not a write: it POSTs only to carry the Briefing form's unsaved values, which it checks with the save's own validation, and answers with the briefing a new session in the chosen project would start with. Writes no settings row and records no event. A locked project is not previewed. |
-| Force utility ranking for a scope | `POST /console/settings/utility` | Knowledge engine's **Auto / On / Off** on a project's row, which saves at once with Undo: sets or clears the owner's per-scope force. `on` and `off` win over the gardener's readiness latch, `auto` defers to it again. The answer returns to the row. |
+| Force a project's ranking by use | `POST /console/settings/utility` | Knowledge engine's **Auto / On / Off** on a project's row (or the global scope's, **Global context**), which saves at once with Undo: sets or clears the owner's per-project force. `on` and `off` win over the gardener's readiness latch, `auto` defers to it again. The answer returns to the row. |
 | Switch embeddings off or back on | `POST /console/settings/embeddings/mode` | Stores or clears the embedder off switch. It is read at serve start, so the change applies from the next restart - the page says so. |
 | Re-embed everything | `POST /console/settings/embeddings/reembed` | Starts a background pass that re-embeds every memory and note with the active model. It changes vectors, never content. |
 | Choose the console level | `POST /console/settings/level` | Stores the [experience level](#choose-how-much-you-see) as a row that wins over file and env. Presentation only: nothing an agent receives changes. |
@@ -19629,8 +19629,8 @@ nothing, and their rows say so.
 | Turn automatic updates on or off | `POST /console/settings/updates/auto` | Stores the console's `update.auto` override (`auto=on` or `off`), keeping its `update.check`. It cannot turn automatic updates on while the config file or environment says `update.auto: false`, or locks `update.check: false` (nothing installs without checks). With checks merely off, the choice is kept and applies once they are back on. Off is your decision alone, refused as turning checks off is; on is open to any caller. Only an install that updates itself acts on it: the installer's, or a [peer_auth system daemon](/guides/peer-auth/#updates)'s. |
 | Update now | `POST /console/settings/updates/apply` | Installs the newest release at once, after a confirm: it skips the soak, the wait for idle agents, skipped releases and the backoff, and lifts a hold, whether automatic updates are on, off or paused. Refused while checks are off, on an install that does not update itself, while an update is under way, within a minute of a failed release check, when nothing newer is known, or when the release carries no signed checksums bundle. The daemon restarts to finish. |
 | Resume automatic updates | `POST /console/settings/updates/resume` | Lifts the pause automatic updates put on themselves after rollbacks, and the hold a deliberate downgrade set. Changes no setting; skipped releases stay skipped, and a running backoff runs out. |
-| Save the gardener's switches | `POST /console/settings/gardener` | Stores the console's choice for **Agents may apply proposals** (`agents=on` or `off`, over `gardener.agents_may_apply`; the section's switch sends `agents_set=1`, with `agents=on` only while it is on, so its absence is off) or for **Apply by themselves** (`auto_set=1` and one `auto=<kind>` per kind switched on, over `gardener.auto_apply`); each control's form carries only its own fields, and each saves the moment a switch changes. It cannot turn agents' applying on while the config file or environment says `gardener.agents_may_apply: false` - that is final - and it refuses any kind but `memory_wanted`, `tool_error`, `abandon_plan` and `ship_plan`. Your decision alone in every direction: refused (403) from an agent's process on the peer_auth socket and from a paired device. Applies at once, with no restart; a proposal already waiting is not applied by it. |
-| Reset the gardener's switches | `POST /console/settings/gardener/reset` | Clears that override - both switches - handing them back to the config file. Refused from an agent's process and from a paired device, as saving is. |
+| Save the gardener's switches | `POST /console/settings/gardener` | Stores the console's choice for **Agents may apply proposals** (`agents=on` or `off`, over `gardener.agents_may_apply`; the section's switch sends `agents_set=1`, with `agents=on` only while it is on, so its absence is off) or for **Apply by themselves** (`auto_set=1` and one `auto=<kind>` per kind switched on, over `gardener.auto_apply`); each control's form carries only its own fields, and each saves the moment a switch changes. It cannot turn agents' applying on while the config file or environment says `gardener.agents_may_apply: false` - that is final - and it refuses any kind but `memory_wanted`, `tool_error`, `abandon_plan` and `ship_plan`. Your decision alone in every direction: refused (403) from an agent's process on the peer_auth socket and from a paired device. Applies at once, with no restart; a proposal already waiting is not applied by it. Records a `gardener.action` event. |
+| Reset the gardener's switches | `POST /console/settings/gardener/reset` | Clears that override - both switches - handing them back to the config file, and records a `gardener.action` event. Refused from an agent's process and from a paired device, as saving is. |
 | Save the backup schedule and folder | `POST /console/settings/backups` | Stores the console's `backup:` override: only the values that differ from the settings in force. A new folder is created and tested with a write first. Applies from the next backup. |
 | Reset the backup settings | `POST /console/settings/backups/reset` | Clears that override, handing the schedule and the folder back to the config file (or, without one, the build's default). |
 | Back up now | `POST /console/settings/backups/now` | Writes a backup at once, marked **Made by you**: never skipped, never deleted automatically. With `run=retry` (the alert card's **Try again**) it runs the schedule's backup instead, which is skipped when nothing changed and prunes after itself. Refused while a backup runs or a restore is being prepared. |
@@ -19674,11 +19674,14 @@ captured plan**, the **star**
 flag, and - with write screening on - **releasing a held write**, which lands
 exactly what an agent wrote, never text of the console's own; the rest either
 manage gardener proposals - which are themselves
-proposals, reviewed before they do anything - or free a task claim, or set a
-configuration knob (briefing overrides, feature switches, project families, the
-update switches, the backup schedule and folder) that shapes future briefings,
-what is exposed, or how the install runs, without touching any memory's
-content. **Back up now** and **Delete a backup** make and remove copies of the
+proposals, reviewed before they do anything - or move a task the way
+`tasks_update` does (release its claim, mark it done, drop or reopen it, mark
+its gate as handled or say what it waits on), or record a decision about the
+work (a repo lock's declaration or hold, a project's isolation, the mishaps
+marked reviewed), or set a configuration knob (briefing overrides, feature
+switches, project families, the update switches, the gardener's switches, the
+backup schedule and folder) that shapes future briefings, what is exposed, or
+how the install runs, without touching any memory's content. **Back up now** and **Delete a backup** make and remove copies of the
 data, never the data itself. The console level is presentation state of the same kind: it changes
 what this console shows you and nothing else. The access, lock, unlock and
 approver rows exist only with [peer_auth](/guides/peer-auth/) or access
@@ -19965,15 +19968,14 @@ a superseded or archived memory finds it here too, with its status.
 |---|---|
 | `Cmd/Ctrl+K` | Search or jump to a section |
 | `/` | Focus this screen's filter; open the palette where there is none |
-| `g` then a key | Go to a section (pressing `g` shows every key it can take, until your next key or `Esc`): `a` Access requests, `k` Approvers, `o` Overview, `n` Now, `i` Interactions, `f` Mishaps, `d` Diary, `w` Projects, `p` Plans, `t` Tasks, `s` Sessions, `b` Locks, `m` Memories, `e` Notes, `r` Retrieval, `g` Gardener, `h` Held, `l` Labs, `x` Trials, `y` System, `v` Privacy, `c` Devices, `,` Settings |
-| `j` / `k` | Next / previous item in a library rail, the Memories list, the Notes list or the Tasks list, or, on [an item's own page](#item-page), in the list it is in |
+| `g` then a key | Go to a section (pressing `g` shows every key it can take, until your next key, `Esc` or a click): `a` Access requests, `k` Approvers, `o` Overview, `n` Now, `i` Interactions, `f` Mishaps, `d` Diary, `w` Projects, `p` Plans, `t` Tasks, `s` Sessions, `b` Locks, `m` Memories, `e` Notes, `r` Retrieval, `g` Gardener, `h` Held, `l` Labs, `x` Trials, `y` System, `v` Privacy, `c` Devices, `,` Settings |
+| `j` / `k` | Next / previous item in a library rail (Gardener, Labs, Trials), the Memories list, the Notes list or the Tasks list, or, on [an item's own page](#item-page), in the list it is in |
 | `Enter` | On the Memories, Notes or Tasks list, open the focused row's own page |
 | `p` | Open the project switcher on Memories, Notes, Tasks and Plans |
 | `a` / `x` | On the Gardener: apply / dismiss the open proposal. An apply that cannot be undone asks in the page first; press `a` again to confirm |
 | `[` | Collapse or expand the sidebar |
 | `?` | The shortcut sheet |
 | `Esc` / `k` / `j` | In the [reading panel](#read-in-place): close it / the previous / the next item of the list it was opened from |
-
 | `Esc` | Close the palette, a menu, a [hint](#shared-parts), the sheet, or the drawer |
 
 The `g` map is read from the sidebar itself, so a section switched off in
@@ -20032,13 +20034,14 @@ your phone and your laptop agree.
 Claude Code or Codex and wants to know it works: the work the agents follow
 (Projects, Plans, Tasks), what they did (Sessions) and what went wrong
 (Mishaps), what they remember (Memories, Notes), cleanup suggestions to accept
-or decline (Gardener), and an Overview that opens on a health strip - which
-agent clients are working here, whether semantic recall is on, when the last
-briefing went out, and the version (which says when a newer release is out) -
-plus the Updates, Backups and Gardener settings.
+or decline (Gardener), and an Overview whose health strip, right under what
+needs you, says which agent clients are working here, whether semantic recall
+is on, when the last briefing went out, and the version (which says when a
+newer release is out) - plus the Experience, Features, Your setup, Updates,
+Backups and Gardener settings.
 
 **Standard** adds watching the agents live and looking after the server: Now
-(and Labs and Trials when that feature is on), System and Privacy, the
+(and Locks, and Labs and Trials, when their features are on), System and Privacy, the
 Overview's window, vitals, and projects table, the Briefing and Workspaces
 settings, and the finer controls on the screens Basic already had.
 
@@ -20158,13 +20161,15 @@ Every route answers in the shape the caller asked for:
 - **An HTML fragment** for entity details when the caller passes `?peek=1` - the
   [reading panel](#read-in-place) (or the Diary's or Interactions' pane) loads
   it without a page navigation - or `?reader=1`, the richer
-  reader fragment the library screens (plans, labs, trials) swap in place.
+  reader fragment the screens that keep a rail and a reader (Gardener, Labs,
+  Trials) swap in place. A memory, a note, a task and a plan answer `?reader=1` too.
 
 The event page composes its full page from the same `detail-body` block its
 peek fragment renders, so the two cannot drift. Session and project
 deliberately do not: their fragments are compact summaries of much richer
-bespoke pages. Plan, lab, and trial detail URLs render their library screen
-with that entity open in the reader; a memory, a note and a task open on
+bespoke pages. Lab and trial detail URLs, and a gardener proposal's
+(`/console/gardener/{id}`), render their screen with that entity open in the
+reader; a memory, a note, a task and a plan open on
 [their own page](#item-page).
 
 Strictly-validated query params (`?sort`, `?scope`, `?tab`, `?w`) return a 400
@@ -20249,7 +20254,7 @@ then whether stored knowledge is reaching your agents. Top to bottom:
 - **Knowledge sky** - a star chart of every active memory, with no cap,
   below the projects. **Fold** puts it away; this browser remembers, and a
   folded sky stays folded on every visit. Each
-  project scope (global included) owns a wedge sized by its share of memories,
+  project (and the global scope) owns a wedge sized by its share of memories,
   largest first. Distance from the centre is when the memory last surfaced to an
   agent: the core holds the last 24 hours, rings mark 7 days and the staleness
   horizon, `gardener.staleness_days` (90 days by default; the same fresh and
@@ -20262,17 +20267,17 @@ then whether stored knowledge is reaching your agents. Top to bottom:
   Beside the chart, a readout states the same picture as text: each ring's
   count, the going-stale count (memories with no update, injection, or read
   within the staleness horizon: always the stale card's count and the rows
-  Retrieval's quiet-knowledge list shows), and every
-  scope with its ring mix as a bar. Point at a star for its name and description
+  Retrieval's quiet-knowledge list shows), and, under **Projects**, every
+  project with its ring mix as a bar. Point at a star for its name and description
   (the pointer snaps to the nearest star); click it for a card with its facts and
   a link to open it; double-click to open it directly. Type in **Find a memory**
-  to light only the matches (name, description, tag, scope, or kind) and list
+  to light only the matches (name, description, tag, project, or kind) and list
   them, with the arrow keys and Enter to step through; click a ring, the going-
-  stale line, a scope, or a kind chip to filter the same way, and point at one
+  stale line, a project, or a kind chip to filter the same way, and point at one
   to preview it. When an injection or a read lands on the live stream, each
   memory it names sends a beam into the core, and the refresh that follows
   glides the star to its new ring; a newly written memory appears with a flare.
-  A star keeps its place while its scope and ring are unchanged, and the rings
+  A star keeps its place while its project and ring are unchanged, and the rings
   and wedges resize in steps rather than with every memory, so a refresh moves
   only what changed, and search, filters, and the selection survive it. The
   refresh downloads only what changed, too: the stars that changed, arrived, or
@@ -20344,10 +20349,10 @@ Top to bottom:
 
 - **The titlebar** - live agent count and the fleet-wide pulse: an events-per-
   five-minutes sparkline over the last hour, all kinds, deliberately unfiltered
-  by scope.
-- **A scope strip** - one chip per project with a live agent (`?scope=<slug>`;
-  the empty project scope filters as `global`). Filtering narrows every zone
-  except the pulse.
+  by project.
+- **A project strip** - **all**, then one chip per project with a live agent
+  (`?scope=<slug>`; the global scope filters as `global`). Filtering narrows
+  every zone except the pulse.
 - **On duty** - one card per live session, headed by the title of the task it
   holds, else by its first prompt as the Sessions screen titles its rows, else
   by its session name, with the session name,
@@ -20368,12 +20373,12 @@ Top to bottom:
   clear.
 - **Plans in motion** - a horizontally scrolling rail of every incomplete plan
   across every project, done/in-flight progress bars and ready counts, cards
-  dimmed once a plan has rested for 24h. Each links to its plan's page, or to
-  its project's Plans & tasks tab when the plan has no page in that project (a
-  plan with no narrative note).
+  dimmed once a plan has rested for 24h. Each links to its plan's page, or,
+  for a plan with no narrative note in its project, to that project's Plans &
+  tasks tab (the Plans board for the global scope).
 - **Up next** - the cross-project ready queue: claimable this instant, plan
   steps included, each naming what closing it would unblock.
-- **The wire** - the freshest business events, scope-filtered.
+- **The wire** - the freshest business events, filtered by the project strip.
 
 Everything links onward - sessions, tasks, plans, projects, events - and the
 lease countdowns tick client-side between refreshes. A title wraps to two
@@ -20734,57 +20739,17 @@ longer resolves or its feature is off. A day still to come answers
 
 `/console/projects`
 
-**Locks.** Under [`peer_auth`](/guides/peer-auth/#two-settings-isolation-and-the-lock),
-a confidential or sealed project's Isolation card offers **Lock this project**,
-which opens `/console/lock/<project>`. Locking it, and removing a lock set here,
-each need a passkey already enrolled on the Approvers page; without one the card
-links there. Seamless restarts to apply the change. A project listed under
-`peer_auth.force_locked` shows as **Force locked** and cannot be changed here. A
-locked project's isolation cannot be set to `open`.
-
-**The lock page**, `/console/lock/<project>`, is one card. Its title asks the
-change it offers ("Lock example-conf?", or "Remove the lock on example-conf?"
-for a lock set here), and a ladder of Open, the project's fence (Confidential,
-or Sealed) and Locked marks where the project stands and where the change takes
-it. Two rows say what the change does to the project's own agents and to this
-console, then one passkey button (in the danger tone to remove a lock), with a
-chip saying Seamless restarts to apply it. After the passkey the card shows the
-change's steps, approved, restarting and done, and the page then refreshes in
-place. An open project's card links to its Isolation card instead, and with no
-passkey enrolled it links to the Approvers page. A force lock names
-`peer_auth.force_locked`, with a copy button and a link to unlock the project
-in this browser instead. A change saved but not applied yet says it takes effect
-when Seamless next restarts. The JSON model adds `isolation`, `rung` (`open`,
-`confidential`, `sealed` or `locked`) and `rung_to`.
-
-**The unlock page**, `/console/unlock/<project>`, is the same card for a locked
-project: a lock, the project's name, a **Locked** chip beside the lock's kind
-(**config file**, or **from the console** with a link to remove it), and its
-counts as tiles. With a passkey enrolled, its one primary action is **Unlock for
-3 hours** (the console's lease, shorter when `peer_auth.max_lease` is), and
-**Approve from a terminal** waits under "no passkey here?". With no passkey
-enrolled, passkeys off, or this browser on another address than the passkey's,
-**Approve from a terminal** is the primary action, with a line saying why. It
-turns the card into numbered steps: this browser's code, large, with its time
-left, then the command with a copy button, and **Cancel**. Once the command
-approves the code, the card turns unlocked in place, without a reload. Unlocked
-here, the lock opens, the chip reads **Unlocked here**, the time left shows as a
-bar and in words, and **Open** leads (the project, or the plan, session or
-conversation a locked page sent you from), with **Lock it again now** under it.
-A caller that is not a browser is told an unlock is per browser. The JSON model
-adds `lock_kind`: `file`, `console`, or empty for a removed lock the next
-restart applies.
-
 The board leads with work. Its summary tiles count the agents live, the open
 tasks (in progress, ready, blocked, waiting on people, and any lapsed or
 unclaimed claims), the plans in motion (a plan with a step still open that
 moved in the last 7 days, out of every plan with a step open, the rest
-stalled), then the knowledge base and its reach, judged against its 55% target.
+stalled), then the knowledge base and its reach, judged against its 55% target
+over the **Reach window** the header picks (`?w=`).
 
 Each project is one compact row: its name, with its star and badges
 (isolation, a lock, live agents, and what needs attention), a work line in the
-[task words](#tasks) - "2 plans moving · 1 in progress · 3 ready · 1 blocked ·
-2 waiting on people" - then its open tasks, its last activity (the later of its
+[task words](#tasks) - "2 plans moving · 1 plan stalled · 1 in progress · 3
+ready · 1 blocked · 2 waiting on people" - then its open tasks, its last activity (the later of its
 last session update and its last task change; hover it for the moment in your
 own time) and its reach as a small figure. The whole row opens the project.
 Blocked and waiting on people count exactly what the Tasks page's JSON rails
@@ -20832,12 +20797,17 @@ remembered pair, drawn in place without a reload; a URL that names a view or
 a sort wins. A fresh browser starts on Activity, sorted by Recent.
 
 Selecting a project opens the **project workspace** - a seven-tab page over that
-project alone. It opens on Plans & tasks (`?tab=plans` is the same tab), and a
-load reads and renders only the tab it shows: the header and the tab counts
-come from the project's board row. A tab is a `?tab=` link that loads in place,
-so switching keeps the page, back and forward walk the tabs, and a live
-refresh redraws only the tab on screen. `?from=<project>` with no tab opens
-Memories, and `?isolate=<state>` with no tab opens Overview.
+project alone. It opens on Plans & tasks (`?tab=tasks`), and a load reads and
+renders only the tab it shows: the header and the tab counts come from the
+project's board row. A tab is a `?tab=` link that loads in place, so switching
+keeps the page, back and forward walk the tabs, and a live refresh redraws
+only the tab on screen. `?tab=` takes `tasks`, `overview`, `sessions`,
+`memories`, `notes`, `interactions` and `context`; `?tab=plans` and the
+Context tab's old name, `?tab=relations`, redirect to their tab.
+`?from=<project>` with no tab opens Memories, and `?isolate=<state>` with no
+tab opens Overview. The Interactions and Context tabs are those screens over
+one project, so they follow their level: below Advanced they leave the tab
+bar, and a `?tab=` link still opens them, under the level note.
 
 | Tab | Shows |
 |---|---|
@@ -20859,6 +20829,48 @@ Choosing one (`?from=<project>`) narrows the three tabs to those items, and
 Plans & tasks then lists the tasks themselves, any status. A locked project
 this browser has not unlocked is named only; the items listed are this
 project's own. A project with no stamped item shows no bar.
+
+**Locks.** Under [`peer_auth`](/guides/peer-auth/#two-settings-isolation-and-the-lock),
+a confidential or sealed project's Isolation card offers **Lock this project**,
+which opens `/console/lock/<project>`. Locking it, and removing a lock set here,
+each need a passkey already enrolled on the Approvers page; without one the card
+links there. Seamless restarts to apply the change. A project listed under
+`peer_auth.force_locked` shows as **Force locked** and cannot be changed here. A
+locked project's isolation cannot be set to `open`.
+
+**The lock page**, `/console/lock/<project>`, is one card. Its title asks the
+change it offers ("Lock example-conf?", or "Remove the lock on example-conf?"
+for a lock set here), and a ladder of Open, the project's fence (Confidential,
+or Sealed) and Locked marks where the project stands and where the change takes
+it. Two rows say what the change does to the project's own agents and to this
+console, then one passkey button (in the danger tone to remove a lock), with a
+chip saying Seamless restarts to apply it. After the passkey the card shows the
+change's steps, approved, restarting and done, and the page then refreshes in
+place. An open project's card links to its Isolation card instead, and with no
+passkey enrolled it links to the Approvers page. A force lock names
+`peer_auth.force_locked`, with a copy button and a link to unlock the project
+in this browser instead. A change saved but not applied yet says it takes effect
+when Seamless next restarts. The JSON model adds `isolation`, `rung` (`open`,
+`confidential`, `sealed` or `locked`) and `rung_to`.
+
+**The unlock page**, `/console/unlock/<project>`, is the same card for a locked
+project: a lock, the project's name, a **Locked** chip beside the lock's kind
+(**config file**, **from the console** with a link to remove it, or **lock
+removed** while a removed lock waits for the next restart), and its counts as
+tiles. With a passkey enrolled, its one primary action is **Unlock for
+3 hours** (the console's lease, shorter when `peer_auth.max_lease` is), and
+**Approve from a terminal** waits under "no passkey here?". With no passkey
+enrolled, passkeys off, or this browser on another address than the passkey's,
+**Approve from a terminal** is the primary action, with a line saying why. It
+turns the card into numbered steps: this browser's code, large, with its time
+left, then the command with a copy button, and **Cancel**. Once the command
+approves the code, the card turns unlocked in place, without a reload. Unlocked
+here, the lock opens, the chip reads **Unlocked here**, the time left shows as a
+bar and in words, and **Open** leads (the project, or the plan, session or
+conversation a locked page sent you from), with **Lock it again now** under it.
+A caller that is not a browser is told an unlock is per browser. The JSON model
+adds `lock_kind`: `file`, `console`, or empty for a removed lock the next
+restart applies.
 
 A retired project still renders, with its banner - kept for provenance. Only an
 unknown slug is a 404. An error page under `/console/projects/<slug>` (a
@@ -20969,6 +20981,11 @@ Overview's mishap card and the check-in's mishap count open it too.
   **untyped**: reports that named no type, among them every report written
   before types existed. The counts cover the project and window in view
   whatever type is selected; point at a chip for what its type means.
+- **Your review** - how many reports arrived since you last marked them
+  reviewed, whatever the filters, with **Mark reviewed**, and a **new** mark
+  on each of those reports. Marking them reviewed clears the Overview's
+  mishap card until another report arrives; it marks through the newest
+  report the page drew, so one that arrives while you read stays new.
 - **Reports** - each with its type (or `untyped`), its text with the type
   prefix taken off, its project (click it to keep only that scope's reports),
   the session that reported it with its agent, and the memories it named.
@@ -20976,12 +20993,6 @@ Overview's mishap card and the check-in's mishap count open it too.
 - **Memories named** - every memory the reports in view named, with how many
   named it. A memory many reports name is one that is not preventing its
   mishap.
-
-- **Your review** - how many reports arrived since you last marked them
-  reviewed, whatever the filters, with **Mark reviewed**, and a **new** mark
-  on each of those reports. Marking them reviewed clears the Overview's
-  mishap card until another report arrives; it marks through the newest
-  report the page drew, so one that arrives while you read stays new.
 
 Filters: `?type=` (a type, or `untyped`), `?project=` (a slug, or `global`),
 and the window `?w=24h|7d|30d|all` (all time by default) or `?days=N`. A value
@@ -20996,11 +21007,12 @@ out. The list holds the newest 200.
 
 ## An item's own page {#item-page}
 
-`/console/memories/{id}`, `/console/notes/{id}`, `/console/tasks/{id}`
+`/console/memories/{id}`, `/console/notes/{id}`, `/console/tasks/{id}`,
+`/console/plans/{slug}?project=<slug>`
 
-A link to one memory, note or task opens that item on a page of its own: the
-item and what is around it, never the list it lives in. The lists stay on
-[Memories](#memories), [Notes](#notes) and [Tasks](#tasks).
+A link to one memory, note, task or plan opens that item on a page of its own:
+the item and what is around it, never the list it lives in. The lists stay on
+[Memories](#memories), [Notes](#notes), [Tasks](#tasks) and [Plans](#plans).
 Every item reads the same way:
 
 - **The way back**, top left: a link to the collection scoped to the item's
@@ -21040,8 +21052,7 @@ Every item reads the same way:
     project (its working copies left out, as on the list), and its file path;
   - a task: its plan as a small card with every step and this one marked,
     what it depends on and what it blocks. Its history and earlier versions
-    follow the body.
-
+    follow the body;
   - a plan (`/console/plans/{slug}?project=<slug>`, drawn by
     [Plans](#plans)): its narrative note, the notes attached to it and its
     project. A plan has no place in a list, so its page has no previous or
@@ -21096,7 +21107,7 @@ memories too.
 The project is chosen with the switcher, the **In All projects** button
 (`p` opens it). It lists **All projects**; **Recent**, the projects this
 browser last chose or visited (up to five, kept in this browser only);
-**Starred** projects; then every scope that holds a match, most active first
+**Starred** projects; then every project that holds a match, most active first
 by its latest session or task, as on [Projects](#projects), and **Shared
 globally** last. Each row counts what choosing it would show, the other
 filters applied. Projects with no activity in 30 days fold into one line
@@ -21263,14 +21274,17 @@ what it takes. The JSON model (`?format=json`) carries the rails as before
 the newest closed tasks) with `projects`, `filter` and `counts`, which count
 as the [project board](#projects) does: in progress is a live claim's alone,
 lapsed claims and unclaimed starts are counted apart, and waiting on people is
-the gates and the steps they hold together. It adds the list's `needsYou`
-(the Needs you group, in its order) and `closedRecent` (the tasks closed in
-the last 7 days).
+the gates and the steps they hold together. `counts.open`, the head's **N open**,
+is every unfinished row the list draws, so it also counts the plan steps that
+wait on you, which Needs you draws while plan steps are toggled off. It adds the list's `needsYou`
+(the Needs you group, in its order) and `closedRecent` (how many tasks closed
+in the last 7 days).
 
 A task's own page and the panel carry the task's body, claim and lease state,
 both dependency directions, its **History**, and the owner's actions on the
 task, the same as the peek (the step dossier on a project's Plans & tasks tab):
-**Mark done** and **Drop** on an open or in-progress task, **Reopen** on a
+**Mark done** and **Drop** on an open or in-progress task (a gate whose gate is
+still open closes by **Mark as handled** instead of Mark done), **Reopen** on a
 closed one, **Mark as handled** with a note on an open gate, **Waits on
 someone** on an open or in-progress task whose own gate is not open (who must
 act and what must happen, the decision and when it is ready optional: the
@@ -21427,8 +21441,8 @@ order, each with its word, holder and the gates it waits on).
 
 Each plan also carries a **model tokens** rollup - the cumulative transcript
 tokens of every session attributed to the plan (any session that moved a step,
-or captured the plan) - compact in the rail (`~483k tok`) and qualified in the
-reader (`~483k model tokens · 3 sessions (1 unreported)`). Attribution is
+or captured the plan) - compact on its card (`~483k tok`) and qualified on its
+page (`~483k model tokens · 3 sessions (1 unreported)`). Attribution is
 whole-session on purpose: tokens are only ever known per session, so a
 session's full burn counts toward each plan it touched, counted once however
 many steps it moved. Claude Code reports tokens at session end (and, while the
@@ -21486,10 +21500,10 @@ The briefing topology that the plans board does not show: which knowledge pools
 are eligible at SessionStart, which configured edges are currently enabled by
 the effective briefing settings, and where project splits moved durable memory.
 It covers global memory, one-way parent-memory inheritance, bidirectional sibling
-families (findings and the opt-in memory channel), unregistered-scope warnings,
+families (findings and the opt-in memory channel), unregistered-project warnings,
 and retired-project split lineage reconstructed from the memory-move event log.
 
-`?scope=all` renders every known project scope, with global memory shown as the
+`?scope=all` (**All projects**) renders every known project, with global memory shown as the
 shared source pool; `?scope=project&project=<slug>` focuses the same topology on
 one project. The legacy `/console/relations` route permanently redirects here
 and preserves its query string.
@@ -21513,7 +21527,7 @@ Five zones below it:
    active memories are still waiting to surface).
 2. **Circulation pattern** - the injection trend chart and the traffic-by-kind
    mix.
-3. **Scope coverage** - reach per project scope (global first), each row with
+3. **Project coverage** - reach per project (the global scope first), each row with
    its own reach rate and injection count.
 4. **Knowledge pressure** - the most-injected memories against **quiet
    knowledge**: active memories not updated, injected, or read within
@@ -21544,7 +21558,8 @@ Five zones below it:
    exempt as pinned-by-design) - the evidence behind the gardener's dead-weight
    archive proposals. Its rows link to a waiting proposal the same way.
 
-Reachable from the Overview's retrieval-health card.
+Reachable from the Overview's reach, injections and sessions-reached vitals
+and its going-stale card, at Advanced.
 
 ## Gardener
 
@@ -21559,13 +21574,17 @@ parent, and the **knowledge gap**
 card with the queries agents kept searching for in vain - applying that one
 opens a task; nothing is written until someone writes the memory.
 
-Split batches are grouped by plan and reviewed together, setup card first, with an
-apply-the-whole-plan action.
+Split batches are grouped by plan and reviewed together, setup card first, with
+**Apply whole plan** and **Dismiss all N**.
 
-The queue is the first thing under the head: one line says who may apply a
+Under the head and its status line (below), one line says who may apply a
 proposal and which kinds apply automatically, with a link to **Settings ›
 Gardener**, and **Ask for a cleanup** is a button that unfolds the ask box
-(with no chat model configured it is one line pointing at Settings). The
+(with no chat model configured it is one line pointing at Settings); the queue
+follows, as a rail of proposals beside the reader. From the Standard level,
+**Type** (All, Split plans, Errors & gaps, Memory cleanup, Plan settlements,
+Digests: `?group=`) and **Source** (All, Asked by you, Background: `?src=`)
+narrow the rail. The
 reader says why each proposal was raised in a plain sentence. A merge shows
 both memories side by side - each body, when it last changed, when it was
 last delivered and how often - and **Swap** keeps the other one instead; an
@@ -21596,8 +21615,11 @@ are off", no pass is offered, and the upkeep the same schedule carries (idle
 sessions reaped, old tool events pruned, retrieval stats refreshed) still runs.
 The line carries no counts: a pass spans every project, a locked one included.
 
-The actions are **apply**, **dismiss**, **hide forever**, **retarget**
-(reproject cards only), and **apply plan**. Dismissing answers the evidence in
+The reader's actions are **Apply change** (which asks in the page first when it
+cannot be undone), **Dismiss suggestion**, **Hide forever** (from the Standard
+level), **Retarget** (reproject cards only, from the Standard level) and
+**Swap** (merge cards only); a
+split plan's are **Apply whole plan** and **Dismiss all N**. Dismissing answers the evidence in
 front of you - the pattern comes back if it recurs; hiding answers the pattern
 itself. A proposal changes nothing until it is applied - by you here, by an
 agent with `gardener_apply` while agents may apply proposals, or, for a kind
@@ -21609,8 +21631,8 @@ agent, by its session's name when a session made the call; automatic apply;
 the gardener settling a proposal whose memory had gone inactive; or unknown
 for a decision made before this was recorded), the note or task an apply
 produced, and Undo wherever it can be taken back. A hide is additionally listed under **Hidden forever**, where
-**Unhide** lifts the block without returning the proposal to the queue. Above
-them sits a single ask-in-words box, and it only ever
+**Unhide** lifts the block without returning the proposal to the queue. The
+ask box under **Ask for a cleanup** only ever
 produces more proposals for this same queue. A request recognized as a project
 split is planned as a split directly - the plan batch appears below like any
 other. When the split's source project cannot be matched, an inline follow-up
@@ -21850,10 +21872,13 @@ chip, which says where they come from: **Config file** (the config file and its
 environment variables, or the build's default), or **Set here** with **Reset**,
 which hands them back to the config file. The chip's hint says more. A value
 the config file makes final reads **Config file decides**, said once in its
-section, and the control it governs is disabled. The editable forms also share
-a save bar that appears at the bottom once a form has unsaved changes, with
-**Save** and **Discard** (which puts the form back exactly as the page loaded
-it); without JavaScript the bar is simply always there. `GET
+section, and the control it governs is disabled. Switches save at once, with
+**Undo** in the toast ([the shared part](#shared-parts)): Features, Updates,
+Gardener and Knowledge engine's ranking rows. A form with a typed value
+(Briefing, and the Backups schedule and folder) keeps a save bar that appears
+at the bottom once it has unsaved changes, with **Save** and **Discard**
+(which puts the form back exactly as the page loaded it); without JavaScript
+the bar is simply always there. `GET
 /console/settings?format=json` returns the whole payload whatever `?s=` says,
 plus `consoleLevel`, `consoleLevelOverridden`, `consoleLevelSource`, and
 `sectionStatus`: each section's state as `{"word", "tone"}` by section id
@@ -21870,21 +21895,21 @@ screens, then its Settings sections, each with a gear. The finer controls a
 level adds inside pages fold into a **+N details** chip, whose
 [hint](#shared-parts) lists them. All of it is generated from the same
 registries the sidebar and the page gates read, so a card cannot promise
-something the level does not do. Choosing one is the card's **Use** button, and
-it applies at once: the sidebar and the page update in place, and if the new level
+something the level does not do. Choosing one is the card's **Use** button
+(**Use Standard**, say), and it applies at once: the sidebar and the page update in place, and if the new level
 hides the screen you were on you land on the Overview with a note. The source chip
 says **Config file**, or **Set here** once a level is stored, whether you chose it
 in this console or the upgrade set it (its hint says which); **Reset** hands the
 choice back to `console.level`. Below the cards, one card holds two rows:
 **Theme**, and **Keyboard** (`?` for every shortcut, `⌘K` to search or jump,
-and a button for the shortcut sheet). The theme is
+and **Show shortcuts**, which opens the shortcut sheet). The theme is
 **System**, **Light**, or **Dark**, kept per browser. System is what a browser
 starts on: it follows your computer's light or dark appearance, and follows it
 live when it changes. Light and Dark pin one theme. The sidebar's sun and moon
 switch the same setting: under System they pin the theme opposite the one on
 screen, and picking System here goes back to following the computer.
 
-### Optional features
+### Features {#optional-features}
 
 `/console/settings?s=features`
 
@@ -22035,7 +22060,7 @@ off" page that links back here (a JSON caller gets a 403), and switching it back
 on restores every surface exactly as it was. That is what the data-kept chip on
 each row is for - it reports the feature's own rows whether it is on or off.
 
-**When the change lands** has four different answers:
+**When the change lands** depends on the surface:
 
 | Surface | When |
 |---|---|

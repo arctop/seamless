@@ -7,7 +7,7 @@
     <div class="session-detail-identity">
       <span class="tile session-detail-tile">{{icon "terminal"}}</span>
       <div class="session-detail-heading">
-        <span class="session-detail-eyebrow">Agent workspace</span>
+        <span class="session-detail-eyebrow">Agent session</span>
         <div class="session-detail-title-row">
           <h1>{{if .Session.Name}}{{.Session.Name}}{{else}}{{shortID .Session.ID}}{{end}}</h1>
           {{if eq .Session.Status "active"}}

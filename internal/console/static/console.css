@@ -9801,3 +9801,20 @@ html:not(.js) .brief-preview { display: none; }
   .eng-card > .set-row, .ur-fold > .set-row, .eng-card-head, .eng-note, .eng-empty, .ur-fold > summary, .eng-storage-row { padding-right: 14px; padding-left: 14px; }
   .brief-knobs { padding-right: 14px; padding-left: 14px; }
 }
+
+/* UX 24: the final walk's phone-width fixes. A session row's title (what the
+   session is doing) gets its own line or two under 720px instead of an
+   ellipsis after a word, with its chips on the next; Now's zone heads wrap
+   their note under the title rather than squeezing it to one word a line. */
+@media (max-width: 720px) {
+  .sess-row .id-line { flex-wrap: wrap; row-gap: 4px; }
+  .sess-row .id-line a.sess-headline { flex: 1 1 100%; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+}
+/* The Updates switches save at once; without script each form keeps a Save
+   button, as Features and Gardener do. */
+.js .up-save { display: none; }
+.now-zone-head { flex-wrap: wrap; row-gap: 2px; }
+.now-zone-head h2 { white-space: nowrap; }
+@media (max-width: 720px) {
+  .now-zone-note { order: 3; flex-basis: 100%; }
+}

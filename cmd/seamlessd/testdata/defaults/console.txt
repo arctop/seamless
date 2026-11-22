@@ -834,12 +834,12 @@
     </header>
     <div class="sky-body" id="sky-body">
       <div class="sky-chart">
-        <svg class="sky-svg" viewBox="0 0 600 600" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Knowledge sky: 6 active memories in 4 scopes, placed by when each last surfaced to an agent: 5 in the last 24 hours, 0 within 7 days, 0 within 90 days, 0 longer ago, 1 never." data-c="300" data-core="38" data-rim="262"><defs id="sky-defs"><radialGradient id="sky-core-glow"><stop offset="0" class="sky-core-stop0"/><stop offset=".6" class="sky-core-stop1"/><stop offset="1" class="sky-core-stop2"/></radialGradient><radialGradient id="sky-h-constraint"><stop offset="0" style="stop-color:var(--k-constraint);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-constraint);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-constraint);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-convention"><stop offset="0" style="stop-color:var(--k-convention);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-convention);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-convention);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-runbook"><stop offset="0" style="stop-color:var(--k-runbook);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-runbook);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-runbook);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-protocol"><stop offset="0" style="stop-color:var(--k-protocol);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-protocol);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-protocol);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-gotcha"><stop offset="0" style="stop-color:var(--k-gotcha);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-gotcha);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-gotcha);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-decision"><stop offset="0" style="stop-color:var(--k-decision);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-decision);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-decision);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-refuted"><stop offset="0" style="stop-color:var(--k-refuted);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-refuted);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-refuted);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-reference"><stop offset="0" style="stop-color:var(--k-reference);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-reference);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-reference);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-stage"><stop offset="0" style="stop-color:var(--k-stage);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-stage);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-stage);stop-opacity:0"/></radialGradient><path id="sky-lp-0" d="M322.1 578.1A279.0 279.0 0 0 0 343.6 24.4"/><path id="sky-lp-1" d="M74.4 464.1A279.0 279.0 0 0 0 308.0 578.9"/><path id="sky-lp-2" d="M42.2 193.3A279.0 279.0 0 0 0 66.4 452.5"/><path id="sky-lp-3" d="M54.3 183.4A272.0 272.0 0 0 1 257.4 31.3"/></defs><g class="sky-grid" id="sky-grid"><circle class="sky-field" cx="300" cy="300" r="262"/><circle class="sky-tint" data-b="3" cx="300" cy="300" r="233.5" stroke-width="8.6"/><circle class="sky-tint" data-b="4" cx="300" cy="300" r="249.9" stroke-width="24.2"/><circle class="sky-ring" data-b="0" cx="300" cy="300" r="214.0"/><circle class="sky-ring" data-b="1" cx="300" cy="300" r="223.2"/><circle class="sky-ring" data-b="2" cx="300" cy="300" r="229.2"/><circle class="sky-ring" data-b="3" cx="300" cy="300" r="237.8"/><circle class="sky-rim" cx="300" cy="300" r="262"/><path class="sky-spokes" d="M305.7 259.4L336.5 40.5M301.9 341.0L312.1 561.7M266.1 323.0L83.1 447.0M262.7 283.1L61.4 191.8M294.3 259.4L263.5 40.5"/></g><g class="sky-wedges" id="sky-wedges"><path id="sky-w-0" class="sky-wedge" data-w="0" data-p="example-open-alpha" data-a0="0.1396" data-a1="3.0796" d="M336.5 40.5A262.0 262.0 0 0 1 316.2 561.5L302.4 337.9A38.0 38.0 0 0 0 305.3 262.4Z"/><path id="sky-w-1" class="sky-wedge" data-w="1" data-p="" data-a0="3.0953" data-a1="4.1009" d="M312.1 561.7A262.0 262.0 0 0 1 85.5 450.4L268.9 321.8A38.0 38.0 0 0 0 301.8 338.0Z"/><path id="sky-w-2" class="sky-wedge" data-w="2" data-p="example-confidential" data-a0="4.1166" data-a1="5.1223" d="M83.1 447.0A262.0 262.0 0 0 1 59.7 195.6L265.1 284.9A38.0 38.0 0 0 0 268.5 321.3Z"/><path id="sky-w-3" class="sky-wedge" data-w="3" data-p="example-sealed" data-a0="5.1380" data-a1="6.1436" d="M61.4 191.8A262.0 262.0 0 0 1 263.5 40.5L294.7 262.4A38.0 38.0 0 0 0 265.4 284.3Z"/></g><g class="sky-ticks" id="sky-ticks"><text class="sky-tick" data-b="0" x="300" y="86.0">24h</text><text class="sky-tick" data-b="1" x="300" y="76.8">7d</text><text class="sky-tick" data-b="2" x="300" y="70.8">90d</text><text class="sky-tick" data-b="4" x="300" y="50.1">never</text></g><g class="sky-labels" id="sky-labels"><text class="sky-label" data-w="0"><textPath href="#sky-lp-0" startOffset="50%" text-anchor="middle">example-open-alpha<tspan class="sky-count" dx="5">3</tspan></textPath></text><text class="sky-label" data-w="1"><textPath href="#sky-lp-1" startOffset="50%" text-anchor="middle">global<tspan class="sky-count" dx="5">1</tspan></textPath></text><text class="sky-label" data-w="2"><textPath href="#sky-lp-2" startOffset="50%" text-anchor="middle">example-confidential<tspan class="sky-count" dx="5">1</tspan></textPath></text><text class="sky-label" data-w="3"><textPath href="#sky-lp-3" startOffset="50%" text-anchor="middle">example-sealed<tspan class="sky-count" dx="5">1</tspan></textPath></text></g><g class="sky-core" id="sky-core" data-sky-core><circle class="sky-core-glow" cx="300" cy="300" r="72.2"/><circle class="sky-core-ring" cx="300" cy="300" r="32"/><text class="sky-core-n" x="300" y="303">5</text><text class="sky-core-l" x="300" y="316">last 24h</text></g><g class="sky-stars" id="sky-stars"><g id="s-<id:2>" class="st warm new" style="transform:translate(<xy>);--d:<phase>" data-x="<n>" data-y="<n>" data-k="constraint" data-b="0" data-p="example-open-alpha" data-n="example-deploy-gate" data-d="Every example deploy goes through the staging gate first" data-g="deploy example" data-t="<unix>" data-c="<unix>" data-i="7" data-r="3"><circle class="dot" r="3.95"/><path class="spk" d="M-8.0 0H8.0M0 -8.0V8.0"/></g><g id="s-<id:3>" class="st warm new" style="transform:translate(<xy>);--d:<phase>" data-x="<n>" data-y="<n>" data-k="convention" data-b="0" data-p="example-open-alpha" data-n="example-layout-convention" data-d="Example services keep their configs under deploy/example" data-t="<unix>" data-c="<unix>" data-i="4" data-r="1"><circle class="dot" r="3.75"/><path class="spk" d="M-7.7 0H7.7M0 -7.7V7.7"/></g><g id="s-<id:4>" class="st warm new" style="transform:translate(<xy>);--d:<phase>" data-x="<n>" data-y="<n>" data-k="stage" data-b="0" data-p="example-open-alpha" data-n="example-migration-stage" data-d="The example data migration waits on the owner&#39;s sign-off" data-g="migration" data-t="<unix>" data-c="<unix>" data-i="4"><circle class="dot" r="3.40"/><path class="spk" d="M-7.4 0H7.4M0 -7.4V7.4"/></g><g id="s-<id:6>" class="st warm new" style="transform:translate(<xy>);--d:<phase>" data-x="<n>" data-y="<n>" data-k="reference" data-b="0" data-p="" data-n="example-style-reference" data-d="Where the shared example style guide lives" data-t="<unix>" data-c="<unix>" data-i="7"><circle class="dot" r="3.61"/><path class="spk" d="M-7.6 0H7.6M0 -7.6V7.6"/></g><g id="s-<id:21>" class="st warm new" style="transform:translate(<xy>);--d:<phase>" data-x="<n>" data-y="<n>" data-k="gotcha" data-b="0" data-p="example-confidential" data-n="example-confidential-gotcha" data-d="The confidential example ledger closes on the fifth" data-t="<unix>" data-c="<unix>" data-i="3"><circle class="dot" r="3.40"/><path class="spk" d="M-7.4 0H7.4M0 -7.4V7.4"/></g><g id="s-<id:26>" class="st new" style="transform:translate(<xy>)" data-x="<n>" data-y="<n>" data-k="gotcha" data-b="4" data-p="example-sealed" data-n="example-sealed-rule" data-d="The sealed example vault rotates keys weekly" data-c="<unix>"><circle class="dot" r="1.50"/><path class="spk" d="M-5.5 0H5.5M0 -5.5V5.5"/></g></g><g class="sky-fx" data-live-skip></g></svg>
+        <svg class="sky-svg" viewBox="0 0 600 600" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Knowledge sky: 6 active memories in 4 projects, placed by when each last surfaced to an agent: 5 in the last 24 hours, 0 within 7 days, 0 within 90 days, 0 longer ago, 1 never." data-c="300" data-core="38" data-rim="262"><defs id="sky-defs"><radialGradient id="sky-core-glow"><stop offset="0" class="sky-core-stop0"/><stop offset=".6" class="sky-core-stop1"/><stop offset="1" class="sky-core-stop2"/></radialGradient><radialGradient id="sky-h-constraint"><stop offset="0" style="stop-color:var(--k-constraint);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-constraint);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-constraint);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-convention"><stop offset="0" style="stop-color:var(--k-convention);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-convention);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-convention);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-runbook"><stop offset="0" style="stop-color:var(--k-runbook);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-runbook);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-runbook);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-protocol"><stop offset="0" style="stop-color:var(--k-protocol);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-protocol);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-protocol);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-gotcha"><stop offset="0" style="stop-color:var(--k-gotcha);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-gotcha);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-gotcha);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-decision"><stop offset="0" style="stop-color:var(--k-decision);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-decision);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-decision);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-refuted"><stop offset="0" style="stop-color:var(--k-refuted);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-refuted);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-refuted);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-reference"><stop offset="0" style="stop-color:var(--k-reference);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-reference);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-reference);stop-opacity:0"/></radialGradient><radialGradient id="sky-h-stage"><stop offset="0" style="stop-color:var(--k-stage);stop-opacity:.5"/><stop offset=".45" style="stop-color:var(--k-stage);stop-opacity:.14"/><stop offset="1" style="stop-color:var(--k-stage);stop-opacity:0"/></radialGradient><path id="sky-lp-0" d="M322.1 578.1A279.0 279.0 0 0 0 343.6 24.4"/><path id="sky-lp-1" d="M74.4 464.1A279.0 279.0 0 0 0 308.0 578.9"/><path id="sky-lp-2" d="M42.2 193.3A279.0 279.0 0 0 0 66.4 452.5"/><path id="sky-lp-3" d="M54.3 183.4A272.0 272.0 0 0 1 257.4 31.3"/></defs><g class="sky-grid" id="sky-grid"><circle class="sky-field" cx="300" cy="300" r="262"/><circle class="sky-tint" data-b="3" cx="300" cy="300" r="233.5" stroke-width="8.6"/><circle class="sky-tint" data-b="4" cx="300" cy="300" r="249.9" stroke-width="24.2"/><circle class="sky-ring" data-b="0" cx="300" cy="300" r="214.0"/><circle class="sky-ring" data-b="1" cx="300" cy="300" r="223.2"/><circle class="sky-ring" data-b="2" cx="300" cy="300" r="229.2"/><circle class="sky-ring" data-b="3" cx="300" cy="300" r="237.8"/><circle class="sky-rim" cx="300" cy="300" r="262"/><path class="sky-spokes" d="M305.7 259.4L336.5 40.5M301.9 341.0L312.1 561.7M266.1 323.0L83.1 447.0M262.7 283.1L61.4 191.8M294.3 259.4L263.5 40.5"/></g><g class="sky-wedges" id="sky-wedges"><path id="sky-w-0" class="sky-wedge" data-w="0" data-p="example-open-alpha" data-a0="0.1396" data-a1="3.0796" d="M336.5 40.5A262.0 262.0 0 0 1 316.2 561.5L302.4 337.9A38.0 38.0 0 0 0 305.3 262.4Z"/><path id="sky-w-1" class="sky-wedge" data-w="1" data-p="" data-a0="3.0953" data-a1="4.1009" d="M312.1 561.7A262.0 262.0 0 0 1 85.5 450.4L268.9 321.8A38.0 38.0 0 0 0 301.8 338.0Z"/><path id="sky-w-2" class="sky-wedge" data-w="2" data-p="example-confidential" data-a0="4.1166" data-a1="5.1223" d="M83.1 447.0A262.0 262.0 0 0 1 59.7 195.6L265.1 284.9A38.0 38.0 0 0 0 268.5 321.3Z"/><path id="sky-w-3" class="sky-wedge" data-w="3" data-p="example-sealed" data-a0="5.1380" data-a1="6.1436" d="M61.4 191.8A262.0 262.0 0 0 1 263.5 40.5L294.7 262.4A38.0 38.0 0 0 0 265.4 284.3Z"/></g><g class="sky-ticks" id="sky-ticks"><text class="sky-tick" data-b="0" x="300" y="86.0">24h</text><text class="sky-tick" data-b="1" x="300" y="76.8">7d</text><text class="sky-tick" data-b="2" x="300" y="70.8">90d</text><text class="sky-tick" data-b="4" x="300" y="50.1">never</text></g><g class="sky-labels" id="sky-labels"><text class="sky-label" data-w="0"><textPath href="#sky-lp-0" startOffset="50%" text-anchor="middle">example-open-alpha<tspan class="sky-count" dx="5">3</tspan></textPath></text><text class="sky-label" data-w="1"><textPath href="#sky-lp-1" startOffset="50%" text-anchor="middle">global<tspan class="sky-count" dx="5">1</tspan></textPath></text><text class="sky-label" data-w="2"><textPath href="#sky-lp-2" startOffset="50%" text-anchor="middle">example-confidential<tspan class="sky-count" dx="5">1</tspan></textPath></text><text class="sky-label" data-w="3"><textPath href="#sky-lp-3" startOffset="50%" text-anchor="middle">example-sealed<tspan class="sky-count" dx="5">1</tspan></textPath></text></g><g class="sky-core" id="sky-core" data-sky-core><circle class="sky-core-glow" cx="300" cy="300" r="72.2"/><circle class="sky-core-ring" cx="300" cy="300" r="32"/><text class="sky-core-n" x="300" y="303">5</text><text class="sky-core-l" x="300" y="316">last 24h</text></g><g class="sky-stars" id="sky-stars"><g id="s-<id:2>" class="st warm new" style="transform:translate(<xy>);--d:<phase>" data-x="<n>" data-y="<n>" data-k="constraint" data-b="0" data-p="example-open-alpha" data-n="example-deploy-gate" data-d="Every example deploy goes through the staging gate first" data-g="deploy example" data-t="<unix>" data-c="<unix>" data-i="7" data-r="3"><circle class="dot" r="3.95"/><path class="spk" d="M-8.0 0H8.0M0 -8.0V8.0"/></g><g id="s-<id:3>" class="st warm new" style="transform:translate(<xy>);--d:<phase>" data-x="<n>" data-y="<n>" data-k="convention" data-b="0" data-p="example-open-alpha" data-n="example-layout-convention" data-d="Example services keep their configs under deploy/example" data-t="<unix>" data-c="<unix>" data-i="4" data-r="1"><circle class="dot" r="3.75"/><path class="spk" d="M-7.7 0H7.7M0 -7.7V7.7"/></g><g id="s-<id:4>" class="st warm new" style="transform:translate(<xy>);--d:<phase>" data-x="<n>" data-y="<n>" data-k="stage" data-b="0" data-p="example-open-alpha" data-n="example-migration-stage" data-d="The example data migration waits on the owner&#39;s sign-off" data-g="migration" data-t="<unix>" data-c="<unix>" data-i="4"><circle class="dot" r="3.40"/><path class="spk" d="M-7.4 0H7.4M0 -7.4V7.4"/></g><g id="s-<id:6>" class="st warm new" style="transform:translate(<xy>);--d:<phase>" data-x="<n>" data-y="<n>" data-k="reference" data-b="0" data-p="" data-n="example-style-reference" data-d="Where the shared example style guide lives" data-t="<unix>" data-c="<unix>" data-i="7"><circle class="dot" r="3.61"/><path class="spk" d="M-7.6 0H7.6M0 -7.6V7.6"/></g><g id="s-<id:21>" class="st warm new" style="transform:translate(<xy>);--d:<phase>" data-x="<n>" data-y="<n>" data-k="gotcha" data-b="0" data-p="example-confidential" data-n="example-confidential-gotcha" data-d="The confidential example ledger closes on the fifth" data-t="<unix>" data-c="<unix>" data-i="3"><circle class="dot" r="3.40"/><path class="spk" d="M-7.4 0H7.4M0 -7.4V7.4"/></g><g id="s-<id:26>" class="st new" style="transform:translate(<xy>)" data-x="<n>" data-y="<n>" data-k="gotcha" data-b="4" data-p="example-sealed" data-n="example-sealed-rule" data-d="The sealed example vault rotates keys weekly" data-c="<unix>"><circle class="dot" r="1.50"/><path class="spk" d="M-5.5 0H5.5M0 -5.5V5.5"/></g></g><g class="sky-fx" data-live-skip></g></svg>
         <div class="sky-tip" data-live-skip hidden></div>
       </div>
       <aside class="sky-side" aria-label="Sky readout">
         <div class="sky-find" data-live-skip>
-          <label class="sky-search"><svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><input type="search" data-sky-q placeholder="Find a memory" autocomplete="off" spellcheck="false" aria-label="Find a memory by name, description, tag, or scope"></label>
+          <label class="sky-search"><svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><input type="search" data-sky-q placeholder="Find a memory" autocomplete="off" spellcheck="false" aria-label="Find a memory by name, description, tag, or project"></label>
         </div>
         <div class="sky-view" data-live-skip aria-live="polite"></div>
         
@@ -884,7 +884,7 @@
             
           </div>
           
-          <h3 class="sky-eyebrow">Scopes <span>4</span></h3>
+          <h3 class="sky-eyebrow">Projects <span>4</span></h3>
           <div class="sky-scopes">
             
             <button type="button" class="sky-scope" data-sky-scope="example-open-alpha" data-name="example-open-alpha" data-href="/console/projects/example-open-alpha?tab=memories" aria-pressed="false">
@@ -3353,7 +3353,6 @@
   var PANEL = '.tabpanel[data-panel="tasks"], [data-plan-scope]';
   function scopeOf(el) { return el && el.closest ? el.closest(PANEL) : null; }
   function inPanel(el) { return !!scopeOf(el); }
-  function pad(n) { return (n < 10 ? '0' : '') + n; }
 
   function fill(box) {
     var src = box.getAttribute('data-dossier');
@@ -3472,8 +3471,10 @@
         el.classList.remove('lease-warn');
         return;
       }
-      if (left >= 3600) v.textContent = Math.floor(left / 3600) + 'h ' + Math.floor((left % 3600) / 60) + 'm';
-      else v.textContent = Math.floor(left / 60) + ':' + pad(left % 60);
+      
+      
+      if (left >= 3600) v.textContent = Math.floor(left / 3600) + 'h ' + Math.floor((left % 3600) / 60) + 'm left';
+      else v.textContent = left < 60 ? '<1m left' : Math.floor(left / 60) + 'm left';
       el.classList.remove('lease-lapsed');
       el.classList.toggle('lease-warn', left < 300);
     });
@@ -5027,7 +5028,6 @@
   var PANEL = '.tabpanel[data-panel="tasks"], [data-plan-scope]';
   function scopeOf(el) { return el && el.closest ? el.closest(PANEL) : null; }
   function inPanel(el) { return !!scopeOf(el); }
-  function pad(n) { return (n < 10 ? '0' : '') + n; }
 
   function fill(box) {
     var src = box.getAttribute('data-dossier');
@@ -5146,8 +5146,10 @@
         el.classList.remove('lease-warn');
         return;
       }
-      if (left >= 3600) v.textContent = Math.floor(left / 3600) + 'h ' + Math.floor((left % 3600) / 60) + 'm';
-      else v.textContent = Math.floor(left / 60) + ':' + pad(left % 60);
+      
+      
+      if (left >= 3600) v.textContent = Math.floor(left / 3600) + 'h ' + Math.floor((left % 3600) / 60) + 'm left';
+      else v.textContent = left < 60 ? '<1m left' : Math.floor(left / 60) + 'm left';
       el.classList.remove('lease-lapsed');
       el.classList.toggle('lease-warn', left < 300);
     });
@@ -7318,7 +7320,7 @@ Wave one is the staging ... </div>
           <div class="search-result-titleline">
             <strong><a href="/console/tasks/<id:30>" data-peek>Implement plan: Example deploy plan</a></strong><button type="button" class="copy-btn" data-copy="Implement plan: Example deploy plan" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
           </div>
-          <div class="search-result-desc">open</div>
+          <div class="search-result-desc">ready</div>
           <div class="search-result-meta">
             <span class="search-kind">task</span>
             
@@ -7793,11 +7795,11 @@ Wave one is the staging ... </div>
     <header class="retrieval-zone-head">
       <div class="retrieval-zone-index">03</div>
       <div>
-        <div class="retrieval-zone-kicker">Scope coverage</div>
+        <div class="retrieval-zone-kicker">Project coverage</div>
         <h2 id="retrieval-scopes-title">Where knowledge reached</h2>
         <p>Compare each project&rsquo;s surfaced memories with its active knowledge base.</p>
       </div>
-      <span class="retrieval-zone-meta">4 scopes</span>
+      <span class="retrieval-zone-meta">4 projects</span>
     </header>
 
     
@@ -8044,9 +8046,9 @@ Wave one is the staging ... </div>
 
 <div class="context-page">
   <header class="mv2-bar">
-    <h1><svg class="ico ico-share-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>Context</h1><details class="page-about"><summary aria-label="About this page" title="About this page"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary><p class="page-about-pop" role="note">How SessionStart knowledge crosses scope boundaries: global memory, shared parents, sibling families, and split lineage.</p></details>
+    <h1><svg class="ico ico-share-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>Context</h1><details class="page-about"><summary aria-label="About this page" title="About this page"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary><p class="page-about-pop" role="note">How SessionStart knowledge crosses project boundaries: global memory, shared parents, sibling families, and split lineage.</p></details>
     <span class="mv2-count" aria-label="Context topology summary">
-      <strong>6</strong>scopes<small>0 parent links &middot; 0 families</small>
+      <strong>6</strong>projects<small>0 parent links &middot; 0 families</small>
     </span>
     
     <button type="button" class="mv2-filter-toggle" data-filters-toggle aria-expanded="false" aria-controls="mv2-controls"><svg class="ico ico-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg><span>Filters</span></button>
@@ -8054,14 +8056,14 @@ Wave one is the staging ... </div>
     <div class="mv2-controls" id="mv2-controls">
     <div class="mv2-sort">
       <span class="mv2-sort-label">View</span>
-      <div class="seg" data-seam-query><a class="on" href="/console/context">All scopes</a></div>
+      <div class="seg" data-seam-query><a class="on" href="/console/context">All projects</a></div>
     </div>
     
     <form class="context-picker" method="get" action="/console/context" data-seam-query>
       <input type="hidden" name="scope" value="project">
       <label for="context-project">Focus project</label>
       <select id="context-project" name="project" required>
-        <option value="" disabled selected>Choose a scope&hellip;</option>
+        <option value="" disabled selected>Choose a project&hellip;</option>
         <option value="example-confidential">example-confidential</option><option value="example-open-alpha">example-open-alpha</option><option value="example-open-beta">example-open-beta</option><option value="example-open-delta">Example Open Delta</option><option value="example-open-gamma">example-open-gamma</option><option value="example-sealed">example-sealed</option>
       </select>
       <button class="btn small" type="submit">Focus</button>
@@ -8078,7 +8080,7 @@ Wave one is the staging ... </div>
 <section class="context-rule-grid" aria-label="Effective briefing flow rules">
   <article class="context-rule active">
     <span class="context-rule-icon global"><svg class="ico ico-database" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg></span>
-    <div><span class="context-rule-label">Global memory</span><strong>1 active</strong><small>eligible in 6 known project scopes</small></div>
+    <div><span class="context-rule-label">Global memory</span><strong>1 active</strong><small>eligible in 6 known projects</small></div>
     <span class="context-rule-state on">always on</span>
   </article>
   <article class="context-rule active">
@@ -8100,7 +8102,7 @@ Wave one is the staging ... </div>
 
 <section class="context-section" aria-labelledby="context-scopes-title">
   <header class="context-section-head">
-    <div><span class="context-section-kicker">Briefing paths</span><h2 id="context-scopes-title">Scope-by-scope context flow</h2></div>
+    <div><span class="context-section-kicker">Briefing paths</span><h2 id="context-scopes-title">Project-by-project context flow</h2></div>
     <span class="context-section-note">Active memories are eligibility pools; age and token-budget trims still apply.</span>
   </header>
   
@@ -8111,7 +8113,7 @@ Wave one is the staging ... </div>
         <span class="tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
         <div class="context-scope-identity">
           <div class="context-scope-title"><a href="/console/projects/example-confidential?tab=context">example-confidential</a></div>
-          <span class="context-role">standalone scope</span>
+          <span class="context-role">standalone project</span>
         </div>
         <a class="context-focus-link" href="/console/context?scope=project&amp;project=example-confidential">focus <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
       </header>
@@ -8145,7 +8147,7 @@ Wave one is the staging ... </div>
         <span class="tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
         <div class="context-scope-identity">
           <div class="context-scope-title"><a href="/console/projects/example-open-alpha?tab=context">example-open-alpha</a></div>
-          <span class="context-role">standalone scope</span>
+          <span class="context-role">standalone project</span>
         </div>
         <a class="context-focus-link" href="/console/context?scope=project&amp;project=example-open-alpha">focus <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
       </header>
@@ -8179,7 +8181,7 @@ Wave one is the staging ... </div>
         <span class="tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
         <div class="context-scope-identity">
           <div class="context-scope-title"><a href="/console/projects/example-open-beta?tab=context">example-open-beta</a></div>
-          <span class="context-role">standalone scope</span>
+          <span class="context-role">standalone project</span>
         </div>
         <a class="context-focus-link" href="/console/context?scope=project&amp;project=example-open-beta">focus <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
       </header>
@@ -8213,7 +8215,7 @@ Wave one is the staging ... </div>
         <span class="tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
         <div class="context-scope-identity">
           <div class="context-scope-title"><a href="/console/projects/example-open-delta?tab=context">Example Open Delta</a><span class="mono">example-open-delta</span></div>
-          <span class="context-role">standalone scope</span>
+          <span class="context-role">standalone project</span>
         </div>
         <a class="context-focus-link" href="/console/context?scope=project&amp;project=example-open-delta">focus <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
       </header>
@@ -8247,7 +8249,7 @@ Wave one is the staging ... </div>
         <span class="tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
         <div class="context-scope-identity">
           <div class="context-scope-title"><a href="/console/projects/example-open-gamma?tab=context">example-open-gamma</a></div>
-          <span class="context-role">standalone scope</span>
+          <span class="context-role">standalone project</span>
         </div>
         <a class="context-focus-link" href="/console/context?scope=project&amp;project=example-open-gamma">focus <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
       </header>
@@ -8281,7 +8283,7 @@ Wave one is the staging ... </div>
         <span class="tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
         <div class="context-scope-identity">
           <div class="context-scope-title"><a href="/console/projects/example-sealed?tab=context">example-sealed</a></div>
-          <span class="context-role">standalone scope</span>
+          <span class="context-role">standalone project</span>
         </div>
         <a class="context-focus-link" href="/console/context?scope=project&amp;project=example-sealed">focus <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
       </header>

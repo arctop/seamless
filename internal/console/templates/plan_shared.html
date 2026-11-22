@@ -144,7 +144,6 @@
   var PANEL = '.tabpanel[data-panel="tasks"], [data-plan-scope]';
   function scopeOf(el) { return el && el.closest ? el.closest(PANEL) : null; }
   function inPanel(el) { return !!scopeOf(el); }
-  function pad(n) { return (n < 10 ? '0' : '') + n; }
 
   function fill(box) {
     var src = box.getAttribute('data-dossier');
@@ -263,8 +262,10 @@
         el.classList.remove('lease-warn');
         return;
       }
-      if (left >= 3600) v.textContent = Math.floor(left / 3600) + 'h ' + Math.floor((left % 3600) / 60) + 'm';
-      else v.textContent = Math.floor(left / 60) + ':' + pad(left % 60);
+      // Words, as every other lease in the console reads (render.go
+      // leaseLeft): "42m left", never "42:07", which reads as a clock time.
+      if (left >= 3600) v.textContent = Math.floor(left / 3600) + 'h ' + Math.floor((left % 3600) / 60) + 'm left';
+      else v.textContent = left < 60 ? '<1m left' : Math.floor(left / 60) + 'm left';
       el.classList.remove('lease-lapsed');
       el.classList.toggle('lease-warn', left < 300);
     });

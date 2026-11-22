@@ -235,7 +235,7 @@
           </tbody>
         </table>
       </div>
-      {{else}}<div class="ov2-panel-empty">{{icon "folder-tree"}}<span>No project activity yet &mdash; scopes appear as agents begin working.</span></div>{{end}}
+      {{else}}<div class="ov2-panel-empty">{{icon "folder-tree"}}<span>No project activity yet &mdash; projects appear as agents begin working.</span></div>{{end}}
     </section>
 
     <aside class="ov2-rail">
@@ -304,7 +304,7 @@
       </div>
       <aside class="sky-side" aria-label="Sky readout">
         <div class="sky-find" data-live-skip>
-          <label class="sky-search">{{icon "search"}}<input type="search" data-sky-q placeholder="Find a memory" autocomplete="off" spellcheck="false" aria-label="Find a memory by name, description, tag, or scope"></label>
+          <label class="sky-search">{{icon "search"}}<input type="search" data-sky-q placeholder="Find a memory" autocomplete="off" spellcheck="false" aria-label="Find a memory by name, description, tag, or project"></label>
         </div>
         <div class="sky-view" data-live-skip aria-live="polite"></div>
         {{if .KeepReadout}}<div class="sky-summary" id="sky-summary" data-live-keep></div>{{else}}
@@ -325,7 +325,7 @@
             {{icon "timer"}}<span><strong>{{.Stale}}</strong> going stale</span><small>no update, injection, or read in {{.StaleDays}} days</small>
           </button>
           {{end}}
-          <h3 class="sky-eyebrow">Scopes <span>{{len .Scopes}}</span></h3>
+          <h3 class="sky-eyebrow">Projects <span>{{len .Scopes}}</span></h3>
           <div class="sky-scopes">
             {{range .Scopes}}
             <button type="button" class="sky-scope" data-sky-scope="{{.Slug}}" data-name="{{.Name}}"{{with .Href}} data-href="{{.}}"{{end}} aria-pressed="false">

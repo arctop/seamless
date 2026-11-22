@@ -71,7 +71,12 @@ func TestUpSwitches_PostOneValueAndOffStaysTheOwners(t *testing.T) {
 				db, mux, fake := newUpdatesConsole(t, autoBase, &st)
 				form := formFor(updatesSection(t, mux), sw.path)
 				require.Contains(t, form, " data-autosave>", "the switch saves at once")
-				require.NotContains(t, form, `type="submit"`, "no button: the switch is the control")
+				// The switch is the control; the Save button is for a browser
+				// without script (hidden under .js, console-autosave-forms-
+				// contract). It adds no field, so a flip still posts one value,
+				// and a Save with no flip posts the field twice or not at all,
+				// which the route refuses with nothing stored.
+				require.Contains(t, form, `<button class="btn small up-save" type="submit">Save</button>`, "a Save button for a browser without script")
 
 				posted, disabled := upToggled(t, form)
 				require.False(t, disabled)

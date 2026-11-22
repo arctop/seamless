@@ -115,11 +115,11 @@
     <header class="retrieval-zone-head">
       <div class="retrieval-zone-index">03</div>
       <div>
-        <div class="retrieval-zone-kicker">Scope coverage</div>
+        <div class="retrieval-zone-kicker">Project coverage</div>
         <h2 id="retrieval-scopes-title">Where knowledge reached</h2>
         <p>Compare each project&rsquo;s surfaced memories with its active knowledge base.</p>
       </div>
-      <span class="retrieval-zone-meta">{{len .ByProject}} scope{{if ne (len .ByProject) 1}}s{{end}}</span>
+      <span class="retrieval-zone-meta">{{len .ByProject}} project{{if ne (len .ByProject) 1}}s{{end}}</span>
     </header>
 
     {{if .ByProject}}
@@ -144,7 +144,7 @@
     <div class="retrieval-scope-quiet">
       <div class="retrieval-scope-quiet-copy">
         <span class="retrieval-scope-quiet-mark">{{icon "moon"}}</span>
-        <div><strong>{{len .ScopesQuiet}} quiet scope{{if ne (len .ScopesQuiet) 1}}s{{end}}</strong><small>No retrieval reached these knowledge bases in the {{.WindowLabel}} window.</small></div>
+        <div><strong>{{len .ScopesQuiet}} quiet project{{if ne (len .ScopesQuiet) 1}}s{{end}}</strong><small>No retrieval reached these knowledge bases in the {{.WindowLabel}} window.</small></div>
       </div>
       <div class="retrieval-scope-quiet-chips">
         {{range .ScopesQuiet}}{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek title="0 of {{.Active}} active memories surfaced">{{.Project}}<small>{{.Active}}</small></a>{{else}}<span title="0 of {{.Active}} active memories surfaced">Global context<small>{{.Active}}</small></span>{{end}}{{end}}

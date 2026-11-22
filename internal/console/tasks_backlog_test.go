@@ -98,7 +98,9 @@ func TestBkDefaultListIsOffPlan_StepsToggleAddsThem(t *testing.T) {
 	require.Equal(t, []string{"loose task"}, bkTitles(data.Ready))
 	require.Empty(t, data.Gates)
 	require.Empty(t, data.Gated)
-	require.Equal(t, taskCounts{Open: 1, Ready: 1}, data.Counts)
+	// Open counts the rows drawn: the loose task, and the plan's gate on the
+	// owner in Needs you.
+	require.Equal(t, taskCounts{Open: 2, Ready: 1}, data.Counts)
 	page := getHTMLBody(t, mux, "/console/tasks")
 	require.NotContains(t, page, "plan step one")
 	require.NotContains(t, page, "plan step behind the gate")

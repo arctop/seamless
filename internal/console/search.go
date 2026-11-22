@@ -745,11 +745,17 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 			ids[i] = t.ID
 		}
 		stamps := s.stampsByID(ctx, core.ItemKindTask, ids)
+		// A hit says its state in the console's words (taskwords.go), never
+		// the stored status: "open" is a ready step and a blocked one alike.
+		words, err := s.wordTasks(ctx, tasks, time.Now())
+		if err != nil {
+			return nil, err
+		}
 		for _, t := range tasks {
 			row := searchRow{
 				Kind: "task", ID: t.ID, Title: t.Title, Project: t.ProjectSlug,
 				Age: ago(t.UpdatedAt), Href: "/console/tasks/" + t.ID,
-				Description: string(t.Status), Updated: t.UpdatedAt,
+				Description: words[t.ID].Text, Updated: t.UpdatedAt,
 				Favorite: t.Favorite, Account: t.Account, Lexical: true, Peek: true,
 				MayContain: core.StampsShown(stamps[t.ID], t.ProjectSlug),
 			}

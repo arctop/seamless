@@ -1974,21 +1974,42 @@ files; use them.
 ## Console (server-rendered)
 
 The observability console is `html/template` + vanilla JS + SSE, served by
-`internal/console` -- no node, npm, React, or build step. It is read-mostly: the
-writes are the owner's overrides and curation actions, among them -- archive or
-restore a memory, delete a note, approve a plan, force-release a task's claim, mark a task done, drop
-or reopen it, mark a task's gate as handled, say what a task waits on (set its gate),
-ask/split/apply/dismiss/retarget a gardener proposal, swap which memory a merge keeps, apply a whole gardener section of undoable proposals, run a gardener pass now, save or reset the
-briefing settings, switch update checks and automatic updates (or hand both
-back to the config), switch agents' applying of gardener proposals and automatic
-apply (or hand both back to the config), check for updates now, update now, resume automatic
-updates, save or reset the backup schedule and folder, back up now, delete a
-backup, restore one (a passkey ceremony bound to the backup's digest and the
-mode while peer_auth locks a project), cancel a staged restore or dismiss its
-result, mark the agents' reported mishaps reviewed, and -- with write
-screening on -- release or discard a held write,
-clear a session's mark, switch lockdown, re-run the review, mark a flagged item
-safe and accept a file changed outside Seamless. Keep pages self-contained and dependency-free so an agent can edit
+`internal/console` -- no node, npm, React, or build step. It is read-mostly:
+every write is a `POST` route `Register` mounts (`internal/console/console.go`),
+and `docs-src/reference/console.md`'s "What the console can change" table has
+one row per route (`cmd/docsgen/console_routes_test.go` holds the two equal).
+The writes are the owner's overrides and curation actions:
+
+- knowledge: archive or restore a memory, delete a note, star or unstar an
+  item, approve a captured plan;
+- tasks: release a claim, mark a task done, drop or reopen it, mark its gate
+  as handled, say what it waits on (set its gate);
+- the gardener: ask for proposals, plan a split, apply, dismiss, hide,
+  unhide, retarget, swap or undo a proposal, apply a split plan whole,
+  dismiss a section, apply a section of undoable proposals, run a pass now;
+- with write screening on (Held): release or discard a held write, clear a
+  session's mark, switch lockdown, re-run the review, mark a flagged item
+  safe, accept a file changed outside Seamless;
+- repo locks: force-release a lock, approve or discard a declaration;
+- projects and access: set a project's isolation; under peer_auth or access
+  requests, lock a project or remove its lock, unlock one in this browser
+  (passkey or terminal), approve or deny an access request (the agent's own
+  ask files it), revoke a lease or a grant, lock a console unlock again,
+  enroll a passkey or a Touch ID approver; on a server that serves other
+  computers, get a pairing code, approve or revoke a device;
+- Settings, with a reset wherever a source chip offers one: the console
+  level (and the welcome card),
+  the optional features, the briefing knobs, a project's ranking by use, the
+  embeddings switch and a re-embed, project families, update checks and
+  automatic updates (check now, update now, resume), the gardener's switches,
+  the backup schedule and folder (back up now, delete a backup, restore one --
+  a passkey ceremony bound to the backup's digest and the mode while
+  peer_auth locks a project -- cancel a staged restore or dismiss its result);
+- sign-in: the key's login and logout, passkey sign-in, adding a passkey, a
+  terminal sign-in;
+- the mishaps: mark the agents' reported mishaps reviewed.
+
+Keep pages self-contained and dependency-free so an agent can edit
 them without a toolchain.
 
 Chart color does one job per chart (`internal/console/charts_marks.go`). A

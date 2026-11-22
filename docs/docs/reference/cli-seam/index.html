@@ -255,7 +255,7 @@ search without its last step, so a <code>seamless.yaml</code> in the working dir
 never read (<a href="../../reference/configuration/#where-the-config-comes-from">why</a>) - then
 talks to a running <code>seamlessd</code> - over MCP at
 <code>/api/mcp</code> for most commands, and over the console's JSON endpoints for the
-owner-only actions that do not exist as MCP tools (force-releasing a task lock,
+owner-only actions that do not exist as MCP tools (force-releasing a task claim,
 approving a plan, deciding a locked project's access request). Both paths authenticate with the static bearer key from
 <a href="../../reference/configuration/">Configuration</a>, so if the key is wrong or the daemon
 is down, every subcommand below fails at the connection.</p>

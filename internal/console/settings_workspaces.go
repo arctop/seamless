@@ -204,7 +204,7 @@ func (s *Service) settingsFamilySave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !allowed[member] {
-			settingsRegistryFlash(w, r, fmt.Sprintf("Unknown project scope %q.", member))
+			settingsRegistryFlash(w, r, fmt.Sprintf("Unknown project %q.", member))
 			return
 		}
 	}

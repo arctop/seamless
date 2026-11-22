@@ -635,6 +635,22 @@
   pinScrollEnds();
   document.addEventListener('seam:content-updated', pinScrollEnds);
 
+  // A tab bar that scrolls sideways (a project's, at phone width) shows its
+  // active tab: a page opened on Sessions or Memories must not hide that tab
+  // past the bar's edge (UX 24). Only a tab outside the view moves the bar,
+  // so a reader's own scrolling stays while the tab they chose is in sight.
+  function revealActiveTabs() {
+    document.querySelectorAll('.tabs').forEach(function (bar) {
+      var on = bar.querySelector('.on');
+      if (!on || bar.scrollWidth <= bar.clientWidth) return;
+      var b = bar.getBoundingClientRect(), r = on.getBoundingClientRect();
+      if (r.left < b.left) bar.scrollLeft += r.left - b.left;
+      else if (r.right > b.right) bar.scrollLeft += r.right - b.right;
+    });
+  }
+  revealActiveTabs();
+  document.addEventListener('seam:content-updated', revealActiveTabs);
+
   /* ---- Check-in: "since you were last here" -------------------------------- */
 
   // The stamp is when the owner last stopped LOOKING (a hidden tab or a page

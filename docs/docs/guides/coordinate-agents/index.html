@@ -645,16 +645,20 @@ being in its loop.</p>
 <td>Who claims it, whether the lease is <strong>live</strong> or <strong>lapsed</strong>, its history, and <strong>Release claim</strong></td>
 </tr>
 <tr>
-<td><code>/console/sessions</code></td>
-<td>Which agents are alive, and each one's claimed tasks with remaining lease</td>
+<td><code>/console/now</code></td>
+<td>Which agents are live, each one's claims with their lease counting down, and the loose ends no live agent carries</td>
 </tr>
 <tr>
-<td>A project's detail</td>
-<td>The plan timeline - each step's status, holder, and lease</td>
+<td><code>/console/sessions</code></td>
+<td>Every session by state; a session's page lists the tasks it claims with their lease countdowns</td>
+</tr>
+<tr>
+<td>A project's Plans &amp; tasks tab</td>
+<td>Each plan's step timeline - each step's status, holder, and lease - and the project's off-plan tasks</td>
 </tr>
 <tr>
 <td><code>/console/plans</code></td>
-<td>Captured plans with status, iteration, and task progress</td>
+<td>Every plan, grouped by state (Needs you, In progress, Stalled, Ready, Shipped), with its status and step progress</td>
 </tr>
 </tbody>
 </table>
