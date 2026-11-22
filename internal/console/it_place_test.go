@@ -80,42 +80,46 @@ func TestItPlaceAgreesWithTheList(t *testing.T) {
 		require.Equal(t, 303, postForm(mux, "/console/memories/"+id+"/archive", "").Code)
 	}
 
+	// The Memories page's list (plan:console-ux-pass UX 28), every row of it
+	// (a page as long as the list), in the order it draws them: a project's
+	// by kind, every project's in the sort's order; the archived and
+	// superseded list the same way.
+	drawn := func(lq libQuery, inactive bool) []string {
+		t.Helper()
+		data, err := svc.memoriesPage(ctx, lq, memoryView{Inactive: inactive, Show: 1000})
+		require.NoError(t, err)
+		require.Empty(t, data.List.More, "the whole list is drawn")
+		var ids []string
+		for _, g := range data.List.Groups {
+			for _, m := range g.Rows {
+				ids = append(ids, m.ID)
+			}
+		}
+		return ids
+	}
+	inactiveLists := 0
 	for _, lq := range []libQuery{
 		{Sort: "recent"}, {Sort: "name"}, {Sort: "reach"}, {Sort: "utility"}, {Sort: "favorites"},
 		{Sort: "recent", Group: "project"}, {Sort: "reach", Group: "project"},
 		{Sort: "recent", Kind: "gotcha"}, {Sort: "name", Project: "example-pay"}, {Sort: "recent", Project: "global"},
+		{Sort: "reach", Project: "example-pay"}, {Sort: "favorites", Project: "example-web"},
 		{Sort: "recent", Fav: true}, {Sort: "recent", Surfaced: "never"}, {Sort: "name", Q: "PAY"}, {Sort: "recent", Q: "global"},
 	} {
-		data, err := svc.memoriesPage(ctx, lq)
-		require.NoError(t, err)
-		var active, inactive []string
-		for _, g := range data.Rail {
-			for _, k := range g.Kinds {
-				for _, m := range k.Memories {
-					active = append(active, m.ID)
-				}
-			}
-		}
-		for _, m := range data.Inactive {
-			inactive = append(inactive, m.ID)
-		}
-		list := store.MemoryList{ByProject: lq.Project != "", Project: lq.Project, Kind: lq.Kind, Fav: lq.Fav,
-			Never: lq.Surfaced == "never", Query: strings.ToLower(lq.Q), Sort: lq.Sort, Tree: lq.tree(), Kinds: itKinds()}
-		if list.Project == "global" {
-			list.Project = ""
-		}
+		// The item page's own list (memoryPlaceList), as memoryItemPage reads it.
+		list := memoryPlaceList(lq, false)
+		require.Equal(t, itKinds(), list.Kinds)
 		what := fmt.Sprintf("memories %+v", lq)
-		itAgree(t, what, active, func(id string) (store.ItemPlace, bool, error) {
+		itAgree(t, what, drawn(lq, false), func(id string) (store.ItemPlace, bool, error) {
 			return store.MemoryPlace(ctx, svc.db(ctx), list, id)
 		})
-		if len(inactive) > 0 {
-			gone := list
-			gone.Inactive, gone.Tree = true, false
+		if inactive := drawn(lq, true); len(inactive) > 0 {
+			inactiveLists++
 			itAgree(t, what+" archived", inactive, func(id string) (store.ItemPlace, bool, error) {
-				return store.MemoryPlace(ctx, svc.db(ctx), gone, id)
+				return store.MemoryPlace(ctx, svc.db(ctx), memoryPlaceList(lq, true), id)
 			})
 		}
 	}
+	require.Positive(t, inactiveLists, "the archived lists are checked too")
 
 	for i, spec := range []struct{ project, title string }{
 		{"example-pay", "Zeta"}, {"example-pay", "alpha"}, {"", "Inbox"}, {"example-web", "Beta"}, {"example-web", "beta two"},

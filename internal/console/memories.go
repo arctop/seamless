@@ -4,12 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"html/template"
 	"io/fs"
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,6 +29,11 @@ var memorySortKeys = []string{"recent", "name", "reach", "utility", "favorites"}
 
 // memoriesListPath is the Memories screen's list URL.
 const memoriesListPath = "/console/memories"
+
+// memoryPageSize is how many rows the Memories list draws at a time across
+// every project, and how many more its Show more link adds. A project's list
+// is drawn whole.
+const memoryPageSize = 50
 
 // errNoFiles is returned when a write action needs the files subsystem but the
 // console was built without it (should not happen in serve).
@@ -55,7 +63,7 @@ type memoryRow struct {
 	EditURL      template.URL `json:"-"` // vscode://file link; template.URL so it survives sanitization
 }
 
-// ScopeLabel names the row's scope as the rail does.
+// ScopeLabel names the row's scope as the list's project chip does.
 func (m memoryRow) ScopeLabel() string {
 	if m.Project == "" {
 		return "Shared globally"
@@ -63,6 +71,7 @@ func (m memoryRow) ScopeLabel() string {
 	return m.Project
 }
 
+// kindGroup and projectGroup are the JSON answer's project -> kind tree.
 type kindGroup struct {
 	Kind     string      `json:"kind"`
 	Memories []memoryRow `json:"memories"`
@@ -72,14 +81,12 @@ type projectGroup struct {
 	Project string      `json:"project"`
 	Count   int         `json:"count"`
 	Kinds   []kindGroup `json:"kinds"`
-	// All marks the one list the HTML rail draws when it does not group: a
-	// single kindless group holding every row in the sort's order.
-	All bool `json:"-"`
 }
 
-// memoriesData is the payload for the Memories library screen. The JSON
-// answer keeps its project and kind groups whatever the rail draws; Rail, the
-// Selected/QS fields and the libView drive the HTML page only.
+// memoriesData is the payload for the Memories screen. The JSON answer is
+// every match, unpaged, in its project and kind groups, with the archived and
+// superseded ones beside them, whatever the page draws; List, the controls
+// and the libView drive the HTML page only (plan:console-ux-pass UX 28).
 type memoriesData struct {
 	Groups        []projectGroup `json:"groups"`
 	Inactive      []memoryRow    `json:"inactive"`
@@ -97,29 +104,293 @@ type memoriesData struct {
 	Fav        bool   `json:"fav,omitempty"`
 	Surfaced   string `json:"surfaced,omitempty"`
 	CanArchive bool   `json:"-"`
-	// Rail is what the HTML rail draws: Groups, or one list.
-	Rail []projectGroup `json:"-"`
-	// KindMenu is the Kind filter, KindLabel its current choice, and
-	// NeverLink the Never surfaced toggle.
-	KindMenu  []libLink `json:"-"`
-	KindLabel string    `json:"-"`
-	NeverLink libLink   `json:"-"`
-	// Selected is the memory open in the reader: the first match on the
-	// list URL (SelectedAuto, which the client pins into the URL). A
-	// memory's own URL draws its item page instead (Item).
-	Selected     *memoryReader `json:"-"`
-	SelectedAuto bool          `json:"-"`
-	// QS is the library state rail links carry, so a selection change keeps
-	// every filter ("" when all are at their defaults).
-	QS      string `json:"-"`
-	libView `json:"-"`
+	// View is the list's own state: which memories it lists and how many
+	// rows it draws. RetiredTotal is every archived and superseded memory
+	// the request reads, whatever the filters.
+	View         memoryView `json:"-"`
+	RetiredTotal int        `json:"-"`
+	// List is what the page draws.
+	List memoryList `json:"-"`
+	// KindChips are the kind filter under the bar: All kinds, then each
+	// kind with what choosing it would show. NeverLink is the Never
+	// surfaced toggle, StatusLink the archived and superseded one.
+	KindChips  []libLink `json:"-"`
+	NeverLink  libLink   `json:"-"`
+	StatusLink libLink   `json:"-"`
+	libView    `json:"-"`
 	// Item is a memory's own page (itempage.go): set, the screen draws it
-	// instead of the library. HTML only.
+	// instead of the list. HTML only.
 	Item *itemPage `json:"-"`
 }
 
-// memoriesPage assembles the memories list for the given library state.
-func (s *Service) memoriesPage(ctx context.Context, lq libQuery) (memoriesData, error) {
+// memoryView is the Memories list's own state beyond the library's
+// (libQuery), read from the URL as strictly: ?status=inactive lists the
+// archived and superseded memories instead of the active ones, and ?show=
+// is how many rows the list across every project draws.
+type memoryView struct {
+	Inactive bool
+	// Show is the rows to draw, 0 for memoryPageSize.
+	Show int
+}
+
+// size is how many rows the list across every project draws.
+func (v memoryView) size() int {
+	if v.Show > 0 {
+		return v.Show
+	}
+	return memoryPageSize
+}
+
+// parseMemoryView reads the list's own state from its URL. A value it cannot
+// read is an error naming what it takes, as parseLibQuery's are.
+func parseMemoryView(q url.Values) (memoryView, error) {
+	var v memoryView
+	switch st := q.Get("status"); st {
+	case "":
+	case "inactive":
+		v.Inactive = true
+	default:
+		return v, fmt.Errorf("invalid status %q: valid values are inactive (or omit)", st)
+	}
+	if raw := q.Get("show"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 {
+			return v, fmt.Errorf("invalid show %q: a number of rows, 1 or more", raw)
+		}
+		v.Show = n
+	}
+	return v, nil
+}
+
+// parseMemoryRequest reads the whole Memories state from a request: the
+// library's and the list's own. ok=false means the 400 was already written.
+func (s *Service) parseMemoryRequest(w http.ResponseWriter, r *http.Request) (libQuery, memoryView, bool) {
+	lq, ok := s.parseLibRequest(w, r, memorySortKeys, true)
+	if !ok {
+		return libQuery{}, memoryView{}, false
+	}
+	v, err := parseMemoryView(r.URL.Query())
+	if err != nil {
+		s.badRequest(w, r, err.Error())
+		return libQuery{}, memoryView{}, false
+	}
+	return lq, v, true
+}
+
+// memoryValues is the whole list state as a query: the library's (forceSort
+// names the sort even at its default), the status, and the rows to draw.
+func memoryValues(lq libQuery, v memoryView, forceSort bool) url.Values {
+	q := lq.values(forceSort)
+	if v.Inactive {
+		q.Set("status", "inactive")
+	}
+	if v.Show > 0 {
+		q.Set("show", strconv.Itoa(v.Show))
+	}
+	return q
+}
+
+// memoryListHref is the list at state lq and v.
+func memoryListHref(lq libQuery, v memoryView) string {
+	return memoriesListPath + encodeQS(memoryValues(lq, v, false))
+}
+
+// memoryListQS is the query a row of the list carries to its memory's own
+// page, so the page's place and its k / j follow this list: the list's
+// state without its page size, and on the default list its sort, so the
+// page knows it came from a list at all (namesMemoryList).
+func memoryListQS(lq libQuery, v memoryView) string {
+	v.Show = 0
+	if qs := encodeQS(memoryValues(lq, v, false)); qs != "" {
+		return qs
+	}
+	return encodeQS(memoryValues(lq, v, true))
+}
+
+// memoryListKeys are the query keys a Memories list puts on its rows' links
+// (memoryListQS): a memory's own URL that carries any of them came from that
+// list.
+var memoryListKeys = []string{"sort", "q", "group", "kind", "project", "fav", "surfaced", "status"}
+
+// namesMemoryList reports whether a memory's own URL names the list it came
+// from.
+func namesMemoryList(q url.Values) bool {
+	for _, k := range memoryListKeys {
+		if q.Has(k) {
+			return true
+		}
+	}
+	return false
+}
+
+// carryStatus is href, a link the library code drew from a libQuery, with
+// the list's status kept: a filter, a sort or a project chosen in the
+// archived and superseded list stays there. The page size is not kept: a
+// new choice starts at the first rows.
+func carryStatus(href string, v memoryView) string {
+	if !v.Inactive {
+		return href
+	}
+	u, err := url.Parse(href)
+	if err != nil {
+		return href
+	}
+	q := u.Query()
+	q.Set("status", "inactive")
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+// memoryList is what the Memories page draws: one list, in groups. Across
+// every project it is a page of the matches in the sort's order, by local
+// day under Recent; with a project chosen it is the whole project, by kind.
+type memoryList struct {
+	Groups []memoryListGroup
+	// ByKind is a project's list, grouped by kind.
+	ByKind bool
+	// Shown is how many rows the page draws, Total how many match.
+	Shown, Total int
+	// More is the same list with MoreN more rows ("" when every match is
+	// drawn).
+	More  string
+	MoreN int
+	// Order says how the rows are ordered ("Newest first").
+	Order string
+	// RowQS is the query every row's link carries (memoryListQS).
+	RowQS string
+}
+
+// memoryListGroup is one group of the list: a local day, a kind, or the one
+// group of an order that has none.
+type memoryListGroup struct {
+	// Key is the group's element id after ml-g-: a day (today, yesterday,
+	// week, month, older), a kind, or all.
+	Key   string
+	Label string
+	// Kind is the kind a kind group holds (its accent), Gloss what that
+	// kind holds (kinds.go).
+	Kind, Gloss string
+	// Note is the group's count in words: every match it holds, the ones
+	// past this page included.
+	Note string
+	Rows []memoryRow
+}
+
+// The local days the list across every project groups its newest-first rows
+// in. A day is counted as the Diary counts it: from the daemon's local
+// midnight (dyMidnight), a day back with AddDate. This week is the seven days
+// up to today, this month the calendar month.
+const (
+	dayToday = iota
+	dayYesterday
+	dayThisWeek
+	dayThisMonth
+	dayOlder
+)
+
+var memoryDays = [...]struct{ key, label string }{
+	dayToday:     {"today", "Today"},
+	dayYesterday: {"yesterday", "Yesterday"},
+	dayThisWeek:  {"week", "Earlier this week"},
+	dayThisMonth: {"month", "Earlier this month"},
+	dayOlder:     {"older", "Older"},
+}
+
+// memoryDay is the day group of a memory updated at t, at now: today
+// (a time after now included), yesterday, earlier this week, earlier this
+// month, or older.
+func memoryDay(t, now time.Time) int {
+	today := dyMidnight(now)
+	switch {
+	case !t.Before(today):
+		return dayToday
+	case !t.Before(today.AddDate(0, 0, -1)):
+		return dayYesterday
+	case !t.Before(today.AddDate(0, 0, -6)):
+		return dayThisWeek
+	case !t.Before(dyMonthStart(now)):
+		return dayThisMonth
+	default:
+		return dayOlder
+	}
+}
+
+// memoryOrders say how the list orders its rows, by sort key.
+var memoryOrders = map[string]string{
+	"recent": "newest first", "name": "A to Z", "reach": "most surfaced first",
+	"utility": "highest utility first", "favorites": "starred first",
+}
+
+// buildMemoryList draws rows, the matches of the list's status, as the page
+// lists them at now: with a project chosen, every row by kind in core's
+// order, each kind in the sort's order; across every project, the first
+// v.size() rows in the sort's order, by local day under Recent. Every
+// group's count is of all its matches. rows is reordered in place.
+func buildMemoryList(rows []memoryRow, lq libQuery, v memoryView, now time.Time) memoryList {
+	order := memoryOrders[lq.Sort]
+	l := memoryList{Total: len(rows), ByKind: lq.Project != "", RowQS: memoryListQS(lq, v)}
+	if l.ByKind {
+		l.Order = "By kind, then " + order
+		byKind := map[string][]memoryRow{}
+		for _, r := range rows {
+			byKind[r.Kind] = append(byKind[r.Kind], r)
+		}
+		for _, k := range core.MemoryKinds {
+			kind := string(k)
+			group := byKind[kind]
+			if len(group) == 0 {
+				continue
+			}
+			sortMemoryRows(group, lq.Sort)
+			l.Groups = append(l.Groups, memoryListGroup{Key: kind, Label: memoryNoun(kind, 2), Kind: kind,
+				Gloss: kindGloss(kind), Note: strconv.Itoa(len(group)), Rows: group})
+			l.Shown += len(group)
+		}
+		return l
+	}
+	l.Order = strings.ToUpper(order[:1]) + order[1:]
+	sortMemoryRows(rows, lq.Sort)
+	shown := rows
+	if size := v.size(); len(rows) > size {
+		shown = rows[:size]
+		more := v
+		more.Show = size + memoryPageSize
+		l.More, l.MoreN = memoryListHref(lq, more), min(memoryPageSize, len(rows)-size)
+	}
+	l.Shown = len(shown)
+	if lq.Sort != libDefaultSort {
+		if len(shown) > 0 {
+			l.Groups = []memoryListGroup{{Key: "all", Label: l.Order, Note: strconv.Itoa(len(rows)), Rows: shown}}
+		}
+		return l
+	}
+	var counts [len(memoryDays)]int
+	for _, r := range rows {
+		counts[memoryDay(r.Updated, now)]++
+	}
+	for _, r := range shown {
+		d := memoryDays[memoryDay(r.Updated, now)]
+		if n := len(l.Groups); n == 0 || l.Groups[n-1].Key != d.key {
+			l.Groups = append(l.Groups, memoryListGroup{Key: d.key, Label: d.label,
+				Note: strconv.Itoa(counts[memoryDay(r.Updated, now)]) + " changed"})
+		}
+		g := &l.Groups[len(l.Groups)-1]
+		g.Rows = append(g.Rows, r)
+	}
+	return l
+}
+
+// memoriesPage assembles the Memories screen for the given state, at the
+// moment the request is served.
+func (s *Service) memoriesPage(ctx context.Context, lq libQuery, v memoryView) (memoriesData, error) {
+	return s.memoriesPageAt(ctx, lq, v, time.Now())
+}
+
+// memoriesPageAt assembles the Memories screen at now (the day groups'
+// clock): the JSON answer's every match, and the page's list and controls.
+// Every read goes through the request's handle, so a locked project's
+// memories are absent from all of it.
+func (s *Service) memoriesPageAt(ctx context.Context, lq libQuery, v memoryView, now time.Time) (memoriesData, error) {
 	q := strings.ToLower(lq.Q)
 	s.freshRetrievalStats(ctx)
 	mems, err := store.AllMemoriesIncludingInvalid(ctx, s.db(ctx))
@@ -142,10 +413,12 @@ func (s *Service) memoriesPage(ctx context.Context, lq libQuery) (memoriesData, 
 
 	// project -> kind -> rows (active only), and the same rows as one list;
 	// inactive rows collected separately. Every filter applies to both sets.
+	// The controls count the list's own status: what choosing them would
+	// show here.
 	resolve := s.sourceSessionResolver(ctx)
 	active := map[string]map[string][]memoryRow{}
 	var flat, inactive []memoryRow
-	total, favs, nevers := 0, 0, 0
+	total, retired, favs, nevers := 0, 0, 0, 0
 	kindCounts, projectCounts := map[string]int{}, map[string]int{}
 	for _, m := range mems {
 		st := stats[m.ID]
@@ -156,8 +429,12 @@ func (s *Service) memoriesPage(ctx context.Context, lq libQuery) (memoriesData, 
 		never := lq.Surfaced == "" || st.InjectCount == 0
 		if m.Active() {
 			total++
-			// Each menu counts what its own choice would show: the other
-			// filters applied, its own left open.
+		} else {
+			retired++
+		}
+		if m.Active() != v.Inactive {
+			// Each control counts what its own choice would show: the
+			// other filters applied, its own left open.
 			if text && scope && fav && never {
 				kindCounts[string(m.Kind)]++
 			}
@@ -197,42 +474,65 @@ func (s *Service) memoriesPage(ctx context.Context, lq libQuery) (memoriesData, 
 		Query:         lq.Q,
 		Sort:          lq.Sort,
 		Group:         lq.Group, Kind: lq.Kind, Project: lq.Project, Fav: lq.Fav, Surfaced: lq.Surfaced,
-		CanArchive: s.cfg.Files != nil,
-		QS:         lq.QS(),
+		CanArchive:   s.cfg.Files != nil,
+		View:         v,
+		RetiredTotal: retired,
 	}
-	data.Rail = data.Groups
-	if !lq.tree() {
-		data.Rail = nil
-		if len(flat) > 0 {
-			sortMemoryRows(flat, lq.Sort)
-			data.Rail = []projectGroup{{Count: len(flat), Kinds: []kindGroup{{Memories: flat}}, All: true}}
+	listed := flat
+	if v.Inactive {
+		listed = slices.Clone(inactive)
+	}
+	data.List = buildMemoryList(listed, lq, v, now)
+
+	// The controls: the library's, each keeping the list's status, and the
+	// list's own.
+	data.libView = newLibView(lq, memoriesListPath, memoriesListPath, memorySortKeys)
+	for key, href := range data.Sorts {
+		data.Sorts[key] = carryStatus(href, v)
+	}
+	data.FavLink.Href = carryStatus(data.FavLink.Href, v)
+	data.FavLink.Count = favs
+	data.ClearHref = carryStatus(data.ClearHref, v)
+	if v.Inactive {
+		data.Keep = append(data.Keep, libField{Name: "status", Value: "inactive"})
+		sort.Slice(data.Keep, func(i, j int) bool { return data.Keep[i].Name < data.Keep[j].Name })
+		if data.SearchHref != "" {
+			data.SearchHref += "&archived=1"
 		}
 	}
-	data.libView = newLibView(lq, memoriesListPath, memoriesListPath, memorySortKeys)
 	data.Projects, data.ProjectLabel = libProjectMenu(lq, projectCounts, names, memoriesListPath, "Shared globally")
+	for i := range data.Projects {
+		data.Projects[i].Href = carryStatus(data.Projects[i].Href, v)
+	}
 	if data.Scope, err = s.projectSwitcher(ctx, data.Projects); err != nil {
 		return memoriesData{}, err
 	}
-	data.FavLink.Count = favs
-	data.KindMenu, data.KindLabel = memoryKindMenu(lq, kindCounts)
+	data.KindChips = memoryKindChips(lq, v, kindCounts)
 	never := lq
 	never.Surfaced = ""
 	if lq.Surfaced == "" {
 		never.Surfaced = "never"
 	}
-	data.NeverLink = libLink{Label: "Never surfaced", Href: never.href(memoriesListPath), Count: nevers, On: lq.Surfaced != ""}
+	data.NeverLink = libLink{Label: "Never surfaced", Href: memoryListHref(never, memoryView{Inactive: v.Inactive}),
+		Count: nevers, On: lq.Surfaced != ""}
+	data.StatusLink = libLink{Label: "archived and superseded", Href: memoryListHref(lq, memoryView{Inactive: !v.Inactive}),
+		Count: len(inactive), On: v.Inactive}
 	return data, nil
 }
 
-// memoryKindMenu lists the Kind filter's choices: every kind, then each kind
-// in canonical order with how many memories match the other filters there,
-// its glossary line as the title. The chosen kind stays listed when nothing
-// matches in it. It returns the menu and that choice's label.
-func memoryKindMenu(lq libQuery, counts map[string]int) ([]libLink, string) {
+// memoryKindChips lists the kind filter's chips: All kinds, then each kind in
+// canonical order with how many memories match the other filters there, its
+// glossary line as the title. A kind with none is left out, but the chosen
+// one, which stays listed. Each chip's Value is its kind ("" for All kinds).
+func memoryKindChips(lq libQuery, v memoryView, counts map[string]int) []libLink {
 	all := lq
 	all.Kind = ""
-	menu := []libLink{{Label: "All kinds", Href: all.href(memoriesListPath), On: lq.Kind == ""}}
-	label := "All"
+	n := 0
+	for _, c := range counts {
+		n += c
+	}
+	keep := memoryView{Inactive: v.Inactive}
+	chips := []libLink{{Label: "All kinds", Href: memoryListHref(all, keep), Count: n, On: lq.Kind == ""}}
 	for _, k := range core.MemoryKinds {
 		kind := string(k)
 		if counts[kind] == 0 && kind != lq.Kind {
@@ -240,57 +540,33 @@ func memoryKindMenu(lq libQuery, counts map[string]int) ([]libLink, string) {
 		}
 		o := lq
 		o.Kind = kind
-		on := kind == lq.Kind
-		if on {
-			label = kind
-		}
-		menu = append(menu, libLink{Label: kind, Href: o.href(memoriesListPath), Title: kindGloss(kind), Count: counts[kind], On: on})
+		chips = append(chips, libLink{Label: kind, Href: memoryListHref(o, keep), Title: kindGloss(kind),
+			Count: counts[kind], On: kind == lq.Kind, Value: kind})
 	}
-	return menu, label
-}
-
-// selectReader opens sel in the reader (auto: the list URL chose it) and
-// redraws the controls that stay on the item being read.
-func (d *memoriesData) selectReader(sel *memoryReader, auto bool, lq libQuery) {
-	d.Selected, d.SelectedAuto = sel, auto
-	v := newLibView(lq, memoriesListPath, memoriesListPath+"/"+sel.ID, memorySortKeys)
-	d.Sorts, d.GroupNone, d.GroupProject = v.Sorts, v.GroupNone, v.GroupProject
+	return chips
 }
 
 func (s *Service) memoriesList(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	lq, ok := s.parseLibRequest(w, r, memorySortKeys, true)
+	lq, v, ok := s.parseMemoryRequest(w, r)
 	if !ok {
 		return
 	}
-	data, err := s.memoriesPage(ctx, lq)
+	data, err := s.memoriesPage(ctx, lq, v)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
-	}
-	// The HTML library auto-opens the first match in the reader.
-	if !wantsJSON(r) {
-		if id := firstMemoryID(data); id != "" {
-			d, found, derr := s.memoryDetailByID(ctx, id)
-			if derr != nil {
-				s.serverError(w, r, derr)
-				return
-			}
-			if found {
-				data.selectReader(s.memoryReaderOf(ctx, d, lq), true, lq)
-			}
-		}
 	}
 	s.render(w, r, "memories", pageData{Title: "Memories", Active: "memories", Data: data})
 }
 
 // memoryLibraryPage answers a memory's own URL in HTML: the reader fragment
-// for the in-place swap (?reader=1), or the memory's own page (itempage.go),
-// the library's state read from the URL either way. The page reads the
-// memory and its context alone, never the library.
+// (?reader=1), or the memory's own page (itempage.go), the list's state read
+// from the URL either way. The page reads the memory and its context alone,
+// never the list.
 func (s *Service) memoryLibraryPage(w http.ResponseWriter, r *http.Request, d memoryDetail) {
 	ctx := r.Context()
-	lq, ok := s.parseLibRequest(w, r, memorySortKeys, true)
+	lq, v, ok := s.parseMemoryRequest(w, r)
 	if !ok {
 		return
 	}
@@ -298,42 +574,7 @@ func (s *Service) memoryLibraryPage(w http.ResponseWriter, r *http.Request, d me
 		s.renderReader(w, r, "memories", "memory-reader", s.memoryReaderOf(ctx, d, lq))
 		return
 	}
-	s.memoryItemPage(w, r, d, lq)
-}
-
-// firstMemoryID picks the reader's default selection on the list URL: the
-// one list's first row, or in the tree the most recently updated active
-// match, falling back to the newest inactive one ("" when nothing matched).
-func firstMemoryID(data memoriesData) string {
-	if len(data.Rail) == 1 && data.Rail[0].All {
-		return data.Rail[0].Kinds[0].Memories[0].ID
-	}
-	return defaultMemoryID(data)
-}
-
-// defaultMemoryID is the most recently updated active match, falling back to
-// the newest inactive one ("" when nothing matched).
-func defaultMemoryID(data memoriesData) string {
-	var id string
-	var newest time.Time
-	for _, g := range data.Groups {
-		for _, k := range g.Kinds {
-			for _, m := range k.Memories {
-				if id == "" || m.Updated.After(newest) {
-					id, newest = m.ID, m.Updated
-				}
-			}
-		}
-	}
-	if id != "" {
-		return id
-	}
-	for _, m := range data.Inactive {
-		if id == "" || m.Updated.After(newest) {
-			id, newest = m.ID, m.Updated
-		}
-	}
-	return id
+	s.memoryItemPage(w, r, d, lq, v)
 }
 
 // memoryMatches reports whether a memory satisfies the ?q text filter (empty q

@@ -1,12 +1,16 @@
-/* Library-style screens (Memories / Notes / Tasks / Plans / Labs / Trials /
-   Gardener): a grouped rail on the left and a document reader on the right.
-   Every rail item is a real server-rendered link; this module upgrades clicks
-   to an in-place reader swap (?reader=1 fragment + history.pushState of the
-   item's canonical URL) so the document and rail keep their scroll positions
-   and the switch is instant. j / k move the selection; on the Gardener, a
+/* Library-style screens (Notes / Tasks / Plans / Labs / Trials / Gardener):
+   a grouped rail on the left and a document reader on the right. Every rail
+   item is a real server-rendered link; this module upgrades clicks to an
+   in-place reader swap (?reader=1 fragment + history.pushState of the item's
+   canonical URL) so the document and rail keep their scroll positions and
+   the switch is instant. j / k move the selection; on the Gardener, a
    applies the open proposal and x dismisses it. The delegated handlers stay
    inert without #lib-reader, but can enhance one inserted by an in-place
    mutation response later.
+
+   The Memories list (memories.html, [data-ml-list]: one full-width list, no
+   rail and no reader) takes j and k to move a focus ring through its rows,
+   and Enter to open the focused row's own page.
 
    On an item's own page (item_shared.html: a memory, a note or a task alone,
    no rail), k and j open the previous and next item of the list it is in by
@@ -233,10 +237,65 @@
     return false;
   }
 
+  // The Memories list's rows, in the order the page draws them.
+  function listRows() {
+    return Array.prototype.slice.call(document.querySelectorAll('.main [data-ml-list] a.ml-row'));
+  }
+  function listRowOf(el) {
+    var row = el && el.closest ? el.closest('a.ml-row') : null;
+    return row && row.closest('[data-ml-list]') ? row : null;
+  }
+  // The row the focus ring was last on: a live refresh that replaces its
+  // node (a memory moved to another day) puts the ring back on it.
+  var listFocus = '';
+  document.addEventListener('focusin', function (e) {
+    var row = listRowOf(e.target);
+    listFocus = row ? row.id : '';
+  });
+  function focusRow(row) {
+    row.focus({ preventScroll: true });
+    row.scrollIntoView({ block: 'nearest' });
+  }
+  // j / k on the Memories list: the next or previous row from the focused
+  // one, or the first row when none is. false when the page has no list.
+  function stepList(e) {
+    var rows = listRows();
+    if (!rows.length) return false;
+    e.preventDefault();
+    var at = rows.indexOf(listRowOf(document.activeElement));
+    var next = at < 0 ? 0 : at + (e.key === 'j' ? 1 : -1);
+    if (next >= 0 && next < rows.length) focusRow(rows[next]);
+    return true;
+  }
+  // Enter on a focused row opens the memory's own page, never the read-in-
+  // place panel a click opens (static/panel.js). SeamPanel is asked at the
+  // moment of the key: panel.js loads after this file. Its leave records
+  // this list as the page's way back.
+  function openListRow(e) {
+    var row = listRowOf(document.activeElement);
+    if (!row || e.shiftKey) return;
+    e.preventDefault();
+    if (e.repeat) return;
+    var href = row.getAttribute('href');
+    var panel = window.SeamPanel;
+    if (panel && panel.leave) panel.leave(href);
+    else location.assign(href);
+  }
+  document.addEventListener('seam:content-updated', function (e) {
+    if (!listFocus || !e.detail || e.detail.source !== 'live') return;
+    var ae = document.activeElement;
+    if (ae && ae !== document.body) return;
+    var row = document.getElementById(listFocus);
+    if (row && listRowOf(row)) row.focus({ preventScroll: true });
+  });
+
   // j / k step the selection through the rail (list order, across groups),
-  // Gmail-style. ("/" -> the page-local filter is search.js's, which owns the
-  // key so the palette and the filter never both answer it.) Arrow keys are
-  // left alone so they keep scrolling the document.
+  // Gmail-style, or the focus ring through the Memories list. ("/" -> the
+  // page-local filter is search.js's, which owns the key so the palette and
+  // the filter never both answer it; "p" -> the project switcher is
+  // scope.js's.) Arrow keys are left alone so they keep scrolling the
+  // document. While the read-in-place panel is open it takes j and k first
+  // (a capture listener that prevents their default), so they return here.
   //
   // On the Gardener, a applies the open proposal and x dismisses it: each
   // submits its reader button, so the in-page confirm (shell.js) still asks
@@ -260,13 +319,18 @@
       else btn.click();
       return;
     }
-    if (e.key !== 'j' && e.key !== 'k') return;
-    if (!items().length) {
-      stepItemPage(e);
+    if (e.key === 'Enter') {
+      openListRow(e);
       return;
     }
-    e.preventDefault();
-    stepSelection(e.key === 'j' ? 1 : -1);
+    if (e.key !== 'j' && e.key !== 'k') return;
+    if (items().length) {
+      e.preventDefault();
+      stepSelection(e.key === 'j' ? 1 : -1);
+      return;
+    }
+    if (stepList(e)) return;
+    stepItemPage(e);
   });
 
   // An item's own page: k / j press its previous / next link, a plain link

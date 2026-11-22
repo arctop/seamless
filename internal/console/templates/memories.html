@@ -1,121 +1,110 @@
 {{define "content"}}
 {{- with .Data.Item}}{{template "item-frame" .}}{{else}}
 {{with .Data}}
-{{$sel := .Selected}}
-{{$qs := .QS}}
+{{- /* One list, full width (plan:console-ux-pass UX 28): across every project
+     a page of the matches, newest first in local-day groups; with a project
+     chosen, all of that project's, by kind. A row opens the memory's own
+     page, the list's query on its link. */}}
+{{$byKind := .List.ByKind}}{{$rowqs := .List.RowQS}}
 <div class="lib-page" data-library="memories">
 <header class="mv2-bar">
   <h1>{{icon "database"}}Memories</h1>{{about "Constraints, decisions, runbooks, and context that agents carry between sessions."}}
-  {{if .Filtered}}
-  <span class="mv2-count" aria-label="{{.ActiveCount}} of {{.Total}} active memories match{{if .InactiveCount}}, and {{.InactiveCount}} archived and superseded{{end}}">
-    <strong>{{.ActiveCount}}</strong>of {{.Total}} active{{if .InactiveCount}}<small>{{.InactiveCount}} archived &amp; superseded</small>{{end}}
+  {{if .View.Inactive}}
+  <span class="mv2-count" aria-label="{{.InactiveCount}}{{if .Filtered}} of {{.RetiredTotal}}{{end}} archived and superseded memories{{if .Filtered}} match{{end}}">
+    <strong>{{.InactiveCount}}</strong>{{if .Filtered}}of {{.RetiredTotal}} {{end}}archived &amp; superseded
   </span>
-  <a class="lib-clear" href="{{.ClearHref}}" data-seam-query title="Show every memory again">{{icon "x"}}Clear</a>
   {{else}}
-  <span class="mv2-count" aria-label="{{.ActiveCount}} active memories{{if .InactiveCount}}, {{.InactiveCount}} archived and superseded{{end}}">
-    <strong>{{.ActiveCount}}</strong>active{{if .InactiveCount}}<small>{{.InactiveCount}} archived &amp; superseded</small>{{end}}
+  <span class="mv2-count" aria-label="{{.ActiveCount}}{{if .Filtered}} of {{.Total}}{{end}} active memories{{if .Filtered}} match{{end}}">
+    <strong>{{.ActiveCount}}</strong>{{if .Filtered}}of {{.Total}} {{end}}active
   </span>
   {{end}}
+  {{if .Filtered}}<a class="lib-clear" href="{{.ClearHref}}" data-seam-query title="Show every memory again">{{icon "x"}}Clear</a>{{end}}
   <form class="search lib-query" method="get" action="/console/memories" data-seam-query>
     {{icon "search"}}
-    <input name="q" aria-label="Filter memories by name, description, kind, tag, or project" placeholder="Filter names, descriptions, kinds, tags, and projects&hellip;" value="{{.Query}}">
+    <input name="q" aria-label="Filter memories by name, description, kind, tag, or project" placeholder="Filter by name, description, kind, tag or project" value="{{.Query}}">
     {{range .Keep}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">{{end}}
+    <kbd class="ml-slash" aria-hidden="true">/</kbd>
   </form>
   <button type="button" class="mv2-filter-toggle" data-filters-toggle aria-expanded="false" aria-controls="mv2-controls">{{icon "sliders"}}<span>Filters</span></button>
   <span class="mv2-spacer"></span>
   <div class="mv2-controls" id="mv2-controls">
-  <details class="menu lib-filter-menu">
-    <summary class="menu-btn" aria-label="Kind: {{.KindLabel}}">{{icon "flag"}}<span class="menu-k">Kind</span><strong>{{.KindLabel}}</strong>{{icon "chevron-down"}}</summary>
-    <div class="menu-list" data-seam-query>
-      {{range .KindMenu}}<a class="{{if .On}}on{{end}}" href="{{.Href}}"{{with .Title}} title="{{.}}"{{end}}>{{.Label}}{{with .Count}}<span class="n">{{.}}</span>{{end}}</a>{{end}}
-    </div>
-  </details>
   {{template "project-switcher" .Scope}}
   <div class="lib-flags" data-seam-query>
     <a class="lib-flag{{if .FavLink.On}} on{{end}}" href="{{.FavLink.Href}}" title="{{if .FavLink.On}}Show every memory again{{else}}Show only starred memories{{end}}">{{icon "star"}}Starred{{with .FavLink.Count}}<span class="n">{{.}}</span>{{end}}</a>
     {{if $.Level.AtLeast "standard"}}<a class="lib-flag{{if .NeverLink.On}} on{{end}}" href="{{.NeverLink.Href}}" title="{{if .NeverLink.On}}Show every memory again{{else}}Show only memories that have never reached an agent's context{{end}}">{{icon "eye-off"}}Never surfaced{{with .NeverLink.Count}}<span class="n">{{.}}</span>{{end}}</a>{{end}}
   </div>
-  {{if not .AlwaysTree}}
-  <div class="lib-group" role="group" aria-label="Group">
-    <span class="lib-group-k">Group</span>
-    <div class="seg" data-seam-query>
-      <a class="{{if .Flat}}on{{end}}" href="{{.GroupNone}}" data-lib-here title="One list in the sort's order, each memory with its project and kind">None</a>
-      <a class="{{if not .Flat}}on{{end}}" href="{{.GroupProject}}" data-lib-here title="Grouped by project, then kind">Project</a>
-    </div>
-  </div>
-  {{end}}
   <details class="menu sort-menu">
     <summary class="menu-btn" aria-label="Sort: {{sortLabel .Sort}}">{{icon "arrow-up-down"}}<span class="menu-k">Sort</span><strong>{{sortLabel .Sort}}</strong>{{icon "chevron-down"}}</summary>
     <div class="menu-list" data-seam-query>
-      <a class="{{if eq .Sort "recent"}}on{{end}}" href="{{index .Sorts "recent"}}" data-lib-here>Recent</a>
-      <a class="{{if eq .Sort "name"}}on{{end}}" href="{{index .Sorts "name"}}" data-lib-here title="A to Z, grouped by project and kind">Name</a>
+      <a class="{{if eq .Sort "recent"}}on{{end}}" href="{{index .Sorts "recent"}}">Recent</a>
+      <a class="{{if eq .Sort "name"}}on{{end}}" href="{{index .Sorts "name"}}" title="A to Z">Name</a>
       {{if $.Level.AtLeast "standard"}}
-      <a class="{{if eq .Sort "reach"}}on{{end}}" href="{{index .Sorts "reach"}}" data-lib-here title="How often each memory surfaced to an agent">Reach</a>
-      <a class="{{if eq .Sort "utility"}}on{{end}}" href="{{index .Sorts "utility"}}" data-lib-here title="Time-decayed demand score: recall hits, prompt matches, explicit reads">Utility</a>
+      <a class="{{if eq .Sort "reach"}}on{{end}}" href="{{index .Sorts "reach"}}" title="How often each memory surfaced to an agent">Reach</a>
+      <a class="{{if eq .Sort "utility"}}on{{end}}" href="{{index .Sorts "utility"}}" title="Time-decayed demand score: recall hits, prompt matches, explicit reads">Utility</a>
       {{end}}
-      <a class="{{if eq .Sort "favorites"}}on{{end}}" href="{{index .Sorts "favorites"}}" data-lib-here>Starred</a>
+      <a class="{{if eq .Sort "favorites"}}on{{end}}" href="{{index .Sorts "favorites"}}">Starred</a>
     </div>
   </details>
+  {{with .StatusLink}}{{if or .Count .On}}
+  <div class="lib-flags" data-seam-query>
+    <a class="lib-flag ml-status{{if .On}} on{{end}}" href="{{.Href}}" title="{{if .On}}Show the active memories again{{else}}Show the memories that were archived or replaced: they no longer reach agents{{end}}">{{icon "archive"}}{{.Count}} {{.Label}}</a>
+  </div>
+  {{end}}{{end}}
   </div>
 </header>
 
-{{if or .Rail .Inactive .Filtered}}
-<div class="lib-layout"{{if and .Selected .SelectedAuto}} data-auto-url="/console/memories/{{.Selected.ID}}{{$qs}}"{{end}}>
-  <nav class="lib-rail" aria-label="Memories">
-    <div class="rail-overview"><span>Memory map</span><span>{{if .Flat}}{{.OrderHint}}{{else}}Project &rarr; kind &rarr; memory{{end}}</span></div>
-    <div class="rail-scroll">
-    {{if or .Rail .Inactive}}
-    <div class="rail-groups">
-      {{range $g := .Rail}}
-      <section class="rail-group" id="rg-{{if $g.All}}active{{else if $g.Project}}{{$g.Project}}{{else}}global{{end}}">
-        <header class="rail-group-hd"><span class="hd-label">{{if $g.All}}{{icon "arrow-up-down"}}Active memories{{else if $g.Project}}{{icon "folder-tree"}}{{$g.Project}}{{else}}{{icon "share-2"}}Shared globally{{end}}</span> <span class="n">{{$g.Count}}</span></header>
-        <div class="rail-subgroups">
-          {{range $g.Kinds}}
-          <section class="rail-subgroup"{{with .Kind}} data-memory-kind="{{.}}"{{end}}>
-          {{if .Kind}}<header class="rail-subgroup-hd"><span><i class="kdot" data-kind="{{.Kind}}"></i>{{.Kind}}</span><span class="n">{{len .Memories}}</span></header>
-          <p class="rail-subgroup-gloss" title="{{.Gloss}}">{{.Gloss}}</p>{{end}}
-          <div class="rail-items">
-          {{range .Memories}}
-          <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/memories/{{.ID}}{{$qs}}" data-title="{{.Name}}" data-context="{{.ScopeLabel}} / {{.Kind}}" data-memory-kind="{{.Kind}}"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
-            <span class="ri-title mono">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Name}}</span>
-            {{if .Description}}<span class="ri-desc">{{.Description}}</span>{{end}}
-            <span class="ri-meta">{{if $g.All}}<span class="ri-chip">{{.ScopeLabel}}</span> <span class="ri-chip ri-kind" data-kind="{{.Kind}}" title="{{.KindGloss}}">{{.Kind}}</span> {{end}}<span>updated {{agoTime .Updated}}</span>{{if $.Level.AtLeast "standard"}}{{if .Injects}} &middot; surfaced {{.Injects}}&times;{{else}} &middot; never surfaced{{end}}{{end}}{{with agentPill .Harness .Model}} {{.}}{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
-          </a>
-          {{end}}
-          </div>
-          </section>
-          {{end}}
-        </div>
-      </section>
-      {{end}}
-      {{if .Inactive}}
-      <details class="rail-group rail-collapse" id="rg-inactive">
-        <summary class="rail-group-hd"><span class="hd-label">{{icon "archive"}}Archived &amp; superseded</span> <span class="n">{{.InactiveCount}}</span></summary>
-        <div class="rail-items">
-          {{range .Inactive}}
-          <a class="rail-item dim{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/memories/{{.ID}}{{$qs}}" data-title="{{.Name}}" data-context="Historical / {{.Kind}}" data-memory-kind="{{.Kind}}"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
-            <span class="ri-title mono"><i class="kdot" data-kind="{{.Kind}}" title="{{.Kind}}: {{.KindGloss}}"></i>{{.Name}}</span>
-            <span class="ri-meta">{{.Status}}{{if .ReplacedBy}} by {{.ReplacedBy}}{{end}} &middot; {{agoTime .Updated}}{{with agentPill .Harness .Model}} {{.}}{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
-          </a>
-          {{end}}
-        </div>
-      </details>
-      {{end}}
-    </div>
-    {{else}}
-    <div class="rail-none lib-none">
-      <p>{{if .Query}}No memories match &ldquo;{{.Query}}&rdquo;{{if .Narrowed}} with these filters{{end}}.{{else}}No memories match these filters.{{end}}</p>
-      <p class="lib-none-acts"><a href="{{.ClearHref}}" data-seam-query>{{icon "x"}}Clear</a>{{with .SearchHref}}<a href="{{.}}">{{icon "search"}}Search everything for &ldquo;{{$.Data.Query}}&rdquo;</a>{{end}}</p>
-    </div>
-    {{end}}
-    </div><!-- .rail-scroll -->
-  </nav>
-  <section class="lib-reader" id="lib-reader" data-base="/console/memories" aria-live="polite" aria-label="Memory">
-    {{if .Selected}}{{template "memory-reader" .Selected}}{{else}}
-    <div class="reader-empty dotgrid"><span class="empty-ico">{{icon "brain"}}</span><div>Select a memory to read it here.</div></div>
-    {{end}}
+{{if or .Total .RetiredTotal}}
+<nav class="ml-kinds" aria-label="Kind" data-seam-query>
+  {{- range .KindChips}}
+  <a class="ml-chip{{if .On}} on{{end}}" href="{{.Href}}"{{with .Title}} title="{{.}}"{{end}}{{if .On}} aria-current="true"{{end}}>{{with .Value}}<i class="kdot" data-kind="{{.}}"></i>{{end}}{{.Label}}<span class="n">{{.Count}}</span></a>
+  {{- end}}
+</nav>
+<section class="ml-list" id="ml-list" aria-label="{{if .View.Inactive}}Archived and superseded memories{{else}}Memories{{end}}" data-ml-list>
+  {{- range .List.Groups}}
+  <section class="ml-group" id="ml-g-{{.Key}}" aria-labelledby="ml-gh-{{.Key}}"{{with .Kind}} data-memory-kind="{{.}}"{{end}}>
+    <header class="ml-group-hd"><h2 id="ml-gh-{{.Key}}">{{.Label}}</h2>{{with .Gloss}}<p class="ml-gloss">{{.}}</p>{{end}}<span class="ml-note">{{.Note}}</span></header>
+    {{- range .Rows}}
+    <a class="ml-row{{if ne .Status "active"}} ml-gone{{end}}" id="ml-{{.ID}}" href="/console/memories/{{.ID}}{{$rowqs}}" data-peek data-memory-kind="{{.Kind}}">
+      <span class="ml-kind" title="{{.KindGloss}}">{{.Kind}}</span>
+      <span class="ml-main"><span class="ml-name">{{if .Favorite}}<span class="ml-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Name}}</span>{{with .Description}}<span class="ml-desc">{{.}}</span>{{end}}</span>
+      {{- if ne .Status "active"}}
+      <span class="ml-status">{{.Status}}{{with .ReplacedBy}} by <span class="ml-successor">{{.}}</span>{{end}}</span>
+      {{- end}}
+      {{- with .Account}}
+      <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>
+      {{- end}}
+      {{- if not $byKind}}
+      <span class="ml-proj">{{.ScopeLabel}}</span>
+      {{- end}}
+      <span class="ml-when">{{agoTime .Updated}}</span>
+      {{- if $.Level.AtLeast "standard"}}
+      <span class="ml-reach">{{if .Injects}}surfaced {{.Injects}}&times;{{else}}never surfaced{{end}}</span>
+      {{- end}}
+    </a>
+    {{- end}}
   </section>
-</div>
+  {{- else}}
+  <div class="ml-none lib-none">
+    {{- if .Filtered}}
+    <p>{{if .Query}}No {{if .View.Inactive}}archived or superseded {{end}}memories match &ldquo;{{.Query}}&rdquo;{{if .Narrowed}} with these filters{{end}}.{{else}}No {{if .View.Inactive}}archived or superseded {{end}}memories match these filters.{{end}}</p>
+    <p class="lib-none-acts"><a href="{{.ClearHref}}" data-seam-query>{{icon "x"}}Clear</a>{{with .SearchHref}}<a href="{{.}}">{{icon "search"}}Search everything for &ldquo;{{$.Data.Query}}&rdquo;</a>{{end}}</p>
+    {{- else if .View.Inactive}}
+    <p>No memory has been archived or replaced.</p>
+    {{- else}}
+    <p>No active memories: every memory here was archived or replaced.</p>
+    {{- end}}
+  </div>
+  {{- end}}
+  {{- with .List}}{{if .Groups}}
+  <footer class="ml-foot" id="ml-foot">
+    <span>{{if .More}}Showing <strong>{{.Shown}}</strong> of {{.Total}}{{else}}{{.Total}} {{if eq .Total 1}}memory{{else}}memories{{end}}{{end}} &middot; {{.Order}}</span>
+    {{- with .More}}
+    <a class="ml-more" href="{{.}}" data-seam-query>Show {{$.Data.List.MoreN}} more</a>
+    {{- end}}
+  </footer>
+  {{- end}}{{end}}
+</section>
+<p class="ml-keys" aria-hidden="true"><span><kbd>j</kbd> <kbd>k</kbd> move</span><span><kbd>Enter</kbd> opens the memory</span><span><kbd>/</kbd> filters</span><span><kbd>p</kbd> picks a project</span></p>
 {{else}}
 <div class="empty dotgrid"><span class="empty-ico">{{icon "brain"}}</span><div>No active memories yet &mdash; durable knowledge agents write with memory_write shows up here.</div></div>
 {{end}}
@@ -123,6 +112,7 @@
 {{end}}
 {{- end}}
 {{end}}
+
 
 {{define "memory-reader"}}
 <article class="reader-sheet" data-memory-kind="{{.Kind}}">

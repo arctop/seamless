@@ -794,7 +794,11 @@ a superseded or archived memory finds it here too, with its status.</p>
 </tr>
 <tr>
 <td><code>j</code> / <code>k</code></td>
-<td>Next / previous item in a library rail, or, on <a href="#item-page">an item's own page</a>, in the list it is in</td>
+<td>Next / previous item in a library rail or the Memories list, or, on <a href="#item-page">an item's own page</a>, in the list it is in</td>
+</tr>
+<tr>
+<td><code>Enter</code></td>
+<td>On the Memories list, open the focused memory's own page</td>
 </tr>
 <tr>
 <td><code>p</code></td>
@@ -1275,7 +1279,7 @@ there. See <a href="../../reference/configuration/">Configuration</a>.</p>
 JSON and not HTML. This is how <code>seam</code> reads the console's data.</li>
 <li><strong>An HTML fragment</strong> for entity details when the caller passes <code>?peek=1</code> - the
 detail pane loads it without a page navigation - or <code>?reader=1</code>, the richer
-reader fragment the library screens (memories, notes, tasks, plans, labs,
+reader fragment the library screens (notes, tasks, plans, labs,
 trials) swap in place.</li>
 </ul>
 <p>The event page composes its full page from the same <code>detail-body</code> block its
@@ -2164,8 +2168,8 @@ out. The list holds the newest 200.</p>
 <h2 id="item-page">An item's own page</h2>
 <p><code>/console/memories/{id}</code>, <code>/console/notes/{id}</code>, <code>/console/tasks/{id}</code></p>
 <p>A link to one memory, note or task opens that item on a page of its own: the
-item and what is around it, never the list it lives in. The rail and the
-reader stay on <a href="#memories">Memories</a>, <a href="#notes">Notes</a> and <a href="#tasks">Tasks</a>.
+item and what is around it, never the list it lives in. The lists stay on
+<a href="#memories">Memories</a>, <a href="#notes">Notes</a> and <a href="#tasks">Tasks</a>.
 Every item reads the same way:</p>
 <ul>
 <li><strong>The way back</strong>, top left: a link to the collection scoped to the item's
@@ -2179,7 +2183,9 @@ the memory's project and kind, newest first; the note's project, newest
 first; a plan step's plan, its closed steps in the order they closed and
 then the rest as the plan card orders them; or an off-plan task's project,
 as the Tasks list orders it. A list that does not hold the item falls back
-to that.</li>
+to that. A row of the Memories list always carries its list's state
+(<code>?sort=recent</code> on the default list), so a memory opened from it is placed
+in that list.</li>
 <li><strong>Where it lives</strong>: project › Memories › kind, project › Notes, project ›
 Plans › <code>plan:&lt;slug&gt;</code>, or project › Tasks, each a link.</li>
 <li><strong>The title row</strong>: a memory's name in mono, or a note's or a task's title,
@@ -2226,24 +2232,39 @@ item answers as it always did, and its items are absent from every other
 item's place. <code>?format=json</code>, <code>?peek=1</code> and <code>?reader=1</code> answer as before.</p>
 <h2 id="memories">Memories</h2>
 <p><code>/console/memories</code>, <code>/console/memories/{id}</code></p>
-<p>A two-pane library: a rail of memories beside a full-height reader. Under the
-default sort, <strong>Recent</strong>, the rail is one list, newest first, each row
-carrying its project and its kind, so what changed last is at the top.
-<strong>Group: Project</strong> turns it into a tree - global first, then projects A to Z,
-kinds in canonical order within each, every kind group with a one-line
-subtitle saying what that kind holds - and the <strong>Name</strong> sort always draws the
-tree. The other sorts are reach (how often a memory surfaced), utility, and
-starred. Inactive memories collapse into an archived-and-superseded group at
-the rail's end, each carrying its status and, when superseded, what replaced
-it.</p>
-<p>Filters narrow the rail and combine: <strong>Kind</strong>, <strong>Project</strong> (a project, or the
-shared global scope), <strong>Starred</strong>, and <strong>Never surfaced</strong> - memories that have
-never reached an agent's context. Each menu entry and toggle counts what
-choosing it would show. The text box matches a substring of the name, the
-description, the kind, a tag, or the project's slug or name. While anything
-is filtered the header reads &quot;3 of 128 active&quot; beside a <strong>Clear</strong> link; when
-nothing matches, the rail says so and offers Clear and <strong>Search everything</strong>
-for the same text on <a href="#search">Search</a>.</p>
+<p>One list, full width, with no rail and no reader: a memory's link opens <a href="#item-page">its
+own page</a>. With <strong>All projects</strong> in scope the list is every match,
+newest first, in local-day groups: <strong>Today</strong>, <strong>Yesterday</strong>, <strong>Earlier this
+week</strong> (the seven days up to today), <strong>Earlier this month</strong> and <strong>Older</strong>,
+each heading saying how many matches it holds. Days are counted in the
+daemon's time zone, as the <a href="#diary">Diary</a> counts them. The list draws 50 rows
+at a time, and <strong>Show 50 more</strong> adds the next rows in place, without reloading
+the page; the address keeps how many are shown (<code>?show=</code>). The other sorts,
+<strong>Name</strong>, <strong>Reach</strong> (how often a memory surfaced), <strong>Utility</strong> and
+<strong>Starred</strong>, draw the matches as one group in that order, 50 at a time. With a
+project chosen in the switcher, the list is the whole project, grouped by kind
+in the canonical order, each kind's heading with the one line that says what
+that kind holds, and each kind in the sort's order.</p>
+<p>A row is one link: the kind as a colored word, the name in mono, the
+description on one line, the project (on the All projects list only), how long
+since it changed, and, from the Standard level, &quot;surfaced 43×&quot; or &quot;never
+surfaced&quot;. A memory written by a restricted local account says so on its row.</p>
+<p>The bar holds the project switcher, the text filter (<code>/</code> focuses it),
+<strong>Starred</strong>, <strong>Never surfaced</strong> (memories that have never reached an agent's
+context, from the Standard level), <strong>Sort</strong>, and <strong>N archived and
+superseded</strong>. Under it the kind chips filter by kind: <strong>All kinds</strong>, then each
+kind with a match. The filters combine, and every chip, toggle and switcher
+row counts what choosing it would show, the other filters applied. The text
+box matches a substring of the name, the description, the kind, a tag, or the
+project's slug or name. While anything is filtered the header reads &quot;3 of 128
+active&quot; beside a <strong>Clear</strong> link; when nothing matches, the list says so and
+offers Clear and <strong>Search everything</strong> for the same text on <a href="#search">Search</a>.</p>
+<p><strong>N archived and superseded</strong> switches the list to the memories that were
+archived or replaced (<code>?status=inactive</code>), laid out the same way: each row
+says which it is and, when superseded, names the memory that replaced it.
+Every filter, the switcher and the sort keep it, and pressed again it brings
+back the active memories. Its <strong>Search everything</strong> reaches the archived
+memories too.</p>
 <p>The project is chosen with the switcher, the <strong>In All projects</strong> button
 (<code>p</code> opens it). It lists <strong>All projects</strong>; <strong>Recent</strong>, the projects this
 browser last chose or visited (up to five, kept in this browser only);
@@ -2257,41 +2278,43 @@ chooses, <code>Esc</code> closes, and <code>Backspace</code> in an empty field g
 projects. A locked project this browser has not unlocked is listed with a
 lock and no count, and links to its unlock page. Without script the switcher
 is a plain menu of the same links.</p>
-<p>The whole state is in the URL - <code>?sort=</code>, <code>?group=project</code>, <code>?kind=</code>,
-<code>?project=</code> (a slug, or <code>global</code>), <code>?fav=1</code>, <code>?surfaced=never</code> and <code>?q=</code> - and
-it survives what you do on the page: opening another memory, changing the sort
-(the memory you are reading stays open), starring, archiving (you land on
-the same filtered list, or, from the memory's own page, on that page) and
-restoring (you stay on the memory). A value the screen cannot read is a 400 naming the
-values it takes.</p>
+<p>The whole state is in the URL: <code>?sort=</code>, <code>?kind=</code>, <code>?project=</code> (a slug, or
+<code>global</code>), <code>?fav=1</code>, <code>?surfaced=never</code>, <code>?q=</code>, <code>?status=inactive</code> and
+<code>?show=</code>. A value the screen cannot read is a 400 naming the values it takes.
+<code>?group=project</code>, from the list before, is still read and kept on links, and
+changes nothing: choosing a project replaces it. Each row's link carries the
+list's state (<code>?sort=recent</code> on the default list), so the memory's page places
+it in this list and its <code>k</code> / <code>j</code> walk it; a new filter, sort or project
+starts again at the first 50 rows. Starring, archiving and restoring on the
+memory's page return to that page with the list's state kept. <code>?format=json</code>
+answers every match, unpaged, in project and kind groups with the archived and
+superseded ones beside them, whatever the page draws.</p>
 <p>What reaches an agent's context is <strong>surfaced</strong> here, the word the Overview
-and the knowledge sky use: a rail row reads &quot;surfaced 43×&quot; or &quot;never
-surfaced&quot;, and the reader leads with how long since the memory last surfaced,
-or says it never has. A kind chip's tooltip is the same one-line meaning its
-kind group shows.</p>
-<p>The reader renders the body uncapped (through the markdown layer, with raw HTML
-disabled and a sanitizer on the output), the metadata - kind, project, tags,
-timestamps, the session that produced it - how often it surfaced and was read,
-the sessions it surfaced to (the five latest, each linked, the rest behind
-<strong>all N</strong>), its
+and the knowledge sky use: a row reads &quot;surfaced 43×&quot; or &quot;never surfaced&quot;, and
+a memory's page leads with how long since it last surfaced, or says it never
+has. A kind's tooltip, on a row or a chip, is the same one-line meaning its
+group heading shows in a project's list.</p>
+<p>A memory's <a href="#item-page">own page</a> renders the body uncapped (through the
+markdown layer, with raw HTML disabled and a sanitizer on the output), the
+metadata (kind, project, tags, timestamps, the session that produced it), how
+often it surfaced and was read, the sessions it surfaced to, its
 <a href="../../concepts/recall/#the-utility-nudge">utility score</a> with the per-signal
 demand breakdown behind it, the <code>vscode://</code> link straight to the file, and its
 supersession neighbors in <strong>both</strong> directions: what replaced it, and what it
-replaced. The actions here are
-<strong>star</strong> - the flag that pins it into briefings and boosts recall - and
-<strong>archive</strong>, which asks in the page first and says what happens: the memory
-leaves briefings and recall, its history stays readable, and it can be
-restored. An archived or superseded memory says so in a banner at the top of
-the reader, and the banner carries <strong>Restore</strong> - unless a memory that replaced
-it is still active, which the banner links instead, or <a href="#held">Held</a> holds it,
-which the banner says.</p>
-<p>Opening <code>/console/memories</code> auto-opens the first match (in the tree, the most
-recently updated one); a memory's own URL opens <a href="#item-page">its own page</a>.
-Clicking rail items swaps the reader in place (real URLs, browser Back
-works), and <code>j</code> / <code>k</code> step through the rail.</p>
+replaced. Its actions are the <strong>star</strong>, the flag that pins it into briefings
+and boosts recall, and <strong>archive</strong>, which asks in the page first and says what
+happens: the memory leaves briefings and recall, its history stays readable,
+and it can be restored. An archived or superseded memory says so in a banner
+at the top of the page, and the banner carries <strong>Restore</strong>, unless a memory
+that replaced it is still active, which the banner links instead, or
+<a href="#held">Held</a> holds it, which the banner says.</p>
+<p><code>j</code> and <code>k</code> move a focus ring through the rows, <code>Enter</code> opens the focused
+memory's page, <code>/</code> focuses the filter and <code>p</code> opens the switcher. A memory
+written while the page is open joins its group as the page refreshes in place,
+without a reload, and the row in focus keeps the ring.</p>
 <h2 id="notes">Notes</h2>
 <p><code>/console/notes</code>, <code>/console/notes/{id}</code></p>
-<p>The same library shape for notes: under <strong>Recent</strong> the rail is one list,
+<p>A two-pane library for notes: under <strong>Recent</strong> the rail is one list,
 newest first, each row carrying its project; <strong>Group: Project</strong> groups it by
 project (global <code>&quot;&quot;</code> first), and sorting by title always does. Sortable by
 recency, title, or starred; filterable by <strong>Project</strong> (the same project

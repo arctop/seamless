@@ -370,7 +370,8 @@ a superseded or archived memory finds it here too, with its status.
 | `Cmd/Ctrl+K` | Search or jump to a section |
 | `/` | Focus this screen's filter; open the palette where there is none |
 | `g` then a key | Go to a section (pressing `g` shows every key it can take, until your next key or `Esc`): `a` Access requests, `k` Approvers, `o` Overview, `n` Now, `i` Interactions, `f` Mishaps, `d` Diary, `w` Projects, `p` Plans, `t` Tasks, `s` Sessions, `b` Locks, `m` Memories, `e` Notes, `r` Retrieval, `g` Gardener, `h` Held, `l` Labs, `x` Trials, `y` System, `v` Privacy, `c` Devices, `,` Settings |
-| `j` / `k` | Next / previous item in a library rail, or, on [an item's own page](#item-page), in the list it is in |
+| `j` / `k` | Next / previous item in a library rail or the Memories list, or, on [an item's own page](#item-page), in the list it is in |
+| `Enter` | On the Memories list, open the focused memory's own page |
 | `p` | Open the project switcher on Memories, Notes and Plans |
 | `a` / `x` | On the Gardener: apply / dismiss the open proposal. An apply that cannot be undone asks in the page first; press `a` again to confirm |
 | `[` | Collapse or expand the sidebar |
@@ -491,7 +492,7 @@ Every route answers in the shape the caller asked for:
   JSON and not HTML. This is how `seam` reads the console's data.
 - **An HTML fragment** for entity details when the caller passes `?peek=1` - the
   detail pane loads it without a page navigation - or `?reader=1`, the richer
-  reader fragment the library screens (memories, notes, tasks, plans, labs,
+  reader fragment the library screens (notes, tasks, plans, labs,
   trials) swap in place.
 
 The event page composes its full page from the same `detail-body` block its
@@ -1300,8 +1301,8 @@ out. The list holds the newest 200.
 `/console/memories/{id}`, `/console/notes/{id}`, `/console/tasks/{id}`
 
 A link to one memory, note or task opens that item on a page of its own: the
-item and what is around it, never the list it lives in. The rail and the
-reader stay on [Memories](#memories), [Notes](#notes) and [Tasks](#tasks).
+item and what is around it, never the list it lives in. The lists stay on
+[Memories](#memories), [Notes](#notes) and [Tasks](#tasks).
 Every item reads the same way:
 
 - **The way back**, top left: a link to the collection scoped to the item's
@@ -1315,7 +1316,9 @@ Every item reads the same way:
   first; a plan step's plan, its closed steps in the order they closed and
   then the rest as the plan card orders them; or an off-plan task's project,
   as the Tasks list orders it. A list that does not hold the item falls back
-  to that.
+  to that. A row of the Memories list always carries its list's state
+  (`?sort=recent` on the default list), so a memory opened from it is placed
+  in that list.
 - **Where it lives**: project › Memories › kind, project › Notes, project ›
   Plans › `plan:<slug>`, or project › Tasks, each a link.
 - **The title row**: a memory's name in mono, or a note's or a task's title,
@@ -1355,25 +1358,42 @@ item's place. `?format=json`, `?peek=1` and `?reader=1` answer as before.
 
 `/console/memories`, `/console/memories/{id}`
 
-A two-pane library: a rail of memories beside a full-height reader. Under the
-default sort, **Recent**, the rail is one list, newest first, each row
-carrying its project and its kind, so what changed last is at the top.
-**Group: Project** turns it into a tree - global first, then projects A to Z,
-kinds in canonical order within each, every kind group with a one-line
-subtitle saying what that kind holds - and the **Name** sort always draws the
-tree. The other sorts are reach (how often a memory surfaced), utility, and
-starred. Inactive memories collapse into an archived-and-superseded group at
-the rail's end, each carrying its status and, when superseded, what replaced
-it.
+One list, full width, with no rail and no reader: a memory's link opens [its
+own page](#item-page). With **All projects** in scope the list is every match,
+newest first, in local-day groups: **Today**, **Yesterday**, **Earlier this
+week** (the seven days up to today), **Earlier this month** and **Older**,
+each heading saying how many matches it holds. Days are counted in the
+daemon's time zone, as the [Diary](#diary) counts them. The list draws 50 rows
+at a time, and **Show 50 more** adds the next rows in place, without reloading
+the page; the address keeps how many are shown (`?show=`). The other sorts,
+**Name**, **Reach** (how often a memory surfaced), **Utility** and
+**Starred**, draw the matches as one group in that order, 50 at a time. With a
+project chosen in the switcher, the list is the whole project, grouped by kind
+in the canonical order, each kind's heading with the one line that says what
+that kind holds, and each kind in the sort's order.
 
-Filters narrow the rail and combine: **Kind**, **Project** (a project, or the
-shared global scope), **Starred**, and **Never surfaced** - memories that have
-never reached an agent's context. Each menu entry and toggle counts what
-choosing it would show. The text box matches a substring of the name, the
-description, the kind, a tag, or the project's slug or name. While anything
-is filtered the header reads "3 of 128 active" beside a **Clear** link; when
-nothing matches, the rail says so and offers Clear and **Search everything**
-for the same text on [Search](#search).
+A row is one link: the kind as a colored word, the name in mono, the
+description on one line, the project (on the All projects list only), how long
+since it changed, and, from the Standard level, "surfaced 43×" or "never
+surfaced". A memory written by a restricted local account says so on its row.
+
+The bar holds the project switcher, the text filter (`/` focuses it),
+**Starred**, **Never surfaced** (memories that have never reached an agent's
+context, from the Standard level), **Sort**, and **N archived and
+superseded**. Under it the kind chips filter by kind: **All kinds**, then each
+kind with a match. The filters combine, and every chip, toggle and switcher
+row counts what choosing it would show, the other filters applied. The text
+box matches a substring of the name, the description, the kind, a tag, or the
+project's slug or name. While anything is filtered the header reads "3 of 128
+active" beside a **Clear** link; when nothing matches, the list says so and
+offers Clear and **Search everything** for the same text on [Search](#search).
+
+**N archived and superseded** switches the list to the memories that were
+archived or replaced (`?status=inactive`), laid out the same way: each row
+says which it is and, when superseded, names the memory that replaced it.
+Every filter, the switcher and the sort keep it, and pressed again it brings
+back the active memories. Its **Search everything** reaches the archived
+memories too.
 
 The project is chosen with the switcher, the **In All projects** button
 (`p` opens it). It lists **All projects**; **Recent**, the projects this
@@ -1389,47 +1409,49 @@ projects. A locked project this browser has not unlocked is listed with a
 lock and no count, and links to its unlock page. Without script the switcher
 is a plain menu of the same links.
 
-The whole state is in the URL - `?sort=`, `?group=project`, `?kind=`,
-`?project=` (a slug, or `global`), `?fav=1`, `?surfaced=never` and `?q=` - and
-it survives what you do on the page: opening another memory, changing the sort
-(the memory you are reading stays open), starring, archiving (you land on
-the same filtered list, or, from the memory's own page, on that page) and
-restoring (you stay on the memory). A value the screen cannot read is a 400 naming the
-values it takes.
+The whole state is in the URL: `?sort=`, `?kind=`, `?project=` (a slug, or
+`global`), `?fav=1`, `?surfaced=never`, `?q=`, `?status=inactive` and
+`?show=`. A value the screen cannot read is a 400 naming the values it takes.
+`?group=project`, from the list before, is still read and kept on links, and
+changes nothing: choosing a project replaces it. Each row's link carries the
+list's state (`?sort=recent` on the default list), so the memory's page places
+it in this list and its `k` / `j` walk it; a new filter, sort or project
+starts again at the first 50 rows. Starring, archiving and restoring on the
+memory's page return to that page with the list's state kept. `?format=json`
+answers every match, unpaged, in project and kind groups with the archived and
+superseded ones beside them, whatever the page draws.
 
 What reaches an agent's context is **surfaced** here, the word the Overview
-and the knowledge sky use: a rail row reads "surfaced 43×" or "never
-surfaced", and the reader leads with how long since the memory last surfaced,
-or says it never has. A kind chip's tooltip is the same one-line meaning its
-kind group shows.
+and the knowledge sky use: a row reads "surfaced 43×" or "never surfaced", and
+a memory's page leads with how long since it last surfaced, or says it never
+has. A kind's tooltip, on a row or a chip, is the same one-line meaning its
+group heading shows in a project's list.
 
-The reader renders the body uncapped (through the markdown layer, with raw HTML
-disabled and a sanitizer on the output), the metadata - kind, project, tags,
-timestamps, the session that produced it - how often it surfaced and was read,
-the sessions it surfaced to (the five latest, each linked, the rest behind
-**all N**), its
+A memory's [own page](#item-page) renders the body uncapped (through the
+markdown layer, with raw HTML disabled and a sanitizer on the output), the
+metadata (kind, project, tags, timestamps, the session that produced it), how
+often it surfaced and was read, the sessions it surfaced to, its
 [utility score](/concepts/recall/#the-utility-nudge) with the per-signal
 demand breakdown behind it, the `vscode://` link straight to the file, and its
 supersession neighbors in **both** directions: what replaced it, and what it
-replaced. The actions here are
-**star** - the flag that pins it into briefings and boosts recall - and
-**archive**, which asks in the page first and says what happens: the memory
-leaves briefings and recall, its history stays readable, and it can be
-restored. An archived or superseded memory says so in a banner at the top of
-the reader, and the banner carries **Restore** - unless a memory that replaced
-it is still active, which the banner links instead, or [Held](#held) holds it,
-which the banner says.
+replaced. Its actions are the **star**, the flag that pins it into briefings
+and boosts recall, and **archive**, which asks in the page first and says what
+happens: the memory leaves briefings and recall, its history stays readable,
+and it can be restored. An archived or superseded memory says so in a banner
+at the top of the page, and the banner carries **Restore**, unless a memory
+that replaced it is still active, which the banner links instead, or
+[Held](#held) holds it, which the banner says.
 
-Opening `/console/memories` auto-opens the first match (in the tree, the most
-recently updated one); a memory's own URL opens [its own page](#item-page).
-Clicking rail items swaps the reader in place (real URLs, browser Back
-works), and `j` / `k` step through the rail.
+`j` and `k` move a focus ring through the rows, `Enter` opens the focused
+memory's page, `/` focuses the filter and `p` opens the switcher. A memory
+written while the page is open joins its group as the page refreshes in place,
+without a reload, and the row in focus keeps the ring.
 
 ## Notes
 
 `/console/notes`, `/console/notes/{id}`
 
-The same library shape for notes: under **Recent** the rail is one list,
+A two-pane library for notes: under **Recent** the rail is one list,
 newest first, each row carrying its project; **Group: Project** groups it by
 project (global `""` first), and sorting by title always does. Sortable by
 recency, title, or starred; filterable by **Project** (the same project

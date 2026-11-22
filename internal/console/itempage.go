@@ -194,41 +194,39 @@ func nounOf(n int, one, many string) string {
 }
 
 // memoryItemPage answers a memory's own URL in HTML: the item page, its
-// place in the list the URL names (lq; listed when it names one), else in
-// its project and kind.
-func (s *Service) memoryItemPage(w http.ResponseWriter, r *http.Request, d memoryDetail, lq libQuery) {
+// place in the list the URL names (lq and v; listed when it names one,
+// namesMemoryList), else in its project and kind.
+func (s *Service) memoryItemPage(w http.ResponseWriter, r *http.Request, d memoryDetail, lq libQuery, v memoryView) {
 	ctx := r.Context()
-	listed := lq.QS() != ""
-	sel := s.memoryReaderOf(ctx, d, lq)
-	active := d.Status == "active"
-	kinds := make([]string, 0, len(core.MemoryKinds))
-	for _, k := range core.MemoryKinds {
-		kinds = append(kinds, string(k))
+	listed := namesMemoryList(r.URL.Query())
+	// qs is the list's state every link of the page keeps: the place's
+	// neighbours, the star's and the archive's way back, the successor
+	// links. The page size is the list's alone.
+	qs := ""
+	if listed {
+		qs = memoryListQS(lq, v)
 	}
+	sel := s.memoryReaderOf(ctx, d, lq)
+	sel.QS = qs
+	active := d.Status == "active"
 	page := &itemPage{
 		Kind: "memory", ID: d.ID, Title: d.Name, Mono: true, Lead: d.Description,
-		Star: itemStar{Action: "/console/favorites/memory/" + d.ID, Next: memoriesListPath + "/" + d.ID + lq.QS(),
+		Star: itemStar{Action: "/console/favorites/memory/" + d.ID, Next: memoriesListPath + "/" + d.ID + qs,
 			On: d.Favorite, Noun: "memory"},
 	}
 
 	// The place: in the list the URL names, when it holds the memory; else in
-	// the memory's project and kind, newest first.
+	// the memory's project and kind, newest first. A memory that is no
+	// longer active is placed among the archived and superseded ones.
 	if listed {
-		l := store.MemoryList{
-			ByProject: lq.Project != "", Project: lq.Project, Kind: lq.Kind, Fav: lq.Fav,
-			Never: lq.Surfaced == "never", Query: strings.ToLower(lq.Q), Inactive: !active,
-			Sort: lq.Sort, Tree: active && lq.tree(), Kinds: kinds,
-		}
-		if l.Project == validate.GlobalProject {
-			l.Project = ""
-		}
+		l := memoryPlaceList(lq, !active)
 		place, found, err := store.MemoryPlace(ctx, s.db(ctx), l, d.ID)
 		if err != nil {
 			s.serverError(w, r, err)
 			return
 		}
 		if found {
-			page.Place = placeOf(place, func(n int) string { return memoryListWords(l, n) }, memoriesListPath, lq.QS())
+			page.Place = placeOf(place, func(n int) string { return memoryListWords(l, n) }, memoriesListPath, qs)
 		} else {
 			listed = false
 		}
@@ -249,7 +247,7 @@ func (s *Service) memoryItemPage(w http.ResponseWriter, r *http.Request, d memor
 	scoped := listHref(memoriesListPath, d.Project, "", lq)
 	page.Back = frameLink{Label: memoryBackLabel(d.Project), Href: listHref(memoriesListPath, d.Project, "", libQuery{})}
 	if listed {
-		page.Back = frameLink{Label: memoryListBack(lq), Href: lq.href(memoriesListPath)}
+		page.Back = frameLink{Label: memoryListBack(lq, v), Href: memoryListHref(lq, memoryView{Inactive: v.Inactive})}
 	}
 	page.Crumbs = []frameLink{
 		s.projectCrumb(ctx, d.Project, scoped, "Shared globally"),
@@ -273,6 +271,27 @@ func (s *Service) memoryItemPage(w http.ResponseWriter, r *http.Request, d memor
 	}
 	page.Memory = item
 	s.render(w, r, "memories", pageData{Title: "Memory " + d.Name, Active: "memories", Data: memoriesData{Item: page}})
+}
+
+// memoryPlaceList is the Memories list lq names, as a place query reads it:
+// the list the Memories page draws (memoriesPage, buildMemoryList), a
+// project's by kind in core's order and then the sort, every project's in the
+// sort's order; inactive for the archived and superseded one.
+// TestItPlaceAgreesWithTheList holds the two equal.
+func memoryPlaceList(lq libQuery, inactive bool) store.MemoryList {
+	kinds := make([]string, 0, len(core.MemoryKinds))
+	for _, k := range core.MemoryKinds {
+		kinds = append(kinds, string(k))
+	}
+	l := store.MemoryList{
+		ByProject: lq.Project != "", Project: lq.Project, Kind: lq.Kind, Fav: lq.Fav,
+		Never: lq.Surfaced == "never", Query: strings.ToLower(lq.Q), Inactive: inactive,
+		Sort: lq.Sort, Tree: lq.Project != "", Kinds: kinds,
+	}
+	if l.Project == validate.GlobalProject {
+		l.Project = ""
+	}
+	return l
 }
 
 // memoryListWords names a Memories list of n: "runbooks in example-ops",
@@ -302,9 +321,12 @@ func memoryBackLabel(project string) string {
 	return project + "’s memories"
 }
 
-// memoryListBack is the way back to the Memories list lq names.
-func memoryListBack(lq libQuery) string {
+// memoryListBack is the way back to the Memories list lq and v name.
+func memoryListBack(lq libQuery, v memoryView) string {
 	noun := memoryNoun(lq.Kind, 2)
+	if v.Inactive {
+		noun = "archived and superseded " + noun
+	}
 	switch lq.Project {
 	case "":
 		return strings.ToUpper(noun[:1]) + noun[1:]

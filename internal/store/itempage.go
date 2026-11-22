@@ -117,7 +117,9 @@ type MemoryList struct {
 	Inactive bool
 	// Sort is the list's sort key (recent, name, reach, utility, favorites);
 	// Tree orders by project, global first, then by kind in kinds' order
-	// before the sort.
+	// before the sort. The console's Memories list sets it for one
+	// project's list, which it draws by kind (plan:console-ux-pass UX 28),
+	// and leaves it off across every project.
 	Sort  string
 	Tree  bool
 	Kinds []string

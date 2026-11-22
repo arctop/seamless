@@ -157,16 +157,14 @@ func TestMemoriesLibrary_DetailAndReaderFragment(t *testing.T) {
 	require.Contains(t, getPeek(t, mux, "/console/memories/"+m.ID+"?group=project").Body.String(), `<div class="item-page"`,
 		"a list's grouping on the URL draws the same page")
 
-	// The list draws the library: one list on Recent, each row naming its kind.
+	// The list is one list, no reader (plan:console-ux-pass UX 28): each row
+	// names its kind in its color, and its project.
 	list := getPeek(t, mux, "/console/memories").Body.String()
-	require.Contains(t, list, `id="lib-reader"`)
-	require.Contains(t, list, `aria-current="page"`)
-	require.NotContains(t, list, `class="rail-subgroup-hd"`, "Recent draws one list, not the kind tree")
-	require.Contains(t, list, `<span class="ri-chip ri-kind" data-kind="gotcha"`, "each row names its kind instead")
-	require.Contains(t, list, `data-context="seamless / gotcha"`)
-	grouped := getPeek(t, mux, "/console/memories?group=project").Body.String()
-	require.Contains(t, grouped, `class="rail-subgroup-hd"`, "grouped, memory kind boundaries are explicit")
-	require.Contains(t, list, `class="reader-sheet" data-memory-kind="gotcha"`)
+	require.NotContains(t, list, `id="lib-reader"`)
+	require.NotContains(t, list, "body of lib-mem", "the list opens no memory")
+	require.Contains(t, list, `<a class="ml-row" id="ml-`+m.ID+`" href="/console/memories/`+m.ID+`?sort=recent" data-peek data-memory-kind="gotcha">`)
+	require.Contains(t, list, `<span class="ml-kind" title="`+kindGloss("gotcha")+`">gotcha</span>`, "each row names its kind")
+	require.Contains(t, list, `<span class="ml-proj">seamless</span>`)
 	require.Contains(t, list, `class="menu-k">Sort<`, "the compact bar still names its sort control")
 	require.Contains(t, list, `<strong>Recent</strong>`, "the sort menu shows the active choice without opening")
 
@@ -175,16 +173,6 @@ func TestMemoriesLibrary_DetailAndReaderFragment(t *testing.T) {
 	require.NotContains(t, frag.Body.String(), "<html")
 	require.Contains(t, frag.Body.String(), "body of lib-mem")
 	require.Contains(t, frag.Body.String(), "archive", "the reader carries the archive action")
-}
-
-func TestMemoriesLibrary_ListAutoSelects(t *testing.T) {
-	_, mgr, mux := newConsoleWithFiles(t)
-	writeMemory(t, mgr, core.KindConstraint, "", "solo-mem", "only memory")
-
-	html := getPeek(t, mux, "/console/memories")
-	require.Equal(t, http.StatusOK, html.Code)
-	require.Contains(t, html.Body.String(), "body of solo-mem")
-	require.Contains(t, html.Body.String(), "data-auto-url=")
 }
 
 func TestTasksLibrary_AutoSelectPrefersInProgress(t *testing.T) {
@@ -288,9 +276,11 @@ func libMain(t *testing.T, body string) string {
 	return body[start : start+end]
 }
 
-// With Recent the rail is one list, newest first, each row naming its
-// project and kind; grouping by project brings the tree back, and Name keeps
-// it. The JSON answer keeps its groups either way.
+// With Recent the list is one list, newest first, whatever the project or
+// kind, each row naming its project and kind; the list opens no memory. The
+// grouping by project is gone from the page (choosing a project replaces
+// it): ?group=project and Name draw the same one list, in their order. The
+// JSON answer keeps its groups either way.
 func TestLibRecentIsOneListNewestFirst(t *testing.T) {
 	_, mgr, mux := newConsoleWithFiles(t)
 	base := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
@@ -299,22 +289,18 @@ func TestLibRecentIsOneListNewestFirst(t *testing.T) {
 	newest := libMemory(t, mgr, core.KindGotcha, "zeta", "zz-newest", base.Add(2*time.Hour))
 
 	body := getHTMLBody(t, mux, "/console/memories")
-	require.Equal(t, []string{newest.ID, mid.ID, old.ID}, libRailIDs(body),
-		"with Recent, the newest memory is the first rail row, whatever its project or kind")
-	require.Contains(t, body, `data-auto-url="/console/memories/`+newest.ID+`"`, "and the reader opens it")
-	require.Contains(t, body, `<span class="ri-chip">zeta</span>`, "a row of the one list names its project")
-	require.Contains(t, body, `<span class="ri-chip">Shared globally</span>`)
-	require.Contains(t, body, `<span>Newest first</span>`)
-	require.Contains(t, body, `class="on" href="/console/memories/`+newest.ID+`" data-lib-here`, "the Group control says None")
+	require.Equal(t, []string{newest.ID, mid.ID, old.ID}, mlRows(body),
+		"with Recent, the newest memory is the first row, whatever its project or kind")
+	require.NotContains(t, body, "data-auto-url", "and the list opens none")
+	require.Contains(t, body, `<span class="ml-proj">zeta</span>`, "a row of the one list names its project")
+	require.Contains(t, body, `<span class="ml-proj">Shared globally</span>`)
+	require.Contains(t, body, `&middot; Newest first`)
+	require.NotContains(t, body, `class="lib-group"`, "no Group control")
 
 	grouped := getHTMLBody(t, mux, "/console/memories?group=project")
-	require.Equal(t, []string{old.ID, mid.ID, newest.ID}, libRailIDs(grouped), "grouped: global first, then projects A to Z")
-	require.NotContains(t, grouped, `class="ri-chip"`)
-	require.Contains(t, grouped, `class="rail-subgroup-hd"`)
-
+	require.Equal(t, []string{newest.ID, mid.ID, old.ID}, mlRows(grouped), "an old grouping on the URL draws the same list")
 	byName := getHTMLBody(t, mux, "/console/memories?sort=name&group=none")
-	require.Contains(t, byName, `class="rail-subgroup-hd"`, "Name keeps the tree")
-	require.NotContains(t, byName, `class="lib-group"`, "so it offers no Group control")
+	require.Equal(t, []string{old.ID, mid.ID, newest.ID}, mlRows(byName), "Name: one list, A to Z")
 
 	var data memoriesData
 	getJSON(t, mux, "/console/memories?format=json", &data)
@@ -382,7 +368,7 @@ func TestLibFiltersCombine(t *testing.T) {
 
 	main := libMain(t, getHTMLBody(t, mux, "/console/memories?kind=gotcha&project=pay&fav=1"))
 	require.Contains(t, main, "<strong>1</strong>of 5 active", "the header says how many of all")
-	require.Contains(t, main, `aria-label="Kind: gotcha"`)
+	require.Contains(t, main, `<a class="ml-chip on" href="/console/memories?fav=1&amp;kind=gotcha&amp;project=pay"`, "the gotcha chip is the choice")
 	require.Contains(t, main, `aria-label="Project: pay"`)
 	require.Contains(t, main, `class="lib-flag on" href="/console/memories?kind=gotcha&amp;project=pay"`,
 		"the Starred toggle is on, and its link turns it off and keeps the rest")
@@ -390,8 +376,8 @@ func TestLibFiltersCombine(t *testing.T) {
 	for _, keep := range []string{`name="fav" value="1"`, `name="kind" value="gotcha"`, `name="project" value="pay"`} {
 		require.Contains(t, main, `<input type="hidden" `+keep+`>`, "typing keeps the other filters")
 	}
-	require.Contains(t, main, `href="/console/memories?fav=1&amp;kind=constraint&amp;project=pay" title="`+kindGloss("constraint")+`">constraint<span class="n">1</span>`,
-		"the Kind menu counts what choosing constraint would show")
+	require.Contains(t, main, `href="/console/memories?fav=1&amp;kind=constraint&amp;project=pay" title="`+kindGloss("constraint")+`"><i class="kdot" data-kind="constraint"></i>constraint<span class="n">1</span>`,
+		"the constraint chip counts what choosing it would show")
 	require.Contains(t, main, `href="/console/memories?fav=1&amp;kind=gotcha&amp;project=web">web<span class="n">1</span>`)
 	require.Contains(t, main, `Never surfaced<span class="n">1</span>`)
 
@@ -424,15 +410,12 @@ func TestLibStateSurvivesStarArchiveSort(t *testing.T) {
 	const qs = "?kind=gotcha&project=pay&q=pay&sort=name"
 	esc := strings.ReplaceAll(qs, "&", "&amp;")
 
-	// The list opens its newest match, b, in the reader.
+	// A row keeps the state, and so does a sort; the list opens no memory.
 	list := libMain(t, getHTMLBody(t, mux, "/console/memories"+qs))
-	require.Contains(t, list, `id="ri-`+a.ID+`" href="/console/memories/`+a.ID+esc+`"`, "a rail row keeps the state")
-	require.Contains(t, list, `<input type="hidden" name="next" value="/console/memories/`+b.ID+esc+`" data-lib-next>`,
-		"the reader's star returns to this memory with every filter")
-	require.Contains(t, list, `<input type="hidden" name="next" value="/console/memories`+esc+`">`,
-		"the reader's archive returns to the filtered list")
-	require.Contains(t, list, `href="/console/memories/`+b.ID+`?kind=gotcha&amp;project=pay&amp;q=pay&amp;sort=recent" data-lib-here>Recent</a>`,
-		"a sort keeps the filters and the memory being read")
+	require.Contains(t, list, `id="ml-`+a.ID+`" href="/console/memories/`+a.ID+esc+`"`, "a row keeps the state")
+	require.Contains(t, list, `href="/console/memories?kind=gotcha&amp;project=pay&amp;q=pay&amp;sort=recent">Recent</a>`,
+		"a sort keeps the filters")
+	require.NotContains(t, list, `name="next"`, "no reader, no star or archive on the list")
 	frag := getPeek(t, mux, "/console/memories/"+b.ID+qs+"&reader=1").Body.String()
 	require.Contains(t, frag, `value="/console/memories/`+b.ID+esc+`" data-lib-next>`, "so does the fragment the rail swaps in")
 
@@ -484,7 +467,9 @@ func TestLibStateSurvivesStarArchiveSort(t *testing.T) {
 
 // After a reader swap, the page's sort and Group links follow the reader and
 // the star's next is the URL the reader is on (library.js), and every such
-// link is marked for it in both library templates.
+// link is marked for it in the Notes template. Memories has no reader beside
+// its list (plan:console-ux-pass UX 28): its sorts are plain list links, and
+// only the reader fragment (?reader=1) still marks its star's next.
 func TestLibReaderSwapKeepsThePageState(t *testing.T) {
 	js := string(libraryJS)
 	require.Contains(t, js, "function followReader(href)")
@@ -495,7 +480,7 @@ func TestLibReaderSwapKeepsThePageState(t *testing.T) {
 	// button is inside the row's anchor, so the check asks the click's target.
 	require.Contains(t, js, "if (e.target.closest('.copy-btn')) return;")
 	require.NotContains(t, js, "a.closest('.copy-btn')", "the anchor's ancestors never include its own button")
-	for name, sorts := range map[string][]string{"memories": memorySortKeys, "notes": noteSortKeys} {
+	for name, sorts := range map[string][]string{"notes": noteSortKeys} {
 		src, err := templateFS.ReadFile("templates/" + name + ".html")
 		require.NoError(t, err)
 		page := string(src)
@@ -505,6 +490,10 @@ func TestLibReaderSwapKeepsThePageState(t *testing.T) {
 			require.Contains(t, page, `href="{{index .Sorts "`+key+`"}}" data-lib-here`, "%s: sort %s", name, key)
 		}
 	}
+	src, err := templateFS.ReadFile("templates/memories.html")
+	require.NoError(t, err)
+	require.NotContains(t, string(src), "data-lib-here", "memories: a sort reorders the list, with no reader to stay on")
+	require.Equal(t, 1, strings.Count(string(src), "data-lib-next"), "memories: the reader fragment's star")
 }
 
 // Typing a project's slug or name narrows to that project, the header says how

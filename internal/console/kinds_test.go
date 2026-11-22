@@ -26,20 +26,21 @@ func TestLibKindGlossaryCoversEveryCoreKind(t *testing.T) {
 	require.Empty(t, kindGloss("bogus"))
 }
 
-// A kind explains itself wherever it shows: under its rail group's header,
-// as the chip's tooltip in the one list, the reader and the peek, and in the
-// Kind menu.
+// A kind explains itself wherever it shows: under its group's heading in a
+// project's list, as a row's kind tooltip and a kind chip's in the list, and
+// in the reader and the peek.
 func TestLibKindChipsExplainThemselves(t *testing.T) {
 	_, mgr, mux := newConsoleWithFiles(t)
 	m := writeMemory(t, mgr, core.KindStage, "pay", "launch-stage", "where the launch stands")
 	gloss := kindGloss(string(core.KindStage))
 
-	grouped := getHTMLBody(t, mux, "/console/memories?group=project")
-	require.Contains(t, grouped, `<p class="rail-subgroup-gloss" title="`+gloss+`">`+gloss+`</p>`)
+	project := getHTMLBody(t, mux, "/console/memories?project=pay")
+	require.Contains(t, project, `<h2 id="ml-gh-stage">stages</h2><p class="ml-gloss">`+gloss+`</p>`, "a kind group's heading")
 	flat := getHTMLBody(t, mux, "/console/memories")
-	require.Contains(t, flat, `<span class="ri-chip ri-kind" data-kind="stage" title="`+gloss+`">stage</span>`)
-	require.Contains(t, flat, `<span class="kind" title="`+gloss+`">stage</span>`, "the reader's chip")
-	require.Contains(t, flat, `title="`+gloss+`">stage<span class="n">1</span></a>`, "the Kind menu")
+	require.Contains(t, flat, `<span class="ml-kind" title="`+gloss+`">stage</span>`, "a row's kind")
+	require.Contains(t, flat, `title="`+gloss+`"><i class="kdot" data-kind="stage"></i>stage<span class="n">1</span></a>`, "the kind chip")
+	reader := getPeek(t, mux, "/console/memories/"+m.ID+"?reader=1").Body.String()
+	require.Contains(t, reader, `<span class="kind" title="`+gloss+`">stage</span>`, "the reader's chip")
 	peek := getPeek(t, mux, "/console/memories/"+m.ID+"?peek=1").Body.String()
 	require.Contains(t, peek, `<span class="kind" title="`+gloss+`">stage</span>`)
 }
@@ -49,7 +50,8 @@ func TestLibKindChipsExplainThemselves(t *testing.T) {
 // accent), filled it with the kind's color under a word in that same
 // color, and left a solid blob nobody could read; any later chip or row
 // that names its kind would go the same way. Every rule that colors by
-// kind is scoped to .kdot, and the chip keeps no background of its own.
+// kind is scoped to .kdot, a Memories row's kind is a colored word on the
+// row's own ground, and a kind chip's color is its dot's alone.
 func TestConsoleCSS_KindColorsPaintOnlyTheDots(t *testing.T) {
 	css := string(consoleCSS)
 	n := 0
@@ -62,9 +64,17 @@ func TestConsoleCSS_KindColorsPaintOnlyTheDots(t *testing.T) {
 		require.True(t, strings.HasPrefix(strings.TrimSpace(line), ".kdot[data-kind="), "a kind color rule matches more than the dots: %s", line)
 	}
 	require.Equal(t, len(core.MemoryKinds), n, "one dot rule per memory kind")
-	i := strings.Index(css, ".ri-chip.ri-kind {")
-	require.GreaterOrEqual(t, i, 0)
-	rule := css[i : i+strings.Index(css[i:], "}")]
-	require.Contains(t, rule, "color: var(--lib-item-accent);", "the chip's word carries the kind's color")
-	require.NotContains(t, rule, "background", "the chip sits on the row's own ground")
+	rule := func(selector string) string {
+		t.Helper()
+		i := strings.Index(css, "\n"+selector+" {")
+		require.GreaterOrEqual(t, i, 0, "no %s rule", selector)
+		return css[i : i+strings.Index(css[i:], "}")]
+	}
+	kind := rule(".ml-kind")
+	require.Contains(t, kind, "color: var(--lib-item-accent);", "the row's kind word carries the kind's color")
+	require.NotContains(t, kind, "background", "the word sits on the row's own ground")
+	chip := rule(".ml-chip")
+	require.NotContains(t, chip, "--k-", "a kind chip's color is its dot's")
+	require.NotContains(t, chip, "--lib-item-accent")
+	require.NotContains(t, css, ".ri-kind", "the rail's kind chip went with the rail")
 }
