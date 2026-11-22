@@ -299,9 +299,10 @@ func TestPlanRollup_GatesOpen(t *testing.T) {
 	require.Empty(t, plain, "plan steps stay out of the default queue")
 }
 
-// TestProjectsWithCounts_GatedCountAsBlocked: the board's blocked count is the
-// open tasks that are not ready, so work waiting on people needs attention too.
-func TestProjectsWithCounts_GatedCountAsBlocked(t *testing.T) {
+// TestBdProjectsWithCounts_GatesWaitNotBlock: the board's blocked count is
+// the Tasks page's blocked rail -- unfinished work before a task and no gate
+// -- and a gate, or a step one holds, waits on people instead.
+func TestBdProjectsWithCounts_GatesWaitNotBlock(t *testing.T) {
 	ctx := context.Background()
 	db := newTaskDB(t)
 	gate := addGated(t, db, "", "GATE", 1, core.TaskKindGate, "owner", "approve")
@@ -313,11 +314,94 @@ func TestProjectsWithCounts_GatedCountAsBlocked(t *testing.T) {
 	for _, r := range rows {
 		if r.Project == "demo" {
 			require.Equal(t, 3, r.OpenTasks)
-			require.Equal(t, 2, r.Blocked)
+			require.Equal(t, 0, r.Blocked, "a gate blocks nobody: its dependents wait on people")
+			require.Equal(t, 2, r.Waiting, "the gate and the step it holds")
+			require.Equal(t, 1, r.GatesOpen)
+			require.Equal(t, 1, r.Ready)
 			return
 		}
 	}
 	t.Fatal("no demo row")
+}
+
+// bdLease stamps a task in progress with a holder and a lease ending at
+// expires (holder "" and a zero expires: a claimless start).
+func bdLease(t *testing.T, db *sql.DB, id, holder string, expires time.Time) {
+	t.Helper()
+	var lease any
+	if !expires.IsZero() {
+		lease = core.FormatTime(expires.UTC())
+	}
+	_, err := db.ExecContext(context.Background(),
+		`UPDATE tasks SET status = 'in_progress', claimed_by = ?, lease_expires_at = ? WHERE id = ?`, holder, lease, id)
+	require.NoError(t, err)
+}
+
+// TestBdTaskCounts_TheTasksPageRails: every group of TaskCountsByProject
+// equals the length of the rail the Tasks page draws it from, per project,
+// and a step in progress counts once, in the status words: in progress
+// (ClaimLive), lapsed (a holder whose lease ended, at exactly now included),
+// unclaimed (no holder), or waiting when an open gate holds it.
+func TestBdTaskCounts_TheTasksPageRails(t *testing.T) {
+	ctx := context.Background()
+	db := newTaskDB(t)
+	now := time.Date(2026, 7, 11, 9, 0, 0, 0, time.UTC)
+
+	// demo: a ready task, one blocked by work, a gate with a step behind it,
+	// a step with its own gate, and five steps in progress.
+	free := addTask(t, db, "demo", "free", 1)
+	addTask(t, db, "demo", "after-free", 2, free)
+	gate := addGated(t, db, "", "GATE", 3, core.TaskKindGate, "owner", "sign")
+	addTask(t, db, "demo", "after-gate", 4, gate)
+	addGated(t, db, "", "own-gate", 5, core.TaskKindStep, "hardware", "the board arrives")
+	bdLease(t, db, addTask(t, db, "demo", "held", 6), "sessA", now.Add(time.Minute))
+	bdLease(t, db, addTask(t, db, "demo", "lapsed", 7), "sessB", now.Add(-time.Minute))
+	bdLease(t, db, addTask(t, db, "demo", "boundary", 8), "sessC", now)
+	bdLease(t, db, addTask(t, db, "demo", "claimless", 9), "", time.Time{})
+	bdLease(t, db, addTask(t, db, "demo", "held-no-lease", 10), "sessD", time.Time{})
+	bdLease(t, db, addTask(t, db, "demo", "behind-gate", 11, gate), "", time.Time{})
+	// A plan step counts too, in another project.
+	addPlanTask(t, db, "other", "p", "step", 12)
+	done := addTask(t, db, "other", "done", 13)
+	setStatus(t, db, done, core.TaskDone)
+
+	counts, err := TaskCountsByProject(ctx, db, now)
+	require.NoError(t, err)
+	require.Equal(t, TaskCounts{
+		Ready: 1, InProgress: 1, Lapsed: 3, Unclaimed: 1,
+		Blocked: 1, Waiting: 3, GatesOpen: 2,
+	}, counts["demo"], "held-no-lease and a lease ending at now are lapsed; behind-gate waits")
+	require.Equal(t, TaskCounts{Ready: 1}, counts["other"], "plan steps count; closed tasks do not")
+
+	// The rails the Tasks page draws: the same numbers.
+	ready, err := AllReadyTasks(ctx, db)
+	require.NoError(t, err)
+	blocked, err := AllBlockedTasks(ctx, db)
+	require.NoError(t, err)
+	gates, err := AllGateTasks(ctx, db)
+	require.NoError(t, err)
+	gated, err := AllGatedTasks(ctx, db)
+	require.NoError(t, err)
+	require.Len(t, ready, counts["demo"].Ready+counts["other"].Ready)
+	require.Len(t, blocked, counts["demo"].Blocked)
+	require.Len(t, gates, 1)
+	require.Len(t, gated, 2)
+	require.Equal(t, len(gates)+len(gated), counts["demo"].Waiting)
+
+	// ClaimLive is the authority: each in-progress task reads as the SQL does.
+	all, err := AllTasksByStatus(ctx, db, core.TaskInProgress)
+	require.NoError(t, err)
+	live := 0
+	for _, tk := range all {
+		if tk.ClaimLive(now) {
+			live++
+		}
+	}
+	require.Equal(t, counts["demo"].InProgress, live)
+
+	ids, err := ReadyTaskProjects(ctx, db)
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{free: "demo", ready[1].ID: "other"}, ids)
 }
 
 // A gate's words are the task's text for updated_account: a restricted

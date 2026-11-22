@@ -52,10 +52,9 @@ func TestProjectsExplorer_ExposesReachWindow(t *testing.T) {
 
 func TestProjectsExplorer_AtlasIsResponsive(t *testing.T) {
 	css := string(consoleCSS)
-	require.Contains(t, css, `grid-template-areas: "main reach knowledge work activity"`)
-	require.Contains(t, css, `grid-template-areas: "main reach activity" "main knowledge work"`)
-	require.Contains(t, css, `grid-template-areas: "main main" "reach activity" "knowledge work"`)
-	require.Contains(t, css, `.project-card { display: flex; flex-direction: column; }`)
+	require.Contains(t, css, `grid-template-areas: "tile main tasks when reach"`)
+	require.Contains(t, css, `grid-template-areas: "tile main main main" "tile tasks when reach"`)
+	require.NotContains(t, css, ".project-card {", "the board's rows are project-row; the old card is gone")
 }
 
 func TestInteractionsExplorer_ExposesTraceFiltersAndVisibleCount(t *testing.T) {

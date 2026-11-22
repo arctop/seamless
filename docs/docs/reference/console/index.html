@@ -1950,10 +1950,28 @@ each need a passkey already enrolled on the Approvers page; without one the card
 links there. Seamless restarts to apply the change. A project listed under
 <code>peer_auth.force_locked</code> shows as <strong>Force locked</strong> and cannot be changed here. A
 locked project's isolation cannot be set to <code>open</code>.</p>
-<p>The board: one row per project, with live sessions, total sessions, open and
-blocked tasks, memory count, inherited memories, reach rate, and last activity
-(the later of its last session update and its last task change). It has three
-views (<code>?group=activity|family|flat</code>):</p>
+<p>The board leads with work. Its summary tiles count the agents live, the open
+tasks (in progress, ready, blocked, waiting on people, and any lapsed or
+unclaimed claims), the plans in motion (a plan with a step still open that
+moved in the last 7 days, out of every plan with a step open, the rest
+stalled), then the knowledge base and its reach, judged against its 55% target.</p>
+<p>Each project is one compact row: its name, with its star and badges
+(isolation, a lock, live agents, and what needs attention), a work line in the
+<a href="#tasks">task words</a> - &quot;2 plans moving · 1 in progress · 3 ready · 1 blocked ·
+2 waiting on people&quot; - then its open tasks, its last activity (the later of its
+last session update and its last task change; hover it for the moment in your
+own time) and its reach as a small figure. The whole row opens the project.
+Blocked and waiting on people count exactly what the Tasks page's rails count:
+blocked waits on unfinished work alone, and waiting on people is a gate or a
+step an open gate holds.</p>
+<p><strong>Needs attention</strong> means something waits on you or is stuck: a lapsed claim, a
+task marked in progress that no claim holds, an open gate, a captured plan
+awaiting approval, or data under a slug the project registry does not list. A
+project whose tasks only wait on other work is not flagged, and neither is a
+retired one. The header's chip counts them, and choosing it narrows the board
+to them (<code>?show=attention</code>; <code>all</code>, the default, shows every project); narrowed,
+the chip's <strong>Show all</strong> clears it.</p>
+<p>The board has three views (<code>?group=activity|family|flat</code>):</p>
 <ul>
 <li><strong>Activity</strong>, the default: <strong>Active</strong> (a live agent, or a session or task
 touched in the last 30 days), then <strong>Quiet</strong>, then <strong>Retired</strong>. Quiet and
@@ -1973,7 +1991,10 @@ linking to <a href="#context">Context</a>.</p>
 the same bands, sorted with the others, with a lock badge: its name, its
 counts, its last activity (the latest session start or end in it, never a
 title) and <strong>Unlock</strong>, which opens <code>/console/unlock/&lt;project&gt;</code>. Nothing else
-about it is read. The JSON model also lists these tallies as <code>locked</code>.</p>
+about it is read: it has no work line, and it is never judged to need
+attention, so the attention view leaves it out. A task that waits on a locked
+project's task counts as blocked, as it does on the Tasks page. The JSON model
+also lists these tallies as <code>locked</code>.</p>
 <p>The board remembers the view and sort you pick, in this browser only (its
 local storage). A link that names neither, such as the sidebar's, shows the
 remembered pair, drawn in place without a reload; a URL that names a view or

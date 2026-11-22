@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -95,6 +96,9 @@ func TestProjectsWithCounts(t *testing.T) {
 	require.Equal(t, 1, seam.LiveSessions) // active within TTL; the idle active one is excluded
 	require.Equal(t, 3, seam.OpenTasks)    // A + P + B (D done excluded)
 	require.Equal(t, 1, seam.Blocked)      // B blocked by open A
+	require.Equal(t, 1, seam.Ready)        // A
+	require.Equal(t, 1, seam.Unclaimed)    // P: in progress with no claim
+	require.Zero(t, seam.InProgress, "no live claim holds P")
 	require.Equal(t, 1, seam.Notes)
 	require.False(t, seam.Unregistered)
 	require.True(t, seam.LastActive.Equal(tsAt(5)), "LastActive == MAX(session updated_at)")
@@ -188,4 +192,19 @@ func TestGetSessionCoverageForProject(t *testing.T) {
 	future, err := GetSessionCoverageForProject(ctx, db, "seam", now.Add(time.Hour))
 	require.NoError(t, err)
 	require.Equal(t, 0, future.Total)
+}
+
+// TestBdProjectBoardRow_JSONKeepsItsKeys: the row's task counts sit in its own
+// JSON object, under the keys a script already reads ("blocked").
+func TestBdProjectBoardRow_JSONKeepsItsKeys(t *testing.T) {
+	raw, err := json.Marshal(ProjectBoardRow{Project: "demo", TaskCounts: TaskCounts{Blocked: 2, Waiting: 3}})
+	require.NoError(t, err)
+	var keys map[string]any
+	require.NoError(t, json.Unmarshal(raw, &keys))
+	require.EqualValues(t, 2, keys["blocked"])
+	require.EqualValues(t, 3, keys["waiting"])
+	for _, k := range []string{"ready", "inProgress", "lapsed", "unclaimed", "gatesOpen", "openTasks"} {
+		require.Contains(t, keys, k)
+	}
+	require.NotContains(t, keys, "TaskCounts")
 }

@@ -1338,17 +1338,18 @@
 
 <div class="ops-page" data-ops="projects" data-board-group="activity" data-board-sort="recent">
 <header class="mv2-bar">
-  <h1><svg class="ico ico-table-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>Projects</h1><details class="page-about"><summary aria-label="About this page" title="About this page"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary><p class="page-about-pop" role="note">Your shared-context map: where agents are working, what each project knows, what needs attention, and how often that knowledge comes back.</p></details>
+  <h1><svg class="ico ico-table-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>Projects</h1><details class="page-about"><summary aria-label="About this page" title="About this page"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary><p class="page-about-pop" role="note">Where the work is: live agents, plans and tasks in each project, what needs your attention, then what each project knows and how often that knowledge comes back.</p></details>
   <span class="mv2-count" aria-label="6 projects">
     <strong>6</strong>projects<small>1 agent working across 1 project</small>
   </span>
-  <a class="lib-active-filter" href="#projects-attention"><svg class="ico ico-triangle-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span>1 project needs attention</span></a>
+  
   <form class="search lib-query" method="get" action="/console/projects" data-seam-query>
     <svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
     <input name="q" aria-label="Filter projects by slug, name, or description" placeholder="Filter by slug, name, or description&hellip;" value="">
     <input type="hidden" name="group" value="activity">
     <input type="hidden" name="sort" value="recent">
     <input type="hidden" name="w" value="24h">
+    
   </form>
   <button type="button" class="mv2-filter-toggle" data-filters-toggle aria-expanded="false" aria-controls="mv2-controls"><svg class="ico ico-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg><span>Filters</span></button>
   <span class="mv2-spacer"></span>
@@ -1380,26 +1381,26 @@
   </div>
 </header>
 
-<section class="project-summary-grid" id="projects-attention" aria-label="Project portfolio summary">
-  <article class="project-summary-card">
-    <span class="project-summary-icon"><svg class="ico ico-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg></span>
-    <div class="project-summary-copy"><span>Knowledge reach</span><strong>83%</strong><small>5 of 6 surfaced &middot; 24h</small></div>
-  </article>
-  <article class="project-summary-card">
-    <span class="project-summary-icon"><svg class="ico ico-layout-dashboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg></span>
-    <div class="project-summary-copy"><span>Projects</span><strong>6</strong><small>independent projects</small></div>
-  </article>
+<section class="project-summary-grid" id="projects-summary" aria-label="Project portfolio summary">
   <article class="project-summary-card live">
     <span class="project-summary-icon"><svg class="ico ico-terminal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg></span>
-    <div class="project-summary-copy"><span>Agent activity</span><strong>1</strong><small>live across 1 project</small></div>
+    <div class="project-summary-copy"><span>Agents live</span><strong>1</strong><small>across 1 project</small></div>
+  </article>
+  <article class="project-summary-card">
+    <span class="project-summary-icon"><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg></span>
+    <div class="project-summary-copy"><span>Open tasks</span><strong>6</strong><small>5 ready · 1 blocked</small></div>
+  </article>
+  <article class="project-summary-card">
+    <span class="project-summary-icon"><svg class="ico ico-map" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg></span>
+    <div class="project-summary-copy"><span>Plans in motion</span><strong>2</strong><small>of 2 with open steps</small></div>
   </article>
   <article class="project-summary-card">
     <span class="project-summary-icon"><svg class="ico ico-database" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg></span>
     <div class="project-summary-copy"><span>Knowledge base</span><strong>6</strong><small>active memories &middot; 3 notes</small></div>
   </article>
-  <article class="project-summary-card warn">
-    <span class="project-summary-icon"><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg></span>
-    <div class="project-summary-copy"><span>Task flow</span><strong>6</strong><small>open &middot; 1 blocked</small></div>
+  <article class="project-summary-card">
+    <span class="project-summary-icon"><svg class="ico ico-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg></span>
+    <div class="project-summary-copy"><span>Knowledge reach</span><strong>83%</strong><small>5 of 6 surfaced &middot; 24h</small><div class="project-summary-band"><span class="band ok">at or above 55% target</span></div></div>
   </article>
 </section>
 <a class="project-global-line" href="/console/context" title="The global scope: knowledge every project&rsquo;s briefing draws on"><svg class="ico ico-database" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg><span><strong>Shared context:</strong> 1 memory, 0 notes, reach 100%</span></a>
@@ -1423,210 +1424,83 @@
           </div>
           <div class="project-group-signals">
             <span>4 projects</span>
+            <span class="live"><span class="live-dot"></span>1 live</span>
+            <span>2 plans moving</span>
+            <span>6 open</span>
+            
+            
             <span class="brand">80% reach</span>
             <span>5 mem &middot; 3 notes</span>
-            
-            <span class="live"><span class="live-dot"></span>1 live</span>
-            <span>6 open</span>
-            <span class="warn">1 blocked</span>
             
           </div>
 </header>
         <div class="project-group-rows">
-<article id="p-example-open-alpha" class="project-card row-link working" data-href="/console/projects/example-open-alpha">
-  <div class="project-card-main">
-    <span class="project-card-tile tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
-    <div class="project-card-copy">
-      <div class="project-card-titleline">
-        <a class="project-card-name" href="/console/projects/example-open-alpha">example-open-alpha</a>
-      </div>
-      <div class="project-card-badges">
-        <span class="project-role">standalone</span>
-        
-        <span class="project-state live"><span class="live-dot"></span>1 working</span>
-        
-      </div>
-      <p>Independent project.</p>
+<article id="p-example-open-alpha" class="project-row row-link working" data-href="/console/projects/example-open-alpha">
+  <span class="project-row-tile tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
+  <div class="project-row-main">
+    <div class="project-row-title">
+      <a class="project-row-name" href="/console/projects/example-open-alpha">example-open-alpha</a>
+      
+      
+      <span class="project-state live"><span class="live-dot"></span>1 working</span>
       
     </div>
+    <div class="project-row-work"><span data-word="plans" title="A plan with a step still open that moved in the last 7 days">2 plans moving</span><span class="project-row-dot" aria-hidden="true">&middot;</span><span data-word="ready" title="Nothing unfinished before it: an agent can claim it now">3 ready</span></div>
   </div>
-
-  <div class="project-card-panel project-card-reach">
-    <div class="project-card-label"><svg class="ico ico-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg> Knowledge reach</div>
-    
-    <div class="project-card-value"><strong>100%</strong><span>3 / 3 surfaced</span></div>
-    <div class="project-meter"><span style="width:100%"></span></div>
-    
-  </div>
-
-  <div class="project-card-panel project-card-knowledge">
-    <div class="project-card-label"><svg class="ico ico-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg> Knowledge</div>
-    <div class="project-stat"><span>Memories</span><strong>3</strong></div>
-    <div class="project-stat"><span>Notes</span><strong>2</strong></div>
-    
-  </div>
-
-  <div class="project-card-panel project-card-work">
-    <div class="project-card-label"><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg> Work</div>
-    <div class="project-stat"><span>Sessions</span><strong>2</strong></div>
-    <div class="project-stat"><span>Open tasks</span><strong>3</strong></div>
-    
-    <div class="project-stat live"><span>Agents live</span><strong>1</strong></div>
-  </div>
-
-  <div class="project-card-panel project-card-activity">
-    <div class="project-card-label"><svg class="ico ico-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Last activity</div>
-    <strong class="project-last-active"><age></strong>
-    <span class="project-activity-state">Active now</span>
-    <span class="project-open-cue">Open project <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
-  </div>
+  <div class="project-row-fig project-row-tasks"><strong>3</strong><span>open tasks</span></div>
+  <div class="project-row-fig project-row-when"><strong><time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></strong><span>active now</span></div>
+  <div class="project-row-fig project-row-reach" title="3 of 3 active memories surfaced"><strong>100%</strong><span>reach &middot; 3 mem</span></div>
 </article>
 
-<article id="p-example-confidential" class="project-card row-link" data-href="/console/projects/example-confidential">
-  <div class="project-card-main">
-    <span class="project-card-tile tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
-    <div class="project-card-copy">
-      <div class="project-card-titleline">
-        <a class="project-card-name" href="/console/projects/example-confidential">example-confidential</a>
-      </div>
-      <div class="project-card-badges">
-        <span class="project-role">standalone</span>
-        <span class="kind accent iso-pill" title="Confidential — nothing leaves. Agents in other projects never see this project&#39;s knowledge, and agents here cannot write outside it."><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>confidential</span>
-        
-        
-      </div>
-      <p>Independent project.</p>
+<article id="p-example-confidential" class="project-row row-link" data-href="/console/projects/example-confidential">
+  <span class="project-row-tile tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
+  <div class="project-row-main">
+    <div class="project-row-title">
+      <a class="project-row-name" href="/console/projects/example-confidential">example-confidential</a>
+      
+      <span class="kind accent iso-pill" title="Confidential — nothing leaves. Agents in other projects never see this project&#39;s knowledge, and agents here cannot write outside it."><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>confidential</span>
+      
       
     </div>
+    <div class="project-row-work"><span data-word="ready" title="Nothing unfinished before it: an agent can claim it now">2 ready</span></div>
   </div>
-
-  <div class="project-card-panel project-card-reach">
-    <div class="project-card-label"><svg class="ico ico-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg> Knowledge reach</div>
-    
-    <div class="project-card-value"><strong>100%</strong><span>1 / 1 surfaced</span></div>
-    <div class="project-meter"><span style="width:100%"></span></div>
-    
-  </div>
-
-  <div class="project-card-panel project-card-knowledge">
-    <div class="project-card-label"><svg class="ico ico-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg> Knowledge</div>
-    <div class="project-stat"><span>Memories</span><strong>1</strong></div>
-    <div class="project-stat"><span>Notes</span><strong>1</strong></div>
-    
-  </div>
-
-  <div class="project-card-panel project-card-work">
-    <div class="project-card-label"><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg> Work</div>
-    <div class="project-stat"><span>Sessions</span><strong>2</strong></div>
-    <div class="project-stat"><span>Open tasks</span><strong>2</strong></div>
-    
-    
-  </div>
-
-  <div class="project-card-panel project-card-activity">
-    <div class="project-card-label"><svg class="ico ico-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Last activity</div>
-    <strong class="project-last-active"><age></strong>
-    <span class="project-activity-state">2 sessions total</span>
-    <span class="project-open-cue">Open project <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
-  </div>
+  <div class="project-row-fig project-row-tasks"><strong>2</strong><span>open tasks</span></div>
+  <div class="project-row-fig project-row-when"><strong><time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></strong><span>last activity</span></div>
+  <div class="project-row-fig project-row-reach" title="1 of 1 active memories surfaced"><strong>100%</strong><span>reach &middot; 1 mem</span></div>
 </article>
 
-<article id="p-example-open-beta" class="project-card row-link blocked" data-href="/console/projects/example-open-beta">
-  <div class="project-card-main">
-    <span class="project-card-tile tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
-    <div class="project-card-copy">
-      <div class="project-card-titleline">
-        <a class="project-card-name" href="/console/projects/example-open-beta">example-open-beta</a>
-      </div>
-      <div class="project-card-badges">
-        <span class="project-role">standalone</span>
-        
-        
-        <span class="project-state warn"><svg class="ico ico-triangle-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>1 blocked</span>
-      </div>
-      <p>Independent project.</p>
+<article id="p-example-open-beta" class="project-row row-link" data-href="/console/projects/example-open-beta">
+  <span class="project-row-tile tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
+  <div class="project-row-main">
+    <div class="project-row-title">
+      <a class="project-row-name" href="/console/projects/example-open-beta">example-open-beta</a>
+      
+      
+      
       
     </div>
+    <div class="project-row-work"><span data-word="blocked" title="Waits on unfinished work before it">1 blocked</span></div>
   </div>
-
-  <div class="project-card-panel project-card-reach">
-    <div class="project-card-label"><svg class="ico ico-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg> Knowledge reach</div>
-    
-    <div class="project-card-value empty-value"><strong>&mdash;</strong><span>No active memories</span></div>
-    <div class="project-meter"><span style="width:0%"></span></div>
-    
-  </div>
-
-  <div class="project-card-panel project-card-knowledge">
-    <div class="project-card-label"><svg class="ico ico-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg> Knowledge</div>
-    <div class="project-stat"><span>Memories</span><strong>0</strong></div>
-    <div class="project-stat"><span>Notes</span><strong>0</strong></div>
-    
-  </div>
-
-  <div class="project-card-panel project-card-work">
-    <div class="project-card-label"><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg> Work</div>
-    <div class="project-stat"><span>Sessions</span><strong>1</strong></div>
-    <div class="project-stat"><span>Open tasks</span><strong>1</strong></div>
-    
-    <div class="project-stat warn"><span>Blocked</span><strong>1</strong></div>
-  </div>
-
-  <div class="project-card-panel project-card-activity">
-    <div class="project-card-label"><svg class="ico ico-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Last activity</div>
-    <strong class="project-last-active"><age></strong>
-    <span class="project-activity-state">1 session total</span>
-    <span class="project-open-cue">Open project <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
-  </div>
+  <div class="project-row-fig project-row-tasks"><strong>1</strong><span>open task</span></div>
+  <div class="project-row-fig project-row-when"><strong><time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></strong><span>last activity</span></div>
+  <div class="project-row-fig project-row-reach" title="No active memories"><strong>&mdash;</strong><span>reach &middot; 0 mem</span></div>
 </article>
 
-<article id="p-example-sealed" class="project-card row-link" data-href="/console/projects/example-sealed">
-  <div class="project-card-main">
-    <span class="project-card-tile tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
-    <div class="project-card-copy">
-      <div class="project-card-titleline">
-        <a class="project-card-name" href="/console/projects/example-sealed">example-sealed</a>
-      </div>
-      <div class="project-card-badges">
-        <span class="project-role">standalone</span>
-        <span class="kind warn iso-pill" title="Sealed — nothing in or out. Agents here see only this project: no global memories, no family, no cross-project reads."><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>sealed</span>
-        
-        
-      </div>
-      <p>Independent project.</p>
+<article id="p-example-sealed" class="project-row row-link" data-href="/console/projects/example-sealed">
+  <span class="project-row-tile tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
+  <div class="project-row-main">
+    <div class="project-row-title">
+      <a class="project-row-name" href="/console/projects/example-sealed">example-sealed</a>
+      
+      <span class="kind warn iso-pill" title="Sealed — nothing in or out. Agents here see only this project: no global memories, no family, no cross-project reads."><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>sealed</span>
+      
       
     </div>
+    <div class="project-row-work"><span class="project-row-idle">No open work</span></div>
   </div>
-
-  <div class="project-card-panel project-card-reach">
-    <div class="project-card-label"><svg class="ico ico-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg> Knowledge reach</div>
-    
-    <div class="project-card-value"><strong>0%</strong><span>0 / 1 surfaced</span></div>
-    <div class="project-meter"><span style="width:0%"></span></div>
-    
-  </div>
-
-  <div class="project-card-panel project-card-knowledge">
-    <div class="project-card-label"><svg class="ico ico-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg> Knowledge</div>
-    <div class="project-stat"><span>Memories</span><strong>1</strong></div>
-    <div class="project-stat"><span>Notes</span><strong>0</strong></div>
-    
-  </div>
-
-  <div class="project-card-panel project-card-work">
-    <div class="project-card-label"><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg> Work</div>
-    <div class="project-stat"><span>Sessions</span><strong>1</strong></div>
-    <div class="project-stat"><span>Open tasks</span><strong>0</strong></div>
-    
-    
-  </div>
-
-  <div class="project-card-panel project-card-activity">
-    <div class="project-card-label"><svg class="ico ico-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Last activity</div>
-    <strong class="project-last-active"><age></strong>
-    <span class="project-activity-state">1 session total</span>
-    <span class="project-open-cue">Open project <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
-  </div>
+  <div class="project-row-fig project-row-tasks"><strong>0</strong><span>open tasks</span></div>
+  <div class="project-row-fig project-row-when"><strong><time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></strong><span>last activity</span></div>
+  <div class="project-row-fig project-row-reach" title="0 of 1 active memories surfaced"><strong>0%</strong><span>reach &middot; 1 mem</span></div>
 </article>
 </div>
       </section>
@@ -1640,111 +1514,48 @@
           <div class="project-group-signals">
             <span>2 projects</span>
             
+            
+            
+            
+            
+            
             <span>0 mem &middot; 0 notes</span>
-            
-            
-            
-            
             
           </div>
 <span class="project-fold-cue" aria-hidden="true"><svg class="ico ico-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></summary>
         <div class="project-group-rows">
-<article id="p-example-open-delta" class="project-card row-link" data-href="/console/projects/example-open-delta">
-  <div class="project-card-main">
-    <span class="project-card-tile tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
-    <div class="project-card-copy">
-      <div class="project-card-titleline">
-        <a class="project-card-name" href="/console/projects/example-open-delta">Example Open Delta</a><span class="project-card-slug">example-open-delta</span>
-      </div>
-      <div class="project-card-badges">
-        <span class="project-role">standalone</span>
-        
-        
-        
-      </div>
-      <p>A fourth open example project</p>
+<article id="p-example-open-delta" class="project-row row-link" data-href="/console/projects/example-open-delta">
+  <span class="project-row-tile tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
+  <div class="project-row-main">
+    <div class="project-row-title">
+      <a class="project-row-name" href="/console/projects/example-open-delta" title="A fourth open example project">Example Open Delta</a><span class="project-row-slug">example-open-delta</span>
+      
+      
+      
       
     </div>
+    <div class="project-row-work"><span class="project-row-idle">No open work</span></div>
   </div>
-
-  <div class="project-card-panel project-card-reach">
-    <div class="project-card-label"><svg class="ico ico-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg> Knowledge reach</div>
-    
-    <div class="project-card-value empty-value"><strong>&mdash;</strong><span>No active memories</span></div>
-    <div class="project-meter"><span style="width:0%"></span></div>
-    
-  </div>
-
-  <div class="project-card-panel project-card-knowledge">
-    <div class="project-card-label"><svg class="ico ico-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg> Knowledge</div>
-    <div class="project-stat"><span>Memories</span><strong>0</strong></div>
-    <div class="project-stat"><span>Notes</span><strong>0</strong></div>
-    
-  </div>
-
-  <div class="project-card-panel project-card-work">
-    <div class="project-card-label"><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg> Work</div>
-    <div class="project-stat"><span>Sessions</span><strong>0</strong></div>
-    <div class="project-stat"><span>Open tasks</span><strong>0</strong></div>
-    
-    
-  </div>
-
-  <div class="project-card-panel project-card-activity">
-    <div class="project-card-label"><svg class="ico ico-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Last activity</div>
-    <strong class="project-last-active">-</strong>
-    <span class="project-activity-state">No sessions yet</span>
-    <span class="project-open-cue">Open project <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
-  </div>
+  <div class="project-row-fig project-row-tasks"><strong>0</strong><span>open tasks</span></div>
+  <div class="project-row-fig project-row-when"><strong>-</strong><span>last activity</span></div>
+  <div class="project-row-fig project-row-reach" title="No active memories"><strong>&mdash;</strong><span>reach &middot; 0 mem</span></div>
 </article>
 
-<article id="p-example-open-gamma" class="project-card row-link" data-href="/console/projects/example-open-gamma">
-  <div class="project-card-main">
-    <span class="project-card-tile tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
-    <div class="project-card-copy">
-      <div class="project-card-titleline">
-        <a class="project-card-name" href="/console/projects/example-open-gamma">example-open-gamma</a>
-      </div>
-      <div class="project-card-badges">
-        <span class="project-role">standalone</span>
-        
-        
-        
-      </div>
-      <p>Independent project.</p>
+<article id="p-example-open-gamma" class="project-row row-link" data-href="/console/projects/example-open-gamma">
+  <span class="project-row-tile tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
+  <div class="project-row-main">
+    <div class="project-row-title">
+      <a class="project-row-name" href="/console/projects/example-open-gamma">example-open-gamma</a>
+      
+      
+      
       
     </div>
+    <div class="project-row-work"><span class="project-row-idle">No open work</span></div>
   </div>
-
-  <div class="project-card-panel project-card-reach">
-    <div class="project-card-label"><svg class="ico ico-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg> Knowledge reach</div>
-    
-    <div class="project-card-value empty-value"><strong>&mdash;</strong><span>No active memories</span></div>
-    <div class="project-meter"><span style="width:0%"></span></div>
-    
-  </div>
-
-  <div class="project-card-panel project-card-knowledge">
-    <div class="project-card-label"><svg class="ico ico-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg> Knowledge</div>
-    <div class="project-stat"><span>Memories</span><strong>0</strong></div>
-    <div class="project-stat"><span>Notes</span><strong>0</strong></div>
-    
-  </div>
-
-  <div class="project-card-panel project-card-work">
-    <div class="project-card-label"><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg> Work</div>
-    <div class="project-stat"><span>Sessions</span><strong>0</strong></div>
-    <div class="project-stat"><span>Open tasks</span><strong>0</strong></div>
-    
-    
-  </div>
-
-  <div class="project-card-panel project-card-activity">
-    <div class="project-card-label"><svg class="ico ico-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Last activity</div>
-    <strong class="project-last-active">-</strong>
-    <span class="project-activity-state">No sessions yet</span>
-    <span class="project-open-cue">Open project <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
-  </div>
+  <div class="project-row-fig project-row-tasks"><strong>0</strong><span>open tasks</span></div>
+  <div class="project-row-fig project-row-when"><strong>-</strong><span>last activity</span></div>
+  <div class="project-row-fig project-row-reach" title="No active memories"><strong>&mdash;</strong><span>reach &middot; 0 mem</span></div>
 </article>
 </div>
       </details>

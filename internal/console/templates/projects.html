@@ -1,19 +1,20 @@
 {{define "content"}}
 {{with .Data}}
-{{$group := .Group}}{{$sort := .Sort}}{{$query := .Query}}
+{{$group := .Group}}{{$sort := .Sort}}{{$query := .Query}}{{$attn := eq .Show "attention"}}
 <div class="ops-page" data-ops="projects" data-board-group="{{.Group}}" data-board-sort="{{.Sort}}">
 <header class="mv2-bar">
-  <h1>{{icon "table-2"}}Projects</h1>{{about "Your shared-context map: where agents are working, what each project knows, what needs attention, and how often that knowledge comes back."}}
+  <h1>{{icon "table-2"}}Projects</h1>{{about "Where the work is: live agents, plans and tasks in each project, what needs your attention, then what each project knows and how often that knowledge comes back."}}
   <span class="mv2-count" aria-label="{{.Projects}} project{{if ne .Projects 1}}s{{end}}">
     <strong>{{.Projects}}</strong>project{{if ne .Projects 1}}s{{end}}<small>{{if .Working}}{{.Working}} agent{{if ne .Working 1}}s{{end}} working{{if .LiveScopes}} across {{.LiveScopes}} project{{if ne .LiveScopes 1}}s{{end}}{{end}}{{else}}no agents working now{{end}}{{if .Retired}} &middot; {{.Retired}} retired{{end}}</small>
   </span>
-  {{if .Attention}}<a class="lib-active-filter" href="#projects-attention">{{icon "triangle-alert"}}<span>{{.Attention}} project{{if ne .Attention 1}}s{{end}} need{{if eq .Attention 1}}s{{end}} attention</span></a>{{end}}
+  {{if eq .Show "attention"}}<span class="lib-active-filter project-attn-chip on">{{icon "triangle-alert"}}<span>{{.Attention}} project{{if ne .Attention 1}}s{{end}} need{{if eq .Attention 1}}s{{end}} attention</span><a href="/console/projects?group={{.Group}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;w={{.Window}}" data-seam-query>Show all</a></span>{{else if .Attention}}<a class="lib-active-filter project-attn-chip" href="/console/projects?group={{.Group}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;w={{.Window}}&amp;show=attention" data-seam-query title="A lapsed or unclaimed claim, an open gate, a plan awaiting approval, or data the project registry does not know">{{icon "triangle-alert"}}<span>{{.Attention}} project{{if ne .Attention 1}}s{{end}} need{{if eq .Attention 1}}s{{end}} attention</span></a>{{end}}
   <form class="search lib-query" method="get" action="/console/projects" data-seam-query>
     {{icon "search"}}
     <input name="q" aria-label="Filter projects by slug, name, or description" placeholder="Filter by slug, name, or description&hellip;" value="{{.Query}}">
     <input type="hidden" name="group" value="{{.Group}}">
     <input type="hidden" name="sort" value="{{.Sort}}">
     <input type="hidden" name="w" value="{{.Window}}">
+    {{if eq .Show "attention"}}<input type="hidden" name="show" value="attention">{{end}}
   </form>
   <button type="button" class="mv2-filter-toggle" data-filters-toggle aria-expanded="false" aria-controls="mv2-controls">{{icon "sliders"}}<span>Filters</span></button>
   <span class="mv2-spacer"></span>
@@ -21,50 +22,50 @@
   <div class="mv2-sort">
     <span class="mv2-sort-label">View</span>
     <div class="seg" data-seam-query>
-      <a class="{{if eq .Group "activity"}}on{{end}}" href="/console/projects?group=activity&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;w={{.Window}}">Activity</a>
-      <a class="{{if eq .Group "family"}}on{{end}}" href="/console/projects?group=family&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;w={{.Window}}">Family</a>
-      <a class="{{if eq .Group "flat"}}on{{end}}" href="/console/projects?group=flat&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;w={{.Window}}">Flat</a>
+      <a class="{{if eq .Group "activity"}}on{{end}}" href="/console/projects?group=activity&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;w={{.Window}}{{if $attn}}&amp;show=attention{{end}}">Activity</a>
+      <a class="{{if eq .Group "family"}}on{{end}}" href="/console/projects?group=family&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;w={{.Window}}{{if $attn}}&amp;show=attention{{end}}">Family</a>
+      <a class="{{if eq .Group "flat"}}on{{end}}" href="/console/projects?group=flat&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;w={{.Window}}{{if $attn}}&amp;show=attention{{end}}">Flat</a>
     </div>
   </div>
   <details class="menu sort-menu">
     <summary class="menu-btn" aria-label="Sort: {{sortLabel .Sort}}">{{icon "arrow-up-down"}}<span class="menu-k">Sort</span><strong>{{sortLabel .Sort}}</strong>{{icon "chevron-down"}}</summary>
     <div class="menu-list" data-seam-query>
-      <a class="{{if eq .Sort "recent"}}on{{end}}" href="/console/projects?group={{.Group}}&amp;sort=recent&amp;q={{.Query}}&amp;w={{.Window}}">Recent</a>
-      <a class="{{if eq .Sort "coverage"}}on{{end}}" href="/console/projects?group={{.Group}}&amp;sort=coverage&amp;q={{.Query}}&amp;w={{.Window}}">Reach</a>
-      <a class="{{if eq .Sort "name"}}on{{end}}" href="/console/projects?group={{.Group}}&amp;sort=name&amp;q={{.Query}}&amp;w={{.Window}}">Name</a>
-      <a class="{{if eq .Sort "favorites"}}on{{end}}" href="/console/projects?group={{.Group}}&amp;sort=favorites&amp;q={{.Query}}&amp;w={{.Window}}">Starred</a>
+      <a class="{{if eq .Sort "recent"}}on{{end}}" href="/console/projects?group={{.Group}}&amp;sort=recent&amp;q={{.Query}}&amp;w={{.Window}}{{if $attn}}&amp;show=attention{{end}}">Recent</a>
+      <a class="{{if eq .Sort "coverage"}}on{{end}}" href="/console/projects?group={{.Group}}&amp;sort=coverage&amp;q={{.Query}}&amp;w={{.Window}}{{if $attn}}&amp;show=attention{{end}}">Reach</a>
+      <a class="{{if eq .Sort "name"}}on{{end}}" href="/console/projects?group={{.Group}}&amp;sort=name&amp;q={{.Query}}&amp;w={{.Window}}{{if $attn}}&amp;show=attention{{end}}">Name</a>
+      <a class="{{if eq .Sort "favorites"}}on{{end}}" href="/console/projects?group={{.Group}}&amp;sort=favorites&amp;q={{.Query}}&amp;w={{.Window}}{{if $attn}}&amp;show=attention{{end}}">Starred</a>
     </div>
   </details>
   <div class="mv2-sort">
     <span class="mv2-sort-label">Reach window</span>
     <div class="seg" data-seam-query>
-      {{range .Windows}}<a class="{{if .Active}}on{{end}}" href="/console/projects?group={{$group}}&amp;sort={{$sort}}&amp;q={{$query}}&amp;w={{.Key}}">{{.Label}}</a>{{end}}
+      {{range .Windows}}<a class="{{if .Active}}on{{end}}" href="/console/projects?group={{$group}}&amp;sort={{$sort}}&amp;q={{$query}}&amp;w={{.Key}}{{if $attn}}&amp;show=attention{{end}}">{{.Label}}</a>{{end}}
     </div>
   </div>
   <a class="btn small" href="/console/context" title="Global, parent, family, and split-lineage context flow">{{icon "share-2"}}<span>Context</span></a>
   </div>
 </header>
 
-<section class="project-summary-grid" id="projects-attention" aria-label="Project portfolio summary">
-  <article class="project-summary-card">
-    <span class="project-summary-icon">{{icon "gauge"}}</span>
-    <div class="project-summary-copy"><span>Knowledge reach</span><strong>{{if .HasReach}}{{.ReachRate}}%{{else}}&mdash;{{end}}</strong><small>{{if .HasReach}}{{.Surfaced}} of {{.Active}} surfaced &middot; {{.WindowLabel}}{{else}}no active memories yet{{end}}</small></div>
-  </article>
-  <article class="project-summary-card">
-    <span class="project-summary-icon">{{icon "layout-dashboard"}}</span>
-    <div class="project-summary-copy"><span>Projects</span><strong>{{.Projects}}</strong><small>{{if .Families}}{{.Families}} connected famil{{if eq .Families 1}}y{{else}}ies{{end}}{{else}}independent projects{{end}}{{if .Retired}} &middot; {{.Retired}} retired{{end}}</small></div>
-  </article>
+<section class="project-summary-grid" id="projects-summary" aria-label="Project portfolio summary">
   <article class="project-summary-card{{if .Working}} live{{end}}">
     <span class="project-summary-icon">{{icon "terminal"}}</span>
-    <div class="project-summary-copy"><span>Agent activity</span><strong>{{.Working}}</strong><small>{{if .Working}}live{{if .LiveScopes}} across {{.LiveScopes}} project{{if ne .LiveScopes 1}}s{{end}}{{end}}{{else}}{{.Sessions}} sessions recorded{{end}}{{if .TokensTotal}} &middot; {{compactNum .TokensTotal}} tokens{{end}}</small></div>
+    <div class="project-summary-copy"><span>Agents live</span><strong>{{.Working}}</strong><small>{{if .Working}}across {{.LiveScopes}} project{{if ne .LiveScopes 1}}s{{end}}{{else}}{{.Sessions}} sessions recorded{{end}}{{if .TokensTotal}} &middot; {{compactNum .TokensTotal}} tokens{{end}}</small></div>
+  </article>
+  <article class="project-summary-card{{if or .Lapsed .Unclaimed .GatesOpen}} warn{{end}}">
+    <span class="project-summary-icon">{{icon "list-checks"}}</span>
+    <div class="project-summary-copy"><span>Open tasks</span><strong>{{.OpenTasks}}</strong><small>{{.TaskLine}}</small></div>
+  </article>
+  <article class="project-summary-card">
+    <span class="project-summary-icon">{{icon "map"}}</span>
+    <div class="project-summary-copy"><span>Plans in motion</span><strong>{{.PlansMoving}}</strong><small>{{.PlanLine}}</small></div>
   </article>
   <article class="project-summary-card">
     <span class="project-summary-icon">{{icon "database"}}</span>
     <div class="project-summary-copy"><span>Knowledge base</span><strong>{{.Memories}}</strong><small>active memories &middot; {{.Notes}} notes</small></div>
   </article>
-  <article class="project-summary-card{{if .Blocked}} warn{{end}}">
-    <span class="project-summary-icon">{{icon "list-checks"}}</span>
-    <div class="project-summary-copy"><span>Task flow</span><strong>{{.OpenTasks}}</strong><small>open{{if .Blocked}} &middot; {{.Blocked}} blocked{{else}} &middot; no blockers{{end}}</small></div>
+  <article class="project-summary-card">
+    <span class="project-summary-icon">{{icon "gauge"}}</span>
+    <div class="project-summary-copy"><span>Knowledge reach</span><strong>{{if .HasReach}}{{.ReachRate}}%{{else}}&mdash;{{end}}</strong><small>{{if .HasReach}}{{.Surfaced}} of {{.Active}} surfaced &middot; {{.WindowLabel}}{{else}}no active memories yet{{end}}</small>{{with bandLine .ReachBand}}<div class="project-summary-band">{{.}}</div>{{end}}</div>
   </article>
 </section>
 {{with .Global}}<a class="project-global-line" href="/console/context" title="The global scope: knowledge every project&rsquo;s briefing draws on">{{icon "database"}}<span><strong>Shared context:</strong> {{.Line}}</span></a>{{end}}
@@ -77,11 +78,11 @@
       <strong>Every project in one sortable list</strong>{{else}}<span class="ops-stage-eyebrow">Projects by activity</span>
       <strong>Active first; quiet and retired projects folded</strong>{{end}}
     </div>
-    <div class="ops-stage-meta"><span>Reach = active memories surfaced</span><span class="ops-stage-dot">&middot;</span><span>{{.WindowLabel}}</span>{{if .Unregistered}}<span class="ops-stage-dot">&middot;</span><span class="project-meta-warn">{{.Unregistered}} unregistered</span>{{end}}</div>
+    <div class="ops-stage-meta">{{if eq .Show "attention"}}<span class="project-meta-warn">Only the projects that need attention</span><span class="ops-stage-dot">&middot;</span>{{end}}<span>Reach = active memories surfaced</span><span class="ops-stage-dot">&middot;</span><span>{{.WindowLabel}}</span>{{if .Unregistered}}<span class="ops-stage-dot">&middot;</span><span class="project-meta-warn">{{.Unregistered}} unregistered</span>{{end}}</div>
   </header>
   <div class="project-board">
     {{if eq .Group "flat"}}
-      {{if .Flat}}<div class="project-flat-stack">{{range .Flat}}{{template "projrow" .}}{{end}}</div>{{else}}<div class="empty dotgrid"><span class="empty-ico">{{icon "folder-tree"}}</span><div>No projects{{if .Query}} match &ldquo;{{.Query}}&rdquo;{{end}} yet.</div></div>{{end}}
+      {{if .Flat}}<section class="project-group project-flat-stack" id="pg-all"><div class="project-group-rows">{{range .Flat}}{{template "projrow" .}}{{end}}</div></section>{{else}}{{template "projempty" .}}{{end}}
     {{else}}
       {{if .Groups}}{{range .Groups}}
       {{if .Folded}}<details class="project-group project-fold" id="pg-{{.Key}}"{{if .Open}} open{{end}}>
@@ -91,7 +92,7 @@
         <header class="project-group-head">{{template "projgrouphead" .}}</header>
         <div class="project-group-rows">{{range .Rows}}{{template "projrow" .}}{{end}}</div>
       </section>{{end}}
-      {{end}}{{else}}<div class="empty dotgrid"><span class="empty-ico">{{icon "folder-tree"}}</span><div>No projects{{if .Query}} match &ldquo;{{.Query}}&rdquo;{{end}} yet.</div></div>{{end}}
+      {{end}}{{else}}{{template "projempty" .}}{{end}}
     {{end}}
   </div>
 </section>
@@ -106,96 +107,48 @@
           </div>
           <div class="project-group-signals">
             <span>{{.Count}} project{{if ne .Count 1}}s{{end}}</span>
+            {{if .Working}}<span class="live"><span class="live-dot"></span>{{.Working}} live</span>{{end}}
+            {{if .PlansMoving}}<span>{{.PlansMoving}} plan{{if ne .PlansMoving 1}}s{{end}} moving</span>{{end}}
+            {{if .OpenTasks}}<span>{{.OpenTasks}} open</span>{{end}}
+            {{if .Attention}}<span class="warn">{{.Attention}} need{{if eq .Attention 1}}s{{end}} attention</span>{{end}}
+            {{if .Unregistered}}<span class="warn">{{.Unregistered}} unregistered</span>{{end}}
             {{if .HasReach}}<span class="brand">{{.ReachRate}}% reach</span>{{end}}
             <span>{{.Memories}} mem &middot; {{.Notes}} notes</span>
             {{if .TokensTotal}}<span>{{compactNum .TokensTotal}} tokens</span>{{end}}
-            {{if .Working}}<span class="live"><span class="live-dot"></span>{{.Working}} live</span>{{end}}
-            {{if .OpenTasks}}<span>{{.OpenTasks}} open</span>{{end}}
-            {{if .Blocked}}<span class="warn">{{.Blocked}} blocked</span>{{end}}
-            {{if .Unregistered}}<span class="warn">{{.Unregistered}} unregistered</span>{{end}}
           </div>
 {{end}}
 
+{{define "projempty"}}<div class="empty dotgrid"><span class="empty-ico">{{icon "folder-tree"}}</span><div>{{if eq .Show "attention"}}No project{{if .Query}} matching &ldquo;{{.Query}}&rdquo;{{end}} needs attention. <a href="/console/projects?group={{.Group}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;w={{.Window}}" data-seam-query>Show all</a>{{else}}No projects{{if .Query}} match &ldquo;{{.Query}}&rdquo;{{end}} yet.{{end}}</div></div>{{end}}
+
 {{define "projrow"}}{{if .Locked}}{{template "lockedrow" .}}{{else}}
-<article{{if not .Global}} id="p-{{.Slug}}"{{end}} class="project-card{{if not .Global}} row-link{{end}}{{if .Indent}} child{{end}}{{if .Retired}} retired{{end}}{{if .Working}} working{{end}}{{if .Blocked}} blocked{{end}}{{if .Unregistered}} unregistered{{end}}"{{if not .Global}} data-href="/console/projects/{{.Slug}}"{{end}}>
-  <div class="project-card-main">
-    <span class="project-card-tile tile {{.TileClass}}">{{icon .TileIcon}}</span>
-    <div class="project-card-copy">
-      <div class="project-card-titleline">
-        {{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{if .Global}}<span class="project-card-name">Global context</span>{{else}}<a class="project-card-name" href="/console/projects/{{.Slug}}">{{.Name}}</a>{{if ne .Name .Slug}}<span class="project-card-slug">{{.Slug}}</span>{{end}}{{end}}{{.Stage}}
-      </div>
-      <div class="project-card-badges">
-        {{if .Global}}<span class="project-role global">shared root</span>{{else if .Retired}}<span class="project-role retired">retired</span>{{else if .Unregistered}}<span class="project-role warn">unregistered</span>{{else if .Child}}<span class="project-role child">child project</span>{{else if .Parent}}<span class="project-role parent">shared parent</span>{{else}}<span class="project-role">standalone</span>{{end}}
-        {{isoPill .Isolation}}
-        {{if .Working}}<span class="project-state live"><span class="live-dot"></span>{{.Working}} working</span>{{end}}
-        {{if .Blocked}}<span class="project-state warn">{{icon "triangle-alert"}}{{.Blocked}} blocked</span>{{end}}
-      </div>
-      <p>{{if .Description}}{{.Description}}{{else if .Global}}Knowledge available to every project and unscoped session.{{else if .Unregistered}}Data exists for this project, but it is missing from the project registry.{{else if .Child}}A child project with inherited shared context.{{else if .Parent}}A shared-context parent for related projects.{{else if .Retired}}Historical project retained for lineage.{{else}}Independent project.{{end}}</p>
-      {{if .Child}}<div class="project-inheritance">{{icon "git-branch"}}Inherits {{.Inherited}} memor{{if eq .Inherited 1}}y{{else}}ies{{end}} from <strong>{{.ParentSlug}}</strong></div>{{else if .Parent}}<div class="project-inheritance">{{icon "folder-tree"}}Shares its active memories with child projects</div>{{else if .Global}}<div class="project-inheritance">{{icon "database"}}Injected alongside every project&rsquo;s local context</div>{{end}}
+<article id="p-{{.Slug}}" class="project-row row-link{{if .Indent}} child{{end}}{{if .Retired}} retired{{end}}{{if .Working}} working{{end}}{{if .Attention}} attention{{end}}{{if .Unregistered}} unregistered{{end}}" data-href="/console/projects/{{.Slug}}">
+  <span class="project-row-tile tile {{.TileClass}}">{{icon .TileIcon}}</span>
+  <div class="project-row-main">
+    <div class="project-row-title">
+      {{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}<a class="project-row-name" href="/console/projects/{{.Slug}}"{{with .Description}} title="{{.}}"{{end}}>{{.Name}}</a>{{if ne .Name .Slug}}<span class="project-row-slug">{{.Slug}}</span>{{end}}{{.Stage}}
+      {{if .Retired}}<span class="project-role retired">retired</span>{{else if .Unregistered}}<span class="project-role warn" title="Data exists under this slug, but the project registry does not list it">unregistered</span>{{else if .Child}}<span class="project-role child" title="Inherits {{.Inherited}} memor{{if eq .Inherited 1}}y{{else}}ies{{end}} from {{.ParentSlug}}">child of {{.ParentSlug}}</span>{{else if .Parent}}<span class="project-role parent" title="Shares its active memories with its child projects">shared parent</span>{{end}}
+      {{isoPill .Isolation}}
+      {{if .Working}}<span class="project-state live"><span class="live-dot"></span>{{.Working}} working</span>{{end}}
+      {{range .Needs}}<span class="project-state {{.Tone}}" data-need="{{.Key}}" title="{{.Hint}}">{{.Text}}</span>{{end}}
     </div>
+    <div class="project-row-work">{{if .Work}}{{range $i, $b := .Work}}{{if $i}}<span class="project-row-dot" aria-hidden="true">&middot;</span>{{end}}<span data-word="{{$b.Key}}" title="{{$b.Hint}}">{{$b.Text}}</span>{{end}}{{else}}<span class="project-row-idle">No open work</span>{{end}}</div>
   </div>
-
-  <div class="project-card-panel project-card-reach">
-    <div class="project-card-label">{{icon "gauge"}} Knowledge reach</div>
-    {{if .HasReach}}
-    <div class="project-card-value"><strong>{{.ReachRate}}%</strong><span>{{.Surfaced}} / {{.Active}} surfaced</span></div>
-    <div class="project-meter"><span style="width:{{.ReachRate}}%"></span></div>
-    {{else}}
-    <div class="project-card-value empty-value"><strong>&mdash;</strong><span>No active memories</span></div>
-    <div class="project-meter"><span style="width:0%"></span></div>
-    {{end}}
-  </div>
-
-  <div class="project-card-panel project-card-knowledge">
-    <div class="project-card-label">{{icon "brain"}} Knowledge</div>
-    <div class="project-stat"><span>Memories</span><strong>{{.Memories}}</strong></div>
-    <div class="project-stat"><span>Notes</span><strong>{{.Notes}}</strong></div>
-    {{if .Inherited}}<div class="project-stat shared"><span>Inherited</span><strong>+{{.Inherited}}</strong></div>{{end}}
-  </div>
-
-  <div class="project-card-panel project-card-work">
-    <div class="project-card-label">{{icon "list-checks"}} Work</div>
-    <div class="project-stat"><span>Sessions</span><strong>{{.Sessions}}</strong></div>
-    <div class="project-stat"><span>Open tasks</span><strong>{{.OpenTasks}}</strong></div>
-    {{if .TokensTotal}}<div class="project-stat" title="Real model tokens burned across this project's sessions, harvested from transcripts"><span>Model tokens</span><strong>{{compactNum .TokensTotal}}</strong></div>{{end}}
-    {{if .Working}}<div class="project-stat live"><span>Agents live</span><strong>{{.Working}}</strong></div>{{else if .Blocked}}<div class="project-stat warn"><span>Blocked</span><strong>{{.Blocked}}</strong></div>{{end}}
-  </div>
-
-  <div class="project-card-panel project-card-activity">
-    <div class="project-card-label">{{icon "activity"}} Last activity</div>
-    <strong class="project-last-active">{{ago .LastActive}}</strong>
-    <span class="project-activity-state">{{if .Working}}Active now{{else if .Sessions}}{{.Sessions}} session{{if ne .Sessions 1}}s{{end}} total{{else}}No sessions yet{{end}}</span>
-    {{if not .Global}}<span class="project-open-cue">Open project {{icon "arrow-right"}}</span>{{end}}
-  </div>
+  <div class="project-row-fig project-row-tasks"><strong>{{.OpenTasks}}</strong><span>open task{{if ne .OpenTasks 1}}s{{end}}</span></div>
+  <div class="project-row-fig project-row-when"><strong>{{agoTime .LastActive}}</strong><span>{{if .Working}}active now{{else}}last activity{{end}}</span></div>
+  <div class="project-row-fig project-row-reach" title="{{if .HasReach}}{{.Surfaced}} of {{.Active}} active memories surfaced{{else}}No active memories{{end}}"><strong>{{if .HasReach}}{{.ReachRate}}%{{else}}&mdash;{{end}}</strong><span>reach &middot; {{.Memories}} mem</span></div>
 </article>
 {{end}}{{end}}
 
 {{define "lockedrow"}}
-<article id="p-{{.Slug}}" class="project-card row-link project-locked" data-href="/console/unlock/{{.Slug}}">
-  <div class="project-card-main">
-    <span class="project-card-tile tile">{{icon "lock"}}</span>
-    <div class="project-card-copy">
-      <div class="project-card-titleline"><a class="project-card-name" href="/console/unlock/{{.Slug}}">{{.Name}}</a>{{if ne .Name .Slug}}<span class="project-card-slug">{{.Slug}}</span>{{end}}</div>
-      <div class="project-card-badges"><span class="project-role warn">{{icon "lock"}}locked</span></div>
-      <p>Name, counts and last activity only. Its content opens only with your approval.</p>
-    </div>
+<article id="p-{{.Slug}}" class="project-row row-link project-locked" data-href="/console/unlock/{{.Slug}}">
+  <span class="project-row-tile tile">{{icon "lock"}}</span>
+  <div class="project-row-main">
+    <div class="project-row-title"><a class="project-row-name" href="/console/unlock/{{.Slug}}">{{.Name}}</a>{{if ne .Name .Slug}}<span class="project-row-slug">{{.Slug}}</span>{{end}}<span class="project-role warn">{{icon "lock"}}locked</span></div>
+    <div class="project-row-work"><span class="project-row-idle">Name, counts and last activity only: {{.Memories}} mem &middot; {{.Notes}} notes &middot; {{.Sessions}} session{{if ne .Sessions 1}}s{{end}}. Its work opens with your approval.</span></div>
   </div>
-  <div class="project-card-panel project-card-knowledge">
-    <div class="project-card-label">{{icon "brain"}} Knowledge</div>
-    <div class="project-stat"><span>Memories</span><strong>{{.Memories}}</strong></div>
-    <div class="project-stat"><span>Notes</span><strong>{{.Notes}}</strong></div>
-  </div>
-  <div class="project-card-panel project-card-work">
-    <div class="project-card-label">{{icon "list-checks"}} Work</div>
-    <div class="project-stat"><span>Sessions</span><strong>{{.Sessions}}</strong></div>
-    <div class="project-stat"><span>Open tasks</span><strong>{{.OpenTasks}}</strong></div>
-  </div>
-  <div class="project-card-panel project-card-activity">
-    <div class="project-card-label">{{icon "activity"}} Last activity</div>
-    <strong class="project-last-active">{{ago .LastActive}}</strong>
-    <span class="project-activity-state">{{if .Sessions}}{{.Sessions}} session{{if ne .Sessions 1}}s{{end}} total{{else}}No sessions yet{{end}}</span>
-    <span class="project-open-cue">Unlock {{icon "arrow-right"}}</span>
-  </div>
+  <div class="project-row-fig project-row-tasks"><strong>{{.OpenTasks}}</strong><span>open task{{if ne .OpenTasks 1}}s{{end}}</span></div>
+  <div class="project-row-fig project-row-when"><strong>{{agoTime .LastActive}}</strong><span>last activity</span></div>
+  <div class="project-row-fig project-row-reach"><span class="project-row-cue">Unlock {{icon "arrow-right"}}</span></div>
 </article>
 {{end}}
 

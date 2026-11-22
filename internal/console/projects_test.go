@@ -95,7 +95,8 @@ func TestProjectsBoard_FamilyGrouping(t *testing.T) {
 	require.False(t, ret.Open)
 
 	body := getHTMLBody(t, mux, "/console/projects?group=family")
-	require.Contains(t, body, `id="p-acme-ios" class="project-card row-link child`, "a child is drawn under its parent")
+	require.Contains(t, body, `id="p-acme-ios" class="project-row row-link child`, "a child is drawn under its parent")
+	require.Contains(t, body, ">child of acme</span>")
 	require.Contains(t, body, `<details class="project-group project-fold" id="pg-retired">`)
 }
 
@@ -178,7 +179,8 @@ func TestProjectsBoard_PortfolioSignalsAndRichCards(t *testing.T) {
 	require.Equal(t, 12400, data.TokensTotal)
 	require.Equal(t, 2, data.OpenTasks)
 	require.Equal(t, 1, data.Blocked)
-	require.Equal(t, 1, data.Attention)
+	require.Equal(t, 1, data.Ready)
+	require.Equal(t, 0, data.Attention, "a task waiting on ready work is plan sequencing, not attention")
 	require.Equal(t, 1, data.Surfaced)
 	require.Equal(t, 2, data.Active)
 	require.Equal(t, 50, data.ReachRate)
@@ -191,12 +193,13 @@ func TestProjectsBoard_PortfolioSignalsAndRichCards(t *testing.T) {
 	body := getHTMLBody(t, mux, "/console/projects?w=all")
 	require.Contains(t, body, `class="project-summary-grid"`)
 	require.Contains(t, body, "1 of 2 surfaced", "the reach card states its denominator")
-	require.Contains(t, body, `class="project-card row-link working blocked"`)
-	require.Contains(t, body, "1 / 2 surfaced")
-	require.Contains(t, body, "1 blocked")
+	require.Contains(t, body, `<span class="band warn">below 55% target</span>`, "reach keeps its judged band")
+	require.Contains(t, body, `<article id="p-seamless" class="project-row row-link working" data-href="/console/projects/seamless">`)
+	require.Contains(t, body, `title="1 of 2 active memories surfaced"><strong>50%</strong>`, "reach is the row's small secondary figure")
+	require.Contains(t, body, `<span data-word="ready" title="Nothing unfinished before it: an agent can claim it now">1 ready</span>`)
+	require.Contains(t, body, `<span data-word="blocked" title="Waits on unfinished work before it">1 blocked</span>`)
 	require.Contains(t, body, "12.4k tokens")
-	require.Contains(t, body, "Model tokens")
-	require.Contains(t, body, "Open project")
+	require.NotContains(t, body, "needs attention", "nothing here waits on the owner")
 	page := pbBoardHTML(t, body)
 	require.NotContains(t, page, "workspace", "the board says project")
 	require.NotContains(t, page, "scope", "the board says project")
@@ -493,7 +496,7 @@ func TestPbLockedRowSortsAmongTheOthers(t *testing.T) {
 		}
 	}
 	html := get("/console/projects")
-	require.Contains(t, html, `<article id="p-`+lockedSlug+`" class="project-card row-link project-locked" data-href="/console/unlock/`+lockedSlug+`">`)
+	require.Contains(t, html, `<article id="p-`+lockedSlug+`" class="project-row row-link project-locked" data-href="/console/unlock/`+lockedSlug+`">`)
 	require.Contains(t, html, `href="/console/unlock/`+lockedSlug+`"`)
 	require.Contains(t, html, "Unlock")
 	require.Less(t, strings.Index(html, `id="p-`+openSlug+`"`), strings.Index(html, `id="p-`+lockedSlug+`"`))

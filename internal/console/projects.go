@@ -1,6 +1,7 @@
 package console
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -10,21 +11,31 @@ import (
 	"time"
 
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/plans"
 	"github.com/arctop/seamless/internal/store"
 )
 
-// projectGroupKeys / projectSortKeys are the strict enums the board's toolbar
-// GET params accept. An unknown value is a 400 (never a silent default): an
-// agent driving the console by URL must see the fix, not a page that quietly
-// ignored its param. The first group key is the default view.
+// projectGroupKeys / projectSortKeys / projectShowKeys are the strict enums
+// the board's toolbar GET params accept. An unknown value is a 400 (never a
+// silent default): an agent driving the console by URL must see the fix, not a
+// page that quietly ignored its param. The first key of each is its default:
+// the Activity view, and every project shown (?show=attention narrows the
+// board to the projects that need attention).
 var (
 	projectGroupKeys = []string{"activity", "family", "flat"}
 	projectSortKeys  = []string{"recent", "coverage", "name", "favorites"}
+	projectShowKeys  = []string{"all", "attention"}
 )
 
 // projectQuietAfter is how long a project goes with no live agent and no
 // session or task touched before the Activity view counts it Quiet.
 const projectQuietAfter = 30 * 24 * time.Hour
+
+// planStalledAfter is how long a plan with a step still open goes with no
+// step changing before the board counts it stalled rather than moving (the
+// plan note's Stalled state: nothing moved for 7 days). A live claim's
+// heartbeat changes its step, so a held plan is moving.
+const planStalledAfter = 7 * 24 * time.Hour
 
 // projectRowVM is one board row: a project's strict per-slug health (from
 // store.ProjectsWithCounts) merged with its registry metadata (name, parent,
@@ -52,14 +63,35 @@ type projectRowVM struct {
 	Working      int // live (active) sessions
 	Sessions     int
 	OpenTasks    int
-	Blocked      int
-	Memories     int
-	Notes        int
-	Inherited    int // memories a child inherits from its parent's shared briefing
-	ReachRate    int
-	Surfaced     int
-	Active       int
-	HasReach     bool // the project has >=1 active memory (a reach denominator)
+	// The open work in the Tasks page's words (store.TaskCounts): Blocked
+	// waits on unfinished work, Waiting on people; InProgress is held by a
+	// live claim, Lapsed and Unclaimed are in progress with no live claim.
+	Ready      int
+	InProgress int
+	Lapsed     int
+	Unclaimed  int
+	Blocked    int
+	Waiting    int
+	GatesOpen  int
+	// PlansActive are its plans with a step still open; PlansMoving those a
+	// step changed in within planStalledAfter; PlansAwaiting its captured
+	// plans presented and awaiting approval.
+	PlansActive   int
+	PlansMoving   int
+	PlansAwaiting int
+	// Attention: something here waits on the owner or is stuck
+	// (projectNeedsAttention). Needs says what, Work is the row's work line;
+	// both are drawn from the counts above, which a JSON caller reads instead.
+	Attention bool
+	Needs     []projectBit `json:"-"`
+	Work      []projectBit `json:"-"`
+	Memories  int
+	Notes     int
+	Inherited int // memories a child inherits from its parent's shared briefing
+	ReachRate int
+	Surfaced  int
+	Active    int
+	HasReach  bool // the project has >=1 active memory (a reach denominator)
 	// LastActive is the project's last activity: its latest session update or
 	// task change, whichever is later. A locked row's is the tally's latest
 	// session start or end.
@@ -68,6 +100,15 @@ type projectRowVM struct {
 	// Stage is the momentum maturity glyph, pre-rendered ("" while the feature
 	// is off -- zero trace in the row markup).
 	Stage template.HTML
+}
+
+// projectBit is one phrase of a row's work line or of what it needs: Key names
+// it for the page (data-word), Tone is a status tone class, Hint its title.
+type projectBit struct {
+	Key  string
+	Text string
+	Tone string
+	Hint string
 }
 
 // projectGroupVM is a band on the board: a labeled header plus its rows. Key
@@ -86,6 +127,9 @@ type projectGroupVM struct {
 	Working      int
 	OpenTasks    int
 	Blocked      int
+	Waiting      int
+	PlansMoving  int
+	Attention    int // rows that need attention
 	Memories     int
 	Notes        int
 	TokensTotal  int
@@ -106,32 +150,46 @@ type projectGlobalVM struct {
 
 // projectsData is the board page payload.
 type projectsData struct {
-	Group        string
-	Sort         string
-	Query        string
-	Window       string
-	WindowLabel  string           `json:"-"`
-	Windows      []windowOption   `json:"-"`
-	Groups       []projectGroupVM // activity and family views
-	Flat         []projectRowVM   // flat view
-	Global       *projectGlobalVM `json:",omitempty"` // the shared-context line; nil while the global scope holds nothing
-	Projects     int              // # project rows, locked ones included (the global scope is not one)
-	Working      int              // total live sessions across visible scopes
-	LiveScopes   int              // visible projects with at least one live session
-	Families     int              // # shared-briefing family bands
-	Sessions     int
-	OpenTasks    int
-	Blocked      int
-	Memories     int
-	Notes        int
-	TokensTotal  int
-	Surfaced     int
-	Active       int
-	ReachRate    int
-	HasReach     bool
-	Attention    int // visible projects with blocked work or registry drift
-	Unregistered int
-	Retired      int
+	Group       string
+	Sort        string
+	Query       string
+	Show        string // all, or attention: only the projects that need attention
+	Window      string
+	WindowLabel string           `json:"-"`
+	Windows     []windowOption   `json:"-"`
+	Groups      []projectGroupVM // activity and family views
+	Flat        []projectRowVM   // flat view
+	Global      *projectGlobalVM `json:",omitempty"` // the shared-context line; nil while the global scope holds nothing
+	Projects    int              // # project rows, locked ones included (the global scope is not one)
+	Working     int              // total live sessions across visible scopes
+	LiveScopes  int              // visible projects with at least one live session
+	Families    int              // # shared-briefing family bands
+	Sessions    int
+	OpenTasks   int
+	// The open work across the rows shown, in the Tasks page's words.
+	Ready         int
+	InProgress    int
+	Lapsed        int
+	Unclaimed     int
+	Blocked       int
+	Waiting       int
+	GatesOpen     int
+	PlansActive   int
+	PlansMoving   int
+	PlansAwaiting int
+	TaskLine      string `json:"-"` // "1 in progress · 3 ready · ..." under the Open tasks tile
+	PlanLine      string `json:"-"` // "of 4 with open steps · 1 stalled" under the Plans tile
+	Memories      int
+	Notes         int
+	TokensTotal   int
+	Surfaced      int
+	Active        int
+	ReachRate     int
+	HasReach      bool
+	ReachBand     band `json:"-"`
+	Attention     int  // projects shown that need attention (projectNeedsAttention)
+	Unregistered  int
+	Retired       int
 	// Locked are the locked projects this request cannot read (peer_auth.
 	// locked): name, counts and last activity only, aggregates taken on the
 	// main handle. Each is also a Locked row in the view's groupings, sorted
@@ -161,6 +219,16 @@ func (s *Service) projectsList(w http.ResponseWriter, r *http.Request) {
 			sortKey, strings.Join(projectSortKeys, ", ")))
 		return
 	}
+	show := r.URL.Query().Get("show")
+	if show == "" {
+		show = projectShowKeys[0]
+	}
+	if !slices.Contains(projectShowKeys, show) {
+		s.badRequest(w, r, fmt.Sprintf("invalid show %q: valid values are %s",
+			show, strings.Join(projectShowKeys, ", ")))
+		return
+	}
+	attentionOnly := show == "attention"
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	now := time.Now().UTC()
 	win := store.ResolveRetrievalWindow(r.URL.Query().Get("w"), now)
@@ -171,6 +239,12 @@ func (s *Service) projectsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	projects, err := store.ListProjects(ctx, s.db(ctx))
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	locked := lockedProjects(ctx)
+	work, err := s.projectWork(ctx, locked, now)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -195,7 +269,7 @@ func (s *Service) projectsList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := projectsData{
-		Group: group, Sort: sortKey, Query: query,
+		Group: group, Sort: sortKey, Query: query, Show: show,
 		Window: win.Key, WindowLabel: win.Label, Windows: windowOptions(win.Key),
 	}
 	vmBySlug := make(map[string]projectRowVM, len(board))
@@ -204,7 +278,16 @@ func (s *Service) projectsList(w http.ResponseWriter, r *http.Request) {
 		data.Working += vm.Working
 		data.Sessions += vm.Sessions
 		data.OpenTasks += vm.OpenTasks
+		data.Ready += vm.Ready
+		data.InProgress += vm.InProgress
+		data.Lapsed += vm.Lapsed
+		data.Unclaimed += vm.Unclaimed
 		data.Blocked += vm.Blocked
+		data.Waiting += vm.Waiting
+		data.GatesOpen += vm.GatesOpen
+		data.PlansActive += vm.PlansActive
+		data.PlansMoving += vm.PlansMoving
+		data.PlansAwaiting += vm.PlansAwaiting
 		data.Memories += vm.Memories
 		data.Notes += vm.Notes
 		data.TokensTotal += vm.TokensTotal
@@ -222,13 +305,17 @@ func (s *Service) projectsList(w http.ResponseWriter, r *http.Request) {
 		if info, ok := stages[b.Project]; ok {
 			vm.Stage = stageGlyph(info, now)
 		}
+		work[b.Project].apply(&vm)
 		if vm.Global {
 			// The shared-context line stands apart from the filter and from
 			// every grouping; the totals count global only when it matches,
 			// as they always have.
 			data.Global = newProjectGlobalVM(vm)
 		}
-		if !matchesQuery(vm, q) {
+		// Global is not a project, so it never needs attention: the
+		// attention view leaves it out of the totals as it leaves out every
+		// project that needs nothing.
+		if !matchesQuery(vm, q) || (attentionOnly && !vm.Attention) {
 			continue
 		}
 		count(vm)
@@ -241,7 +328,7 @@ func (s *Service) projectsList(w http.ResponseWriter, r *http.Request) {
 		if vm.Working > 0 {
 			data.LiveScopes++
 		}
-		if projectNeedsAttention(vm) {
+		if vm.Attention {
 			data.Attention++
 		}
 		if vm.Unregistered {
@@ -252,15 +339,18 @@ func (s *Service) projectsList(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	data.HasReach, data.ReachRate = data.Active > 0, percent(data.Surfaced, data.Active)
+	data.ReachBand = floorBand(data.ReachRate, reachTargetPct, data.HasReach)
 
-	if locked := lockedProjects(ctx); len(locked) > 0 {
+	if len(locked) > 0 {
 		tallies, err := store.ProjectTallies(ctx, s.writeDB(), locked)
 		if err != nil {
 			s.serverError(w, r, err)
 			return
 		}
 		for _, t := range tallies {
-			if !t.Registered || (q != "" && !strings.Contains(strings.ToLower(t.Slug), q) && !strings.Contains(strings.ToLower(t.Name), q)) {
+			// A locked row is never read past its counts, so it cannot be
+			// judged to need attention: the attention view leaves it out.
+			if attentionOnly || !t.Registered || (q != "" && !strings.Contains(strings.ToLower(t.Slug), q) && !strings.Contains(strings.ToLower(t.Name), q)) {
 				continue
 			}
 			data.Locked = append(data.Locked, t)
@@ -283,7 +373,10 @@ func (s *Service) projectsList(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	data.TaskLine, data.PlanLine = boardTaskLine(data), boardPlanLine(data)
+
 	less := boardLess(group, sortKey)
+	filtered := q != "" || attentionOnly
 	switch group {
 	case "flat":
 		flat := make([]projectRowVM, 0, len(rows))
@@ -291,9 +384,9 @@ func (s *Service) projectsList(w http.ResponseWriter, r *http.Request) {
 		sortRows(flat, less)
 		data.Flat = flat
 	case "family":
-		data.Groups = familyGroups(rows, vmBySlug, childrenOf, isParent, memoriesBySlug, less, q != "")
+		data.Groups = familyGroups(rows, vmBySlug, childrenOf, isParent, memoriesBySlug, less, filtered)
 	default:
-		data.Groups = activityGroups(rows, now, less, q != "")
+		data.Groups = activityGroups(rows, now, less, filtered)
 	}
 	s.render(w, r, "projects", pageData{Title: "Projects", Active: "projects", Data: data})
 }
@@ -446,7 +539,13 @@ func newProjectRowVM(b store.ProjectBoardRow, p core.Project, parent bool) proje
 		Working:      b.LiveSessions,
 		Sessions:     b.Sessions,
 		OpenTasks:    b.OpenTasks,
+		Ready:        b.Ready,
+		InProgress:   b.InProgress,
+		Lapsed:       b.Lapsed,
+		Unclaimed:    b.Unclaimed,
 		Blocked:      b.Blocked,
+		Waiting:      b.Waiting,
+		GatesOpen:    b.GatesOpen,
 		Memories:     b.Memories,
 		Notes:        b.Notes,
 		ReachRate:    b.ReachRate,
@@ -486,6 +585,11 @@ func newProjectGroupVM(key, label, icon, note string, rows []projectRowVM) proje
 		g.Working += row.Working
 		g.OpenTasks += row.OpenTasks
 		g.Blocked += row.Blocked
+		g.Waiting += row.Waiting
+		g.PlansMoving += row.PlansMoving
+		if row.Attention {
+			g.Attention++
+		}
 		g.Memories += row.Memories
 		g.Notes += row.Notes
 		g.TokensTotal += row.TokensTotal
@@ -500,8 +604,195 @@ func newProjectGroupVM(key, label, icon, note string, rows []projectRowVM) proje
 	return g
 }
 
+// projectNeedsAttention is what the board's attention chip means: something
+// in an open project waits on the owner or is stuck -- a claim that lapsed, a
+// task marked in progress that no claim holds, an open gate, a captured plan
+// awaiting approval, or data under a slug the project registry does not know.
+// Work that waits on other work is ordinary plan sequencing, not a reason:
+// blocked tasks never flag a project. A locked row is not read, so it is never
+// judged.
 func projectNeedsAttention(row projectRowVM) bool {
-	return !row.Retired && (row.Blocked > 0 || row.Unregistered)
+	if row.Retired || row.Locked || row.Global {
+		return false
+	}
+	return row.Lapsed > 0 || row.Unclaimed > 0 || row.GatesOpen > 0 || row.PlansAwaiting > 0 || row.Unregistered
+}
+
+// projectWorkFacts is what the board reads about a project's work beyond its
+// board row: its plans with a step still open and how many of those moved
+// within planStalledAfter (store.AllPlanRollups), its captured plans awaiting
+// approval, and lockedBlocked, the tasks ready on this request's handle that
+// unfinished work in a locked project blocks.
+type projectWorkFacts struct {
+	plansActive   int
+	plansMoving   int
+	awaiting      int
+	lockedBlocked int
+}
+
+// projectWork gathers projectWorkFacts for every project, through the
+// request's handle: a locked project's plans and captures are absent from the
+// read itself. While a project is locked, the ready tasks its unfinished work
+// blocks move from ready to blocked, by the Tasks page's rule
+// (markLockedBlockers): the filtered handle hides a locked project's tasks and
+// their dependency edges, so the main handle is asked for those blockers'
+// projects alone, never their content.
+func (s *Service) projectWork(ctx context.Context, locked []string, now time.Time) (map[string]projectWorkFacts, error) {
+	out := map[string]projectWorkFacts{}
+	rollups, err := store.AllPlanRollups(ctx, s.db(ctx))
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range rollups {
+		if p.Done >= p.Total {
+			continue // every step closed: shipped, not in motion
+		}
+		f := out[p.Project]
+		f.plansActive++
+		if now.Sub(p.LastActivity) <= planStalledAfter {
+			f.plansMoving++
+		}
+		out[p.Project] = f
+	}
+	captures, err := store.NotesByTag(ctx, s.db(ctx), "", plans.TagPlan)
+	if err != nil {
+		return nil, err
+	}
+	for _, n := range captures {
+		if plans.StatusFromTags(n.Tags) == plans.StatusPresented {
+			f := out[n.Project]
+			f.awaiting++
+			out[n.Project] = f
+		}
+	}
+	if len(locked) == 0 {
+		return out, nil
+	}
+	ready, err := store.ReadyTaskProjects(ctx, s.db(ctx))
+	if err != nil || len(ready) == 0 {
+		return out, err
+	}
+	ids := make([]string, 0, len(ready))
+	for id := range ready {
+		ids = append(ids, id)
+	}
+	by, err := store.OpenBlockerProjects(ctx, s.writeDB(), ids, locked)
+	if err != nil {
+		return nil, err
+	}
+	for id := range by {
+		f := out[ready[id]]
+		f.lockedBlocked++
+		out[ready[id]] = f
+	}
+	return out, nil
+}
+
+// apply folds the facts into a row and draws its work line and its needs.
+func (f projectWorkFacts) apply(vm *projectRowVM) {
+	moved := min(f.lockedBlocked, vm.Ready)
+	vm.Ready -= moved
+	vm.Blocked += moved
+	vm.PlansActive, vm.PlansMoving, vm.PlansAwaiting = f.plansActive, f.plansMoving, f.awaiting
+	vm.Attention = projectNeedsAttention(*vm)
+	if vm.Attention {
+		vm.Needs = projectNeeds(*vm)
+	}
+	vm.Work = projectWorkLine(*vm)
+}
+
+// projectWorkLine is a row's work line, plans first: "2 plans moving, 1 in
+// progress, 3 ready". Each phrase is a word of the task vocabulary
+// (taskwords.go); a row with no open work has none.
+func projectWorkLine(vm projectRowVM) []projectBit {
+	var bits []projectBit
+	if vm.PlansMoving > 0 {
+		bits = append(bits, projectBit{Key: "plans", Text: plural(vm.PlansMoving, "plan moving", "plans moving"),
+			Hint: "A plan with a step still open that moved in the last 7 days"})
+	}
+	if stalled := vm.PlansActive - vm.PlansMoving; stalled > 0 {
+		bits = append(bits, projectBit{Key: "stalled", Text: plural(stalled, "plan stalled", "plans stalled"),
+			Hint: "A plan with a step still open and nothing moved in 7 days"})
+	}
+	return append(bits, taskBits(vm.InProgress, vm.Ready, vm.Blocked, vm.Waiting)...)
+}
+
+// taskBits words open-task counts: in progress, ready, blocked, waiting on
+// people, each only when there is one.
+func taskBits(inProgress, ready, blocked, waiting int) []projectBit {
+	var bits []projectBit
+	for _, b := range []struct {
+		n               int
+		key, text, hint string
+	}{
+		{inProgress, wordInProgress, "in progress", "Held by a live claim"},
+		{ready, wordReady, "ready", "Nothing unfinished before it: an agent can claim it now"},
+		{blocked, wordBlocked, "blocked", "Waits on unfinished work before it"},
+		{waiting, wordWaiting, "waiting on people", "A gate, or a step an open gate holds"},
+	} {
+		if b.n > 0 {
+			bits = append(bits, projectBit{Key: b.key, Text: fmt.Sprintf("%d %s", b.n, b.text), Hint: b.hint})
+		}
+	}
+	return bits
+}
+
+// projectNeeds says why a row needs attention, in the task vocabulary's words
+// and tones. Data the registry does not know is the row's role badge instead.
+func projectNeeds(vm projectRowVM) []projectBit {
+	var bits []projectBit
+	if vm.Lapsed > 0 {
+		bits = append(bits, projectBit{Key: wordLapsed, Tone: "danger", Text: plural(vm.Lapsed, "lapsed claim", "lapsed claims"),
+			Hint: "In progress, but its holder's lease ran out: any agent can claim it"})
+	}
+	if vm.Unclaimed > 0 {
+		bits = append(bits, projectBit{Key: wordUnclaimed, Tone: "warn", Text: plural(vm.Unclaimed, "unclaimed task", "unclaimed tasks"),
+			Hint: "Marked in progress without a claim: any agent can claim it"})
+	}
+	if vm.GatesOpen > 0 {
+		bits = append(bits, projectBit{Key: "gate", Tone: "warn", Text: plural(vm.GatesOpen, "open gate", "open gates"),
+			Hint: "Waits on a person, or an event outside Seamless"})
+	}
+	if vm.PlansAwaiting > 0 {
+		bits = append(bits, projectBit{Key: "approval", Tone: "warn", Text: plural(vm.PlansAwaiting, "plan awaiting approval", "plans awaiting approval"),
+			Hint: "A captured plan, presented and awaiting your approval"})
+	}
+	return bits
+}
+
+// boardTaskLine is the Tasks tile's line over the rows shown.
+func boardTaskLine(d projectsData) string {
+	var parts []string
+	for _, b := range taskBits(d.InProgress, d.Ready, d.Blocked, d.Waiting) {
+		parts = append(parts, b.Text)
+	}
+	if d.Lapsed > 0 {
+		parts = append(parts, plural(d.Lapsed, "lapsed claim", "lapsed claims"))
+	}
+	if d.Unclaimed > 0 {
+		parts = append(parts, plural(d.Unclaimed, "unclaimed", "unclaimed"))
+	}
+	if len(parts) == 0 {
+		return "nothing open"
+	}
+	return strings.Join(parts, " \u00b7 ")
+}
+
+// boardPlanLine is the Plans tile's line over the rows shown.
+func boardPlanLine(d projectsData) string {
+	var parts []string
+	if d.PlansActive == 0 {
+		parts = append(parts, "no plan has an open step")
+	} else {
+		parts = append(parts, fmt.Sprintf("of %d with open steps", d.PlansActive))
+		if stalled := d.PlansActive - d.PlansMoving; stalled > 0 {
+			parts = append(parts, fmt.Sprintf("%d stalled", stalled))
+		}
+	}
+	if d.PlansAwaiting > 0 {
+		parts = append(parts, fmt.Sprintf("%d awaiting approval", d.PlansAwaiting))
+	}
+	return strings.Join(parts, " \u00b7 ")
 }
 
 // familyNote describes a shared-briefing band: the parent injects its active

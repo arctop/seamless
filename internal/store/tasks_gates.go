@@ -10,7 +10,8 @@
 //	ready    the rest: open, no open gate, no unfinished blocker
 //
 // The predicates below are the one statement of that rule in SQL; every
-// queue query, ClaimTask's compare-and-set and the plan rollups build on them.
+// queue query, ClaimTask's compare-and-set, the plan rollups and the project
+// board's counts (TaskCountsByProject) build on them.
 package store
 
 import (
@@ -172,7 +173,7 @@ func gateWords(g core.TaskGate) [5]string {
 	return [5]string{g.Who, g.What, g.Decision, g.ReadyWhen, g.Note}
 }
 
-// normalizeGate trims a gate's text fields.// normalizeGate trims a gate's text fields.
+// normalizeGate trims a gate's text fields.
 func normalizeGate(g core.TaskGate) core.TaskGate {
 	g.Who = strings.TrimSpace(g.Who)
 	g.What = strings.TrimSpace(g.What)
@@ -282,6 +283,107 @@ func sqlGates(alias string) string {
 // unfinished step whose own gate is open.
 func sqlGatesOpen(alias string) string {
 	return "(" + alias + ".status IN ('open','in_progress') AND " + sqlHeldByGate(alias) + ")"
+}
+
+// sqlClaimLive holds for a row of alias that a live claim holds at the bound
+// instant (one bind: now): core.Task.ClaimLive -- in progress, a holder, and
+// a lease that runs out strictly after now. It is the exact negation of
+// ClaimTask's in_progress arms (constraint
+// claimtask-claimless-inprogress-and-lease-boundary): a lease ending at now is
+// already lapsed.
+func sqlClaimLive(alias string) string {
+	return "(" + alias + ".status = 'in_progress' AND " + alias + ".claimed_by <> '' AND " +
+		alias + ".lease_expires_at IS NOT NULL AND " + alias + ".lease_expires_at > ?)"
+}
+
+// TaskCounts is a project's unfinished tasks in the queue's words: the one
+// tally the project board shares with the Tasks page. Ready, Blocked and
+// Waiting count the Tasks page's rails -- ready (sqlReady), blocked
+// (sqlBlocked: waiting on unfinished work and on no gate) and the people's two
+// (sqlGates and sqlGated: the gates, and the steps an open gate holds) -- so
+// the two screens cannot disagree on what is blocked and what waits on people.
+//
+// A step in progress counts once, in the console's status words
+// (internal/console/taskwords.go): InProgress while a live claim holds it,
+// Lapsed when its holder's lease ran out, Unclaimed when no claim names a
+// holder at all; a step an open gate holds reads as waiting instead, so it is
+// in neither of the last two. GatesOpen is a plan rollup's GatesOpen
+// (sqlGatesOpen) over the whole project: the gates, and the unfinished steps
+// whose own gate is open.
+type TaskCounts struct {
+	Ready      int `json:"ready"`
+	InProgress int `json:"inProgress"`
+	Lapsed     int `json:"lapsed"`
+	Unclaimed  int `json:"unclaimed"`
+	Blocked    int `json:"blocked"`
+	Waiting    int `json:"waiting"`
+	GatesOpen  int `json:"gatesOpen"`
+}
+
+// TaskCountsByProject tallies every project's unfinished tasks (TaskCounts),
+// plan steps included, in one grouped query, keyed by project slug ("" is the
+// global scope). A project with no unfinished task is absent. now is the
+// instant a claim is judged live at.
+func TaskCountsByProject(ctx context.Context, db *sql.DB, now time.Time) (map[string]TaskCounts, error) {
+	at := core.FormatTime(now.UTC())
+	notWaiting := "NOT " + sqlHeldByGate("t") + " AND NOT " + sqlOpenBlocker("t", true)
+	stale := "t.status = 'in_progress' AND t.kind <> 'gate' AND " + notWaiting + " AND NOT " + sqlClaimLive("t")
+	rows, err := db.QueryContext(ctx, `
+		SELECT t.project_slug,
+		       SUM(CASE WHEN `+sqlReady("t")+` THEN 1 ELSE 0 END),
+		       SUM(CASE WHEN t.kind <> 'gate' AND `+sqlClaimLive("t")+` THEN 1 ELSE 0 END),
+		       SUM(CASE WHEN `+stale+` AND t.claimed_by <> '' THEN 1 ELSE 0 END),
+		       SUM(CASE WHEN `+stale+` AND t.claimed_by = '' THEN 1 ELSE 0 END),
+		       SUM(CASE WHEN `+sqlBlocked("t")+` THEN 1 ELSE 0 END),
+		       SUM(CASE WHEN (`+sqlGates("t")+`) OR (`+sqlGated("t")+`) THEN 1 ELSE 0 END),
+		       SUM(CASE WHEN `+sqlGatesOpen("t")+` THEN 1 ELSE 0 END)
+		  FROM tasks t
+		 WHERE t.status IN ('open','in_progress')
+		 GROUP BY t.project_slug`, at, at, at)
+	if err != nil {
+		return nil, fmt.Errorf("store.TaskCountsByProject: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]TaskCounts{}
+	for rows.Next() {
+		var (
+			slug string
+			c    TaskCounts
+		)
+		if err := rows.Scan(&slug, &c.Ready, &c.InProgress, &c.Lapsed, &c.Unclaimed, &c.Blocked, &c.Waiting, &c.GatesOpen); err != nil {
+			return nil, fmt.Errorf("store.TaskCountsByProject: scan: %w", err)
+		}
+		out[slug] = c
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store.TaskCountsByProject: %w", err)
+	}
+	return out, nil
+}
+
+// ReadyTaskProjects maps every ready task (sqlReady), plan steps included, to
+// its project: ids and slugs only, no content. The console's board asks it on
+// the request's handle while a project is locked, to find the ready tasks a
+// locked project's work may block (OpenBlockerProjects), as the Tasks page
+// does for its rows.
+func ReadyTaskProjects(ctx context.Context, db *sql.DB) (map[string]string, error) {
+	rows, err := db.QueryContext(ctx, `SELECT t.id, t.project_slug FROM tasks t WHERE `+sqlReady("t"))
+	if err != nil {
+		return nil, fmt.Errorf("store.ReadyTaskProjects: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]string{}
+	for rows.Next() {
+		var id, project string
+		if err := rows.Scan(&id, &project); err != nil {
+			return nil, fmt.Errorf("store.ReadyTaskProjects: scan: %w", err)
+		}
+		out[id] = project
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store.ReadyTaskProjects: %w", err)
+	}
+	return out, nil
 }
 
 // queueScope narrows a queue query: one project's non-plan tasks (the default

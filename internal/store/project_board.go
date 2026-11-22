@@ -13,9 +13,10 @@ import (
 
 // ProjectBoardRow is one project's health roll-up for the project board: the
 // same strict per-slug counts GetProjectCounts computes for a single project,
-// batched across every project in one pass, plus liveness (live sessions),
-// backpressure (blocked tasks), recency (last session activity), and retrieval
-// reach joined from BuildRetrievalReport.
+// batched across every project in one pass, plus liveness (live sessions), the
+// state of its unfinished work (TaskCounts: ready, in progress, lapsed and
+// unclaimed claims, blocked, waiting on people, open gates), recency (last
+// session activity), and retrieval reach joined from BuildRetrievalReport.
 //
 // Counts are STRICT per-slug (project = slug / project_slug = slug), never a
 // global union: the global scope ("") is its own row whose counts are the
@@ -29,7 +30,6 @@ type ProjectBoardRow struct {
 	Sessions     int       `json:"sessions"`     // all sessions project_slug = slug (matches GetProjectCounts.Sessions)
 	LiveSessions int       `json:"liveSessions"` // live sessions (core.Session.LiveAsOf): active AND updated within the idle TTL or holding a live claim (matches the Sessions screen)
 	OpenTasks    int       `json:"openTasks"`    // status IN ('open','in_progress') (matches GetProjectCounts.OpenTasks)
-	Blocked      int       `json:"blocked"`      // open tasks that are not ready: an open/in_progress blocker, or waiting on people (a gate, an open gate of its own)
 	Notes        int       `json:"notes"`        // notes project = slug (matches GetProjectCounts.Notes)
 	LastActive   time.Time `json:"lastActive"`   // MAX(sessions.updated_at) for the project; zero when none
 	LastTask     time.Time `json:"lastTask"`     // MAX(tasks.updated_at) for the project, any status; zero when none
@@ -38,12 +38,18 @@ type ProjectBoardRow struct {
 	ReachRate    int       `json:"reachRate"`    // Surfaced/Active rounded %, from BuildRetrievalReport; 0 when absent
 	Surfaced     int       `json:"surfaced"`     // distinct active memories surfaced >=1x in the window
 	Active       int       `json:"active"`       // active memories (reach denominator) per BuildRetrievalReport
+	// TaskCounts is the open tasks in the queue's words (TaskCountsByProject),
+	// the Tasks page's rails counted: Blocked waits on unfinished work alone,
+	// Waiting on people (a gate, or a step an open gate holds). Its fields
+	// read as the row's own (row.Blocked) and sit in the row's JSON object.
+	TaskCounts
 }
 
 // ProjectsWithCounts returns a ProjectBoardRow for every project -- every slug
 // that appears in memories_index / sessions / tasks / notes_index unioned with
-// the projects table -- with strict per-slug counts, liveness, blocked-task
-// backpressure, and session and task recency computed in SQL, then retrieval reach
+// the projects table -- with strict per-slug counts, liveness, the open tasks'
+// TaskCounts (claims judged live at now), and session and task recency
+// computed in SQL, then retrieval reach
 // (ReachRate/Surfaced/Active) joined by slug from BuildRetrievalReport over the
 // given window. LiveSessions counts the sessions live at now by the one rule
 // (core.Session.LiveAsOf, in SQL: sessionLive): active, and updated within
@@ -127,16 +133,15 @@ func ProjectsWithCounts(ctx context.Context, db *sql.DB, window RetrievalWindow,
 		return nil, fmt.Errorf("store.ProjectsWithCounts: open tasks: %w", err)
 	}
 
-	// Blocked tasks per project: open tasks that are not ready -- an
-	// open/in_progress blocker, or waiting on people -- the open tasks the
-	// readiness rule (sqlReady) leaves out: BlockedTasks, GatedTasks and the
-	// open GateTasks together.
-	if err := scanGroupCount(ctx, db, `
-		SELECT t.project_slug, COUNT(*) FROM tasks t
-		WHERE t.status = 'open' AND NOT (`+sqlReady("t")+`)
-		GROUP BY t.project_slug`,
-		func(slug string, n int) { row(slug).Blocked = n }); err != nil {
-		return nil, fmt.Errorf("store.ProjectsWithCounts: blocked tasks: %w", err)
+	// The open tasks in the queue's words: the one tally the Tasks page's rails
+	// agree with (TaskCountsByProject), so blocked means waiting on unfinished
+	// work and waiting means waiting on people, here and there alike.
+	counts, err := TaskCountsByProject(ctx, db, now)
+	if err != nil {
+		return nil, fmt.Errorf("store.ProjectsWithCounts: %w", err)
+	}
+	for slug, c := range counts {
+		row(slug).TaskCounts = c
 	}
 
 	// Task recency per project: the last time any of its tasks changed, any

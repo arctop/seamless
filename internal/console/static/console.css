@@ -2856,10 +2856,9 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
 }
 .ops-stage-dot { color: var(--border-strong); }
 
-/* Project atlas: the portfolio pulse is intentionally denser than the other
-   operational heroes, then each family becomes a bounded topology band. The
-   project cards keep all six operational signals visible without requiring a
-   drill-in: role, reach, knowledge, work, blockers, and recency. */
+/* Project atlas: the portfolio pulse leads with work (agents, tasks, plans),
+   then knowledge; each band is a bounded list of compact rows (UX 11's
+   section near the end of the file). */
 
 .project-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(212px, 1fr)); gap: 10px; margin: 0 0 12px; }
 .project-summary-card {
@@ -2914,40 +2913,8 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
 .project-group-signals > span.live { color: var(--ok); border-color: color-mix(in oklab, var(--ok) 22%, var(--border)); }
 .project-group-signals > span.warn { color: var(--warn); border-color: color-mix(in oklab, var(--warn) 25%, var(--border)); background: color-mix(in oklab, var(--warn-soft) 70%, var(--surface)); }
 .project-group-rows { background: var(--border); }
-.project-group-rows .project-card + .project-card { border-top: 1px solid var(--border); }
+.project-group-rows .project-row + .project-row { border-top: 1px solid var(--border); }
 
-.project-card {
-  position: relative; display: grid; grid-template-columns: minmax(270px, 1.5fr) minmax(150px, .72fr) minmax(118px, .54fr) minmax(118px, .54fr) minmax(126px, .58fr);
-  grid-template-areas: "main reach knowledge work activity"; min-width: 0; background: var(--surface);
-  transition: background var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
-}
-.project-flat-stack .project-card { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-xs); }
-.project-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; z-index: 1; background: transparent; }
-.project-card.working::before { background: var(--ok); }
-.project-card.blocked::before { background: var(--warn); }
-.project-card.unregistered::before { background: var(--danger); }
-.project-card.row-link { cursor: pointer; }
-.project-card.row-link:hover {
-  z-index: 1; background: color-mix(in oklab, var(--brand) 5%, var(--surface));
-  box-shadow: inset 3px 0 0 color-mix(in oklab, var(--brand) 70%, transparent), var(--shadow-sm);
-}
-.project-card.row-link:focus-within { z-index: 2; box-shadow: inset 3px 0 0 var(--brand), var(--shadow-focus); }
-.project-card.retired { opacity: .7; }
-.project-card-main { grid-area: main; display: flex; align-items: flex-start; gap: 12px; min-width: 0; padding: 17px 16px 16px 18px; }
-.project-card.child .project-card-main { padding-left: 42px; }
-.project-card.child::after {
-  content: ""; position: absolute; left: 20px; top: 0; width: 12px; height: 31px;
-  border: solid color-mix(in oklab, var(--brand) 28%, var(--border-strong)); border-width: 0 0 1px 1px; border-bottom-left-radius: 5px;
-}
-.project-card-tile { width: 40px; height: 40px; border-radius: 11px; box-shadow: var(--shadow-xs); }
-.project-card-tile .ico { width: 18px; height: 18px; }
-.project-card-copy { min-width: 0; }
-.project-card-titleline { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.project-card-name { overflow: hidden; color: var(--ink); font-family: var(--font-display); font-size: var(--text-md); font-weight: 680; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap; }
-a.project-card-name { color: var(--ink); }
-a.project-card-name:hover { color: var(--brand); text-decoration: none; }
-.project-card-slug { overflow: hidden; color: var(--faint); font-family: var(--font-mono); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.project-card-badges { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
 .project-role, .project-state {
   display: inline-flex; align-items: center; gap: 4px; min-height: 19px; padding: 2px 6px; border-radius: var(--radius-pill);
   background: var(--surface-2); color: var(--faint); font-size: 9px; font-weight: 750; letter-spacing: .05em; text-transform: uppercase;
@@ -2958,46 +2925,6 @@ a.project-card-name:hover { color: var(--brand); text-decoration: none; }
 .project-role.warn, .project-state.warn { color: var(--warn); background: var(--warn-soft); }
 .project-state.live { color: var(--ok); background: var(--ok-soft); }
 .project-state .ico { width: 10px; height: 10px; }
-.project-card-copy p {
-  display: -webkit-box; overflow: hidden; margin: 7px 0 0; max-width: 46ch; color: var(--muted); font-size: var(--text-xs); line-height: 1.38;
-  -webkit-box-orient: vertical; -webkit-line-clamp: 2;
-}
-.project-inheritance { display: flex; align-items: center; gap: 5px; margin-top: 7px; color: var(--faint); font-size: 10px; }
-.project-inheritance .ico { width: 11px; height: 11px; flex: none; color: var(--brand); }
-.project-inheritance strong { color: var(--muted); font-family: var(--font-mono); font-weight: 650; }
-
-.project-card-panel { min-width: 0; padding: 16px 13px; border-left: 1px solid var(--border); }
-.project-card-reach { grid-area: reach; display: flex; flex-direction: column; justify-content: center; }
-.project-card-knowledge { grid-area: knowledge; }
-.project-card-work { grid-area: work; }
-.project-card-activity { grid-area: activity; position: relative; display: flex; flex-direction: column; justify-content: center; }
-.project-card-label { display: flex; align-items: center; gap: 5px; margin-bottom: 9px; color: var(--faint); font-size: 9px; font-weight: 750; letter-spacing: .07em; text-transform: uppercase; white-space: nowrap; }
-.project-card-label .ico { width: 11px; height: 11px; color: var(--brand); }
-.project-card-value { display: flex; align-items: baseline; justify-content: space-between; gap: 7px; }
-.project-card-value strong { color: var(--brand); font-family: var(--font-display); font-size: var(--text-xl); line-height: 1; font-variant-numeric: tabular-nums; }
-.project-card-value span { overflow: hidden; color: var(--faint); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
-.project-card-value.empty-value strong, .project-card-value.empty-value span { color: var(--faint); }
-.project-meter { overflow: hidden; height: 5px; margin-top: 9px; border-radius: var(--radius-pill); background: var(--surface-3); }
-.project-meter > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--brand), color-mix(in oklab, var(--brand) 52%, var(--ok))); }
-.project-stat { display: flex; align-items: baseline; justify-content: space-between; gap: 7px; min-height: 21px; color: var(--muted); font-size: var(--text-2xs); }
-.project-stat strong { color: var(--ink-2); font-family: var(--font-display); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
-.project-stat.shared, .project-stat.shared strong { color: var(--brand); }
-.project-stat.live, .project-stat.live strong { color: var(--ok); }
-.project-stat.warn, .project-stat.warn strong { color: var(--warn); }
-.project-last-active { color: var(--ink-2); font-family: var(--font-display); font-size: var(--text-sm); white-space: nowrap; }
-.project-activity-state { margin-top: 3px; color: var(--faint); font-size: 9px; }
-.project-open-cue { display: inline-flex; align-items: center; gap: 5px; margin-top: 11px; color: var(--brand); font-size: 9px; font-weight: 700; opacity: .72; }
-.project-open-cue .ico { width: 11px; height: 11px; transition: transform var(--dur-fast) var(--ease-out); }
-.project-card.row-link:hover .project-open-cue { opacity: 1; }
-.project-card.row-link:hover .project-open-cue .ico { transform: translateX(2px); }
-
-@media (max-width: 1160px) {
-  .project-card {
-    grid-template-columns: minmax(280px, 1.25fr) minmax(168px, .72fr) minmax(154px, .65fr);
-    grid-template-areas: "main reach activity" "main knowledge work";
-  }
-  .project-card-knowledge, .project-card-work { border-top: 1px solid var(--border); }
-}
 
 @media (max-width: 980px) {
   .project-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -3006,32 +2933,11 @@ a.project-card-name:hover { color: var(--brand); text-decoration: none; }
 @media (max-width: 760px) {
   .project-group-head { align-items: flex-start; flex-direction: column; gap: 10px; }
   .project-group-signals { justify-content: flex-start; }
-  .project-card {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-areas: "main main" "reach activity" "knowledge work";
-  }
-  .project-card-main { border-bottom: 1px solid var(--border); }
-  .project-card-reach, .project-card-knowledge { border-left: 0; }
-  .project-card-knowledge, .project-card-work { border-top: 1px solid var(--border); }
 }
 
 @media (max-width: 540px) {
   .project-summary-grid { grid-template-columns: 1fr; gap: 7px; }
   .project-summary-card { min-height: 66px; }
-  
-  
-  .project-card { display: flex; flex-direction: column; }
-  .project-card.child .project-card-main { padding-left: 34px; }
-  .project-card.child::after { left: 15px; width: 10px; }
-  .project-card-panel { padding: 13px 16px; border-top: 1px solid var(--border); border-left: 0; }
-  .project-card-reach { order: 2; }
-  .project-card-knowledge { order: 3; }
-  .project-card-work { order: 4; }
-  .project-card-activity { order: 5; }
-  .project-card-label { margin-bottom: 7px; }
-  .project-card-knowledge, .project-card-work { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
-  .project-card-knowledge .project-card-label, .project-card-work .project-card-label { grid-column: 1 / -1; }
-  .project-open-cue { position: absolute; right: 16px; bottom: 15px; margin-top: 0; }
 }
 
 /* Session map: status is carried by a small rail, while project/source remain
@@ -6006,7 +5912,7 @@ a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex]:focus-v
 .gardener-examples > span, .gardener-fenced-note > div > span, .gardener-request-origin > span, .gardener-retarget label,
 .gardener-scope > span, .gardener-split-controls label, .grp-hd, .ix-chip-k, .ix-section-title, .login-kicker,
 .login-section-label, .mem-index .hd, .metricbar .k, .now-tape-label, .ops-stage-eyebrow, .ov2-attn-label,
-.ov2-live-label, .ov2-vital-label, .plan-ledger .lbl, .project-card-label, .project-summary-copy > span,
+.ov2-live-label, .ov2-vital-label, .plan-ledger .lbl, .project-summary-copy > span,
 .proposal-document-head > div > span, .proposal-memory > span, .proposal-move-map div > span,
 .proposal-object > div:nth-child(2) > span, .proposal-project > span, .proposal-query-list > span, .proposal-reason > span,
 .proposal-source-list > span, .proposal-target-projects > div > span, .registry-panel-head > div > span,
@@ -8168,7 +8074,7 @@ a.project-global-line:focus-visible { outline: none; box-shadow: var(--shadow-fo
 .project-fold:not([open]) .project-fold-cue { transform: rotate(-90deg); }
 .project-fold > summary:hover .project-fold-cue { color: var(--brand); }
 /* A locked project is a row like any other, with its lock. */
-.project-card.project-locked .project-card-tile { color: var(--muted); }
+.project-row.project-locked .project-row-tile { color: var(--muted); }
 .project-role .ico { width: 10px; height: 10px; }
 @media (max-width: 760px) {
   .project-fold > summary { position: relative; padding-right: 42px; }
@@ -8180,6 +8086,70 @@ a.project-global-line:focus-visible { outline: none; box-shadow: var(--shadow-fo
    danger tone, and the sentence it asks about sits beside it. */
 .btn[data-armed] { color: var(--danger-ink); background: var(--danger); border-color: var(--danger); }
 .confirm-note { display: inline-block; max-width: 100%; margin-left: 8px; font-size: var(--text-xs); color: var(--danger); vertical-align: middle; }
+
+/* UX 11: projects board rows lead with work */
+/* A row is a line of identity and a line of work, then three small figures:
+   open tasks, last activity, reach. About 48px tall on a desktop; on a phone
+   the figures move to a line of their own under the work. The left rail
+   marks a live agent, a project that needs attention, or unregistered data. */
+.project-row {
+  position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) 76px 92px 82px;
+  grid-template-areas: "tile main tasks when reach"; align-items: center; gap: 0 14px;
+  min-width: 0; padding: 7px 16px 7px 18px; background: var(--surface);
+  transition: background var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.project-row::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: transparent; }
+.project-row.working::before { background: var(--ok); }
+.project-row.attention::before { background: var(--warn); }
+.project-row.unregistered::before { background: var(--danger); }
+.project-row.row-link { cursor: pointer; }
+.project-row.row-link:hover { z-index: 1; background: color-mix(in oklab, var(--brand) 5%, var(--surface)); }
+.project-row.row-link:focus-within { z-index: 2; box-shadow: inset 3px 0 0 var(--brand), var(--shadow-focus); }
+.project-row.retired { opacity: .7; }
+.project-row.child { padding-left: 40px; }
+.project-row.child::after {
+  content: ""; position: absolute; left: 20px; top: 0; width: 11px; height: 50%;
+  border: solid color-mix(in oklab, var(--brand) 28%, var(--border-strong)); border-width: 0 0 1px 1px; border-bottom-left-radius: 5px;
+}
+.project-row-tile { grid-area: tile; width: 30px; height: 30px; border-radius: 9px; }
+.project-row-tile .ico { width: 15px; height: 15px; }
+.project-row-main { grid-area: main; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.project-row-title { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 7px; min-width: 0; }
+.project-row-name {
+  overflow: hidden; max-width: 100%; color: var(--ink); font-family: var(--font-display); font-size: var(--text-sm);
+  font-weight: 680; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap;
+}
+a.project-row-name:hover { color: var(--brand); text-decoration: none; }
+.project-row-slug { color: var(--faint); font-family: var(--font-mono); font-size: 10px; white-space: nowrap; }
+.project-row-title .project-role, .project-row-title .project-state, .project-row-title .iso-pill { min-height: 17px; padding-block: 1px; }
+.project-state.danger { color: var(--danger); background: var(--danger-soft); }
+.project-row-work { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; min-width: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.35; }
+.project-row-work [data-word="in-progress"] { color: var(--brand); }
+.project-row-work [data-word="waiting"], .project-row-work [data-word="stalled"] { color: var(--warn); }
+.project-row-dot, .project-row-idle { color: var(--faint); }
+.project-row-fig { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; min-width: 0; text-align: right; }
+.project-row-fig strong { color: var(--ink-2); font-family: var(--font-display); font-size: var(--text-sm); font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.project-row-fig > span { color: var(--faint); font-size: 10px; white-space: nowrap; }
+.project-row-tasks { grid-area: tasks; }
+.project-row-when { grid-area: when; }
+.project-row-reach { grid-area: reach; }
+.project-row-reach strong { color: var(--muted); font-size: var(--text-xs); }
+.project-row-fig > .project-row-cue { display: inline-flex; align-items: center; gap: 4px; color: var(--brand); font-size: 10px; font-weight: 700; }
+.project-row-cue .ico { width: 11px; height: 11px; }
+/* The attention chip filters the board; narrowed, it is the way back. */
+.lib-active-filter.project-attn-chip { color: var(--warn); background: var(--warn-soft); text-decoration: none; }
+.lib-active-filter.project-attn-chip .ico, .lib-active-filter.project-attn-chip a { color: var(--warn); }
+a.lib-active-filter.project-attn-chip:hover { text-decoration: none; box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--warn) 40%, transparent); }
+.project-summary-band { order: 4; }
+@media (max-width: 760px) {
+  .project-row {
+    grid-template-columns: auto repeat(3, minmax(0, 1fr)); grid-template-areas: "tile main main main" "tile tasks when reach";
+    align-items: start; gap: 6px 10px; padding: 10px 14px 10px 16px;
+  }
+  .project-row.child { padding-left: 34px; }
+  .project-row.child::after { left: 15px; width: 10px; height: 24px; }
+  .project-row-fig { flex-direction: row; align-items: baseline; justify-content: flex-start; gap: 4px; text-align: left; }
+}
 
 /* UX 06: the owner's task actions (task_shared.html's task-actions, task-held
    and the gate's Mark as handled), in the task reader and the peek. */
