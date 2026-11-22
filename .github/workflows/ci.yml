@@ -14,20 +14,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # The full gate, or its docs lane when `changes` finds a docs-only run.
-  # !cancelled() runs it even when `changes` failed: a missing output reads
-  # as code, so every step below that tests `!= 'false'` runs the full gate.
-  check:
+  # The full gate is `make check` split over runners: `static` runs its first
+  # stage (make check-static) and `test-race` its second, in three parts at
+  # once. On one 4-core runner `make check` reached 24 minutes by 2026-11-21,
+  # 20 of them test-race, which no ordering inside one runner shortens: the
+  # suite is about an hour of CPU under -race. Each part is a third of the
+  # tests (cmd/testshard's TESTSHARD_SLICE, cut by count, the same on every
+  # runner), sharded over its runner's cores.
+  #
+  # The Linux jobs keep their Go caches with actions/cache, one per role,
+  # instead of setup-go's: setup-go keys every Linux job's cache alike and
+  # saves it once per go.sum, so the first job to finish would decide what
+  # the others restore (static's builds hold no -race packages, and a part's
+  # hold no lint). Each cache is saved once per go.mod/go.sum, falling back to
+  # the newest older one on a change, as setup-go did.
+
+  # The gate's first stage, or its docs lane when `changes` finds a docs-only
+  # run. !cancelled() runs it even when `changes` failed: a missing output
+  # reads as code, so every step below that tests `!= 'false'` runs the full
+  # stage.
+  static:
     needs: changes
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
-    # make check took 14m50s on 2026-10-10 (go test -race ./... alone ~11m,
-    # internal/console the long pole at ~9m), and the next run was cut off
-    # 12ms after printing "check: all green". This caps a hung job, so it
-    # leaves headroom over a normal run rather than tracking it. Runs reached
-    # 18-24m by 2026-11-18, and on 2026-11-19 one was cancelled at 25m with
-    # every finished package ok and internal/store still under -race.
-    timeout-minutes: 40
+    # The stage took about 3.5 minutes on one runner with its steps one after
+    # another (2026-11-21); they now run at once. This caps a hung step.
+    timeout-minutes: 20
     steps:
       # fetch-depth: 0 because `make docs-check` runs scripts/changelog.sh
       # --check, which rebuilds the changelog from every v* tag and the commit
@@ -44,10 +56,23 @@ jobs:
 
       # go-version-file reads go.mod's `toolchain` line, so the security
       # toolchain floor (go1.26.11, audit M1) is set in exactly one place.
+      # cache: false -- the step after keeps this job's cache.
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false
+
+      # The build cache, the module cache and golangci-lint's, for this job
+      # alone (see the top of `jobs`).
+      - id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+            ~/.cache/golangci-lint
+          key: go-static-${{ runner.os }}-${{ hashFiles('go.mod', 'go.sum') }}
+          restore-keys: go-static-${{ runner.os }}-
 
       # Pinned to the version developers run locally. The MAJOR line is
       # load-bearing, not just reproducibility: .golangci.yml declares
@@ -73,12 +98,11 @@ jobs:
         if: needs.changes.outputs.code != 'false'
         run: go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 
-      # build + vet + fmt-check + lint + vulncheck + test-race. CGO stays enabled (the default
-      # on this runner) because -race requires it; the no-CGO rule is about the
-      # shipped binary's deps, not the test toolchain.
-      - name: make check
+      # build, vet, cross-check, fmt-check, docs-check, installer-check,
+      # site-check, lint and vulncheck, at once.
+      - name: make check-static
         if: needs.changes.outputs.code != 'false'
-        run: make check
+        run: make check-static
 
       # The docs lane, for a run that changed only docs-src/ and the files
       # docsgen generates from it (`changes` decides). Such a run changes no
@@ -106,7 +130,92 @@ jobs:
           echo "docs lane: go test ${pkgs[*]}"
           go test -count=1 "${pkgs[@]}"
 
-  # `check` above stays the only full gate. This job runs the packages with
+      # Saved once per key, from a full stage only: the docs lane builds a
+      # fraction of what the next full run needs.
+      - if: steps.cache.outputs.cache-hit != 'true' && needs.changes.outputs.code != 'false'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+            ~/.cache/golangci-lint
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+  # The gate's second stage: `make test-race` with -count=1, one part of the
+  # run per runner. Every test runs in exactly one part, whatever each
+  # runner's times file says (cmd/testshard's slice.take); a new entry in
+  # `slice` makes every part smaller, as TESTSHARD_SLICE reads the count from
+  # strategy.job-total. Each part reports on its own (fail-fast: false).
+  # Skipped on a docs-only run, with os-smoke. CGO stays enabled (the default
+  # on this runner) because -race requires it; the no-CGO rule is about the
+  # shipped binary's deps, not the test toolchain.
+  test-race:
+    name: test-race (${{ matrix.slice }}/${{ strategy.job-total }})
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        slice: [1, 2, 3]
+    runs-on: ubuntu-latest
+    # go test's own -timeout (20m, per shard) stops a hung test; this caps the
+    # job. A third of the suite is about 20 CPU-minutes under -race, so a
+    # part should take well under 10 minutes on 4 cores.
+    timeout-minutes: 30
+    steps:
+      # Full history, as `static` has and the single-job gate had: some tests
+      # read the checkout's git state.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # The -race builds. Every part builds nearly every package (each holds a
+      # third of each big package's tests), so the first part's cache serves
+      # all three, and it alone saves.
+      - id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-race-${{ runner.os }}-${{ hashFiles('go.mod', 'go.sum') }}
+          restore-keys: go-race-${{ runner.os }}-
+
+      # testshard's times file for this part: the durations its last green
+      # run recorded, which pack its shards (longest first, about three per
+      # core). Only the packing reads it; which tests the part runs never
+      # does. One entry per run, the newest restored.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/seamless
+          key: testshard-race-${{ matrix.slice }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: testshard-race-${{ matrix.slice }}-
+
+      - name: make test-race (one part)
+        env:
+          TESTSHARD_SLICE: ${{ matrix.slice }}/${{ strategy.job-total }}
+        run: make test-race TESTFLAGS=-count=1
+
+      - if: matrix.slice == 1 && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+      # Only a green part's durations are kept.
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/seamless
+          key: testshard-race-${{ matrix.slice }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+  # `static` and `test-race` above are the full gate. This job runs the packages with
   # OS-specific code on the two OSes Linux CI cannot stand in for. Files
   # behind a windows or darwin build tag compile into the test binary only on
   # that OS: Windows file locking, the detached updater child, the job
@@ -154,7 +263,7 @@ jobs:
         if: runner.os == 'Windows'
         run: git config --global core.autocrlf false
 
-      # Same pins as `check`. The default shallow checkout is enough: these
+      # Same pins as `static`. The default shallow checkout is enough: these
       # tests read repo files (docs/install, .goreleaser.yaml, ...) but no git
       # history.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -169,7 +278,7 @@ jobs:
       # replace the pure-Go os/user and net code with libc calls. It also keeps
       # the job off the runner's C toolchain.
       #
-      # No -race on either OS. `check` already runs -race over every package
+      # No -race on either OS. `test-race` already runs -race over every package
       # on Linux, and a data race in shared code is detected on any OS. The
       # OS-specific files this job exists for share no memory between
       # goroutines: their only goroutines reap the updater child, in
@@ -209,13 +318,14 @@ jobs:
   #   workflow (owner, 2026-11-06: the macOS job runs only then).
   # - code: false only when EVERY changed path is docs-src/ or a file docsgen
   #   generates from it (docs/docs/, docs/llms.txt, docs/llms-full.txt), such
-  #   as the changelog refresh after a release. `check` then runs its docs
-  #   lane and os-smoke is skipped. Any other path keeps the full gate: Go
+  #   as the changelog refresh after a release. `static` then runs its docs
+  #   lane, and test-race, os-smoke and config-lint are skipped: none of
+  #   them reads a docs file. Any other path keeps the full gate: Go
   #   code, a workflow, a script, .goreleaser.yaml, docs/install* (os-smoke
   #   tests it), docs/index.html (site-check judges it against the installer
   #   and the CLI), docs/scenarios/, the repo root.
-  # Plain git rather than a path-filter action, for the reason config-lint
-  # gives. Both commits are fetched at depth 1: a two-dot diff compares trees
+  # Plain git rather than a path-filter action, which would be one more
+  # third-party dependency for what git diff already says. Both commits are fetched at depth 1: a two-dot diff compares trees
   # and needs no history. Anything it cannot tell (a new branch's all-zero
   # `before`, a failed fetch or diff, an empty diff) runs every job.
   changes:
@@ -276,12 +386,14 @@ jobs:
 
   # Nothing else parses the workflows or .goreleaser.yaml before a tag push,
   # so a broken release config otherwise shows up when the release job fails
-  # on a pushed tag. This job runs on every push instead of behind a path
-  # filter: a path-filter action would be one more third-party dependency,
-  # and the job is cheap. Each tool ran in well under a second, a cold
-  # actionlint install took about 10s, and goreleaser-action downloads a
-  # prebuilt binary (building goreleaser from source pulls 2.2 GB of modules).
+  # on a pushed tag. This job runs on every push but a docs-only one
+  # (`changes`), which touches neither file. The job is cheap: each tool ran
+  # in well under a second, a cold actionlint install took about 10s, and
+  # goreleaser-action downloads a prebuilt binary (building goreleaser from
+  # source pulls 2.2 GB of modules).
   config-lint:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.code != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -289,16 +401,15 @@ jobs:
       # enough.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # No cache: this job would save under the same key as `check` (same OS,
-      # Go version and go.sum). It finishes first, so its small cache would
-      # win the save, and `check` would then restore that cache instead of
-      # its own.
+      # No cache: one go install is all this job builds, and setup-go's
+      # cache would be one more Linux cache saved under a shared key (see
+      # the top of `jobs`).
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: false
 
-      # Pinned like golangci-lint in `check`, and bumped by hand: dependabot
+      # Pinned like golangci-lint in `static`, and bumped by hand: dependabot
       # bumps only `uses:` pins. actionlint picks up the runner's shellcheck
       # (the ubuntu-24.04 image ships 0.9.0), so `run:` scripts are
       # shellchecked too. A newer shellcheck in a later runner image can add

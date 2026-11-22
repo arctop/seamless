@@ -109,10 +109,19 @@ config key makes the committed output stale, and this is the step that says so.
 
 ## What CI runs
 
-`.github/workflows/ci.yml` runs three jobs on every push to `main` and every
-pull request:
+`.github/workflows/ci.yml` runs on every push to `main` and every pull
+request. A tag runs only the release workflow, which tests nothing again, and
+a `site-*` tag only the site's deploy.
 
-- **`check`**, on Linux: `make check`, the gate above.
+- **`static`** and **`test-race`**, on Linux: `make check`, the gate above,
+  split over runners. `static` runs its first stage (`make check-static`).
+  `test-race` runs the second in three parts at once, one runner each:
+  `TESTSHARD_SLICE=i/3` gives each part a third of the tests by count, cut from
+  the package list and the test names alone, so every runner cuts the same
+  thirds and every test runs in exactly one of them. On one 4-core runner the
+  gate had reached 24 minutes, 20 of them under `-race`. Each part keeps
+  `cmd/testshard`'s record of its own durations from its last green run, which
+  orders its shards and never decides which tests it runs.
 - **`os-smoke`**, on `macos-latest` and `windows-latest`: `go test -count=1`
   over `./cmd/seamlessd`, `./internal/update` and `./internal/agentproc`. These
   are the packages with code behind darwin and windows build tags (file
@@ -124,6 +133,14 @@ pull request:
 - **`config-lint`**: actionlint over the workflows, and `goreleaser check` over
   `.goreleaser.yaml` with the goreleaser version range the release workflow
   uses. Without it, a broken release config would first fail on a pushed tag.
+- **`approver`**, on `macos-latest`: the Touch ID approver's Swift tests and an
+  unsigned build, only when a change touches `macos/`, `scripts/approver/` or
+  a workflow.
+
+A run whose every change is under `docs-src/` or is a file `make docs`
+generates from it (the changelog refresh after a release, say) runs the docs
+lane instead: `static` runs `docs-check`, `site-check` and the tests that read
+docs files, and the other jobs are skipped.
 
 Since those packages' tests run on Windows, write them to pass there:
 

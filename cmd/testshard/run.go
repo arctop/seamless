@@ -21,35 +21,33 @@ var scanNames = testNames
 func sharded(ctx context.Context, o options, stdout, stderr io.Writer) (int, string) {
 	// 1. Build every test binary once, through one go command. A binary that
 	// does not build, or whose TestMain fails with no test to run, stops the
-	// run here.
-	pre := exec.CommandContext(ctx, o.gocmd, append(append(append([]string{"test"}, o.flags...), "-run", "^$"), o.pkgs...)...)
-	var preOut bytes.Buffer
-	pre.Stdout, pre.Stderr = &preOut, &preOut
-	if err := pre.Run(); err != nil {
-		for _, line := range strings.SplitAfter(preOut.String(), "\n") {
-			if !strings.HasPrefix(line, "ok  ") && !strings.HasPrefix(line, "?   ") &&
-				!strings.HasPrefix(line, "testing: warning: no tests to run") {
-				fmt.Fprint(stdout, line)
-			}
-		}
-		fmt.Fprintln(stdout, "FAIL")
-		return max(exitCode(err, stderr), 1), "the test binaries did not build or start"
-	}
-
-	// 2. The packages, as go test sees them, and their tests.
-	list := exec.CommandContext(ctx, o.gocmd, append([]string{"list", "-f", "{{.ImportPath}}\t{{.Dir}}"}, o.pkgs...)...)
-	list.Stderr = stderr
-	out, err := list.Output()
-	if err != nil {
-		return max(exitCode(err, stderr), 1), ""
-	}
+	// run here. 2. The packages, as go test sees them, and their tests. One
+	// part of a split run lists first and builds only the packages it runs.
 	var pkgs []pkg
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		path, dir, ok := strings.Cut(line, "\t")
+	if o.slice.n > 1 {
+		all, code, ok := listPackages(ctx, o, stderr)
 		if !ok {
-			continue
+			return code, ""
 		}
-		pkgs = append(pkgs, pkg{path: path, dir: dir, names: scanNames(dir)})
+		pkgs = o.slice.take(all)
+		if len(pkgs) == 0 {
+			return 0, fmt.Sprintf("slice %d/%d has no tests", o.slice.i+1, o.slice.n)
+		}
+		paths := make([]string, len(pkgs))
+		for i, p := range pkgs {
+			paths[i] = p.path
+		}
+		if code, ok := prebuild(ctx, o, paths, stdout, stderr); !ok {
+			return code, "the test binaries did not build or start"
+		}
+	} else {
+		code, ok := prebuild(ctx, o, o.pkgs, stdout, stderr)
+		if !ok {
+			return code, "the test binaries did not build or start"
+		}
+		if pkgs, code, ok = listPackages(ctx, o, stderr); !ok {
+			return code, ""
+		}
 	}
 
 	// 3. Pack and order the shards; 4. run them.
@@ -74,12 +72,56 @@ func sharded(ctx context.Context, o options, stdout, stderr io.Writer) (int, str
 		fmt.Fprintln(stdout, "FAIL")
 	}
 	if ctx.Err() == nil {
-		merged := mergeTimes(loadTimes(o.timesPath), results)
+		merged := mergeTimes(loadTimes(o.timesPath), results, o.slice.n > 1)
 		if err := saveTimes(o.timesPath, merged); err != nil {
 			fmt.Fprintf(stderr, "testshard: could not record test durations in %s: %v\n", o.timesPath, err)
 		}
 	}
-	return code, summarize(results, o.jobs)
+	summary := summarize(results, o.jobs)
+	if o.slice.n > 1 {
+		summary = fmt.Sprintf("slice %d/%d: %s", o.slice.i+1, o.slice.n, summary)
+	}
+	return code, summary
+}
+
+// prebuild is step 1: `go test -run '^$'` over pkgs, which builds every test
+// binary once and runs each TestMain with no test. On a failure it prints go
+// test's output, less the packages that passed, and reports false.
+func prebuild(ctx context.Context, o options, pkgs []string, stdout, stderr io.Writer) (int, bool) {
+	pre := exec.CommandContext(ctx, o.gocmd, append(append(append([]string{"test"}, o.flags...), "-run", "^$"), pkgs...)...)
+	var preOut bytes.Buffer
+	pre.Stdout, pre.Stderr = &preOut, &preOut
+	if err := pre.Run(); err != nil {
+		for _, line := range strings.SplitAfter(preOut.String(), "\n") {
+			if !strings.HasPrefix(line, "ok  ") && !strings.HasPrefix(line, "?   ") &&
+				!strings.HasPrefix(line, "testing: warning: no tests to run") {
+				fmt.Fprint(stdout, line)
+			}
+		}
+		fmt.Fprintln(stdout, "FAIL")
+		return max(exitCode(err, stderr), 1), false
+	}
+	return 0, true
+}
+
+// listPackages is step 2: the packages o names, as go list sees them, each
+// with the test names its files declare.
+func listPackages(ctx context.Context, o options, stderr io.Writer) ([]pkg, int, bool) {
+	list := exec.CommandContext(ctx, o.gocmd, append([]string{"list", "-f", "{{.ImportPath}}\t{{.Dir}}"}, o.pkgs...)...)
+	list.Stderr = stderr
+	out, err := list.Output()
+	if err != nil {
+		return nil, max(exitCode(err, stderr), 1), false
+	}
+	var pkgs []pkg
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		path, dir, ok := strings.Cut(line, "\t")
+		if !ok {
+			continue
+		}
+		pkgs = append(pkgs, pkg{path: path, dir: dir, names: scanNames(dir)})
+	}
+	return pkgs, 0, true
 }
 
 // result is one shard's run: its exit, what go test -json said, and the
@@ -247,12 +289,23 @@ func report(w io.Writer, path string, rs []*result) bool {
 			cached++
 		}
 	}
-	if cached == len(rs) {
-		fmt.Fprintf(w, "ok  \t%s\t(cached, %d shards)\n", path, len(rs))
-	} else {
+	switch {
+	case cached == len(rs):
+		fmt.Fprintf(w, "ok  \t%s\t(cached, %d %s)\n", path, len(rs), plural(len(rs), "shard"))
+	case len(rs) == 1:
+		// One part of a split run, holding a slice of the package.
+		fmt.Fprintf(w, "ok  \t%s\t%.3fs\t(1 shard)\n", path, longest)
+	default:
 		fmt.Fprintf(w, "ok  \t%s\t%.3fs\t(longest of %d shards)\n", path, longest, len(rs))
 	}
 	return true
+}
+
+func plural(n int, word string) string {
+	if n == 1 {
+		return word
+	}
+	return word + "s"
 }
 
 func writeAll(w io.Writer, lines []string) {
@@ -264,8 +317,10 @@ func writeAll(w io.Writer, lines []string) {
 // mergeTimes replaces each package's recorded durations with this run's, for
 // every package whose shards all reported: a test renamed or removed leaves
 // the record with its package's next run. A cached shard's elapsed is the
-// original run's, so it counts too.
-func mergeTimes(old times, results []result) times {
+// original run's, so it counts too. A part of a split run ran only some of
+// each package's tests, so it adds to the record (partial) and never drops a
+// name.
+func mergeTimes(old times, results []result, partial bool) times {
 	fresh := times{}
 	incomplete := map[string]bool{}
 	for _, r := range results {
@@ -280,7 +335,7 @@ func mergeTimes(old times, results []result) times {
 		}
 	}
 	for p, tests := range fresh {
-		if incomplete[p] {
+		if incomplete[p] || partial {
 			for n, s := range tests {
 				if old[p] == nil {
 					old[p] = map[string]float64{}

@@ -47,10 +47,18 @@
 // -list, -bench, -fuzz, -json, -v) run plain go test instead, as does
 // TESTSHARD=0.
 //
+// One run can also be split over several machines, CI's runners:
+// TESTSHARD_SLICE=i/n runs part i of n (slice.take). The parts are cut from
+// the package list and the test names alone, so every machine cuts the same
+// ones and every test runs in exactly one; the times file only orders the
+// shards inside a part, and a part adds to it without dropping the names the
+// other parts ran.
+//
 // Environment: GO (the go command, default go), TESTSHARD=0 (plain go test),
 // TESTSHARD_JOBS (shards at once, default the CPU count), TESTSHARD_TIMES
 // (the times file, default <user cache dir>/seamless/testshard-<race|plain>.tsv,
-// shared by every checkout on the machine).
+// shared by every checkout on the machine), TESTSHARD_SLICE (i/n: one part of
+// a run split over n machines).
 package main
 
 import (
@@ -84,6 +92,7 @@ type options struct {
 	jobs      int
 	timesPath string
 	plain     bool
+	slice     slice // n == 0: the whole run
 }
 
 func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -142,6 +151,20 @@ func parseArgs(args []string, getenv func(string) string) (options, error) {
 	}
 	if getenv("TESTSHARD") == "0" {
 		o.plain = true
+	}
+	if v := getenv("TESTSHARD_SLICE"); v != "" {
+		i, n, ok := strings.Cut(v, "/")
+		part, err1 := strconv.Atoi(i)
+		parts, err2 := strconv.Atoi(n)
+		if !ok || err1 != nil || err2 != nil || parts < 1 || part < 1 || part > parts {
+			return o, fmt.Errorf("TESTSHARD_SLICE=%q: want i/n, 1 <= i <= n", v)
+		}
+		if o.plain {
+			// Plain go test runs every test: each part would run them all.
+			return o, fmt.Errorf("TESTSHARD_SLICE=%q needs a sharded run: no TESTSHARD=0 and no flag that picks the tests (%s)",
+				v, strings.Join(pickers, ", "))
+		}
+		o.slice = slice{i: part - 1, n: parts}
 	}
 	if j := getenv("TESTSHARD_JOBS"); j != "" {
 		n, err := strconv.Atoi(j)

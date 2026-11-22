@@ -1916,8 +1916,12 @@ months. Workflow and flags: `cmd/seambench/README.md`. (`make seambench`, not
 3. For any change touching a recurring pattern above, grep for siblings and fix
    them together.
 
-CI (`.github/workflows/ci.yml`) runs `make check` on Linux, plus two jobs
-`check` cannot stand in for: `os-smoke` runs `go test -count=1` over
+CI (`.github/workflows/ci.yml`) runs `make check` on Linux, split over
+runners: `static` runs `make check-static` (its first stage) and `test-race`
+runs the second in three parts at once (`TESTSHARD_SLICE`), so a test must
+pass in a process of its own whatever ran before it -- which the shards
+already require. Two more jobs cover what `check` cannot stand in for:
+`os-smoke` runs `go test -count=1` over
 `./cmd/seamlessd ./internal/update ./internal/agentproc` on `macos-latest` and
 `windows-latest` (`CGO_ENABLED=0`, no `-race`, `fail-fast: false`; Windows
 skips the names in `known_windows_failures`, so delete a name when its fix

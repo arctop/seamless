@@ -385,10 +385,19 @@ are generated from the code (the MCP tool reference reads <code>mcp.Catalog()</c
 configuration reference reflects <code>config.Defaults()</code>), so changing a tool or a
 config key makes the committed output stale, and this is the step that says so.</p>
 <h2 id="what-ci-runs">What CI runs</h2>
-<p><code>.github/workflows/ci.yml</code> runs three jobs on every push to <code>main</code> and every
-pull request:</p>
+<p><code>.github/workflows/ci.yml</code> runs on every push to <code>main</code> and every pull
+request. A tag runs only the release workflow, which tests nothing again, and
+a <code>site-*</code> tag only the site's deploy.</p>
 <ul>
-<li><strong><code>check</code></strong>, on Linux: <code>make check</code>, the gate above.</li>
+<li><strong><code>static</code></strong> and <strong><code>test-race</code></strong>, on Linux: <code>make check</code>, the gate above,
+split over runners. <code>static</code> runs its first stage (<code>make check-static</code>).
+<code>test-race</code> runs the second in three parts at once, one runner each:
+<code>TESTSHARD_SLICE=i/3</code> gives each part a third of the tests by count, cut from
+the package list and the test names alone, so every runner cuts the same
+thirds and every test runs in exactly one of them. On one 4-core runner the
+gate had reached 24 minutes, 20 of them under <code>-race</code>. Each part keeps
+<code>cmd/testshard</code>'s record of its own durations from its last green run, which
+orders its shards and never decides which tests it runs.</li>
 <li><strong><code>os-smoke</code></strong>, on <code>macos-latest</code> and <code>windows-latest</code>: <code>go test -count=1</code>
 over <code>./cmd/seamlessd</code>, <code>./internal/update</code> and <code>./internal/agentproc</code>. These
 are the packages with code behind darwin and windows build tags (file
@@ -400,7 +409,14 @@ Windows because of a known product bug are skipped there by name
 <li><strong><code>config-lint</code></strong>: actionlint over the workflows, and <code>goreleaser check</code> over
 <code>.goreleaser.yaml</code> with the goreleaser version range the release workflow
 uses. Without it, a broken release config would first fail on a pushed tag.</li>
+<li><strong><code>approver</code></strong>, on <code>macos-latest</code>: the Touch ID approver's Swift tests and an
+unsigned build, only when a change touches <code>macos/</code>, <code>scripts/approver/</code> or
+a workflow.</li>
 </ul>
+<p>A run whose every change is under <code>docs-src/</code> or is a file <code>make docs</code>
+generates from it (the changelog refresh after a release, say) runs the docs
+lane instead: <code>static</code> runs <code>docs-check</code>, <code>site-check</code> and the tests that read
+docs files, and the other jobs are skipped.</p>
 <p>Since those packages' tests run on Windows, write them to pass there:</p>
 <ul>
 <li>A test that fakes a home sets <code>USERPROFILE</code> beside <code>HOME</code>. <code>os.UserHomeDir</code>

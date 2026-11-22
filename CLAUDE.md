@@ -38,7 +38,8 @@ cmd/seambench/     agent-scenario benchmark: `run` (headless scenario x conditio
 cmd/testshard/     make test/test-race's runner: each package's tests split across
                    go test processes, packed by the durations it recorded last
                    time (<user cache dir>/seamless/testshard-*.tsv, shared by
-                   every checkout), longest first
+                   every checkout), longest first; TESTSHARD_SLICE=i/n runs one
+                   part of a run split over machines (CI's test-race jobs)
 cmd/releasekit/    the release's macOS half: builds and packs the darwin binaries
                    from .goreleaser.yaml's builds and archive, the tag's sha256
                    manifest and release.yml's check of the draft against it,
@@ -192,7 +193,9 @@ make check      # the full gate: build, vet, cross-check (darwin/linux/windows
                 # vet), fmt-check, docs-check, installer-check, site-check,
                 # lint and vulncheck at once, then test-race -count=1.
                 # Every go command builds with -trimpath, so a fresh
-                # worktree reuses the build cache of the trees before it
+                # worktree reuses the build cache of the trees before it.
+                # CI runs its two stages as jobs: check-static, and
+                # test-race in three parts on runners of their own
 make check-fast # the pre-commit subset (no build/vulncheck/test-race);
                 # .githooks/pre-commit runs it
 make lint       # golangci-lint

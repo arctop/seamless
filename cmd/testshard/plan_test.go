@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -185,10 +186,112 @@ func TestMergeTimes(t *testing.T) {
 		{shard: shard{pkg: "m/b"}, times: map[string]float64{"TestB2": 5}},
 		{shard: shard{pkg: "m/b", index: 1}, times: map[string]float64{}, err: fmt.Errorf("signal: killed")},
 	}
-	got := mergeTimes(old, results)
+	copyOf := func(in times) times {
+		out := times{}
+		for p, tests := range in {
+			out[p] = map[string]float64{}
+			for n, s := range tests {
+				out[p][n] = s
+			}
+		}
+		return out
+	}
+	got := mergeTimes(copyOf(old), results, false)
 	require.Equal(t, map[string]float64{"TestKept": 3, "TestNew": 1}, got["m/a"], "a package that ran whole is replaced")
 	require.Equal(t, map[string]float64{"TestB": 4, "TestB2": 5}, got["m/b"], "a package with a silent shard keeps its old record")
 	require.Equal(t, map[string]float64{"TestC": 2}, got["m/c"], "a package not run is untouched")
+
+	got = mergeTimes(copyOf(old), results, true)
+	require.Equal(t, map[string]float64{"TestGone": 9, "TestKept": 3, "TestNew": 1}, got["m/a"],
+		"a part of a split run adds what it ran and drops nothing: the other parts ran the rest")
+}
+
+// TestSlice_EveryTestRunsInExactlyOnePart is assertCovers across the parts of
+// a split run: each scanned name runs in exactly one part's shards, and each
+// package's catch-all (a whole run or a -skip shard, which also runs what the
+// scan missed) in exactly one part, whatever the times file says on each
+// machine.
+func TestSlice_EveryTestRunsInExactlyOnePart(t *testing.T) {
+	pkgs := []pkg{
+		{path: "m/big", names: names(110)},
+		{path: "m/seven", names: names(7)},
+		{path: "m/two", names: names(2)},
+		{path: "m/one", names: names(1)},
+		{path: "m/none"},
+		{path: "m/none2"},
+		{path: "m/three", names: names(3)},
+	}
+	records := []times{{}, {"m/big": {"Test000": 90, "Test001": 50}}, {"m/seven": {"Test003": 7}, "m/one": {"Test000": 1}}}
+	for _, n := range []int{1, 2, 3, 5} {
+		ran := map[string]map[string]int{}
+		catchAll := map[string]int{}
+		parts := map[string]map[int]bool{}
+		for i := range n {
+			part := slice{i: i, n: n}.take(pkgs)
+			// Each machine plans its part with a record of its own.
+			for _, s := range plan(part, records[i%len(records)], 4) {
+				if ran[s.pkg] == nil {
+					ran[s.pkg] = map[string]int{}
+					parts[s.pkg] = map[int]bool{}
+				}
+				parts[s.pkg][i] = true
+				var all []string
+				for _, p := range pkgs {
+					if p.path == s.pkg {
+						all = p.names
+					}
+				}
+				switch {
+				case s.whole:
+					require.Equal(t, []string{s.pkg}, s.args())
+					catchAll[s.pkg]++
+					for _, name := range all {
+						ran[s.pkg][name]++
+					}
+				case s.skip != nil:
+					require.Equal(t, []string{"-skip", anchored(s.skip), s.pkg}, s.args())
+					catchAll[s.pkg]++
+					for _, name := range all {
+						if !slices.Contains(s.skip, name) {
+							ran[s.pkg][name]++
+							require.Contains(t, s.names, name, "%s: a -skip shard runs its own names", s.pkg)
+						}
+					}
+				default:
+					require.NotEmpty(t, s.names, "%s: a -run shard names its tests", s.pkg)
+					require.Equal(t, []string{"-run", anchored(s.names), s.pkg}, s.args())
+					for _, name := range s.names {
+						ran[s.pkg][name]++
+					}
+				}
+			}
+		}
+		for _, p := range pkgs {
+			require.Equal(t, 1, catchAll[p.path], "n=%d %s: exactly one part runs the catch-all", n, p.path)
+			for _, name := range p.names {
+				require.Equal(t, 1, ran[p.path][name], "n=%d %s.%s runs exactly once", n, p.path, name)
+			}
+			require.Len(t, ran[p.path], len(p.names), "n=%d %s: nothing but its names", n, p.path)
+		}
+		if n > 1 {
+			require.Len(t, parts["m/big"], n, "n=%d: a big package spreads over every part", n)
+		}
+		// The parts are even by count: a name, or a package with none, is one.
+		var sizes []int
+		for i := range n {
+			size := 0
+			for _, p := range (slice{i: i, n: n}).take(pkgs) {
+				size += len(p.names)
+				if len(p.names) == 0 && !p.noCatchAll && len(p.others) == 0 {
+					size++
+				}
+			}
+			sizes = append(sizes, size)
+		}
+		require.LessOrEqual(t, slices.Max(sizes)-slices.Min(sizes), 1, "n=%d: part sizes %v", n, sizes)
+	}
+	require.Equal(t, pkgs, slice{}.take(pkgs), "no slice: the whole run")
+	require.Equal(t, pkgs, slice{i: 0, n: 1}.take(pkgs), "one part: the whole run")
 }
 
 func TestParseArgs(t *testing.T) {
@@ -229,6 +332,18 @@ func TestParseArgs(t *testing.T) {
 	require.Equal(t, 3, o.jobs)
 	_, err = parseArgs([]string{"--"}, env("TESTSHARD_JOBS", "0"))
 	require.ErrorContains(t, err, "TESTSHARD_JOBS")
+
+	o, err = parseArgs([]string{"--"}, env("TESTSHARD_SLICE", "2/3"))
+	require.NoError(t, err)
+	require.Equal(t, slice{i: 1, n: 3}, o.slice)
+	for _, bad := range []string{"0/3", "4/3", "3", "a/b", "1/0", "-1/2"} {
+		_, err = parseArgs([]string{"--"}, env("TESTSHARD_SLICE", bad))
+		require.ErrorContains(t, err, "TESTSHARD_SLICE", bad)
+	}
+	_, err = parseArgs([]string{"--"}, env("TESTSHARD_SLICE", "1/2", "TESTSHARD", "0"))
+	require.ErrorContains(t, err, "needs a sharded run", "plain go test would run every test in every part")
+	_, err = parseArgs([]string{"-run", "X", "--"}, env("TESTSHARD_SLICE", "1/2"))
+	require.ErrorContains(t, err, "needs a sharded run")
 
 	race, err := parseArgs([]string{"-race", "--"}, env())
 	require.NoError(t, err)

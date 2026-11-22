@@ -164,11 +164,54 @@ func saveTimes(path string, t times) error {
 	return err
 }
 
-// pkg is one package to test: its import path, directory and test names.
+// pkg is one package to test: its import path, directory and the test names
+// this run runs. In one part of a split run (a slice), others are the
+// package's scanned names the other parts run, and noCatchAll marks a
+// package whose catch-all (the shard that runs whatever the scan missed) is
+// another part's. Outside a slice both are zero: the run runs every name.
 type pkg struct {
-	path  string
-	dir   string
-	names []string
+	path       string
+	dir        string
+	names      []string
+	others     []string
+	noCatchAll bool
+}
+
+// slice is one part of a run split over several machines
+// (TESTSHARD_SLICE=i/n): part i of n, i counted from 0 here.
+type slice struct{ i, n int }
+
+// take is the part's share of pkgs. The parts are cut by count from the
+// package list and the scanned names alone, never from the times file, so
+// every machine cuts the same parts whatever its record says: test k of the
+// run (packages in go list's order, each one's names sorted) is part k mod n's.
+// Each package's catch-all goes with its first name; a package with no names
+// counts as one test. A package the part has neither a name nor the catch-all
+// of is left out, and so is never built there.
+func (s slice) take(pkgs []pkg) []pkg {
+	if s.n <= 1 {
+		return pkgs
+	}
+	var out []pkg
+	k := 0
+	for _, p := range pkgs {
+		q := pkg{path: p.path, dir: p.dir, noCatchAll: k%s.n != s.i}
+		if len(p.names) == 0 {
+			k++
+		}
+		for _, n := range p.names {
+			if k%s.n == s.i {
+				q.names = append(q.names, n)
+			} else {
+				q.others = append(q.others, n)
+			}
+			k++
+		}
+		if !q.noCatchAll || len(q.names) > 0 {
+			out = append(out, q)
+		}
+	}
+	return out
 }
 
 // shard is one go test process: a package and the names it runs. skip marks
@@ -238,7 +281,13 @@ func plan(pkgs []pkg, rec times, jobs int) []shard {
 }
 
 func planPackage(p pkg, rec times, median, target float64, per int) []shard {
-	if len(p.names) <= 1 {
+	// full: this run runs the whole package, so one shard can run it plainly.
+	full := !p.noCatchAll && len(p.others) == 0
+	if len(p.names) == 0 && !full {
+		// The catch-all alone: whatever the scan missed.
+		return []shard{{pkg: p.path, skip: p.others}}
+	}
+	if len(p.names) <= 1 && full {
 		est := 0.0
 		for _, n := range p.names {
 			est += estimate(rec, p.path, n, median)
@@ -263,7 +312,7 @@ func planPackage(p pkg, rec times, median, target float64, per int) []shard {
 	k := int(math.Ceil(knownSum / target))
 	k = max(k, (unknown+per-1)/per, 1)
 	k = min(k, maxShards, len(tests))
-	if k == 1 {
+	if k == 1 && full {
 		return []shard{{pkg: p.path, est: sum, whole: true}}
 	}
 
@@ -291,11 +340,15 @@ func planPackage(p pkg, rec times, median, target float64, per int) []shard {
 		sort.Strings(shards[i].names)
 	}
 	// Shard 0 runs everything the others do not: its own names, and any test
-	// the scan missed.
-	for i := 1; i < k; i++ {
-		shards[0].skip = append(shards[0].skip, shards[i].names...)
+	// the scan missed -- unless another part of a split run holds the
+	// catch-all, and then it runs its names like the rest.
+	if !p.noCatchAll {
+		shards[0].skip = append(shards[0].skip, p.others...)
+		for i := 1; i < k; i++ {
+			shards[0].skip = append(shards[0].skip, shards[i].names...)
+		}
+		sort.Strings(shards[0].skip)
 	}
-	sort.Strings(shards[0].skip)
 	return shards
 }
 

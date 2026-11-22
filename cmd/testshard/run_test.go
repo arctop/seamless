@@ -127,6 +127,11 @@ func TestRun_EndToEnd(t *testing.T) {
 	t.Setenv("GO", gobin)
 	t.Setenv("TESTSHARD_TIMES", timesPath)
 	t.Setenv("TESTSHARD_JOBS", "4")
+	// The run under test reads the knobs of the run it is part of: under CI's
+	// TESTSHARD_SLICE it would run one part of this module, under TESTSHARD=0
+	// plain go test.
+	t.Setenv("TESTSHARD", "")
+	t.Setenv("TESTSHARD_SLICE", "")
 	t.Chdir(mod)
 
 	var stdout, stderr bytes.Buffer
@@ -150,6 +155,34 @@ func TestRun_EndToEnd(t *testing.T) {
 	rec := loadTimes(timesPath)
 	require.Len(t, rec["example.com/m/a"], 60, "every top-level test that ran is recorded")
 	require.Contains(t, rec["example.com/m/b"], "TestB")
+
+	// The same run in two parts, as two CI runners run it: every test exactly
+	// once between them, the one the scan missed included. By count, a's 60
+	// names are tests 0-59 (its catch-all goes with the first, to part 1), b's
+	// one is test 60 (part 1), and c, with none, counts as test 61 (part 2).
+	require.NoError(t, os.Remove(log))
+	var parts []string
+	for _, part := range []string{"1/2", "2/2"} {
+		t.Setenv("TESTSHARD_SLICE", part)
+		stdout.Reset()
+		stderr.Reset()
+		code := run(context.Background(), []string{"-count=1", "--", "./..."}, &stdout, &stderr)
+		require.Equal(t, 0, code, "stdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
+		require.Contains(t, stderr.String(), "testshard: slice "+part+": ")
+		require.Contains(t, stdout.String(), "ok  \texample.com/m/a\t", "a's tests are in both parts")
+		parts = append(parts, stdout.String())
+	}
+	t.Setenv("TESTSHARD_SLICE", "")
+	require.Contains(t, parts[0], "ok  \texample.com/m/b\t")
+	require.NotContains(t, parts[1], "example.com/m/b", "part 2 neither builds nor reports b")
+	require.Contains(t, parts[1], "?   \texample.com/m/c\t[no test files]")
+	require.NotContains(t, parts[0], "example.com/m/c")
+	raw, err = os.ReadFile(log)
+	require.NoError(t, err)
+	got = strings.Fields(string(raw))
+	sort.Strings(got)
+	require.Equal(t, want, got, "two parts: every test exactly once between them, the missed one included")
+	require.Len(t, loadTimes(timesPath)["example.com/m/a"], 60, "each part added to the record, and neither dropped the other's")
 
 	// A planted failure fails the run and shows only the failing test.
 	write("a/fail_test.go", "package a\n\nimport \"testing\"\n\nfunc TestPlantedFailure(t *testing.T) { t.Fatal(\"planted\") }\n")

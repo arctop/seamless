@@ -136,7 +136,7 @@ DOCS_ADDR ?= 127.0.0.1:8899
 INSTALLER    := docs/install
 PS_INSTALLER := docs/install.ps1
 
-.PHONY: help build test test-race bench seambench lint vet cross-check vulncheck fmt fmt-check check check-fast tidy run doctor console console-chrome \
+.PHONY: help build test test-race bench seambench lint vet cross-check vulncheck fmt fmt-check check check-static check-fast tidy run doctor console console-chrome \
 	docs docs-check docs-serve changelog installer-check site-check site-stamp indexnow metrics release-snapshot install-git-hooks uninstall-git-hooks \
 	install uninstall update _check-takeover _seed-config _install-service _reload-service \
 	_check-health _wait-healthy _check-server start stop restart status \
@@ -155,6 +155,7 @@ help:
 	@echo "             Unrelated to 'bench' above (see cmd/seambench/README.md)"
 	@echo "  check      the full gate: build, vet, cross-check, fmt, docs, installer, site, lint and vulncheck at once,"
 	@echo "             then test-race with -count=1"
+	@echo "  check-static  check's first stage alone (CI runs test-race in jobs of its own)"
 	@echo "  check-fast the pre-commit subset: same minus build, vulncheck and test-race"
 	@echo "  lint       run golangci-lint"
 	@echo "  vet        run go vet"
@@ -218,7 +219,7 @@ build:
 # its doc comment): the tests inside one package run one after another, so a
 # plain `go test ./...` ends with a few big packages each on one core.
 # TESTSHARD=0 runs plain go test instead; TESTSHARD_JOBS caps the shards
-# running at once.
+# running at once; TESTSHARD_SLICE=i/n runs part i of n (CI's test-race jobs).
 test:
 	@GO='$(GO)' $(GO) run ./cmd/testshard -- $(PKG)
 
@@ -404,12 +405,19 @@ changelog:
 # this one, and the cache cannot see what a test reads through a child
 # process (a test here builds ./cmd/seam with `go build`, which no cache key of
 # cmd/seamlessd's covers). `make test-race` on its own still uses the cache.
+#
+# check-static is the first stage alone. CI runs it as one job and test-race
+# as others, one per part of the run (TESTSHARD_SLICE), on runners of their
+# own: a 4-core runner took 20 minutes over test-race alone.
 CHECK_STATIC := build vet cross-check fmt-check docs-check installer-check site-check lint vulncheck
 
 check:
-	@MAKE='$(MAKE)' scripts/parallel-make.sh $(CHECK_STATIC)
+	@$(MAKE) --no-print-directory check-static
 	@$(MAKE) --no-print-directory test-race TESTFLAGS=-count=1
 	@echo "check: all green"
+
+check-static:
+	@MAKE='$(MAKE)' scripts/parallel-make.sh $(CHECK_STATIC)
 
 # The fast half of `check`: everything except build, vulncheck and test-race,
 # run at the same time like check's static stage. This is what
