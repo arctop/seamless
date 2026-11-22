@@ -266,7 +266,8 @@ func TestBdBoardAndTasksPageCountAlike(t *testing.T) {
 
 	var board projectsData
 	getJSON(t, mux, "/console/projects?format=json&group=flat", &board)
-	code, page := bdGet(mux, "/console/tasks?format=json", true)
+	// The board counts plan steps too: the Tasks page with its steps shown.
+	code, page := bdGet(mux, "/console/tasks?format=json&steps=1", true)
 	require.Equal(t, http.StatusOK, code, page)
 	rails := bdTasksRails(t, page)
 	rows := bdRows(board)

@@ -93,3 +93,40 @@
 
 {{/* task-ref-gate follows a dependency that is a gate with what it waits on. */}}
 {{define "task-ref-gate"}}{{if and .Kind .Gate}}{{if .Gate.Open}} <span class="muted" data-gate-who="{{.Gate.Who}}">gate &middot; waits on {{.Gate.Who}}: {{.Gate.What}}</span>{{end}}{{end}}{{end}}
+
+{{/* task-wait offers, while the task offers it (Actions.WaitOn: open or in
+     progress, no live claim, its own gate not open), Waits on someone: who
+     must act and what must happen, with the optional decision and ready-when
+     lines, posted to the gate set. It is folded until opened; each field keeps
+     what the owner typed through a live refresh (data-live-skip), keyed by
+     the task so it never carries to another. */}}
+{{define "task-wait"}}{{if .Actions.WaitOn}}
+  <details class="reader-links task-wait" data-task-wait>
+    <summary>{{icon "clock"}}Waits on someone</summary>
+    <p class="muted">Say who must act and what must happen: the task leaves the ready queue for the people's, until its gate is marked as handled.</p>
+    <form class="task-wait-form" method="post" action="/console/tasks/{{.ID}}/gate">
+      {{- template "task-next" .}}
+      <label class="task-wait-field"><span>Who</span><input id="wait-who-{{.ID}}" type="text" name="who" required maxlength="100" autocomplete="off" list="wait-who-{{.ID}}-list" data-live-skip placeholder="owner, hardware, reviewer:&lt;name&gt;"></label>
+      <datalist id="wait-who-{{.ID}}-list"><option value="owner"><option value="hardware"><option value="reviewer:"><option value="sitting:"></datalist>
+      <label class="task-wait-field task-wait-wide"><span>What</span><input id="wait-what-{{.ID}}" type="text" name="what" required maxlength="500" autocomplete="off" data-live-skip placeholder="What must happen, one line"></label>
+      <label class="task-wait-field task-wait-wide"><span>Decision <small>optional</small></span><input id="wait-decision-{{.ID}}" type="text" name="decision" maxlength="500" autocomplete="off" data-live-skip placeholder="The open question they answer"></label>
+      <label class="task-wait-field task-wait-wide"><span>Ready when <small>optional</small></span><input id="wait-ready-{{.ID}}" type="text" name="ready_when" maxlength="500" autocomplete="off" data-live-skip placeholder="When the task can go ahead"></label>
+      <button class="ract" type="submit" data-task-act="wait" title="Set the task's gate: it waits on them, not on an agent">{{icon "clock"}}Set what it waits on</button>
+    </form>
+  </details>
+{{end}}{{end}}
+
+{{/* task-history renders what happened to the task (its History, oldest
+     first, from its task.transition events): each move's verb in its tone,
+     who did it -- the session, linked where the request reads it, or you, from
+     this console -- and when. A holder's renewed claim reads once, with how
+     many times. It renders nothing for a task with no recorded history. */}}
+{{define "task-history"}}{{with .History}}
+  <section class="reader-links task-history" data-history>
+    <h3>{{icon "history"}}History <span class="count">{{len .}}</span></h3>
+    <ol class="task-history-list">
+      {{range .}}<li data-verb="{{.Verb}}"><span class="th-verb{{with .Tone}} {{.}}{{end}}">{{icon .Icon}}{{.Verb}}</span>{{if gt .Times 1}} <span class="th-times" title="{{.Times}} in a row">&times;{{.Times}}</span>{{end}}{{if .Owner}} <span class="th-who owner" title="An owner action from this console">you</span>{{else}}{{with .Who}} <span class="th-who">{{template "task-session" .}}</span>{{end}}{{end}} <span class="th-when">{{agoTime .At}}</span></li>{{end}}
+    </ol>{{if $.HistoryMore}}
+    <p class="muted">Older history is not shown.</p>{{end}}
+  </section>
+{{end}}{{end}}

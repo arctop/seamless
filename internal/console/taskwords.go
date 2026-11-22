@@ -290,3 +290,81 @@ func sessionLabel(sess core.Session) string {
 	}
 	return shortID(sess.ID)
 }
+
+// taskHistoryLimit is how many of a task's newest task.transition events its
+// history reads.
+const taskHistoryLimit = 100
+
+// taskHistoryEntry is one line of a task's history: what happened (Verb,
+// with its icon and tone), when, and who did it -- the session, named and
+// linked where the request reads it, or the owner (Owner, a console write).
+// Times counts the events in a row it stands for: a holder renewing its claim
+// re-claims, which reads as one claim.
+type taskHistoryEntry struct {
+	Verb  string       `json:"verb"`
+	Icon  string       `json:"-"`
+	Tone  string       `json:"tone,omitempty"`
+	At    time.Time    `json:"at"`
+	Who   *taskSession `json:"who,omitempty"`
+	Owner bool         `json:"owner,omitempty"`
+	Times int          `json:"times,omitempty"`
+}
+
+// taskHistory reads task id's history (taskHistoryEntry), oldest first, from
+// its newest taskHistoryLimit task.transition events, through the request's
+// handle: an event a locked project's session made is absent with it. more
+// says older events were left out.
+func (s *Service) taskHistory(ctx context.Context, id string, namer func(string) core.Session) ([]taskHistoryEntry, bool, error) {
+	evs, err := store.TaskTransitions(ctx, s.db(ctx), id, taskHistoryLimit)
+	if err != nil {
+		return nil, false, err
+	}
+	var out []taskHistoryEntry
+	for _, e := range evs {
+		verb, iconName, tone := historyVerb(e.Payload)
+		owner := payloadStr(e.Payload, "by") == "console"
+		// A claim stamps its holder in the payload; every other transition
+		// carries the acting session on the event itself.
+		actor := e.SessionID
+		if actor == "" {
+			actor = payloadStr(e.Payload, "claimed_by")
+		}
+		var who *taskSession
+		if !owner {
+			who = holderLink(actor, namer)
+		}
+		if n := len(out); n > 0 && out[n-1].Verb == verb && out[n-1].Owner == owner && sameSession(out[n-1].Who, who) {
+			out[n-1].Times++
+			continue
+		}
+		out = append(out, taskHistoryEntry{Verb: verb, Icon: iconName, Tone: tone, At: e.TS, Who: who, Owner: owner, Times: 1})
+	}
+	return out, len(evs) >= taskHistoryLimit, nil
+}
+
+// sameSession reports two history actors as one: both none, or the same
+// session as written.
+func sameSession(a, b *taskSession) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.ID == b.ID && a.Name == b.Name
+}
+
+// historyVerb reads a task.transition payload as its history's verb: the
+// ledger's (transitionVerb), and the gate's own moves, which an update that
+// changes no status otherwise reads as an edit -- set, cleared (a gate-kind
+// task's clearing closes it too) and removed.
+func historyVerb(payload map[string]any) (verb, iconName, tone string) {
+	if !payloadBool(payload, "created") {
+		switch payloadStr(payload, "gate") {
+		case "set":
+			return "gate set", "clock", "warn"
+		case "cleared":
+			return "gate cleared", "check", "ok"
+		case "removed":
+			return "gate removed", "x", "muted"
+		}
+	}
+	return transitionVerb(payload)
+}

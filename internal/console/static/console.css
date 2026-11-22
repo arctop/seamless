@@ -8311,6 +8311,53 @@ a.lib-active-filter.project-attn-chip:hover { text-decoration: none; box-shadow:
 .search-pills a[data-search-kind]::before { margin-right: 6px; }
 .cmdk-group[data-search-kind]::before { display: inline-block; margin-right: 7px; vertical-align: 1px; }
 
+/* UX 08: Tasks as a backlog. Rows wrap rather than cut their time in state;
+   a lapsed lease reads in the claim-lapsed word's tone, an untouched ready
+   task in the warning one. The closed pager, Waits on someone, and the
+   history strip in the reader. */
+.lib-page[data-library="tasks"] .rail-item .ri-meta { white-space: normal; }
+.rail-item .ri-since { color: var(--muted); }
+.rail-item .ri-lease { font-variant-numeric: tabular-nums; }
+.rail-item .ri-untouched { color: var(--warn); font-weight: 600; }
+.rail-item .ri-desc[data-first-blocker] { color: var(--faint); }
+.rail-pager { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px 10px; }
+.rail-pager a {
+  display: inline-flex; align-items: center; gap: 4px; min-height: 26px; padding: 2px 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--ink-2); font-size: var(--text-xs);
+}
+.rail-pager a .ico { width: 12px; height: 12px; }
+.rail-pager a:hover { border-color: var(--lib-accent); color: var(--lib-accent); text-decoration: none; }
+.rail-pager a:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+.lib-flag[data-task-plan] { font-family: var(--font-mono); }
+.task-wait > summary {
+  display: inline-flex; align-items: center; gap: 8px; width: fit-content; cursor: pointer;
+  font-size: var(--text-sm); font-weight: 600; color: var(--ink-2);
+}
+.task-wait > summary .ico { width: 14px; height: 14px; color: var(--warn); }
+.task-wait > summary:focus-visible { outline: none; box-shadow: var(--shadow-focus); border-radius: var(--radius-sm); }
+.task-wait > p { margin: 4px 0 0; font-size: var(--text-xs); }
+.task-wait-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-top: 8px; }
+.task-wait-field { display: flex; flex-direction: column; gap: 3px; flex: 1 1 10rem; min-width: 0; font-size: var(--text-2xs); color: var(--muted); }
+.task-wait-field.task-wait-wide { flex-basis: 16rem; }
+.task-wait-field small { color: var(--faint); font-size: inherit; }
+.task-wait-field input {
+  min-height: 28px; padding: 4px 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--ink); font: inherit; font-size: var(--text-xs);
+}
+.task-wait-field input::placeholder { color: var(--faint); }
+.task-wait-field input:focus { outline: none; border-color: var(--brand); box-shadow: var(--shadow-focus); }
+.task-history-list { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0; padding: 0; list-style: none; font-size: var(--text-xs); color: var(--muted); }
+.task-history-list li { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.task-history-list .th-verb { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--ink-2); }
+.task-history-list .th-verb .ico { width: 12px; height: 12px; flex: none; }
+.task-history-list .th-verb.ok { color: var(--ok); }
+.task-history-list .th-verb.brand { color: var(--brand-strong); }
+.task-history-list .th-verb.warn { color: var(--warn); }
+.task-history-list .th-verb.muted { color: var(--muted); }
+.task-history-list .th-who { max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-history-list .th-who.owner { color: var(--pop-strong); font-weight: 600; }
+.task-history-list .th-when, .task-history-list .th-times { color: var(--faint); font-variant-numeric: tabular-nums; }
+
 /* UX 04: the project tab's off-plan tasks. The plan card's frame and step
    rows, in groups that say what is true of each row: a quiet header per
    group, one rule between groups, and the empty line flush with the card. */

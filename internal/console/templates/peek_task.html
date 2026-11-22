@@ -20,6 +20,7 @@
 
 {{define "detail-body"}}
   {{- template "task-gate" .}}
+  {{- template "task-wait" .}}
   {{if .Body}}<div class="prose">{{.Body}}</div>{{else}}<div class="peek-note">No description</div>{{end}}
 
   <dl class="peek-kv">
@@ -53,6 +54,7 @@
     </ul>
   </section>
   {{end}}
+  {{- template "task-history" .}}
   {{- template "task-revisions" .Revisions}}
 
   {{- template "task-held" .}}

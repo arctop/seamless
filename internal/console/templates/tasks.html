@@ -1,71 +1,115 @@
 {{define "content"}}
 {{with .Data}}
 {{$sel := .Selected}}
-{{$open := add (add (add (len .Ready) (len .InProgress)) (len .Blocked)) (add (len .Gates) (len .Gated))}}
+{{$v := .View}}
+{{$qs := $v.QS}}
+{{$c := .Counts}}
+{{$d := .}}
 <div class="lib-page" data-library="tasks">
 <header class="mv2-bar">
-  <h1>{{icon "list-checks"}}Tasks</h1>{{about "Ready work, live claims, and dependency blockers across every project."}}
-  <span class="mv2-count" aria-label="{{$open}} open tasks">
-    <strong>{{$open}}</strong>open{{if .Closed}}<small>{{add (len .Closed) .ClosedMore}} recently closed</small>{{end}}
+  <h1>{{icon "list-checks"}}Tasks</h1>{{about "The backlog: every project's tasks outside a plan, with plan steps a toggle away. Filter by project, plan or text."}}
+  <span class="mv2-count" aria-label="{{$c.Open}} open tasks">
+    <strong>{{$c.Open}}</strong>open{{if .ClosedTotal}}<small>{{.ClosedTotal}} closed</small>{{end}}
   </span>
+  {{- if $v.Filtered}}
+  <a class="lib-clear" href="{{$v.ClearHref}}" data-seam-query title="Back to the default list: every project's tasks outside a plan">{{icon "x"}}Clear</a>{{end}}
+  <form class="search lib-query" method="get" action="/console/tasks" data-seam-query>
+    {{icon "search"}}
+    <input name="q" aria-label="Filter tasks by title, description, or id" placeholder="Filter titles, descriptions, and ids&hellip;" value="{{$v.Query.Q}}">
+    {{range $v.Keep}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">{{end}}
+  </form>
   <button type="button" class="mv2-filter-toggle" data-filters-toggle aria-expanded="false" aria-controls="mv2-controls">{{icon "sliders"}}<span>Filters</span></button>
   <span class="mv2-spacer"></span>
   <div class="mv2-controls" id="mv2-controls">
+  <details class="menu lib-filter-menu" data-task-projects>
+    <summary class="menu-btn" aria-label="Project: {{$v.ProjectLabel}}">{{icon "folder-tree"}}<span class="menu-k">Project</span><strong>{{$v.ProjectLabel}}</strong>{{icon "chevron-down"}}</summary>
+    <div class="menu-list" data-seam-query>
+      {{range $v.Projects}}<a class="{{if .On}}on{{end}}" href="{{.Href}}" title="{{.Count}} open">{{.Label}}<span class="n">{{.Count}}</span></a>{{end}}
+    </div>
+  </details>
+  <div class="lib-flags" data-seam-query>
+    <a class="lib-flag{{if $v.Steps.On}} on{{end}}" href="{{$v.Steps.Href}}" data-task-steps title="{{if $v.Steps.On}}Show only the tasks outside a plan{{else}}Show plan steps too, each with its plan{{end}}">{{icon "map"}}Plan steps</a>
+    {{- with $v.Query.Plan}}
+    <a class="lib-flag on" href="{{$v.PlanClear}}" data-task-plan="{{.}}" title="Show every task again, not only this plan's steps">plan:{{.}}{{icon "x"}}</a>{{end}}
+  </div>
+  <details class="menu sort-menu">
+    <summary class="menu-btn" aria-label="Sort: {{$v.SortLabel}}">{{icon "arrow-up-down"}}<span class="menu-k">Sort</span><strong>{{$v.SortLabel}}</strong>{{icon "chevron-down"}}</summary>
+    <div class="menu-list" data-seam-query>
+      {{range $v.Sorts}}<a class="{{if .On}}on{{end}}" href="{{.Href}}" data-lib-here>{{.Label}}</a>{{end}}
+    </div>
+  </details>
   <div class="lib-summary-pills">
-    {{if .InProgress}}<a class="status-live" href="#rg-inprogress"><span class="live-dot"></span>{{len .InProgress}} in progress</a>{{end}}
-    <a class="status-ready" href="#rg-ready">{{len .Ready}} ready</a>
-    {{if .Blocked}}<a class="status-blocked" href="#rg-blocked">{{len .Blocked}} blocked</a>{{end}}
-    {{- if .Gates}}
-    <a class="status-blocked" href="#rg-gates">{{len .Gates}} waiting on people</a>{{end}}
-    {{- if .Gated}}
-    <a class="status-blocked" href="#rg-gated">{{len .Gated}} gated</a>{{end}}
-    {{if .Closed}}<a href="#rg-closed">{{add (len .Closed) .ClosedMore}} closed</a>{{end}}
+    {{if $c.InProgress}}<a class="status-live" href="#rg-inprogress" title="Held by a live claim"><span class="live-dot"></span>{{$c.InProgress}} in progress</a>{{end}}
+    {{- if $c.Lapsed}}
+    <a class="status-blocked" href="#rg-unheld" data-word="claim-lapsed" title="In progress, but its holder's lease ran out: any agent can claim it">{{$c.Lapsed}} lapsed claim{{if ne $c.Lapsed 1}}s{{end}}</a>{{end}}
+    {{- if $c.Unclaimed}}
+    <a class="status-blocked" href="#rg-unheld" data-word="unclaimed" title="Marked in progress without a claim: any agent can claim it">{{$c.Unclaimed}} unclaimed</a>{{end}}
+    <a class="status-ready" href="#rg-ready">{{$c.Ready}} ready</a>
+    {{if $c.Blocked}}<a class="status-blocked" href="#rg-blocked" title="Waits on unfinished work before it">{{$c.Blocked}} blocked</a>{{end}}
+    {{- if $c.Waiting}}
+    <a class="status-blocked" href="{{$v.WaitingHref}}" title="A gate, or a step an open gate holds">{{$c.Waiting}} waiting on people</a>{{end}}
+    {{if .ClosedTotal}}<a href="#rg-closed">{{.ClosedTotal}} closed</a>{{end}}
   </div>
   </div>
 </header>
 
-{{if or .Ready .InProgress .Blocked .Gates .Gated .Closed}}
-<div class="lib-layout"{{if and .Selected .SelectedAuto}} data-auto-url="/console/tasks/{{.Selected.ID}}"{{end}}>
+{{if or .Ready .InProgress .Blocked .Gates .Gated .Closed $v.Filtered .Selected}}
+<div class="lib-layout"{{if and .Selected .SelectedAuto}} data-auto-url="/console/tasks/{{.Selected.ID}}{{$qs}}"{{end}}>
   <nav class="lib-rail" aria-label="Tasks">
-    <div class="rail-overview"><span>Queue map</span><span>State &rarr; task</span></div>
+    <div class="rail-overview"><span>Queue map</span><span>{{if eq $v.Query.Sort "newest"}}Newest first{{else}}Oldest first, as agents claim{{end}}</span></div>
     <div class="rail-scroll">
+    {{if or .Ready .InProgress .Blocked .Gates .Gated .Closed}}
     <div class="rail-groups">
-      {{if .InProgress}}
+      {{with .Live}}
       <section class="rail-group" id="rg-inprogress">
-        <header class="rail-group-hd"><span class="hd-label"><span class="live-dot"></span>in progress</span> <span class="n">{{len .InProgress}}</span></header>
+        <header class="rail-group-hd" title="Held by a live claim"><span class="hd-label"><span class="live-dot"></span>in progress</span> <span class="n">{{len .}}</span></header>
         <div class="rail-items">
-          {{range .InProgress}}
-          <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/tasks/{{.ID}}" data-title="{{.Title}}" data-context="In progress"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
+          {{range .}}{{$r := .}}
+          <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/tasks/{{.ID}}{{$qs}}" data-title="{{.Title}}" data-context="In progress"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
             <span class="ri-title">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</span>
-            <span class="ri-meta"><span class="mono">{{shortID .ID}}</span>{{copyBtn .ID}} &middot; {{if .Project}}{{.Project}}{{else}}global{{end}}{{with .Word}}{{if ne .Key "in-progress"}} &middot; <span class="ri-word" data-word="{{.Key}}"{{with .Hint}} title="{{.}}"{{end}}>{{.Text}}</span>{{end}}{{end}}{{with .Holder}} &middot; <span class="ri-holder" title="The session that holds the claim">{{.Name}}</span>{{end}} &middot; {{agoTime .Created}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
+            <span class="ri-meta">{{template "task-ri-lead" .}}{{with .Holder}} &middot; <span class="ri-holder" title="The session that holds the claim">{{.Name}}</span>{{end}}{{with .Lease}} &middot; <span class="ri-lease task-lease">{{timeAs $r.LeaseExpiry .}}</span>{{end}}{{template "task-ri-tail" .}}</span>
+          </a>
+          {{end}}
+        </div>
+      </section>
+      {{end}}
+      {{with .Unheld}}
+      <section class="rail-group" id="rg-unheld">
+        <header class="rail-group-hd" title="Marked in progress, but no live claim holds it: its holder's lease ran out, or nobody claimed it. Any agent can claim it.">no live claim <span class="n">{{len .}}</span></header>
+        <div class="rail-items">
+          {{range .}}{{$r := .}}
+          <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/tasks/{{.ID}}{{$qs}}" data-title="{{.Title}}" data-context="No live claim"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
+            <span class="ri-title">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</span>
+            <span class="ri-meta">{{template "task-ri-lead" .}}{{with .Word}} &middot; <span class="ri-word" data-word="{{.Key}}"{{with .Hint}} title="{{.}}"{{end}}>{{.Text}}</span>{{end}}{{with .Holder}} &middot; <span class="ri-holder" title="The session whose claim it was">{{.Name}}</span>{{end}}{{with .Lease}} &middot; <span class="ri-lease task-lease{{if $r.LeaseLapsed}} is-lapsed{{end}}">{{timeAs $r.LeaseExpiry .}}</span>{{end}}{{template "task-ri-tail" .}}</span>
           </a>
           {{end}}
         </div>
       </section>
       {{end}}
       <section class="rail-group" id="rg-ready">
-        <header class="rail-group-hd">ready <span class="n">{{len .Ready}}</span></header>
+        <header class="rail-group-hd" title="Nothing unfinished before it: an agent can claim it now">ready <span class="n">{{len .Ready}}</span></header>
         {{if .Ready}}
         <div class="rail-items">
           {{range .Ready}}
-          <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/tasks/{{.ID}}" data-title="{{.Title}}" data-context="Ready"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
+          <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/tasks/{{.ID}}{{$qs}}" data-title="{{.Title}}" data-context="Ready"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
             <span class="ri-title">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</span>
-            <span class="ri-meta"><span class="mono">{{shortID .ID}}</span>{{copyBtn .ID}} &middot; {{if .Project}}{{.Project}}{{else}}global{{end}}{{if .Deps}} &middot; {{.Deps}} dep{{if ne .Deps 1}}s{{end}}{{end}} &middot; {{agoTime .Created}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
+            <span class="ri-meta">{{template "task-ri-lead" .}}{{if .Deps}} &middot; {{.Deps}} dep{{if ne .Deps 1}}s{{end}}{{end}}{{if .Untouched}} &middot; <span class="ri-untouched" data-untouched title="Nothing changed on it for 30 days or more">{{timeAs .Updated (print "untouched " (ago .Updated))}}</span>{{end}}{{template "task-ri-tail" .}}</span>
           </a>
           {{end}}
         </div>
         {{else}}
-        <div class="rail-none">Nothing ready to pick up.</div>
+        <div class="rail-none">Nothing ready to pick up{{if $v.Filtered}} here{{end}}.</div>
         {{end}}
       </section>
       {{if .Blocked}}
       <section class="rail-group" id="rg-blocked">
-        <header class="rail-group-hd">blocked <span class="n">{{len .Blocked}}</span></header>
+        <header class="rail-group-hd" title="Waits on unfinished work before it">blocked <span class="n">{{len .Blocked}}</span></header>
         <div class="rail-items">
-          {{range .Blocked}}
-          <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/tasks/{{.ID}}" data-title="{{.Title}}" data-context="Blocked"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
+          {{range .Blocked}}{{$r := .}}
+          <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/tasks/{{.ID}}{{$qs}}" data-title="{{.Title}}" data-context="Blocked"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
             <span class="ri-title">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</span>
-            <span class="ri-meta"><span class="mono">{{shortID .ID}}</span>{{copyBtn .ID}} &middot; {{if .Project}}{{.Project}}{{else}}global{{end}} &middot; blocked by {{.BlockedBy}} &middot; {{agoTime .Created}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>{{range .LockedIn}}
+            <span class="ri-meta">{{template "task-ri-lead" .}} &middot; blocked by {{.BlockedBy}}{{template "task-ri-tail" .}}</span>{{with .FirstBlocker}}
+            <span class="ri-desc" data-first-blocker="{{.ID}}">after {{.Title}}{{if gt $r.BlockedBy 1}} and {{sub $r.BlockedBy 1}} more{{end}}</span>{{end}}{{range .LockedIn}}
             <span class="ri-desc" data-locked-blocker="{{.}}" title="Unlock {{.}} in the console to see the task">{{icon "lock"}} a task in locked project {{.}} blocks this one</span>{{end}}
           </a>
           {{end}}
@@ -77,9 +121,9 @@
         <header class="rail-group-hd" title="Gates: what a person, or an event outside Seamless, must do before the tasks that depend on them go ahead">waiting on people <span class="n">{{len .Gates}}</span></header>
         <div class="rail-items">
           {{range .Gates}}
-          <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/tasks/{{.ID}}" data-title="{{.Title}}" data-context="Waiting on people" data-gate{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
+          <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/tasks/{{.ID}}{{$qs}}" data-title="{{.Title}}" data-context="Waiting on people" data-gate{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
             <span class="ri-title">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</span>
-            <span class="ri-meta"><span class="mono">{{shortID .ID}}</span>{{copyBtn .ID}} &middot; {{if .Project}}{{.Project}}{{else}}global{{end}}{{if eq .Status "in_progress"}} &middot; started{{end}}{{if .BlockedBy}} &middot; blocked by {{.BlockedBy}}{{end}} &middot; {{agoTime .Created}}</span>
+            <span class="ri-meta">{{template "task-ri-lead" .}}{{if eq .Status "in_progress"}} &middot; started{{end}}{{if .BlockedBy}} &middot; blocked by {{.BlockedBy}}{{end}}{{template "task-ri-tail" .}}</span>
             {{with .Gate}}<span class="ri-desc" data-gate-who="{{.Who}}">waits on {{.Who}}: {{.What}}</span>{{end}}
           </a>
           {{end}}
@@ -88,12 +132,12 @@
       {{- end}}
       {{- if .Gated}}
       <section class="rail-group" id="rg-gated">
-        <header class="rail-group-hd" title="Steps that wait on people: their own gate is open, or a gate blocks them">gated <span class="n">{{len .Gated}}</span></header>
+        <header class="rail-group-hd" title="Steps that wait on people: their own gate is open, or a gate blocks them">waiting on a gate <span class="n">{{len .Gated}}</span></header>
         <div class="rail-items">
           {{range .Gated}}
-          <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/tasks/{{.ID}}" data-title="{{.Title}}" data-context="Gated"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
+          <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/tasks/{{.ID}}{{$qs}}" data-title="{{.Title}}" data-context="Waiting on a gate"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
             <span class="ri-title">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</span>
-            <span class="ri-meta"><span class="mono">{{shortID .ID}}</span>{{copyBtn .ID}} &middot; {{if .Project}}{{.Project}}{{else}}global{{end}}{{with .WaitsOn}} &middot; waits on {{joinAnd .}}{{end}} &middot; {{agoTime .Created}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
+            <span class="ri-meta">{{template "task-ri-lead" .}}{{with .WaitsOn}} &middot; waits on {{joinAnd .}}{{end}}{{template "task-ri-tail" .}}</span>
             {{with .Gate}}{{if .Open}}<span class="ri-desc" data-gate-who="{{.Who}}">waits on {{.Who}}: {{.What}}</span>{{end}}{{end}}{{range .LockedIn}}
             <span class="ri-desc" data-locked-blocker="{{.}}" title="Unlock {{.}} in the console to see the task">{{icon "lock"}} a task in locked project {{.}} blocks this one</span>{{end}}
           </a>
@@ -102,19 +146,37 @@
       </section>
       {{- end}}
       {{if .Closed}}
-      <details class="rail-group rail-collapse" id="rg-closed">
-        <summary class="rail-group-hd">recently closed <span class="n">{{len .Closed}}{{if .ClosedMore}} of {{add (len .Closed) .ClosedMore}}{{end}}</span></summary>
+      <details class="rail-group rail-collapse" id="rg-closed"{{if $v.Query.ClosedAll}} open{{end}}>
+        <summary class="rail-group-hd">{{if $v.Query.ClosedAll}}closed{{else}}recently closed{{end}} <span class="n">{{if $v.Query.ClosedAll}}{{if gt .ClosedPages 1}}page {{.ClosedPage}} of {{.ClosedPages}} &middot; {{end}}{{.ClosedTotal}}{{else}}{{len .Closed}}{{if .ClosedMore}} of {{.ClosedTotal}}{{end}}{{end}}</span></summary>
         <div class="rail-items">
           {{range .Closed}}
-          <a class="rail-item dim{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/tasks/{{.ID}}" data-title="{{.Title}}" data-context="Recently closed"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
+          <a class="rail-item dim{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/tasks/{{.ID}}{{$qs}}" data-title="{{.Title}}" data-context="{{if $v.Query.ClosedAll}}Closed{{else}}Recently closed{{end}}"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
             <span class="ri-title">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</span>
-            <span class="ri-meta"><span class="mono">{{shortID .ID}}</span>{{copyBtn .ID}} &middot; {{.Word.Text}} &middot; {{if .Project}}{{.Project}}{{else}}global{{end}}{{if .Closed}} &middot; {{agoTime .Closed}}{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
+            <span class="ri-meta"><span class="mono">{{shortID .ID}}</span>{{copyBtn .ID}} &middot; {{.Word.Text}} &middot; {{if .Project}}{{.Project}}{{else}}global{{end}}{{with .Plan}} <span class="ri-chip" data-plan="{{.}}">plan:{{.}}</span>{{end}}{{if .Closed}} &middot; {{agoTime .Closed}}{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
           </a>
           {{end}}
         </div>
+        {{- if or $v.ClosedAllHref $v.ClosedNewer $v.ClosedOlder}}
+        <div class="rail-pager" data-seam-query data-closed-pager>
+          {{- with $v.ClosedAllHref}}<a href="{{.}}">All {{$d.ClosedTotal}} closed tasks{{icon "chevron-right"}}</a>{{end}}
+          {{- with $v.ClosedNewer}}<a href="{{.}}" rel="prev">{{icon "chevron-left"}}Newer</a>{{end}}
+          {{- with $v.ClosedOlder}}<a href="{{.}}" rel="next">Older{{icon "chevron-right"}}</a>{{end}}
+        </div>
+        {{- end}}
       </details>
       {{end}}
     </div>
+    {{else}}
+    <div class="rail-none lib-none">
+      {{- if $v.Filtered}}
+      <p>{{if $v.Query.Q}}No task matches &ldquo;{{$v.Query.Q}}&rdquo;{{if or $v.Query.Project $v.Query.Plan}} with these filters{{end}}.{{else}}No task matches these filters.{{end}}</p>
+      <p class="lib-none-acts"><a href="{{$v.ClearHref}}" data-seam-query>{{icon "x"}}Clear</a>{{if not $v.Steps.On}}<a href="{{$v.Steps.Href}}" data-seam-query>{{icon "map"}}Show plan steps too</a>{{end}}{{with $v.SearchHref}}<a href="{{.}}">{{icon "search"}}Search everything for &ldquo;{{$v.Query.Q}}&rdquo;</a>{{end}}</p>
+      {{- else}}
+      <p>No task outside a plan.</p>
+      <p class="lib-none-acts"><a href="{{$v.Steps.Href}}" data-seam-query>{{icon "map"}}Show plan steps</a></p>
+      {{- end}}
+    </div>
+    {{end}}
     </div><!-- .rail-scroll -->
   </nav>
   <section class="lib-reader" id="lib-reader" data-base="/console/tasks" aria-live="polite" aria-label="Task">
@@ -124,11 +186,23 @@
   </section>
 </div>
 {{else}}
+{{- if $v.StepsOnly}}
+<div class="empty dotgrid"><span class="empty-ico">{{icon "list-checks"}}</span><div>Every task is a plan step: this list shows the tasks outside a plan. <a href="{{$v.Steps.Href}}" data-seam-query>Show plan steps</a></div></div>
+{{- else}}
 <div class="empty dotgrid"><span class="empty-ico">{{icon "list-checks"}}</span><div>No tasks yet &mdash; add work with tasks_add; a task appears in the ready queue once its blockers clear.</div></div>
+{{- end}}
 {{end}}
 </div><!-- .lib-page -->
 {{end}}
 {{end}}
+
+{{/* task-ri-lead opens a rail row's meta line: the short id that copies the
+     whole one, the project, and the plan chip of a plan step. */}}
+{{define "task-ri-lead"}}<span class="mono">{{shortID .ID}}</span>{{copyBtn .ID}} &middot; {{if .Project}}{{.Project}}{{else}}global{{end}}{{with .Plan}} <span class="ri-chip" data-plan="{{.}}">plan:{{.}}</span>{{end}}{{end}}
+
+{{/* task-ri-tail closes an open row's meta line: its time in its state, and
+     the restricted account that wrote it. */}}
+{{define "task-ri-tail"}}{{with .InState}} &middot; <span class="ri-since">{{.}}</span>{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{end}}
 
 {{define "task-reader"}}
 <article class="reader-sheet">
@@ -145,7 +219,7 @@
     <h2 class="reader-title">{{.Title}}{{copyBtn .Title}}
       <form class="star-form" method="post" action="/console/favorites/task/{{.ID}}">
         <input type="hidden" name="favorite" value="{{if .Favorite}}0{{else}}1{{end}}">
-        <input type="hidden" name="next" value="/console/tasks/{{.ID}}">
+        <input type="hidden" name="next" value="{{if .Next}}{{.Next}}{{else}}/console/tasks/{{.ID}}{{end}}" data-lib-next>
         <button class="star{{if .Favorite}} on{{end}}" type="submit" aria-pressed="{{if .Favorite}}true{{else}}false{{end}}" title="{{if .Favorite}}Unstar{{else}}Star{{end}} this task">{{icon "star"}}</button>
       </form>
     </h2>
@@ -155,10 +229,13 @@
       <span class="fact">created {{agoTime .Created}}</span>
       <span class="fact">updated {{agoTime .Updated}}</span>
       {{if .Closed}}<span class="fact">closed {{agoTime .Closed}}</span>{{end}}
+      {{- with .PlanSlug}}
+      <a class="fact" href="/console/tasks?plan={{.}}" data-seam-query data-plan-steps title="The Tasks list narrowed to this plan's steps">every step of plan:{{.}}</a>{{end}}
     </div>
     {{- template "task-held" .}}
   </header>
   {{- template "task-gate" .}}
+  {{- template "task-wait" .}}
   {{if .Body}}<div class="prose doc">{{.Body}}</div>{{else}}<div class="peek-note">No description</div>{{end}}
   {{if .DependsOn}}
   <section class="reader-links">
@@ -177,6 +254,7 @@
     </ul>
   </section>
   {{end}}
+  {{- template "task-history" .}}
   {{- template "task-revisions" .Revisions}}
 </article>
 {{end}}

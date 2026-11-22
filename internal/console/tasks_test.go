@@ -58,7 +58,7 @@ func TestTasksPage_ReadyBlockedClosed(t *testing.T) {
 	require.Contains(t, rr.Body.String(), "ship the widget")
 }
 
-func TestTasksPage_RailGroupsOrderNewestFirst(t *testing.T) {
+func TestTasksPage_RailGroupsSortOldestOrNewest(t *testing.T) {
 	db, mux := newConsole(t)
 	ctx := context.Background()
 	base := time.Date(2026, time.July, 20, 12, 0, 0, 0, time.UTC)
@@ -74,8 +74,8 @@ func TestTasksPage_RailGroupsOrderNewestFirst(t *testing.T) {
 		return id
 	}
 
-	// Give every older row a star. Stars remain visible metadata, but must not
-	// displace a newer row when the rail has no explicit alternate sort mode.
+	// Give every older row a star. Stars remain visible metadata, but never
+	// move a row in either sort.
 	oldInProgress := create("old in progress", core.TaskInProgress, base, base.Add(8*time.Hour), nil)
 	create("new in progress", core.TaskInProgress, base.Add(time.Hour), base.Add(time.Hour), nil)
 	oldReady := create("old ready", core.TaskOpen, base, base, nil)
@@ -89,8 +89,6 @@ func TestTasksPage_RailGroupsOrderNewestFirst(t *testing.T) {
 		require.NoError(t, store.SetTaskFavorite(ctx, db, id, true))
 	}
 
-	var data tasksData
-	getJSON(t, mux, "/console/tasks?format=json", &data)
 	titles := func(rows []taskRow) []string {
 		out := make([]string, len(rows))
 		for i := range rows {
@@ -98,6 +96,17 @@ func TestTasksPage_RailGroupsOrderNewestFirst(t *testing.T) {
 		}
 		return out
 	}
+	// The default is the order agents claim in: oldest first.
+	var data tasksData
+	getJSON(t, mux, "/console/tasks?format=json", &data)
+	require.Equal(t, "oldest", data.Filter.Sort)
+	require.Equal(t, []string{"old in progress", "new in progress"}, titles(data.InProgress))
+	require.Equal(t, []string{"old ready", "new ready"}, titles(data.Ready))
+	require.Equal(t, []string{"old blocked", "new blocked"}, titles(data.Blocked))
+	require.Equal(t, []string{"new closed", "old closed"}, titles(data.Closed), "closed is newest first in either sort")
+	require.True(t, data.Ready[0].Favorite)
+
+	getJSON(t, mux, "/console/tasks?format=json&sort=newest", &data)
 	require.Equal(t, []string{"new in progress", "old in progress"}, titles(data.InProgress))
 	require.Equal(t, []string{"new ready", "old ready"}, titles(data.Ready))
 	require.Equal(t, []string{"new blocked", "old blocked"}, titles(data.Blocked))

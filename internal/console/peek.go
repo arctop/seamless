@@ -364,6 +364,12 @@ type taskDetail struct {
 	// task waits on outside Seamless, open or cleared, nil when nothing.
 	Kind string        `json:"kind,omitempty"`
 	Gate *taskGateView `json:"gate,omitempty"`
+	// History is what happened to the task, oldest first, from its
+	// task.transition events read through the request's handle (taskHistory):
+	// created, claimed, released, reopened, closed, its gate set and cleared,
+	// each by whom and when. HistoryMore says older events were left out.
+	History     []taskHistoryEntry `json:"history,omitempty"`
+	HistoryMore bool               `json:"historyMore,omitempty"`
 	// Revisions are the task's earlier bodies, newest first (migration 054):
 	// each body a tasks_update replaced or appended to. Read through the
 	// request's handle (s.db), which hides them with their task; nil while
@@ -433,6 +439,9 @@ func (s *Service) taskDetailData(ctx context.Context, t core.Task) (taskDetail, 
 		d.Revisions = append(d.Revisions, taskRevisionView{Revision: r.Revision,
 			Body: s.renderBody(ctx, r.Body, t.ProjectSlug), BodyText: r.Body, Change: string(r.Change),
 			ReplacedAt: r.ReplacedAt, ReplacedBy: r.ReplacedBy, UpdatedAccount: r.UpdatedAccount})
+	}
+	if d.History, d.HistoryMore, err = s.taskHistory(ctx, t.ID, namer); err != nil {
+		return taskDetail{}, err
 	}
 	var linked []core.Task // the tasks this one links, worded together below
 	for _, depID := range t.DependsOn {
@@ -527,16 +536,30 @@ func (s *Service) taskDetail(w http.ResponseWriter, r *http.Request) {
 		s.renderFragment(w, r, "task", d)
 		return
 	}
+	// The reader and the page carry the Tasks page's state (taskQuery): the
+	// reader's actions return to the task with it, and the page's rail is the
+	// list under it.
 	if r.URL.Query().Get("reader") == "1" {
+		q, err := parseTaskQuery(r.URL.Query())
+		if err != nil {
+			s.badRequest(w, r, err.Error())
+			return
+		}
+		d.Next = q.listNext(d.ID)
 		s.renderReader(w, r, "tasks", "task-reader", d)
 		return
 	}
-	data, err := s.tasksPage(ctx)
-	if err != nil {
-		s.serverError(w, r, err)
+	q, ok := s.taskQueryOf(w, r)
+	if !ok {
 		return
 	}
+	data, ok := s.tasksPageFor(w, r, q)
+	if !ok {
+		return
+	}
+	d.Next = q.listNext(d.ID)
 	data.Selected = &d
+	data.View = newTaskView(q, data, "/console/tasks/"+d.ID)
 	s.render(w, r, "tasks", pageData{Title: taskPageTitle(t), Active: "tasks", Data: data})
 }
 

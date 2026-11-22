@@ -58,7 +58,7 @@ func TestTasksPage_GatesAndGatedSteps(t *testing.T) {
 	page := rr.Body.String()
 	require.Contains(t, page, `id="rg-gates"`)
 	require.Contains(t, page, `id="rg-gated"`)
-	require.Contains(t, page, "1 waiting on people")
+	require.Contains(t, page, "3 waiting on people", "the header counts the gates and the steps they hold, as the board does")
 	require.Contains(t, page, "waits on owner: sign the release")
 	require.Contains(t, page, "gate &middot; waits on owner: sign the release", "the reader marks a dependency that is a gate")
 

@@ -118,6 +118,7 @@ func (d *cmDaemon) postTargets(t *testing.T, pendingID string) []struct {
 				"/console/gardener/group/dismiss":      {"kind": {"archive"}},
 				"/console/tasks/{id}/status":           {"to": {"done"}},
 				"/console/tasks/{id}/gate/clear":       {"note": {"probe"}},
+				"/console/tasks/{id}/gate":             {"who": {"owner"}, "what": {"probe"}},
 				"/console/settings/level":              {"level": {"advanced"}},
 				"/console/settings/features":           {"feature_research": {"1"}, "feature_momentum": {"1"}, "feature_gamification": {"1"}, "feature_screening": {"1"}, "feature_diary": {"1"}},
 				"/console/settings/embeddings/mode":    {"mode": {"auto"}},

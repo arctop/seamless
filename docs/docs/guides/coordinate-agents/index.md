@@ -385,8 +385,8 @@ being in its loop.
 
 | Screen | What it answers |
 |---|---|
-| `/console/tasks` | Ready, In progress, Blocked (with each task's blockers), Closed - the queue at a glance |
-| A task's detail panel | Who claims it, whether the lease is **live** or **expired**, and the release-lock button |
+| `/console/tasks` | The backlog outside a plan (plan steps a toggle away), by state, filtered by project, plan or text - the queue at a glance |
+| A task's detail panel | Who claims it, whether the lease is **live** or **lapsed**, its history, and **Release claim** |
 | `/console/sessions` | Which agents are alive, and each one's claimed tasks with remaining lease |
 | A project's detail | The plan timeline - each step's status, holder, and lease |
 | `/console/plans` | Captured plans with status, iteration, and task progress |

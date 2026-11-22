@@ -661,15 +661,15 @@ func TestTkActionsFor(t *testing.T) {
 		live bool
 		want taskActions
 	}{
-		{"open", core.Task{Status: core.TaskOpen}, false, taskActions{Done: true, Drop: true}},
-		{"claimless start", core.Task{Status: core.TaskInProgress}, false, taskActions{Release: true, Done: true, Drop: true}},
-		{"lapsed claim", core.Task{Status: core.TaskInProgress, ClaimedBy: "s"}, false, taskActions{Release: true, Done: true, Drop: true}},
+		{"open", core.Task{Status: core.TaskOpen}, false, taskActions{Done: true, Drop: true, WaitOn: true}},
+		{"claimless start", core.Task{Status: core.TaskInProgress}, false, taskActions{Release: true, Done: true, Drop: true, WaitOn: true}},
+		{"lapsed claim", core.Task{Status: core.TaskInProgress, ClaimedBy: "s"}, false, taskActions{Release: true, Done: true, Drop: true, WaitOn: true}},
 		{"live claim", core.Task{Status: core.TaskInProgress, ClaimedBy: "s"}, true, taskActions{Release: true, Held: true}},
 		{"done", core.Task{Status: core.TaskDone}, false, taskActions{Reopen: true}},
 		{"dropped", core.Task{Status: core.TaskDropped}, false, taskActions{Reopen: true}},
 		{"open gate", core.Task{Status: core.TaskOpen, Kind: core.TaskKindGate, Gate: gate}, false, taskActions{Handle: true, Drop: true}},
 		{"a step's open gate", core.Task{Status: core.TaskOpen, Gate: gate}, false, taskActions{Handle: true, Done: true, Drop: true}},
-		{"a step's cleared gate", core.Task{Status: core.TaskOpen, Gate: cleared}, false, taskActions{Done: true, Drop: true}},
+		{"a step's cleared gate", core.Task{Status: core.TaskOpen, Gate: cleared}, false, taskActions{Done: true, Drop: true, WaitOn: true}},
 		{"a gate held live", core.Task{Status: core.TaskInProgress, Gate: gate, ClaimedBy: "s"}, true, taskActions{Release: true, Held: true}},
 		{"a closed gate", core.Task{Status: core.TaskDone, Kind: core.TaskKindGate, Gate: cleared}, false, taskActions{Reopen: true}},
 	} {

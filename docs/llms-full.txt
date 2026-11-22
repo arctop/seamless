@@ -7568,8 +7568,8 @@ being in its loop.
 
 | Screen | What it answers |
 |---|---|
-| `/console/tasks` | Ready, In progress, Blocked (with each task's blockers), Closed - the queue at a glance |
-| A task's detail panel | Who claims it, whether the lease is **live** or **expired**, and the release-lock button |
+| `/console/tasks` | The backlog outside a plan (plan steps a toggle away), by state, filtered by project, plan or text - the queue at a glance |
+| A task's detail panel | Who claims it, whether the lease is **live** or **lapsed**, its history, and **Release claim** |
 | `/console/sessions` | Which agents are alive, and each one's claimed tasks with remaining lease |
 | A project's detail | The plan timeline - each step's status, holder, and lease |
 | `/console/plans` | Captured plans with status, iteration, and task progress |
@@ -19537,6 +19537,7 @@ nothing, and their rows say so.
 | Force-release a task claim | `POST /console/tasks/{id}/release` | The owner override, **Release claim** on a task in progress, which asks in the page first: takes the task's claim from whoever holds it, live or lapsed, and tells the holder, or reopens a task marked in progress with no claim at all, so any agent may claim it. A task no longer in progress has nothing to release: the page says so (a JSON caller gets 409). Not reachable from the agent MCP tools. |
 | Mark a task done, drop it, or reopen it | `POST /console/tasks/{id}/status` | **Mark done**, **Drop** (which asks in the page first) or **Reopen** on a task: `to=done`, `dropped` or `open`, through the update `tasks_update status=` makes, so a closed task unblocks the tasks that depend on it, and the last step of a plan closed as done settles the plan as an agent's close does. Records `task.transition` with `by: console`. Refused, naming the holder, while a live claim holds the task: release the claim first. Reopen is for a done or dropped task (one in progress reopens through **Release claim**); a move to the status the task has writes nothing. |
 | Mark a gate as handled | `POST /console/tasks/{id}/gate/clear` | **Mark as handled** on a task whose own gate is open, with an optional one-line `note=`: clears the gate as `tasks_update gate_clear` does, recording the owner as who cleared it and the note. A step's gate clears, and the step goes ahead once nothing else blocks it; a gate closes as done, which unblocks the tasks waiting on it. Records `task.transition` with `gate: cleared` and `by: console`. Refused while a live claim holds the task, from an agent's process on the peer_auth socket, and from a paired device. |
+| Say what a task waits on | `POST /console/tasks/{id}/gate` | **Waits on someone** on an open or in-progress task whose own gate is not open: `who=` and `what=` (one line each), with optional `decision=` and `ready_when=`. Sets the task's gate as `tasks_update gate_who` and `gate_what` do, so a ready step leaves the ready queue and waits on people until its gate is marked as handled; a gate already cleared opens again. Records `task.transition` with `gate: set` and `by: console`. Refused, naming the holder, while a live claim holds the task, and on a closed task; setting the gate the task already has writes nothing. |
 | Force-release a repo lock | `POST /console/locks/{id}/release` | [Repo locks](#locks): ends the hold a lock carries, live or lapsed, whoever holds it; the lock stays declared. What `seam lock release --force` sends. Refused when nobody holds it (409), from an agent's process on the peer_auth socket, and from a paired device. |
 | Approve a lock declaration | `POST /console/locks/{id}/approve` | Makes a restricted account's waiting declaration an active lock, which agents may then hold. Refused for a lock already active (409), from an agent's process on the peer_auth socket, and from a paired device. |
 | Discard a lock declaration | `POST /console/locks/{id}/discard` | Deletes a restricted account's waiting declaration with its repository identities, so the repository may be declared again. An active lock is refused (409): no route removes one. Refused from an agent's process on the peer_auth socket, and from a paired device. |
@@ -20546,9 +20547,9 @@ Each project is one compact row: its name, with its star and badges
 2 waiting on people" - then its open tasks, its last activity (the later of its
 last session update and its last task change; hover it for the moment in your
 own time) and its reach as a small figure. The whole row opens the project.
-Blocked and waiting on people count exactly what the Tasks page's rails count:
-blocked waits on unfinished work alone, and waiting on people is a gate or a
-step an open gate holds.
+Blocked and waiting on people count exactly what the Tasks page's rails count
+with its plan steps shown (`?steps=1`): blocked waits on unfinished work
+alone, and waiting on people is a gate or a step an open gate holds.
 
 **Needs attention** means something waits on you or is stuck: a lapsed claim, a
 task marked in progress that no claim holds, an open gate, a captured plan
@@ -20830,19 +20831,55 @@ ticked; while [Held](#held) holds the note, the reader says why instead.
 
 `/console/tasks`, `/console/tasks/{id}`
 
-The same library shape, with the rail grouped into four buckets: **ready** (no
-unfinished blocker), **in progress**, **blocked**, and **closed** (done and
-dropped merged, newest first, capped at 25 with a count of the rest, collapsed
-by default). The reader carries the task's body, claim and lease state, and
-both dependency directions, and the owner's actions on the task, the same in
+The backlog. By default it lists every project's tasks outside a plan, which
+is what `tasks_ready` means for an agent; **Plan steps** adds the plan steps,
+each with its `plan:<slug>` chip, and the header's counts follow it. The rail
+groups the tasks in the words below: **in progress** (held by a live claim),
+**no live claim** (in progress, but its holder's lease lapsed or nobody
+claimed it), **ready**, **blocked**, **waiting on people** (the gates) and
+**waiting on a gate** (the steps an open gate holds), then **recently closed**
+(done and dropped, newest first, the newest 25, folded). The header counts
+them as the [project board](#projects) does: in progress is a live claim's
+alone, lapsed claims and unclaimed starts are counted apart, and waiting on
+people is the gates and the steps they hold together.
+
+Each row names its project, its plan, and how long it has been in its state
+(`ready 12d`, `in progress 2h`): an in progress row names its holder and its
+lease, in the lapsed tone once the lease ran out; a blocked row names its
+first blocker; a waiting row names who it waits on. A ready task nothing
+changed on for 30 days says **untouched**.
+
+The URL holds the filters, so a link keeps them: `?project=<slug>` (`global`
+for the global scope; the **Project** menu lists the projects with open tasks
+and their counts), `?plan=<slug>` (one plan's steps; `plan:<slug>` works too),
+`?q=<text>` (title, body or id; a pasted short id finds its task), `?steps=1`
+(plan steps too), `?closed=all` (every closed task, 25 to a page, with
+`&page=N`) and `?sort=oldest|newest` (oldest first, the order agents claim
+in, is the default). A value the page cannot read, or a project or plan it
+holds no task of (a locked one's included), is a 400 that names what it
+takes. The JSON model (`?format=json`) carries the rails with `counts`,
+`projects` and `filter`.
+
+The reader carries the task's body, claim and lease state, both dependency
+directions, its **History**, and the owner's actions on the task, the same in
 the reader and in the peek (the step dossier on a project's Plans & tasks tab):
 **Mark done** and **Drop** on an open or in-progress task, **Reopen** on a
-closed one, **Mark as handled** with a note on an open gate, and **Release
-claim** on a task in progress, whoever holds it or none. Drop and Release claim
-ask in the page: the button turns into a second one to press. While a live
-claim holds the task the page names its holder and offers Release claim
-first: the console never closes a task over its holder's head. Each action
-returns to the page it came from with a line that says what it did.
+closed one, **Mark as handled** with a note on an open gate, **Waits on
+someone** on an open or in-progress task whose own gate is not open (who must
+act and what must happen, the decision and when it is ready optional: the
+task leaves the ready queue for the people's until its gate is marked as
+handled), and **Release claim** on a task in progress, whoever holds it or
+none. Drop and Release claim ask in the page: the button turns into a second
+one to press. While a live claim holds the task the page names its holder and
+offers Release claim first: the console never closes a task over its holder's
+head. Each action returns to the page it came from, its filters kept, with a
+line that says what it did.
+
+The history lists what happened to the task, oldest first, from its
+`task.transition` events: created, claimed, released, reopened, done or
+dropped, its gate set and cleared, each with the session that did it (linked
+when the console can read it, **you** for an action from this console) and
+when. A holder's renewed claim reads once, with how many times.
 
 Every task and plan step says where it stands in the same words, on Tasks,
 the project workspace and Plans:
