@@ -449,13 +449,7 @@ func (s *Service) needMishapReview(ctx context.Context) []attnCard {
 	if s.cfg.Events == nil {
 		return nil
 	}
-	db := s.db(ctx)
-	at, reviewed, err := store.MishapsReviewedAt(ctx, db)
-	if err != nil {
-		// A stamp that does not read counts every report: more, never fewer.
-		s.logger.Warn("console: mishaps reviewed stamp", "error", err)
-	}
-	n, err := store.CountMishapsAfter(ctx, db, at)
+	n, at, reviewed, err := s.unreviewedMishaps(ctx, s.db(ctx))
 	if err != nil {
 		s.logger.Warn("console: mishaps for the needs strip", "error", err)
 		return nil

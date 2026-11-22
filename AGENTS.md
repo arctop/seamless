@@ -2010,8 +2010,9 @@ lapsed, unclaimed, done or dropped, each with one tone; `taskBadge` and
 browser's local time); a task claim is a claim, never a lock.
 
 A sidebar number asks for something or is live, never a total (`screens.go`'s
-`badgeKind`): a queue (Tasks, Plans, Gardener, Held, Locks, Access requests)
-is drawn only while something waits on the owner, and lights the collapsed
+`badgeKind`): a queue (Access requests, Mishaps, Plans, Tasks, Locks,
+Gardener, Held) is drawn only while something waits on the owner, and lights
+the collapsed
 rail's dot and the phone bar's menu button; the one pulse (Now) is drawn at
 every value. Each queue counts what the Overview's matching needs item counts
 (`needs.go`), from the same rows, with the predicates in `console.go` beside

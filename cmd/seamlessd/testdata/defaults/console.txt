@@ -37,22 +37,26 @@
     
     <button type="button" class="side-search" data-cmdk-open data-tip="Search" aria-label="Search or jump to (Cmd+K)"><span class="side-search-ico"><svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span><span class="side-search-label">Search or jump to&hellip;</span><kbd class="kbd-hint">&#8984;K</kbd></button>
     
-    <nav class="nav" aria-label="Sections" data-scopes="memories notes sessions">
+    <nav class="nav" aria-label="Sections" data-scopes="memories notes tasks plans projects sessions" data-waiting>
       <div class="nav-scroll">
         <div class="nav-sec">Live</div>
         <a href="/console/" data-key="o" data-tip="Overview" class="active"><svg class="ico ico-layout-dashboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg><span class="nav-label">Overview</span></a>
+        <a href="/console/mishaps" data-key="f" data-tip="Mishaps" class=""><svg class="ico ico-triangle-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span class="nav-label">Mishaps</span><span class="count" data-badge="queue" title="Mishaps reported since you last marked them reviewed">1</span></a>
+        <div class="nav-sec">Work</div>
+        <a href="/console/projects" data-key="w" data-tip="Projects" class=""><svg class="ico ico-table-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg><span class="nav-label">Projects</span></a>
+        <a href="/console/plans" data-key="p" data-tip="Plans" class=""><svg class="ico ico-map" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg><span class="nav-label">Plans</span></a>
+        <a href="/console/tasks" data-key="t" data-tip="Tasks" class=""><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg><span class="nav-label">Tasks</span></a>
+        <a href="/console/sessions" data-key="s" data-tip="Sessions" class=""><svg class="ico ico-terminal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg><span class="nav-label">Sessions</span></a>
         <div class="nav-sec">Knowledge</div>
         <a href="/console/memories" data-key="m" data-tip="Memories" class=""><svg class="ico ico-database" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg><span class="nav-label">Memories</span></a>
         <a href="/console/notes" data-key="e" data-tip="Notes" class=""><svg class="ico ico-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg><span class="nav-label">Notes</span></a>
         <a href="/console/gardener" data-key="g" data-tip="Gardener" class=""><svg class="ico ico-sprout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/></svg><span class="nav-label">Gardener</span></a>
-        <div class="nav-sec">Work</div>
-        <a href="/console/sessions" data-key="s" data-tip="Sessions" class=""><svg class="ico ico-terminal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg><span class="nav-label">Sessions</span></a>
       </div>
       <div class="nav-pinned">
         <a href="/console/settings" data-key="," data-tip="Settings" class="nav-settings"><svg class="ico ico-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span class="nav-label">Settings</span></a>
       </div>
       
-      <div class="nav-jumps" hidden><a href="/console/search" data-jump="Search" data-hint="every filter and sort" tabindex="-1"><svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></a><a href="/console/mishaps" data-jump="Mishaps" data-hint="what agents reported going wrong, by type" tabindex="-1"><svg class="ico ico-triangle-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></a><a href="/console/settings?s=experience" data-jump="Settings › Experience" data-hint="How much of the console you see, and how it looks" tabindex="-1"><svg class="ico ico-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg></a><a href="/console/settings?s=features" data-jump="Settings › Features" data-hint="Optional features, for the console and agents alike" tabindex="-1"><svg class="ico ico-toggle-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="12" x="2" y="6" rx="6" ry="6"/><circle cx="16" cy="12" r="2"/></svg></a><a href="/console/settings?s=setup" data-jump="Settings › Your setup" data-hint="Version, files, and what is connected" tabindex="-1"><svg class="ico ico-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg></a><a href="/console/settings?s=updates" data-jump="Settings › Updates" data-hint="New releases, and whether this install checks for and installs them" tabindex="-1"><svg class="ico ico-refresh-cw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></a><a href="/console/settings?s=backups" data-jump="Settings › Backups" data-hint="Automatic backups, the folder they go to, and restoring one" tabindex="-1"><svg class="ico ico-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg></a></div>
+      <div class="nav-jumps" hidden><a href="/console/search" data-jump="Search" data-hint="every filter and sort" tabindex="-1"><svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></a><a href="/console/settings?s=experience" data-jump="Settings › Experience" data-hint="How much of the console you see, and how it looks" tabindex="-1"><svg class="ico ico-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg></a><a href="/console/settings?s=features" data-jump="Settings › Features" data-hint="Optional features, for the console and agents alike" tabindex="-1"><svg class="ico ico-toggle-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="12" x="2" y="6" rx="6" ry="6"/><circle cx="16" cy="12" r="2"/></svg></a><a href="/console/settings?s=setup" data-jump="Settings › Your setup" data-hint="Version, files, and what is connected" tabindex="-1"><svg class="ico ico-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg></a><a href="/console/settings?s=updates" data-jump="Settings › Updates" data-hint="New releases, and whether this install checks for and installs them" tabindex="-1"><svg class="ico ico-refresh-cw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></a><a href="/console/settings?s=backups" data-jump="Settings › Backups" data-hint="Automatic backups, the folder they go to, and restoring one" tabindex="-1"><svg class="ico ico-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg></a></div>
     </nav>
     <div class="side-foot">
       <div class="account">
@@ -637,14 +641,14 @@
       <div class="level-welcome-card is-current" data-level-card="basic">
         <button type="submit" name="level" value="basic">
           <span class="level-welcome-name"><strong>Basic</strong><span class="badge ok">Current</span></span>
-          <span class="level-welcome-line">Just the essentials: what your agents remember and what they are doing.</span>
+          <span class="level-welcome-line">Just the essentials: the work you follow and what your agents remember.</span>
         </button>
       </div>
       
       <div class="level-welcome-card" data-level-card="standard">
         <button type="submit" name="level" value="standard">
           <span class="level-welcome-name"><strong>Standard</strong></span>
-          <span class="level-welcome-line">Curate knowledge and follow the work.</span>
+          <span class="level-welcome-line">Watch your agents live, curate knowledge and look after the server.</span>
         </button>
       </div>
       
@@ -699,7 +703,7 @@
   
 
   
-  <section class="checkin" id="checkin" data-live-skip hidden data-checkin-offer="memories sessions notes gardener mishaps" aria-label="Since you were last here">
+  <section class="checkin" id="checkin" data-live-skip hidden data-checkin-offer="memories sessions tasks notes gardener mishaps" aria-label="Since you were last here">
     <span class="checkin-ico"><svg class="ico ico-history" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></span>
     <div class="checkin-body"></div>
     <button type="button" class="checkin-x" data-checkin-dismiss aria-label="Dismiss"><svg class="ico ico-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
@@ -728,17 +732,17 @@
         <ul class="ov2-motion-list">
           
           <li id="mo-rd-<id:10>">
-            <span class="ov2-motion-t"><span>Example: promote the deploy</span></span>
+            <span class="ov2-motion-t"><a href="/console/tasks/<id:10>">Example: promote the deploy</a></span>
             <span class="ov2-motion-meta">example-open-alpha</span>
           </li>
           
           <li id="mo-rd-<id:12>">
-            <span class="ov2-motion-t"><span>Example: wave one</span></span>
+            <span class="ov2-motion-t"><a href="/console/tasks/<id:12>">Example: wave one</a></span>
             <span class="ov2-motion-meta">example-open-alpha &middot; plan:example-rollout</span>
           </li>
           
           <li id="mo-rd-<id:23>">
-            <span class="ov2-motion-t"><span>Example: close the confidential ledger</span></span>
+            <span class="ov2-motion-t"><a href="/console/tasks/<id:23>">Example: close the confidential ledger</a></span>
             <span class="ov2-motion-meta">example-confidential</span>
           </li>
           
@@ -830,7 +834,7 @@
           <h3 class="sky-eyebrow">Scopes <span>4</span></h3>
           <div class="sky-scopes">
             
-            <button type="button" class="sky-scope" data-sky-scope="example-open-alpha" data-name="example-open-alpha" aria-pressed="false">
+            <button type="button" class="sky-scope" data-sky-scope="example-open-alpha" data-name="example-open-alpha" data-href="/console/projects/example-open-alpha?tab=memories" aria-pressed="false">
               <span class="sky-scope-name">example-open-alpha</span>
               <b>3</b>
               <span class="sky-mix" aria-hidden="true"><i data-b="0" style="width:100.0%"></i></span>
@@ -842,13 +846,13 @@
               <span class="sky-mix" aria-hidden="true"><i data-b="0" style="width:100.0%"></i></span>
             </button>
             
-            <button type="button" class="sky-scope" data-sky-scope="example-confidential" data-name="example-confidential" aria-pressed="false">
+            <button type="button" class="sky-scope" data-sky-scope="example-confidential" data-name="example-confidential" data-href="/console/projects/example-confidential?tab=memories" aria-pressed="false">
               <span class="sky-scope-name">example-confidential</span>
               <b>1</b>
               <span class="sky-mix" aria-hidden="true"><i data-b="0" style="width:100.0%"></i></span>
             </button>
             
-            <button type="button" class="sky-scope" data-sky-scope="example-sealed" data-name="example-sealed" aria-pressed="false">
+            <button type="button" class="sky-scope" data-sky-scope="example-sealed" data-name="example-sealed" data-href="/console/projects/example-sealed?tab=memories" aria-pressed="false">
               <span class="sky-scope-name">example-sealed</span>
               <b>1</b>
               <span class="sky-mix" aria-hidden="true"><i data-b="4" style="width:100.0%"></i></span>
@@ -1536,17 +1540,7 @@
     
     
     
-    <div class="section notice level-banner" role="note" data-level-banner="projects">
-      <p class="level-banner-copy"><svg class="ico ico-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg><span><strong>Projects</strong> is a Standard screen. You are in Basic: it works, it just is not in your sidebar.</span></p>
-      <div class="level-banner-acts">
-        <form method="post" action="/console/settings/level">
-          <input type="hidden" name="level" value="standard">
-          <input type="hidden" name="return" value="/console/projects">
-          <button class="btn small primary" type="submit">Switch to Standard</button>
-        </form>
-        <button class="btn small" type="button" data-level-banner-dismiss>Got it</button>
-      </div>
-    </div>
+    
     
     
     
@@ -2358,17 +2352,7 @@
     
     
     
-    <div class="section notice level-banner" role="note" data-level-banner="projects">
-      <p class="level-banner-copy"><svg class="ico ico-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg><span><strong>Projects</strong> is a Standard screen. You are in Basic: it works, it just is not in your sidebar.</span></p>
-      <div class="level-banner-acts">
-        <form method="post" action="/console/settings/level">
-          <input type="hidden" name="level" value="standard">
-          <input type="hidden" name="return" value="/console/projects/example-open-alpha">
-          <button class="btn small primary" type="submit">Switch to Standard</button>
-        </form>
-        <button class="btn small" type="button" data-level-banner-dismiss>Got it</button>
-      </div>
-    </div>
+    
     
     
     
@@ -3329,17 +3313,7 @@
     
     
     
-    <div class="section notice level-banner" role="note" data-level-banner="projects">
-      <p class="level-banner-copy"><svg class="ico ico-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg><span><strong>Projects</strong> is a Standard screen. You are in Basic: it works, it just is not in your sidebar.</span></p>
-      <div class="level-banner-acts">
-        <form method="post" action="/console/settings/level">
-          <input type="hidden" name="level" value="standard">
-          <input type="hidden" name="return" value="/console/projects/example-confidential">
-          <button class="btn small primary" type="submit">Switch to Standard</button>
-        </form>
-        <button class="btn small" type="button" data-level-banner-dismiss>Got it</button>
-      </div>
-    </div>
+    
     
     
     
@@ -3483,17 +3457,7 @@
     
     
     
-    <div class="section notice level-banner" role="note" data-level-banner="projects">
-      <p class="level-banner-copy"><svg class="ico ico-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg><span><strong>Projects</strong> is a Standard screen. You are in Basic: it works, it just is not in your sidebar.</span></p>
-      <div class="level-banner-acts">
-        <form method="post" action="/console/settings/level">
-          <input type="hidden" name="level" value="standard">
-          <input type="hidden" name="return" value="/console/projects/example-sealed">
-          <button class="btn small primary" type="submit">Switch to Standard</button>
-        </form>
-        <button class="btn small" type="button" data-level-banner-dismiss>Got it</button>
-      </div>
-    </div>
+    
     
     
     
@@ -3949,17 +3913,7 @@
     
     
     
-    <div class="section notice level-banner" role="note" data-level-banner="tasks">
-      <p class="level-banner-copy"><svg class="ico ico-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg><span><strong>Tasks</strong> is a Standard screen. You are in Basic: it works, it just is not in your sidebar.</span></p>
-      <div class="level-banner-acts">
-        <form method="post" action="/console/settings/level">
-          <input type="hidden" name="level" value="standard">
-          <input type="hidden" name="return" value="/console/tasks">
-          <button class="btn small primary" type="submit">Switch to Standard</button>
-        </form>
-        <button class="btn small" type="button" data-level-banner-dismiss>Got it</button>
-      </div>
-    </div>
+    
     
     
     
@@ -4352,17 +4306,7 @@
     
     
     
-    <div class="section notice level-banner" role="note" data-level-banner="plans">
-      <p class="level-banner-copy"><svg class="ico ico-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg><span><strong>Plans</strong> is a Standard screen. You are in Basic: it works, it just is not in your sidebar.</span></p>
-      <div class="level-banner-acts">
-        <form method="post" action="/console/settings/level">
-          <input type="hidden" name="level" value="standard">
-          <input type="hidden" name="return" value="/console/plans">
-          <button class="btn small primary" type="submit">Switch to Standard</button>
-        </form>
-        <button class="btn small" type="button" data-level-banner-dismiss>Got it</button>
-      </div>
-    </div>
+    
     
     
     
@@ -5890,8 +5834,8 @@ window.SEAM_NO_LIVE_REFRESH = true;
           <input type="hidden" name="level" value="basic">
           <input type="hidden" name="return" value="/console/settings?s=experience">
           <header class="level-card-head"><h3>Basic</h3><span class="badge ok">Current</span></header>
-          <p class="level-card-line">Just the essentials: what your agents remember and what they are doing.</p>
-          <div class="level-card-items"><span class="level-card-lead">Shows</span><ul><li>Overview</li><li>Memories</li><li>Notes</li><li>Gardener</li><li>Sessions</li><li>Settings</li><li>Search</li><li>Mishaps</li><li>Settings: Experience, Features, Your setup, Updates, and Backups</li></ul>
+          <p class="level-card-line">Just the essentials: the work you follow and what your agents remember.</p>
+          <div class="level-card-items"><span class="level-card-lead">Shows</span><ul><li>Overview</li><li>Mishaps</li><li>Projects</li><li>Plans</li><li>Tasks</li><li>Sessions</li><li>Memories</li><li>Notes</li><li>Gardener</li><li>Settings</li><li>Search</li><li>Settings: Experience, Features, Your setup, Updates, and Backups</li></ul>
             </div>
           <button class="btn small" type="button" disabled>In use</button>
         </form>
@@ -5900,9 +5844,9 @@ window.SEAM_NO_LIVE_REFRESH = true;
           <input type="hidden" name="level" value="standard">
           <input type="hidden" name="return" value="/console/settings?s=experience">
           <header class="level-card-head"><h3>Standard</h3></header>
-          <p class="level-card-line">Curate knowledge and follow the work.</p>
-          <div class="level-card-items"><span class="level-card-lead">Adds</span><ul><li>Now</li><li>Projects</li><li>Plans</li><li>Tasks</li><li>Labs</li><li>Trials</li><li>System</li><li>Privacy</li><li>Settings: Briefing and Workspaces</li></ul>
-            <ul class="level-card-details"><li>Overview: the observation window, the vitals, and the projects table and the knowledge rail</li><li>Memories: the Reach and Utility sorts, how often each memory surfaced, the Never surfaced filter, and the utility score in the reader</li><li>Gardener: the Type and Source filters, the project-split example, the Hidden forever list, Retarget on a proposal, and Hide forever on a proposal</li><li>Sessions: the Retained filter, the Sort menu, and a session&#39;s review signals</li><li>Search: the Updated window and the Sort control</li><li>Settings › Features: the precedence line and the agent tool names</li></ul></div>
+          <p class="level-card-line">Watch your agents live, curate knowledge and look after the server.</p>
+          <div class="level-card-items"><span class="level-card-lead">Adds</span><ul><li>Now</li><li>Labs</li><li>Trials</li><li>System</li><li>Privacy</li><li>Settings: Briefing and Workspaces</li></ul>
+            <ul class="level-card-details"><li>Overview: the observation window, the vitals, and the projects table and the knowledge rail</li><li>Sessions: the Retained filter, the Sort menu, and a session&#39;s review signals</li><li>Memories: the Reach and Utility sorts, how often each memory surfaced, the Never surfaced filter, and the utility score in the reader</li><li>Gardener: the Type and Source filters, the project-split example, the Hidden forever list, Retarget on a proposal, and Hide forever on a proposal</li><li>Search: the Updated window and the Sort control</li><li>Settings › Features: the precedence line and the agent tool names</li></ul></div>
           <button class="btn small primary" type="submit">Use Standard</button>
         </form>
         
@@ -6768,8 +6712,8 @@ window.SEAM_NO_LIVE_REFRESH = true;
 
 <header class="mv2-bar">
   <h1><svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Search</h1><details class="page-about"><summary aria-label="About this page" title="About this page"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary><p class="page-about-pop" role="note">Everything the console can link to, in one query.</p></details>
-  <span class="mv2-count" aria-label="11 results">
-    <strong>11</strong>matches<small>for &ldquo;example deploy&rdquo; &middot; all time</small>
+  <span class="mv2-count" aria-label="13 results">
+    <strong>13</strong>matches<small>for &ldquo;example deploy&rdquo; &middot; all time</small>
   </span>
   <button type="button" class="mv2-filter-toggle" data-filters-toggle aria-expanded="false" aria-controls="mv2-controls"><svg class="ico ico-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg><span>Filters</span></button>
   <span class="mv2-spacer"></span>
@@ -6779,7 +6723,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
 
 <form class="search search-query" method="get" action="/console/search" data-seam-query>
   <svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-  <input name="q" aria-label="Search memories, notes, and sessions" placeholder="Search memories, notes, and sessions&hellip;" value="example deploy" autofocus>
+  <input name="q" aria-label="Search memories, notes, tasks, plans, projects, and sessions" placeholder="Search memories, notes, tasks, plans, projects, and sessions&hellip;" value="example deploy" autofocus>
   <input type="hidden" name="scope" value="all">
   <input type="hidden" name="w" value="all">
   <input type="hidden" name="sort" value="relevance">
@@ -6797,6 +6741,12 @@ window.SEAM_NO_LIVE_REFRESH = true;
       <a class="" href="/console/search?scope=memories&amp;w=all&amp;sort=relevance&amp;q=example%20deploy" data-search-kind="memory">Memories</a>
       
       <a class="" href="/console/search?scope=notes&amp;w=all&amp;sort=relevance&amp;q=example%20deploy" data-search-kind="note">Notes</a>
+      
+      <a class="" href="/console/search?scope=tasks&amp;w=all&amp;sort=relevance&amp;q=example%20deploy" data-search-kind="task">Tasks</a>
+      
+      <a class="" href="/console/search?scope=plans&amp;w=all&amp;sort=relevance&amp;q=example%20deploy" data-search-kind="plan">Plans</a>
+      
+      <a class="" href="/console/search?scope=projects&amp;w=all&amp;sort=relevance&amp;q=example%20deploy" data-search-kind="project">Projects</a>
       
       <a class="" href="/console/search?scope=sessions&amp;w=all&amp;sort=relevance&amp;q=example%20deploy" data-search-kind="session">Sessions</a>
       
@@ -6825,7 +6775,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
 
     <div class="search-results-head">
       <div class="search-breakdown" aria-label="Result counts by type" data-seam-query>
-        <span data-search-kind="memory"><b>6</b> Memories</span><span data-search-kind="note"><b>3</b> Notes</span><span data-search-kind="session"><b>2</b> Sessions</span>
+        <span data-search-kind="memory"><b>6</b> Memories</span><span data-search-kind="note"><b>3</b> Notes</span><span data-search-kind="task"><b>1</b> Tasks</span><span data-search-kind="plan"><b>1</b> Plans</span><span data-search-kind="session"><b>2</b> Sessions</span>
       </div>
       <span class="search-order-note">Best matches first</span>
     </div>
@@ -7030,6 +6980,52 @@ Wave one is the staging ... </div>
             <span class="search-identifier">confidential-example-ledger-notes</span>
             
             <span class="search-project"><svg class="ico ico-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>example-confidential</span>
+            <span class="search-age"><svg class="ico ico-timer" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="10" x2="14" y1="2" y2="2"/><line x1="12" x2="15" y1="14" y2="11"/><circle cx="12" cy="14" r="8"/></svg>updated <age></span>
+          </div>
+        </div>
+        <div class="search-match">
+          
+          <div class="search-text-match" title="The query appears in this result">
+            <svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><span><strong>Text match</strong><small>Keyword</small></span>
+          </div>
+          
+        </div>
+      </article>
+      
+      <article class="search-result row-link" data-search-kind="task" data-href="/console/tasks/<id:30>" data-peek>
+        <div class="search-result-body">
+          <div class="search-result-titleline">
+            <strong><a href="/console/tasks/<id:30>" data-peek>Implement plan: Example deploy plan</a></strong><button type="button" class="copy-btn" data-copy="Implement plan: Example deploy plan" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
+          </div>
+          <div class="search-result-desc">open</div>
+          <div class="search-result-meta">
+            <span class="search-kind">task</span>
+            
+            
+            <span class="search-project"><svg class="ico ico-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>example-open-alpha</span>
+            <span class="search-age"><svg class="ico ico-timer" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="10" x2="14" y1="2" y2="2"/><line x1="12" x2="15" y1="14" y2="11"/><circle cx="12" cy="14" r="8"/></svg>updated <age></span>
+          </div>
+        </div>
+        <div class="search-match">
+          
+          <div class="search-text-match" title="The query appears in this result">
+            <svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><span><strong>Text match</strong><small>Keyword</small></span>
+          </div>
+          
+        </div>
+      </article>
+      
+      <article class="search-result row-link" data-search-kind="plan" data-href="/console/plans/example-deploy-plan?project=example-open-alpha" data-peek>
+        <div class="search-result-body">
+          <div class="search-result-titleline">
+            <strong><a href="/console/plans/example-deploy-plan?project=example-open-alpha" data-peek>Example deploy plan</a></strong><button type="button" class="copy-btn" data-copy="Example deploy plan" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
+          </div>
+          
+          <div class="search-result-meta">
+            <span class="search-kind">plan</span>
+            <span class="search-identifier">example-deploy-plan</span>
+            
+            <span class="search-project"><svg class="ico ico-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>example-open-alpha</span>
             <span class="search-age"><svg class="ico ico-timer" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="10" x2="14" y1="2" y2="2"/><line x1="12" x2="15" y1="14" y2="11"/><circle cx="12" cy="14" r="8"/></svg>updated <age></span>
           </div>
         </div>

@@ -647,8 +647,8 @@ func TestNdLinks_NoneLeadsAboveTheLevel(t *testing.T) {
 					}
 				}
 			}
-			// The items still say what waits; at Basic, where Tasks, Plans
-			// and Locks are not in the sidebar, without the link.
+			// The items still say what waits; at Basic, where Locks is not
+			// in the sidebar, without the link.
 			if lvl == levelBasic {
 				require.Contains(t, body, `<span class="ov2-attn-main">`)
 			}
@@ -657,13 +657,12 @@ func TestNdLinks_NoneLeadsAboveTheLevel(t *testing.T) {
 			offer := regexp.MustCompile(`data-checkin-offer="([^"]*)"`).FindStringSubmatch(body)
 			require.NotNil(t, offer)
 			require.Contains(t, strings.Fields(offer[1]), "mishaps")
-			if lvl == levelBasic {
-				require.NotContains(t, strings.Fields(offer[1]), "tasks", "Tasks is above Basic")
-			}
+			// Tasks is a Basic screen (plan:console-ux-pass UX 14): the
+			// check-in links its count at every level.
+			require.Contains(t, strings.Fields(offer[1]), "tasks")
 			if lvl == levelStandard {
 				require.Contains(t, body, `<div class="ov2-vital">`, "Retrieval is Advanced: the vitals that open it are plain cards")
 				require.Contains(t, body, `<a class="ov2-vital" href="/console/sessions?w=24h&amp;retained=no"`)
-				require.Contains(t, strings.Fields(offer[1]), "tasks", "tasks are Standard")
 			}
 		})
 	}

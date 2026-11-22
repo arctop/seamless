@@ -988,8 +988,9 @@ func TestLockScreens_OnlyWhileLocked(t *testing.T) {
 			ids[i] = sc.ID
 		}
 		at := slices.Index(ids, "access")
+		require.Zero(t, at, "the access screens are the first group (plan:console-ux-pass UX 14)")
 		require.Equal(t, "approvers", ids[at+1])
-		require.Equal(t, "settings", ids[at+2], "the access screens sit just above Settings")
+		require.Equal(t, visible, with[at+2:], "the registry's screens follow, in order")
 		groups := navGroups(with, "", navCounts{})
 		seen := map[string]bool{}
 		for _, g := range groups {

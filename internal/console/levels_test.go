@@ -108,10 +108,11 @@ func TestScreenRegistry_WellFormed(t *testing.T) {
 			require.Empty(t, sc.Key, "palette-only page %s has no nav link to carry a chord", sc.ID)
 		}
 	}
-	// The existing chords survive the move to the registry.
+	// The existing chords survive the move to the registry, and every later
+	// reorder: a key belongs to its screen, not to a position (Mishaps took f).
 	require.Equal(t, map[string]bool{"o": true, "n": true, "i": true, "m": true, "e": true, "r": true, "g": true,
 		"w": true, "p": true, "t": true, "s": true, "b": true, "l": true, "x": true, ",": true, "h": true, "y": true, "v": true,
-		"d": true}, keys)
+		"d": true, "f": true}, keys)
 }
 
 // Every screen the console can show -- the registry's, the lock-only ones and
@@ -145,12 +146,14 @@ func TestScreenRegistry_VisibleSetsNest(t *testing.T) {
 			prev = cur
 		}
 	}
-	// And the matrix's anchors: basic is the six essentials, advanced is all.
+	// And the matrix's anchors: basic is the essentials -- the work the owner
+	// follows (Projects, Plans, Tasks) included -- and advanced is all.
 	var basic []string
 	for _, sc := range visibleScreens(featuresAll(true), levelBasic) {
 		basic = append(basic, sc.ID)
 	}
-	require.Equal(t, []string{"overview", "memories", "notes", "gardener", "held", "diary", "sessions", "settings", "search", "mishaps"}, basic,
+	require.Equal(t, []string{"overview", "mishaps", "diary", "projects", "plans", "tasks", "sessions",
+		"memories", "notes", "gardener", "held", "settings", "search"}, basic,
 		"held is a basic screen while write screening is on: whoever turns it on must reach what it holds; "+
 			"the Diary is a basic screen while its feature is on")
 	require.Len(t, visibleScreens(featuresAll(true), levelAdvanced), len(screenRegistry()))
@@ -171,13 +174,14 @@ func TestLevelBannerFor(t *testing.T) {
 }
 
 // The level POST's landing rule (T5 wires it): back where the owner was when
-// the new level shows that screen, Home with a note when it hides it, and never
-// anywhere off-console.
+// the new level shows that screen, the Overview with a note when it hides it,
+// and never anywhere off-console. The note calls the screen by its name,
+// Overview, as the sidebar does (plan:console-ux-pass UX 16).
 func TestRedirectAfterLevelChange(t *testing.T) {
 	reg := screenRegistry()
 	home := func(label, lvl string) string {
 		return "/console/?notice=" + url.QueryEscape("Switched to "+lvl+". "+label+" is not in the "+lvl+
-			" sidebar, so you are back on Home.")
+			" sidebar, so you are back on the Overview.")
 	}
 	for _, tc := range []struct {
 		name, from string
@@ -189,7 +193,8 @@ func TestRedirectAfterLevelChange(t *testing.T) {
 			"/console/retrieval?notice=Switched+to+Advanced.&w=7d"},
 		{"a detail page follows its screen", "/console/memories/01ABC", levelBasic,
 			"/console/memories/01ABC?notice=Switched+to+Basic."},
-		{"a detail page under a hidden screen lands home", "/console/tasks/01TASK", levelBasic, home("Tasks", "Basic")},
+		{"a detail page under a hidden screen lands home", "/console/trials/01TRIAL", levelBasic, home("Trials", "Basic")},
+		{"the work's screens stay at basic", "/console/tasks/01TASK", levelBasic, "/console/tasks/01TASK?notice=Switched+to+Basic."},
 		{"no gated screen: stay", "/console/events/01XYZ", levelBasic, "/console/events/01XYZ?notice=Switched+to+Basic."},
 		{"context is its own advanced screen", "/console/context", levelStandard, home("Context", "Standard")},
 		{"standard keeps now", "/console/now", levelStandard, "/console/now?notice=Switched+to+Standard."},
@@ -225,8 +230,8 @@ func TestScreenForPath(t *testing.T) {
 }
 
 // seedLevelFleet gives a console enough rows that a level-dependent answer
-// would show: a project, a session, and a task and plan whose titles match
-// "xylophone" -- work that only Standard's screens list.
+// would show: a project, a session, and a task whose titles match
+// "xylophone".
 func seedLevelFleet(t *testing.T, db *sql.DB) (taskID string) {
 	t.Helper()
 	ctx := context.Background()
@@ -338,8 +343,8 @@ func TestLevels_HiddenScreenRendersWithTheBanner(t *testing.T) {
 	require.NotContains(t, banner, "data-flash")
 
 	// A Standard screen at basic says "a Standard screen".
-	require.Contains(t, getPeek(t, mux, "/console/tasks").Body.String(),
-		"<strong>Tasks</strong> is a Standard screen. You are in Basic")
+	require.Contains(t, getPeek(t, mux, "/console/now").Body.String(),
+		"<strong>Now</strong> is a Standard screen. You are in Basic")
 
 	// Context highlights Projects but is its own Advanced screen.
 	setLevel(t, db, "standard")
@@ -347,7 +352,7 @@ func TestLevels_HiddenScreenRendersWithTheBanner(t *testing.T) {
 
 	// At the screen's level there is nothing to say.
 	setLevel(t, db, "advanced")
-	for _, path := range []string{"/console/retrieval", "/console/context", "/console/tasks"} {
+	for _, path := range []string{"/console/retrieval", "/console/context", "/console/now"} {
 		require.NotContains(t, getPeek(t, mux, path).Body.String(), "data-level-banner", path)
 	}
 	// A screen every level shows never carries it.
@@ -357,9 +362,12 @@ func TestLevels_HiddenScreenRendersWithTheBanner(t *testing.T) {
 
 // A fragment is injected into a pane, never a page: it never carries the banner.
 func TestLevels_FragmentsNeverCarryTheBanner(t *testing.T) {
-	db, mux := newConsoleLevel(t, config.Features{}, "basic")
+	db, mux := newConsoleLevel(t, config.Features{Research: true}, "basic")
 	taskID := seedLevelFleet(t, db)
+	trialID := seedTrial(t, db, "xylophone-lab", "xylophone trial", core.OutcomePass, "orchestra", "", nil, 1)
 	for _, path := range []string{
+		"/console/trials/" + trialID + "?peek=1",
+		"/console/trials/" + trialID + "?reader=1",
 		"/console/tasks/" + taskID + "?peek=1",
 		"/console/tasks/" + taskID + "?reader=1",
 		"/console/projects/orchestra?peek=1",
@@ -368,44 +376,47 @@ func TestLevels_FragmentsNeverCarryTheBanner(t *testing.T) {
 		require.Equal(t, http.StatusOK, rr.Code, path)
 		require.NotContains(t, rr.Body.String(), "level-banner", path)
 	}
-	// The full task page does.
-	require.Contains(t, getPeek(t, mux, "/console/tasks/"+taskID).Body.String(), `data-level-banner="tasks"`)
+	// The full page of a screen above the level does.
+	require.Contains(t, getPeek(t, mux, "/console/trials/"+trialID).Body.String(), `data-level-banner="trials"`)
+	// A task's page is a Basic screen's: no banner.
+	require.NotContains(t, getPeek(t, mux, "/console/tasks/"+taskID).Body.String(), "data-level-banner")
 }
 
 // Search offers only the level's scopes on the page, while a hidden scope still
 // works by URL (with the banner) and a misspelling is still a named 400 naming
-// the level-blind enum.
+// the level-blind enum. The work's scopes (tasks, plans, projects) are Basic,
+// like their screens; trials is Standard.
 func TestLevels_SearchScopesFollowTheLevel(t *testing.T) {
 	db, mux := newConsoleLevel(t, config.Features{Research: true}, "basic")
 	seedLevelFleet(t, db)
+	seedTrial(t, db, "xylophone-lab", "xylophone trial", core.OutcomePass, "orchestra", "", nil, 1)
 
 	page := getPeek(t, mux, "/console/search?q=xylophone").Body.String()
-	for _, scope := range []string{"all", "memories", "notes", "sessions"} {
+	for _, scope := range []string{"all", "memories", "notes", "tasks", "plans", "projects", "sessions"} {
 		require.Contains(t, page, `href="/console/search?scope=`+scope+`&amp;`, "basic offers %s", scope)
 	}
-	for _, scope := range []string{"tasks", "plans", "trials", "projects"} {
-		require.NotContains(t, page, `href="/console/search?scope=`+scope+`&amp;`, "basic hides %s", scope)
-	}
+	require.NotContains(t, page, `href="/console/search?scope=trials&amp;`, "basic hides trials")
 	require.Contains(t, page, "cc/xylophone", "the session matches under all")
-	require.NotContains(t, page, "tune the xylophone", `"all" on the basic page covers the offered scopes only`)
-	require.Contains(t, page, `placeholder="Search memories, notes, and sessions&hellip;"`)
-	require.Contains(t, page, `data-scopes="memories notes sessions"`, "the palette narrows to the same scopes")
+	require.Contains(t, page, "tune the xylophone", "the task matches under all at basic")
+	require.NotContains(t, page, "xylophone trial", `"all" on the basic page covers the offered scopes only`)
+	require.Contains(t, page, `placeholder="Search memories, notes, tasks, plans, projects, and sessions&hellip;"`)
+	require.Contains(t, page, `data-scopes="memories notes tasks plans projects sessions"`, "the palette narrows to the same scopes")
 
 	// Hidden, not locked: an explicit hidden scope still searches, under the banner.
-	page = getPeek(t, mux, "/console/search?q=xylophone&scope=tasks").Body.String()
-	require.Contains(t, page, "tune the xylophone")
-	require.Contains(t, page, `data-level-banner="tasks"`)
-	require.Contains(t, page, `href="/console/search?scope=tasks&amp;`, "the active scope stays visible in the selector")
+	page = getPeek(t, mux, "/console/search?q=xylophone&scope=trials").Body.String()
+	require.Contains(t, page, "xylophone trial")
+	require.Contains(t, page, `data-level-banner="trials"`)
+	require.Contains(t, page, `href="/console/search?scope=trials&amp;`, "the active scope stays visible in the selector")
 
 	// A misspelling is refused with the level-blind enum, as before.
 	rr := getPeek(t, mux, "/console/search?q=xylophone&scope=task")
 	require.Equal(t, http.StatusBadRequest, rr.Code)
 	require.Contains(t, rr.Body.String(), "valid values are all, memories, notes, tasks, plans, trials, projects, sessions")
 
-	// Standard offers the work scopes; the research scope follows its feature.
+	// Standard adds the research scope, which follows its feature.
 	setLevel(t, db, "standard")
 	page = getPeek(t, mux, "/console/search?q=xylophone").Body.String()
-	require.Contains(t, page, "tune the xylophone")
+	require.Contains(t, page, "xylophone trial")
 	for _, scope := range []string{"tasks", "plans", "trials", "projects"} {
 		require.Contains(t, page, `href="/console/search?scope=`+scope+`&amp;`, "standard offers %s", scope)
 	}
@@ -451,14 +462,14 @@ func TestLevels_PaletteJumpsFollowTheLevel(t *testing.T) {
 	}
 
 	require.Equal(t, []string{
-		"/console/search", "/console/mishaps",
+		"/console/search",
 		"/console/settings?s=experience", "/console/settings?s=features", "/console/settings?s=setup",
 		"/console/settings?s=updates", "/console/settings?s=backups",
-	}, jumps(), "basic: no Context, no Standard or Advanced sections")
+	}, jumps(), "basic: no Context, no Standard or Advanced sections; Mishaps is a sidebar row now")
 
 	setLevel(t, db, "advanced")
 	require.Equal(t, []string{
-		"/console/search", "/console/mishaps", "/console/context",
+		"/console/search", "/console/context",
 		"/console/settings?s=experience", "/console/settings?s=features", "/console/settings?s=setup",
 		"/console/settings?s=updates", "/console/settings?s=backups",
 		"/console/settings?s=briefing", "/console/settings?s=workspaces", "/console/settings?s=engine",
@@ -513,9 +524,9 @@ func TestLevelPost_ValidatesRecordsAndRedirects(t *testing.T) {
 	require.Equal(t, store.ConsoleLevelChosen, source)
 	require.True(t, welcomed, "a choice anywhere answers the welcome card")
 
-	// Down while standing on a screen the new level hides: Home, with the note.
+	// Down while standing on a screen the new level hides: the Overview, with the note.
 	rr = postForm(mux, "/console/settings/level", "level=basic&return="+url.QueryEscape("/console/retrieval"))
-	require.Equal(t, "/console/?notice="+url.QueryEscape("Switched to Basic. Retrieval is not in the Basic sidebar, so you are back on Home."),
+	require.Equal(t, "/console/?notice="+url.QueryEscape("Switched to Basic. Retrieval is not in the Basic sidebar, so you are back on the Overview."),
 		rr.Header().Get("Location"))
 
 	// Down from a Settings section the new level hides: Experience.
@@ -524,7 +535,7 @@ func TestLevelPost_ValidatesRecordsAndRedirects(t *testing.T) {
 	require.True(t, strings.HasPrefix(rr.Header().Get("Location"), "/console/settings?notice="), rr.Header().Get("Location"))
 	require.Contains(t, rr.Header().Get("Location"), "s=experience")
 
-	// No return: the Experience section. An off-console return: Home.
+	// No return: the Experience section. An off-console return: the Overview.
 	rr = postForm(mux, "/console/settings/level", "level=basic")
 	require.True(t, strings.HasPrefix(rr.Header().Get("Location"), "/console/settings?notice=Switched+to+Basic."))
 	rr = postForm(mux, "/console/settings/level", "level=standard&return="+url.QueryEscape("https://evil.example/"))
@@ -553,7 +564,7 @@ func TestLevelReset_BackToFileAndEnv(t *testing.T) {
 
 	setLevel(t, db, "advanced")
 	rr = postForm(mux, "/console/settings/level/reset", "return="+url.QueryEscape("/console/retrieval"))
-	require.Equal(t, "/console/?notice="+url.QueryEscape("Switched to Standard. Retrieval is not in the Standard sidebar, so you are back on Home."),
+	require.Equal(t, "/console/?notice="+url.QueryEscape("Switched to Standard. Retrieval is not in the Standard sidebar, so you are back on the Overview."),
 		rr.Header().Get("Location"))
 	level, overridden, _, welcomed, err := store.ConsoleLevel(ctx, db, "standard")
 	require.NoError(t, err)
@@ -630,13 +641,19 @@ func TestExperienceSection_CardsAreGenerated(t *testing.T) {
 	require.Contains(t, basic, "is-current")
 	require.Contains(t, basic, "In use")
 	require.Contains(t, standard, "Use Standard")
-	for _, item := range []string{"Overview", "Memories", "Notes", "Gardener", "Sessions", "Settings", "Search",
-		"Settings: Experience, Features, Your setup, Updates, and Backups"} {
+	for _, item := range []string{"Overview", "Mishaps", "Projects", "Plans", "Tasks", "Sessions", "Memories", "Notes",
+		"Gardener", "Settings", "Search", "Settings: Experience, Features, Your setup, Updates, and Backups"} {
 		require.Contains(t, basic, "<li>"+item+"</li>")
 	}
-	for _, item := range []string{"Now", "Projects", "Plans", "Tasks", "Labs", "Trials", "Settings: Briefing and Workspaces"} {
+	for _, item := range []string{"Now", "Labs", "Trials", "System", "Privacy", "Settings: Briefing and Workspaces"} {
 		require.Contains(t, standard, "<li>"+item+"</li>")
 	}
+	for _, item := range []string{"Projects", "Plans", "Tasks"} {
+		require.NotContains(t, standard, "<li>"+item+"</li>", "Basic shows %s, so Standard does not add it", item)
+	}
+	// The pitches say what each level is for, and Basic's names the work.
+	require.Contains(t, basic, "Just the essentials: the work you follow and what your agents remember.")
+	require.Contains(t, standard, "Watch your agents live, curate knowledge and look after the server.")
 	for _, item := range []string{"Interactions", "Retrieval", "Context", "Settings: Knowledge engine"} {
 		require.Contains(t, advanced, "<li>"+item+"</li>")
 	}
@@ -752,10 +769,19 @@ func TestErrorPage_DestinationsFollowTheLevel(t *testing.T) {
 		}
 		return out
 	}
-	require.Equal(t, []string{"/console/", "/console/memories", "/console/sessions", "/console/notes"}, links())
+	// Projects is a Basic screen, so Basic offers it too.
+	require.Equal(t, []string{"/console/", "/console/memories", "/console/sessions", "/console/projects"}, links())
 	require.Contains(t, getPeek(t, mux, "/console/no-such-screen").Body.String(),
-		`placeholder="Search memories, notes, and sessions&hellip;"`)
+		`placeholder="Search memories, notes, tasks, plans, projects, and sessions&hellip;"`)
 
 	setLevel(t, db, "standard")
 	require.Equal(t, []string{"/console/", "/console/memories", "/console/sessions", "/console/projects"}, links())
+
+	// A destination the screens on offer lack is skipped for the next one.
+	var ids []string
+	for _, sc := range errorLinks(slices.DeleteFunc(visibleScreens(config.Features{}, levelBasic),
+		func(sc screen) bool { return sc.ID == "projects" })) {
+		ids = append(ids, sc.ID)
+	}
+	require.Equal(t, []string{"overview", "memories", "sessions", "notes"}, ids)
 }

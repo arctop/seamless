@@ -368,21 +368,30 @@ func TestScreenRegistry_HrefsAreRegisteredRoutes(t *testing.T) {
 // matrix is a product decision, so changing it should take a deliberate edit
 // here as well as in screens.go.
 func TestNav_RendersExactlyTheVisibleScreensPerLevel(t *testing.T) {
-	basic := []string{"/console/", "/console/memories", "/console/notes", "/console/gardener",
-		"/console/sessions", "/console/settings"}
-	standard := []string{"/console/", "/console/now", "/console/memories", "/console/notes",
-		"/console/gardener", "/console/projects", "/console/plans", "/console/tasks", "/console/sessions",
-		"/console/system", "/console/privacy", "/console/settings"}
-	standardResearch := []string{"/console/", "/console/now", "/console/memories", "/console/notes",
-		"/console/gardener", "/console/projects", "/console/plans", "/console/tasks", "/console/sessions",
-		"/console/labs", "/console/trials", "/console/system", "/console/privacy", "/console/settings"}
-	advanced := []string{"/console/", "/console/now", "/console/interactions", "/console/memories",
-		"/console/notes", "/console/retrieval", "/console/gardener", "/console/projects", "/console/plans",
-		"/console/tasks", "/console/sessions", "/console/system", "/console/privacy", "/console/settings"}
-	advancedResearch := []string{"/console/", "/console/now", "/console/interactions", "/console/memories",
-		"/console/notes", "/console/retrieval", "/console/gardener", "/console/projects", "/console/plans",
-		"/console/tasks", "/console/sessions", "/console/labs", "/console/trials", "/console/system", "/console/privacy",
+	// The groups in order: Live, Work, Knowledge, Research, Server, then the
+	// pinned Settings (plan:console-ux-pass UX 14).
+	basic := []string{"/console/", "/console/mishaps",
+		"/console/projects", "/console/plans", "/console/tasks", "/console/sessions",
+		"/console/memories", "/console/notes", "/console/gardener",
 		"/console/settings"}
+	standard := []string{"/console/", "/console/now", "/console/mishaps",
+		"/console/projects", "/console/plans", "/console/tasks", "/console/sessions",
+		"/console/memories", "/console/notes", "/console/gardener",
+		"/console/system", "/console/privacy", "/console/settings"}
+	standardResearch := []string{"/console/", "/console/now", "/console/mishaps",
+		"/console/projects", "/console/plans", "/console/tasks", "/console/sessions",
+		"/console/memories", "/console/notes", "/console/gardener",
+		"/console/labs", "/console/trials",
+		"/console/system", "/console/privacy", "/console/settings"}
+	advanced := []string{"/console/", "/console/now", "/console/interactions", "/console/mishaps",
+		"/console/projects", "/console/plans", "/console/tasks", "/console/sessions",
+		"/console/memories", "/console/notes", "/console/retrieval", "/console/gardener",
+		"/console/system", "/console/privacy", "/console/settings"}
+	advancedResearch := []string{"/console/", "/console/now", "/console/interactions", "/console/mishaps",
+		"/console/projects", "/console/plans", "/console/tasks", "/console/sessions",
+		"/console/memories", "/console/notes", "/console/retrieval", "/console/gardener",
+		"/console/labs", "/console/trials",
+		"/console/system", "/console/privacy", "/console/settings"}
 
 	navRe := regexp.MustCompile(`<nav class="nav".*?</nav>`)
 	linkRe := regexp.MustCompile(`<a href="(/console/[^"]*)" data-key="([^"]*)" data-tip="([^"]*)"`)

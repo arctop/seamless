@@ -1524,13 +1524,13 @@ func sumValues(m map[string]int) int {
 //
 // Each queue counts what the Overview's matching needs item counts
 // (needs.go), from the same rows and through the same predicates
-// (ownerGateOpen, looseClaim, planAwaitsApproval), without building the
-// items: the sidebar is drawn on every page and every live refresh. The Tasks
-// badge is the sum of three items: the gates waiting on the owner, the lapsed
-// claims and the claimless starts.
+// (ownerGateOpen, looseClaim, planAwaitsApproval, unreviewedMishaps), without
+// building the items: the sidebar is drawn on every page and every live
+// refresh. The Tasks badge is the sum of three items: the gates waiting on
+// the owner, the lapsed claims and the claimless starts.
 //
 // Every read goes through the request's handle, so a locked project's gates,
-// claims, plans and proposals are absent from the read itself. A badge whose
+// claims, plans, proposals and mishaps are absent from the read itself. A badge whose
 // optional feature is off is not read at all. Best-effort one badge at a
 // time: a read that fails costs its badge, which then draws nothing, never
 // the page.
@@ -1590,6 +1590,14 @@ func (s *Service) navCounts(ctx context.Context, feats config.Features) navCount
 		read("access requests", &counts.Access, func() (int, error) {
 			pending, err := store.PendingAccessApprovals(ctx, db, now)
 			return len(pending), err
+		})
+	}
+	// The Mishaps badge counts the reports since the owner last marked them
+	// reviewed, through the Overview's mishap item's own read.
+	if s.cfg.Events != nil {
+		read("mishaps to review", &counts.Mishaps, func() (int, error) {
+			n, _, _, err := s.unreviewedMishaps(ctx, db)
+			return n, err
 		})
 	}
 	// The Locks badge counts the declarations waiting for the owner's
@@ -1660,6 +1668,7 @@ type navCounts struct {
 	Held      int // queue: writes held for the owner (write screening, or restricted accounts' proposals)
 	Access    int // queue: access requests waiting (only while a project is locked or read grants are on)
 	Locks     int // queue: repo lock declarations waiting for the owner
+	Mishaps   int // queue: agent-reported mishaps since the owner last marked them reviewed
 	Labs      int // the Settings feature card's data line only
 	Trials    int // the Settings feature card's data line only
 }

@@ -279,16 +279,17 @@ cookie to the browser they can actually see. (`--browser` is macOS-only.)
 
 ## Getting around
 
-The sidebar groups the screens by the job they serve rather than by table:
+The sidebar groups the screens by the job they serve rather than by table,
+in this order:
 
 | Group | Screens |
 |---|---|
-| **Live** | Overview, Now, Interactions |
-| **Knowledge** | Memories, Notes, Retrieval, Gardener, Held (only while [write screening](#held) is on, or restricted accounts are configured) |
+| **Access** | Access requests, Approvers (only while `peer_auth` locks a project; Access requests alone while read grants are on). Whenever it exists it is the first group: a waiting request is an agent waiting on you. |
+| **Live** | Overview, Now, Interactions, Mishaps |
 | **Work** | Diary (only while that [optional feature](#optional-features) is on), Projects, Plans, Tasks, Sessions, Locks (only while that [optional feature](#optional-features) is on) |
+| **Knowledge** | Memories, Notes, Retrieval, Gardener, Held (only while [write screening](#held) is on, or restricted accounts are configured) |
 | **Research** | Labs, Trials (only while that [optional feature](#optional-features) is on) |
 | **Server** | System, Privacy, Devices (only on a server that [serves other computers](#devices)) |
-| **Access** | Access requests, Approvers (only while `peer_auth` locks a project) |
 
 That is the full list, at the Advanced [level](#choose-how-much-you-see); a
 lower level shows a subset, in the same order and under the same names.
@@ -304,7 +305,7 @@ A number beside a section is one of two kinds:
 
 | Kind | Sections | Shows |
 |---|---|---|
-| **Waiting on you** | Tasks (gates waiting on you, lapsed claims, and tasks in progress with no claim), Plans (captured plans awaiting your approval), Gardener (proposals waiting for review), Held, Locks (declarations waiting for your approval), Access requests | A pill while something waits, and nothing at zero. Each counts what the Overview's matching **Needs you** cards count. |
+| **Waiting on you** | Access requests, Mishaps (reports since you last marked them reviewed), Plans (captured plans awaiting your approval), Tasks (gates waiting on you, lapsed claims, and tasks in progress with no claim), Locks (declarations waiting for your approval), Gardener (proposals waiting for review), Held | A pill while something waits, and nothing at zero. Each counts what the Overview's matching **Needs you** cards count. |
 | **Live** | Now | The agents live right now, dimmed at zero. |
 
 The other sections carry no number: their totals are on the
@@ -339,7 +340,7 @@ a superseded or archived memory finds it here too, with its status.
 |---|---|
 | `Cmd/Ctrl+K` | Search or jump to a section |
 | `/` | Focus this screen's filter; open the palette where there is none |
-| `g` then a key | Go to a section (pressing `g` shows every key it can take, until your next key or `Esc`): `o` Overview, `n` Now, `i` Interactions, `m` Memories, `e` Notes, `r` Retrieval, `g` Gardener, `h` Held, `d` Diary, `w` Projects, `p` Plans, `t` Tasks, `s` Sessions, `b` Locks, `l` Labs, `x` Trials, `y` System, `v` Privacy, `c` Devices, `a` Access requests, `k` Approvers, `,` Settings |
+| `g` then a key | Go to a section (pressing `g` shows every key it can take, until your next key or `Esc`): `a` Access requests, `k` Approvers, `o` Overview, `n` Now, `i` Interactions, `f` Mishaps, `d` Diary, `w` Projects, `p` Plans, `t` Tasks, `s` Sessions, `b` Locks, `m` Memories, `e` Notes, `r` Retrieval, `g` Gardener, `h` Held, `l` Labs, `x` Trials, `y` System, `v` Privacy, `c` Devices, `,` Settings |
 | `j` / `k` | Next / previous item in a library rail |
 | `a` / `x` | On the Gardener: apply / dismiss the open proposal. An apply that cannot be undone asks in the page first; press `a` again to confirm |
 | `[` | Collapse or expand the sidebar |
@@ -397,17 +398,18 @@ presentation, stored for this installation's owner rather than per browser, so
 your phone and your laptop agree.
 
 **Basic** is the essentials, for someone who installed Seamless because they use
-Claude Code or Codex and wants to know it works: what the agents remember
-(Memories, Notes), what they did (Sessions), cleanup suggestions to accept or
-decline (Gardener), and a Home that opens on a health strip - which agent clients
-are working here, whether semantic recall is on, when the last briefing went
-out, and the version (which says when a newer release is out) - plus the
-Updates and Backups settings.
+Claude Code or Codex and wants to know it works: the work the agents follow
+(Projects, Plans, Tasks), what they did (Sessions) and what went wrong
+(Mishaps), what they remember (Memories, Notes), cleanup suggestions to accept
+or decline (Gardener), and an Overview that opens on a health strip - which
+agent clients are working here, whether semantic recall is on, when the last
+briefing went out, and the version (which says when a newer release is out) -
+plus the Updates and Backups settings.
 
-**Standard** adds following the work: Now, Projects, Plans, and Tasks (and Labs
-and Trials when that feature is on), the Overview's window, vitals, and
-projects table, the Briefing and Workspaces settings, and the finer controls on the
-screens Basic already had.
+**Standard** adds watching the agents live and looking after the server: Now
+(and Labs and Trials when that feature is on), System and Privacy, the
+Overview's window, vitals, and projects table, the Briefing and Workspaces
+settings, and the finer controls on the screens Basic already had.
 
 **Advanced** is every screen and every knob: Interactions (the tool-call
 transport), Retrieval (the analytics), Context, the Knowledge engine settings,
@@ -452,24 +454,24 @@ What each level shows, generated from the console's own registries:
 | **Overview** | shown | shown | shown |
 | **Now** | - | shown | shown |
 | **Interactions** | - | - | shown |
+| **Mishaps** | shown | shown | shown |
+| **Diary** - while the diary feature is on | shown | shown | shown |
+| **Projects** | shown | shown | shown |
+| **Plans** | shown | shown | shown |
+| **Tasks** | shown | shown | shown |
+| **Sessions** | shown | shown | shown |
+| **Locks** - while the repo_locks feature is on | - | shown | shown |
 | **Memories** | shown | shown | shown |
 | **Notes** | shown | shown | shown |
 | **Retrieval** | - | - | shown |
 | **Gardener** | shown | shown | shown |
 | **Held** - while the screening feature is on | shown | shown | shown |
-| **Diary** - while the diary feature is on | shown | shown | shown |
-| **Projects** | - | shown | shown |
-| **Plans** | - | shown | shown |
-| **Tasks** | - | shown | shown |
-| **Sessions** | shown | shown | shown |
-| **Locks** - while the repo_locks feature is on | - | shown | shown |
 | **Labs** - while the research feature is on | - | shown | shown |
 | **Trials** - while the research feature is on | - | shown | shown |
 | **System** | - | shown | shown |
 | **Privacy** | - | shown | shown |
 | **Settings** | shown | shown | shown |
 | **Search** - no sidebar entry: the palette and links reach it | shown | shown | shown |
-| **Mishaps** - no sidebar entry: the palette and links reach it | shown | shown | shown |
 | **Context** - no sidebar entry: the palette and links reach it | - | - | shown |
 
 ### Settings sections
@@ -492,6 +494,9 @@ What each level shows, generated from the console's own registries:
 | **Overview: the observation window** | - | shown | shown |
 | **Overview: the vitals** | - | shown | shown |
 | **Overview: the projects table and the knowledge rail** | - | shown | shown |
+| **Sessions: the Retained filter** | - | shown | shown |
+| **Sessions: the Sort menu** | - | shown | shown |
+| **Sessions: a session's review signals** | - | shown | shown |
 | **Memories: the Reach and Utility sorts** | - | shown | shown |
 | **Memories: how often each memory surfaced** | - | shown | shown |
 | **Memories: the Never surfaced filter** | - | shown | shown |
@@ -501,9 +506,6 @@ What each level shows, generated from the console's own registries:
 | **Gardener: the Hidden forever list** | - | shown | shown |
 | **Gardener: Retarget on a proposal** | - | shown | shown |
 | **Gardener: Hide forever on a proposal** | - | shown | shown |
-| **Sessions: the Retained filter** | - | shown | shown |
-| **Sessions: the Sort menu** | - | shown | shown |
-| **Sessions: a session's review signals** | - | shown | shown |
 | **Search: the Updated window** | - | shown | shown |
 | **Search: the Sort control** | - | shown | shown |
 | **Settings › Features: the precedence line** | - | shown | shown |
@@ -650,7 +652,7 @@ destination explains why there is nothing. Below Advanced, where Retrieval is
 not in the sidebar, the three Retrieval vitals are plain cards.
 
 **No link above your level.** A link whose screen your level's sidebar does
-not show - Projects, Plans, Tasks, Locks and Now at Basic, Retrieval and Interactions
+not show - Locks and Now at Basic, Retrieval and Interactions
 below Advanced - is not offered as a link anywhere on this page: the card,
 the row or the count says the same thing as plain text. The screen still opens
 by URL, under the level note.
@@ -1281,9 +1283,10 @@ no card.
 `/console/mishaps`
 
 Every mishap agents reported at `session_end`, newest first, for a recurrence
-review: which kinds keep happening, and which memories fail to prevent them. It
-has no sidebar entry; the Overview's mishap card, the check-in's mishap count and
-the palette's Jump to open it.
+review: which kinds keep happening, and which memories fail to prevent them. Its
+sidebar row is under Live, at every level, with a count of the reports since you
+last marked them reviewed (nothing at zero), and `g` then `f` opens it; the
+Overview's mishap card and the check-in's mishap count open it too.
 
 - **Type chips** - All, then each type with its count - `shell-trap`,
   `wrong-target`, `live-state`, `ignored-warning`, `fabricated`, `other` - and
@@ -1991,7 +1994,7 @@ Advanced - the current one marked, each with a one-line pitch and a list of what
 it shows, generated from the same registries the sidebar and the page gates
 read, so the list cannot promise something the level does not do. Choosing one
 applies at once: the sidebar and the page update in place, and if the new level
-hides the screen you were on you land on Home with a note. The note at the top
+hides the screen you were on you land on the Overview with a note. The note at the top
 says whether the level was **chosen in the console** or **set by the upgrade**,
 and **Reset to file + env** hands the choice back to `console.level`. The same
 section holds the theme and a button for the shortcut sheet. The theme is

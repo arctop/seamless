@@ -281,20 +281,28 @@ func TestEventSummary_MishapType(t *testing.T) {
 		Payload: map[string]any{"description": "odd", "type": "not-a-type"}}))
 }
 
-// The screen is in the registry with no sidebar row, at Basic like the card
-// that links to it, so the palette and the docs matrix know it.
+// The screen is a sidebar row under Live (plan:console-ux-pass UX 14), at
+// Basic like the card that links to it, with a queue badge: the palette reads
+// it from the sidebar, so it is no longer a Jump to row of its own.
 func TestMishapsScreen_Registered(t *testing.T) {
 	sc, ok := screenByID("mishaps")
 	require.True(t, ok)
-	require.False(t, sc.NavRow)
+	require.True(t, sc.NavRow)
+	require.Equal(t, groupLive, sc.Group)
+	require.Equal(t, "f", sc.Key)
 	require.Equal(t, levelBasic, sc.Min)
 	require.Equal(t, mishapsPath, sc.Href)
 	require.Empty(t, sc.Feature)
+	require.Equal(t, "mishaps", sc.Badge)
+	require.Equal(t, badgeQueue, sc.BadgeKind)
 
 	_, mux := newConsoleLevel(t, config.Features{}, "basic")
 	page := getHTMLBody(t, mux, "/console/memories")
-	require.Contains(t, page, `<a href="/console/mishaps" data-jump="Mishaps" data-hint="what agents reported going wrong, by type"`)
-	require.NotContains(t, getHTMLBody(t, mux, "/console/mishaps"), "data-level-banner", "a Basic screen carries no banner at Basic")
+	require.Contains(t, page, `<a href="/console/mishaps" data-key="f" data-tip="Mishaps" class="">`)
+	require.NotContains(t, page, `data-jump="Mishaps"`)
+	mishaps := getHTMLBody(t, mux, "/console/mishaps")
+	require.NotContains(t, mishaps, "data-level-banner", "a Basic screen carries no banner at Basic")
+	require.Contains(t, mishaps, `<a href="/console/mishaps" data-key="f" data-tip="Mishaps" class="active">`)
 }
 
 // The Diary's mishap moment wears its type chip, and its JSON carries the

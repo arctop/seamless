@@ -76,7 +76,7 @@ func sbPage(t *testing.T, mux *http.ServeMux, path string) string {
 // which sections wait on the owner, which one is a pulse, and that every
 // other section carries no number at all.
 var (
-	sbQueues = []string{"gardener", "held", "plans", "tasks", "locks", "access"}
+	sbQueues = []string{"gardener", "held", "plans", "tasks", "locks", "access", "mishaps"}
 	sbPulses = []string{"now"}
 )
 
@@ -133,7 +133,8 @@ func TestSbSidebar_InventoryRendersNoCountAndAQueueAtZeroNone(t *testing.T) {
 		require.True(t, ok, "%s is on the sidebar", href)
 		require.False(t, b.Drawn, "%s renders no count", href)
 	}
-	for _, href := range []string{"/console/gardener", "/console/held", "/console/plans", "/console/tasks", "/console/locks"} {
+	for _, href := range []string{"/console/gardener", "/console/held", "/console/plans", "/console/tasks", "/console/locks",
+		"/console/mishaps"} {
 		require.False(t, badges[href].Drawn, "a queue at zero renders nothing: %s", href)
 	}
 	require.Equal(t, sbBadge{Drawn: true, Kind: "pulse", Count: 0, Zero: true}, badges["/console/now"],
@@ -223,19 +224,22 @@ func TestSbQueues_EqualTheNeedsModel(t *testing.T) {
 	require.Equal(t, need(needProposals), got("/console/gardener"))
 	require.Equal(t, need(needHeld), got("/console/held"))
 	require.Equal(t, need(needLocks), got("/console/locks"))
+	require.Equal(t, need(needMishaps), got("/console/mishaps"))
 	// And the fixture really exercises each one.
 	require.Equal(t, 4, need(needGates))
 	require.Equal(t, 2, need(needPlans))
 	require.Equal(t, 1, need(needLapsed))
 	require.Equal(t, 1, need(needUnclaimed), "the in-progress gate is counted once, with the gates")
-	for _, href := range []string{"/console/tasks", "/console/plans", "/console/gardener", "/console/held", "/console/locks"} {
+	require.Equal(t, 1, need(needMishaps))
+	for _, href := range []string{"/console/tasks", "/console/plans", "/console/gardener", "/console/held", "/console/locks",
+		"/console/mishaps"} {
 		require.Equal(t, "queue", badges[href].Kind, href)
 	}
 }
 
 // Every count reads through the request's handle: a locked project's gate,
-// lapsed claim, presented plan and live agent are absent from the badges,
-// and an unlock brings them back -- the absence is the view's.
+// lapsed claim, presented plan, mishap report and live agent are absent from
+// the badges, and an unlock brings them back -- the absence is the view's.
 func TestSbBadges_LockedProjectIsAbsent(t *testing.T) {
 	lc := newLockedConsole(t)
 	now := time.Now().UTC()
@@ -247,6 +251,8 @@ func TestSbBadges_LockedProjectIsAbsent(t *testing.T) {
 	ndCapture(t, lc.mgr, lockedSlug, "ledger-capture", plans.StatusPresented)
 	ndTask(t, lc.db, core.Task{ProjectSlug: openSlug, Title: "open gate", Kind: core.TaskKindGate,
 		Gate: core.TaskGate{Who: "owner", What: "approve"}})
+	ndMishap(t, lc.db, lockedSlug, "live-state: touched "+lockedSecret, now.Add(-2*time.Minute))
+	ndMishap(t, lc.db, openSlug, "shell-trap: a bare == died", now.Add(-time.Minute))
 
 	read := func(unlock string) map[string]sbBadge {
 		status, body := lc.get(t, "/console/memories", unlock)
@@ -257,11 +263,13 @@ func TestSbBadges_LockedProjectIsAbsent(t *testing.T) {
 	require.Equal(t, 1, locked["/console/tasks"].Count, "the open project's gate alone")
 	require.False(t, locked["/console/plans"].Drawn, "the only presented plan is the locked project's")
 	require.Equal(t, 0, locked["/console/now"].Count, "the only live agent is the locked project's")
+	require.Equal(t, 1, locked["/console/mishaps"].Count, "the open project's report alone")
 
 	unlocked := read(lc.unlockByTerminal(t))
 	require.Equal(t, 3, unlocked["/console/tasks"].Count, "unlocked: its gate and its lapsed claim count too")
 	require.Equal(t, 1, unlocked["/console/plans"].Count)
 	require.Equal(t, 1, unlocked["/console/now"].Count)
+	require.Equal(t, 2, unlocked["/console/mishaps"].Count, "unlocked: its report counts too")
 }
 
 // A failed count never fails a page: the read that fails costs its badge,

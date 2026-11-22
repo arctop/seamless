@@ -9,7 +9,8 @@ package console
 //
 // Levels REMOVE; they never rename or rearrange what remains. The registry
 // order is the sidebar order at every level, and a screen's label is the same
-// everywhere it appears.
+// everywhere it appears. The g-chord keys belong to screens, not to
+// positions: moving a screen never moves its key.
 
 import (
 	"context"
@@ -77,12 +78,15 @@ const (
 	badgePulse badgeKind = "pulse"
 )
 
-// Sidebar groups, in the owner's job order: what is happening, what the fleet
-// knows and how it circulates, what is being done, and the research domain.
+// Sidebar groups, in the owner's job order (plan:console-ux-pass UX 14, the
+// owner's decision of 2026-11-21): what is happening, the work being followed
+// (the owner's main job, so it comes before Knowledge), what the fleet knows
+// and how it circulates, the research domain, and this machine. The Access
+// group (groupAccess, below) goes ahead of all of them whenever it exists.
 const (
 	groupLive      = "Live"
-	groupKnowledge = "Knowledge"
 	groupWork      = "Work"
+	groupKnowledge = "Knowledge"
 	groupResearch  = "Research"
 	// groupServer is this machine's own picture: the parts of Seamless and
 	// what agents can reach.
@@ -97,6 +101,34 @@ var screens = []screen{
 		Min: levelStandard, NavRow: true, Badge: "now", BadgeKind: badgePulse, BadgeTitle: "Agents live now"},
 	{ID: "interactions", Label: "Interactions", Icon: "activity", Href: "/console/interactions", Group: groupLive, Key: "i",
 		Min: levelAdvanced, NavRow: true},
+	// The Mishaps screen (mishaps.go): Basic, like the Overview's mishap
+	// item, and a queue of the reports since the owner last marked them
+	// reviewed -- the item's own count (unreviewedMishaps).
+	{ID: "mishaps", Label: "Mishaps", Icon: "triangle-alert", Href: mishapsPath, Group: groupLive, Key: "f",
+		Min: levelBasic, NavRow: true, Badge: "mishaps", BadgeKind: badgeQueue,
+		BadgeTitle: "Mishaps reported since you last marked them reviewed"},
+	// The Diary (diary.go): one entry per day of work. Basic, and the Work
+	// group's first row, because "what happened today" is the first question
+	// an owner who turns it on asks.
+	{ID: "diary", Label: "Diary", Icon: "book-open", Href: "/console/diary", Group: groupWork, Key: "d",
+		Min: levelBasic, Feature: features.Diary, NavRow: true},
+	// Projects, Plans and Tasks are Basic: following plans and tasks is the
+	// owner's main job, and a new installation starts at Basic.
+	{ID: "projects", Label: "Projects", Icon: "table-2", Href: "/console/projects", Group: groupWork, Key: "w",
+		Min: levelBasic, NavRow: true, Scope: "projects"},
+	{ID: "plans", Label: "Plans", Icon: "map", Href: "/console/plans", Group: groupWork, Key: "p",
+		Min: levelBasic, NavRow: true, Badge: "plans", BadgeKind: badgeQueue, BadgeTitle: "Plans awaiting your approval",
+		Scope: "plans"},
+	{ID: "tasks", Label: "Tasks", Icon: "list-checks", Href: "/console/tasks", Group: groupWork, Key: "t",
+		Min: levelBasic, NavRow: true, Badge: "tasks", BadgeKind: badgeQueue,
+		BadgeTitle: "Gates waiting on you, lapsed claims and tasks in progress with no claim", Scope: "tasks"},
+	{ID: "sessions", Label: "Sessions", Icon: "terminal", Href: "/console/sessions", Group: groupWork, Key: "s",
+		Min: levelBasic, NavRow: true, Scope: "sessions"},
+	// The repo locks (locks.go): every lock on a repository's refs, and the
+	// declarations waiting for the owner.
+	{ID: "locks", Label: "Locks", Icon: "git-branch", Href: "/console/locks", Group: groupWork, Key: "b",
+		Min: levelStandard, Feature: features.RepoLocks, NavRow: true, Badge: "locks", BadgeKind: badgeQueue,
+		BadgeTitle: "Lock declarations waiting for you"},
 	{ID: "memories", Label: "Memories", Icon: "database", Href: "/console/memories", Group: groupKnowledge, Key: "m",
 		Min: levelBasic, NavRow: true, Scope: "memories"},
 	{ID: "notes", Label: "Notes", Icon: "file-text", Href: "/console/notes", Group: groupKnowledge, Key: "e",
@@ -110,31 +142,10 @@ var screens = []screen{
 	{ID: "held", Label: "Held", Icon: "lock", Href: "/console/held", Group: groupKnowledge, Key: "h",
 		Min: levelBasic, Feature: features.Screening, NavRow: true, Badge: "held", BadgeKind: badgeQueue,
 		BadgeTitle: "Writes held for your review"},
-	// The Diary (diary.go): one entry per day of work. Basic, and the Work
-	// group's first row, because "what happened today" is the first question
-	// an owner who turns it on asks.
-	{ID: "diary", Label: "Diary", Icon: "book-open", Href: "/console/diary", Group: groupWork, Key: "d",
-		Min: levelBasic, Feature: features.Diary, NavRow: true},
-	{ID: "projects", Label: "Projects", Icon: "table-2", Href: "/console/projects", Group: groupWork, Key: "w",
-		Min: levelStandard, NavRow: true, Scope: "projects"},
-	{ID: "plans", Label: "Plans", Icon: "map", Href: "/console/plans", Group: groupWork, Key: "p",
-		Min: levelStandard, NavRow: true, Badge: "plans", BadgeKind: badgeQueue, BadgeTitle: "Plans awaiting your approval",
-		Scope: "plans"},
-	{ID: "tasks", Label: "Tasks", Icon: "list-checks", Href: "/console/tasks", Group: groupWork, Key: "t",
-		Min: levelStandard, NavRow: true, Badge: "tasks", BadgeKind: badgeQueue,
-		BadgeTitle: "Gates waiting on you, lapsed claims and tasks in progress with no claim", Scope: "tasks"},
-	{ID: "sessions", Label: "Sessions", Icon: "terminal", Href: "/console/sessions", Group: groupWork, Key: "s",
-		Min: levelBasic, NavRow: true, Scope: "sessions"},
-	// The repo locks (locks.go): every lock on a repository's refs, and the
-	// declarations waiting for the owner.
-	{ID: "locks", Label: "Locks", Icon: "git-branch", Href: "/console/locks", Group: groupWork, Key: "b",
-		Min: levelStandard, Feature: features.RepoLocks, NavRow: true, Badge: "locks", BadgeKind: badgeQueue,
-		BadgeTitle: "Lock declarations waiting for you"},
 	{ID: "labs", Label: "Labs", Icon: "flask-conical", Href: "/console/labs", Group: groupResearch, Key: "l",
 		Min: levelStandard, Feature: features.Research, NavRow: true},
 	{ID: "trials", Label: "Trials", Icon: "test-tube", Href: "/console/trials", Group: groupResearch, Key: "x",
 		Min: levelStandard, Feature: features.Research, NavRow: true, Scope: "trials"},
-	// Standard: a default (Basic) install's sidebar stays as it was.
 	{ID: "system", Label: "System", Icon: "orbit", Href: "/console/system", Group: groupServer, Key: "y",
 		Min: levelStandard, NavRow: true},
 	{ID: "privacy", Label: "Privacy", Icon: "shield", Href: "/console/privacy", Group: groupServer, Key: "v",
@@ -144,9 +155,6 @@ var screens = []screen{
 	// Real pages with no sidebar row.
 	{ID: "search", Label: "Search", Icon: "search", Href: "/console/search",
 		Min: levelBasic, Hint: "every filter and sort"},
-	// Basic, like the Overview's mishap card that links here (mishaps.go).
-	{ID: "mishaps", Label: "Mishaps", Icon: "triangle-alert", Href: "/console/mishaps",
-		Min: levelBasic, Hint: "what agents reported going wrong, by type"},
 	{ID: "context", Label: "Context", Icon: "share-2", Href: "/console/context",
 		Min: levelAdvanced, Hint: "briefing topology across projects"},
 }
@@ -160,7 +168,7 @@ const groupAccess = "Access"
 // decide them. They are deliberately not in screens: a console with nothing
 // locked has no such pages, so its sidebar, palette and docs matrix
 // (LevelMatrix) never name them. withLockScreens places them, at every level,
-// ahead of the pinned Settings entry.
+// as the sidebar's first group: a waiting request is a blocked agent.
 var lockScreens = []screen{
 	{ID: "access", Label: "Access requests", Icon: "lock", Href: "/console/access", Group: groupAccess, Key: "a",
 		Min: levelBasic, NavRow: true, Badge: "access", BadgeKind: badgeQueue, BadgeTitle: "Access requests waiting for you"},
@@ -169,25 +177,25 @@ var lockScreens = []screen{
 }
 
 // withLockScreens returns visible with the lock-only screens inserted ahead of
-// the pinned tail (the first nav row with no group: Settings), or visible
+// the first group, so Access is the sidebar's first section, or visible
 // itself when locked is false.
 func withLockScreens(visible []screen, locked bool) []screen {
 	if !locked {
 		return visible
 	}
-	return beforeTail(visible, lockScreens)
+	return slices.Concat(lockScreens, visible)
 }
 
 // withAccessScreens is withLockScreens when a project is locked; otherwise,
 // with read grants on (isolation.requests) and no lock, it places only the
-// Access requests screen -- there are no approver credentials to manage
-// without peer_auth. Neither: visible itself.
+// Access requests screen, first as well -- there are no approver credentials
+// to manage without peer_auth. Neither: visible itself.
 func withAccessScreens(visible []screen, locked, grants bool) []screen {
 	switch {
 	case locked:
 		return withLockScreens(visible, true)
 	case grants:
-		return beforeTail(visible, lockScreens[:1])
+		return slices.Concat(lockScreens[:1], visible)
 	}
 	return visible
 }
@@ -396,6 +404,8 @@ func (n navCounts) count(badge string) (int, bool) {
 		return n.Access, true
 	case "locks":
 		return n.Locks, true
+	case "mishaps":
+		return n.Mishaps, true
 	default:
 		return 0, false
 	}
@@ -424,6 +434,9 @@ var surfaces = []surface{
 	{Where: "Overview", Template: "overview.html", Label: "the observation window", Min: levelStandard},
 	{Where: "Overview", Template: "overview.html", Label: "the vitals", Min: levelStandard},
 	{Where: "Overview", Template: "overview.html", Label: "the projects table and the knowledge rail", Min: levelStandard},
+	{Where: "Sessions", Template: "sessions.html", Label: "the Retained filter", Min: levelStandard},
+	{Where: "Sessions", Template: "sessions.html", Label: "the Sort menu", Min: levelStandard},
+	{Where: "Sessions", Template: "session.html", Label: "a session's review signals", Min: levelStandard},
 	{Where: "Memories", Template: "memories.html", Label: "the Reach and Utility sorts", Min: levelStandard},
 	{Where: "Memories", Template: "memories.html", Label: "how often each memory surfaced", Min: levelStandard},
 	{Where: "Memories", Template: "memories.html", Label: "the Never surfaced filter", Min: levelStandard},
@@ -433,9 +446,6 @@ var surfaces = []surface{
 	{Where: "Gardener", Template: "gardener.html", Label: "the Hidden forever list", Min: levelStandard},
 	{Where: "Gardener", Template: "gardener.html", Label: "Retarget on a proposal", Min: levelStandard},
 	{Where: "Gardener", Template: "gardener.html", Label: "Hide forever on a proposal", Min: levelStandard},
-	{Where: "Sessions", Template: "sessions.html", Label: "the Retained filter", Min: levelStandard},
-	{Where: "Sessions", Template: "sessions.html", Label: "the Sort menu", Min: levelStandard},
-	{Where: "Sessions", Template: "session.html", Label: "a session's review signals", Min: levelStandard},
 	{Where: "Search", Template: "search.html", Label: "the Updated window", Min: levelStandard},
 	{Where: "Search", Template: "search.html", Label: "the Sort control", Min: levelStandard},
 	{Where: "Settings \u203a Features", Template: "settings.html", Label: "the precedence line", Min: levelStandard},

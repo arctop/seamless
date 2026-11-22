@@ -3,7 +3,8 @@ package console
 // Console experience levels (plan:console-levels).
 //
 // The level decides how much of the console the owner SEES: basic (the fewest
-// screens and knobs), standard (adds following the work), advanced (every
+// screens and knobs, the work and the knowledge included), standard (adds the
+// live view, the server's screens and the finer controls), advanced (every
 // screen and knob). It is presentation only -- agents, hooks, MCP tools, the
 // briefing, the gardener, and recall are identical at every level -- so it
 // lives here, in the console, and nowhere an agent can reach.
@@ -90,7 +91,7 @@ func (l level) AtLeast(name string) (bool, error) {
 }
 
 // levelState is the level in force for one request, with the facts the
-// Settings precedence line and the Home welcome card read.
+// Settings precedence line and the Overview's welcome card read.
 type levelState struct {
 	Level level
 	// Overridden reports a stored row setting the level (else file/env).
@@ -98,7 +99,7 @@ type levelState struct {
 	// Source says who set a stored level: store.ConsoleLevelChosen or
 	// store.ConsoleLevelSeeded ("" when not overridden).
 	Source string
-	// Welcomed reports whether the owner has seen the Home welcome card.
+	// Welcomed reports whether the owner has seen the Overview's welcome card.
 	Welcomed bool
 }
 
@@ -106,8 +107,8 @@ type levelState struct {
 // stored row layered over it. It returns no error on purpose, exactly like
 // featuresConfig: a corrupt row is logged and degrades to the base. The
 // degraded state counts as welcomed -- a row exists, so this is not a fresh
-// installation, and re-asking on every Home load would nag about a fault the
-// owner cannot see; choosing a level in Settings rewrites the row.
+// installation, and re-asking on every Overview load would nag about a fault
+// the owner cannot see; choosing a level in Settings rewrites the row.
 func (s *Service) consoleLevel(ctx context.Context) levelState {
 	name, overridden, source, welcomed, err := store.ConsoleLevel(ctx, s.db(ctx), s.baseLevel.String())
 	if err != nil {
@@ -148,9 +149,9 @@ func screenForPath(reg []screen, path string) (screen, bool) {
 // or the path belongs to no level-gated screen at all (an event page) -- the
 // owner goes back where they were; switching UP always does. When the new level
 // hides it, standing on a bannered page would be a strange welcome to a level
-// just chosen, so the owner lands on Home with a note naming what left the
-// sidebar. A Settings section the new level hides lands on Experience instead,
-// where the switch was most likely made. returnPath passes the login
+// just chosen, so the owner lands on the Overview with a note naming what left
+// the sidebar. A Settings section the new level hides lands on Experience
+// instead, where the switch was most likely made. returnPath passes the login
 // open-redirect guard first.
 func redirectAfterLevelChange(reg []screen, newLevel level, returnPath string) string {
 	switched := "Switched to " + newLevel.Label() + "."
@@ -161,7 +162,7 @@ func redirectAfterLevelChange(reg []screen, newLevel level, returnPath string) s
 	if sc, ok := screenForPath(reg, target.Path); ok && newLevel < sc.Min {
 		target = &url.URL{Path: "/console/"}
 		switched += " " + sc.Label + " is not in the " + newLevel.Label() +
-			" sidebar, so you are back on Home."
+			" sidebar, so you are back on the Overview."
 	} else if ok && sc.ID == "settings" {
 		if sec, found := settingsSectionByID(target.Query().Get("s")); found && newLevel < sec.Min {
 			target = &url.URL{Path: "/console/settings", RawQuery: "s=" + defaultSettingsSection}
@@ -183,8 +184,8 @@ func withNotice(target *url.URL, notice string) string {
 	return target.RequestURI()
 }
 
-// levelCard is one level as the Experience section and the Home welcome card
-// offer it: the pitch, and what the level shows beyond the one below it.
+// levelCard is one level as the Experience section and the Overview's welcome
+// card offer it: the pitch, and what the level shows beyond the one below it.
 type levelCard struct {
 	Level level
 	// Line is the one-sentence pitch.
@@ -202,8 +203,8 @@ type levelCard struct {
 
 // levelPitches are the one-line pitches, by level.
 var levelPitches = map[level]string{
-	levelBasic:    "Just the essentials: what your agents remember and what they are doing.",
-	levelStandard: "Curate knowledge and follow the work.",
+	levelBasic:    "Just the essentials: the work you follow and what your agents remember.",
+	levelStandard: "Watch your agents live, curate knowledge and look after the server.",
 	levelAdvanced: "Every screen, every knob, every number.",
 }
 

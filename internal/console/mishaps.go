@@ -9,6 +9,7 @@ package console
 import (
 	"cmp"
 	"context"
+	"database/sql"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -309,6 +310,23 @@ func (s *Service) mishapsPage(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, "mishaps", pageData{Title: "Mishaps", Active: "mishaps", Data: data})
 }
 
+// unreviewedMishaps counts the agent-reported mishaps recorded after the
+// owner last marked them reviewed (every report before the first review),
+// through db, the request's handle, so a locked project's reports are absent
+// from the count itself. It is the one definition of "mishaps to review": the
+// Overview's mishap item, the Mishaps screen's review line, its Mark reviewed
+// and the sidebar's Mishaps badge all read it. A stamp that does not read
+// counts every report: more, never fewer. at and reviewed are the stamp.
+func (s *Service) unreviewedMishaps(ctx context.Context, db *sql.DB) (n int, at time.Time, reviewed bool, err error) {
+	at, reviewed, serr := store.MishapsReviewedAt(ctx, db)
+	if serr != nil {
+		s.logger.Warn("console: mishaps reviewed stamp", "error", serr)
+		at, reviewed = time.Time{}, false
+	}
+	n, err = store.CountMishapsAfter(ctx, db, at)
+	return n, at, reviewed, err
+}
+
 // mishapsReviewOf reads where the review stands, through the request's
 // handle, whatever the page's filters: the stamp, the reports after it, and
 // the newest report, which a Mark reviewed marks the reports reviewed through.
@@ -320,17 +338,14 @@ func (s *Service) mishapsReviewOf(ctx context.Context, r *http.Request) (*mishap
 		return nil, err
 	}
 	rv := &mishapsReview{Through: core.FormatTime(newest[0].At), Return: returnPath(r)}
-	at, reviewed, err := store.MishapsReviewedAt(ctx, db)
+	n, at, reviewed, err := s.unreviewedMishaps(ctx, db)
 	if err != nil {
-		// A stamp that does not read counts every report, as the Overview does.
-		s.logger.Warn("console: mishaps reviewed stamp", "error", err)
+		return nil, err
 	}
 	if reviewed {
 		rv.At = &at
 	}
-	if rv.New, err = store.CountMishapsAfter(ctx, db, at); err != nil {
-		return nil, err
-	}
+	rv.New = n
 	return rv, nil
 }
 
@@ -369,11 +384,7 @@ func (s *Service) mishapsReviewed(w http.ResponseWriter, r *http.Request) {
 		return withNotice(target, msg)
 	}
 	db := s.db(ctx)
-	prev, _, err := store.MishapsReviewedAt(ctx, db)
-	if err != nil {
-		s.logger.Warn("console: mishaps reviewed stamp", "error", err)
-	}
-	before, err := store.CountMishapsAfter(ctx, db, prev)
+	before, prev, _, err := s.unreviewedMishaps(ctx, db)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
