@@ -23,12 +23,7 @@
   <button type="button" class="mv2-filter-toggle" data-filters-toggle aria-expanded="false" aria-controls="mv2-controls">{{icon "sliders"}}<span>Filters</span></button>
   <span class="mv2-spacer"></span>
   <div class="mv2-controls" id="mv2-controls">
-  <details class="menu lib-filter-menu">
-    <summary class="menu-btn" aria-label="Project: {{.ProjectLabel}}">{{icon "folder-tree"}}<span class="menu-k">Project</span><strong>{{.ProjectLabel}}</strong>{{icon "chevron-down"}}</summary>
-    <div class="menu-list" data-seam-query>
-      {{range .Projects}}<a class="{{if .On}}on{{end}}" href="{{.Href}}"{{with .Title}} title="{{.}}"{{end}}>{{.Label}}{{with .Count}}<span class="n">{{.}}</span>{{end}}</a>{{end}}
-    </div>
-  </details>
+  {{template "project-switcher" .Scope}}
   <div class="lib-flags" data-seam-query>
     <a class="lib-flag{{if .FavLink.On}} on{{end}}" href="{{.FavLink.Href}}" title="{{if .FavLink.On}}Show every note again{{else}}Show only starred notes{{end}}">{{icon "star"}}Starred{{with .FavLink.Count}}<span class="n">{{.}}</span>{{end}}</a>
   </div>

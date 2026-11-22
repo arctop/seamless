@@ -772,6 +772,10 @@ a superseded or archived memory finds it here too, with its status.</p>
 <td>Next / previous item in a library rail</td>
 </tr>
 <tr>
+<td><code>p</code></td>
+<td>Open the project switcher on Memories and Notes</td>
+</tr>
+<tr>
 <td><code>a</code> / <code>x</code></td>
 <td>On the Gardener: apply / dismiss the open proposal. An apply that cannot be undone asks in the page first; press <code>a</code> again to confirm</td>
 </tr>
@@ -2151,6 +2155,19 @@ description, the kind, a tag, or the project's slug or name. While anything
 is filtered the header reads &quot;3 of 128 active&quot; beside a <strong>Clear</strong> link; when
 nothing matches, the rail says so and offers Clear and <strong>Search everything</strong>
 for the same text on <a href="#search">Search</a>.</p>
+<p>The project is chosen with the switcher, the <strong>In All projects</strong> button
+(<code>p</code> opens it). It lists <strong>All projects</strong>; <strong>Recent</strong>, the projects this
+browser last chose or visited (up to five, kept in this browser only);
+<strong>Starred</strong> projects; then every scope that holds a match, most active first
+by its latest session or task, as on <a href="#projects">Projects</a>, and <strong>Shared
+globally</strong> last. Each row counts what choosing it would show, the other
+filters applied. Projects with no activity in 30 days fold into one line
+that says how many there are, and typing finds them. Typing filters by slug
+or display name in the page, with no request; the arrow keys move, <code>Enter</code>
+chooses, <code>Esc</code> closes, and <code>Backspace</code> in an empty field goes back to All
+projects. A locked project this browser has not unlocked is listed with a
+lock and no count, and links to its unlock page. Without script the switcher
+is a plain menu of the same links.</p>
 <p>The whole state is in the URL - <code>?sort=</code>, <code>?group=project</code>, <code>?kind=</code>,
 <code>?project=</code> (a slug, or <code>global</code>), <code>?fav=1</code>, <code>?surfaced=never</code> and <code>?q=</code> - and
 it survives what you do on the page: opening another memory, changing the sort
@@ -2187,8 +2204,10 @@ Back works), and <code>j</code> / <code>k</code> step through the rail.</p>
 <p>The same library shape for notes: under <strong>Recent</strong> the rail is one list,
 newest first, each row carrying its project; <strong>Group: Project</strong> groups it by
 project (global <code>&quot;&quot;</code> first), and sorting by title always does. Sortable by
-recency, title, or starred; filterable by <strong>Project</strong> and <strong>Starred</strong> and by a
-substring of the title, the description, a tag, or the project's slug or name,
+recency, title, or starred; filterable by <strong>Project</strong> (the same project
+switcher as Memories, where the global scope reads Global inbox), by
+<strong>Starred</strong>, and by a substring of the title, the description, a tag, or the
+project's slug or name,
 with the same &quot;N of M&quot; header, Clear, Search fallback and URL state as
 Memories. The
 reader renders the note as a document - uncapped body in a measured reading

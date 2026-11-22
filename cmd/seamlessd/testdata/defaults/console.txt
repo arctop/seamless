@@ -141,6 +141,8 @@
       </section>
     </div>
   </div>
+          <div><dt><kbd>p</kbd></dt><dd>Choose a project (Memories, Notes)</dd></div>
+
 </div>
 <script src="/console/static/interactions.js?v=<hash:11>"></script>
 <script src="/console/static/search.js?v=<hash:12>"></script>
@@ -1033,6 +1035,8 @@
       </section>
     </div>
   </div>
+          <div><dt><kbd>p</kbd></dt><dd>Choose a project (Memories, Notes)</dd></div>
+
 </div>
 <script src="/console/static/interactions.js?v=<hash:11>"></script>
 <script src="/console/static/search.js?v=<hash:12>"></script>
@@ -1903,6 +1907,8 @@
       </section>
     </div>
   </div>
+          <div><dt><kbd>p</kbd></dt><dd>Choose a project (Memories, Notes)</dd></div>
+
 </div>
 <script src="/console/static/interactions.js?v=<hash:11>"></script>
 <script src="/console/static/search.js?v=<hash:12>"></script>
@@ -2768,6 +2774,8 @@
       </section>
     </div>
   </div>
+          <div><dt><kbd>p</kbd></dt><dd>Choose a project (Memories, Notes)</dd></div>
+
 </div>
 <script src="/console/static/interactions.js?v=<hash:11>"></script>
 <script src="/console/static/search.js?v=<hash:12>"></script>
@@ -3697,12 +3705,23 @@
       <a class="on" href="/console/memories">All kinds</a><a class="" href="/console/memories?kind=constraint" title="A rule any agent must follow, whatever the task. Briefings never drop it.">constraint<span class="n">1</span></a><a class="" href="/console/memories?kind=convention" title="A project&#39;s own choice or layout fact: naming, branding, where things live.">convention<span class="n">1</span></a><a class="" href="/console/memories?kind=gotcha" title="A trap and how to avoid it, led by its symptom.">gotcha<span class="n">2</span></a><a class="" href="/console/memories?kind=reference" title="A pointer to something outside Seamless, and what is there.">reference<span class="n">1</span></a><a class="" href="/console/memories?kind=stage" title="Where a piece of work across sessions stands: its status and what it waits on.">stage<span class="n">1</span></a>
     </div>
   </details>
-  <details class="menu lib-filter-menu">
-    <summary class="menu-btn" aria-label="Project: All"><svg class="ico ico-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg><span class="menu-k">Project</span><strong>All</strong><svg class="ico ico-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-    <div class="menu-list" data-seam-query>
-      <a class="on" href="/console/memories">All projects</a><a class="" href="/console/memories?project=global">Shared globally<span class="n">1</span></a><a class="" href="/console/memories?project=example-confidential">example-confidential<span class="n">1</span></a><a class="" href="/console/memories?project=example-open-alpha">example-open-alpha<span class="n">3</span></a><a class="" href="/console/memories?project=example-sealed">example-sealed<span class="n">1</span></a>
+  <details class="menu scope" data-scope data-scope-current="">
+  <summary class="menu-btn scope-btn" aria-label="Project: All projects" aria-keyshortcuts="p" title="Choose a project (p)"><span class="menu-k">In</span><strong>All projects</strong><kbd class="scope-key" aria-hidden="true">p</kbd><svg class="ico ico-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+  <div class="menu-list scope-pop">
+    <label class="scope-field" data-live-skip hidden><svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><input type="text" placeholder="Type a project" aria-label="Type a project" role="combobox" aria-expanded="true" aria-controls="scope-list" aria-autocomplete="list" autocomplete="off" spellcheck="false"></label>
+    <div class="scope-list" id="scope-list">
+      <a class="scope-o on" id="sc-o-all" data-scope-v="" data-seam-query href="/console/memories">All projects<span class="n">6</span></a>
+      <div class="scope-sec" data-scope-recent hidden><p class="scope-head">Recent</p></div>
+      <p class="scope-head" data-scope-head>All, most active first</p>
+      <a class="scope-o" id="sc-o-example-confidential" data-scope-v="example-confidential" data-seam-query href="/console/memories?project=example-confidential">example-confidential<span class="n">1</span><span class="scope-hint"><time datetime="<time>" data-clock="title" title="<time> UTC">active <age></time></span></a>
+      <a class="scope-o" id="sc-o-example-sealed" data-scope-v="example-sealed" data-seam-query href="/console/memories?project=example-sealed">example-sealed<span class="n">1</span><span class="scope-hint"><time datetime="<time>" data-clock="title" title="<time> UTC">active <age></time></span></a>
+      <a class="scope-o" id="sc-o-example-open-alpha" data-scope-v="example-open-alpha" data-seam-query href="/console/memories?project=example-open-alpha">example-open-alpha<span class="n">3</span><span class="scope-hint"><time datetime="<time>" data-clock="title" title="<time> UTC">active <age></time></span></a>
+      <a class="scope-o" id="sc-o-global" data-scope-v="global" data-seam-query href="/console/memories?project=global">Shared globally<span class="n">1</span><span class="scope-hint">every project reads these</span></a>
+      <p class="scope-none" data-scope-none hidden>No project matches <q></q>.</p>
     </div>
-  </details>
+    <p class="scope-keys" aria-hidden="true"><span><kbd>&uarr;</kbd><kbd>&darr;</kbd> move</span><span><kbd>Enter</kbd> choose</span><span><kbd>Esc</kbd> close</span></p>
+  </div>
+</details>
   <div class="lib-flags" data-seam-query>
     <a class="lib-flag" href="/console/memories?fav=1" title="Show only starred memories"><svg class="ico ico-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg>Starred</a>
     
@@ -3897,12 +3916,21 @@
   <button type="button" class="mv2-filter-toggle" data-filters-toggle aria-expanded="false" aria-controls="mv2-controls"><svg class="ico ico-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg><span>Filters</span></button>
   <span class="mv2-spacer"></span>
   <div class="mv2-controls" id="mv2-controls">
-  <details class="menu lib-filter-menu">
-    <summary class="menu-btn" aria-label="Project: All"><svg class="ico ico-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg><span class="menu-k">Project</span><strong>All</strong><svg class="ico ico-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-    <div class="menu-list" data-seam-query>
-      <a class="on" href="/console/notes">All projects</a><a class="" href="/console/notes?project=example-confidential">example-confidential<span class="n">1</span></a><a class="" href="/console/notes?project=example-open-alpha">example-open-alpha<span class="n">2</span></a>
+  <details class="menu scope" data-scope data-scope-current="">
+  <summary class="menu-btn scope-btn" aria-label="Project: All projects" aria-keyshortcuts="p" title="Choose a project (p)"><span class="menu-k">In</span><strong>All projects</strong><kbd class="scope-key" aria-hidden="true">p</kbd><svg class="ico ico-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+  <div class="menu-list scope-pop">
+    <label class="scope-field" data-live-skip hidden><svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><input type="text" placeholder="Type a project" aria-label="Type a project" role="combobox" aria-expanded="true" aria-controls="scope-list" aria-autocomplete="list" autocomplete="off" spellcheck="false"></label>
+    <div class="scope-list" id="scope-list">
+      <a class="scope-o on" id="sc-o-all" data-scope-v="" data-seam-query href="/console/notes">All projects<span class="n">3</span></a>
+      <div class="scope-sec" data-scope-recent hidden><p class="scope-head">Recent</p></div>
+      <p class="scope-head" data-scope-head>All, most active first</p>
+      <a class="scope-o" id="sc-o-example-confidential" data-scope-v="example-confidential" data-seam-query href="/console/notes?project=example-confidential">example-confidential<span class="n">1</span><span class="scope-hint"><time datetime="<time>" data-clock="title" title="<time> UTC">active <age></time></span></a>
+      <a class="scope-o" id="sc-o-example-open-alpha" data-scope-v="example-open-alpha" data-seam-query href="/console/notes?project=example-open-alpha">example-open-alpha<span class="n">2</span><span class="scope-hint"><time datetime="<time>" data-clock="title" title="<time> UTC">active <age></time></span></a>
+      <p class="scope-none" data-scope-none hidden>No project matches <q></q>.</p>
     </div>
-  </details>
+    <p class="scope-keys" aria-hidden="true"><span><kbd>&uarr;</kbd><kbd>&darr;</kbd> move</span><span><kbd>Enter</kbd> choose</span><span><kbd>Esc</kbd> close</span></p>
+  </div>
+</details>
   <div class="lib-flags" data-seam-query>
     <a class="lib-flag" href="/console/notes?fav=1" title="Show only starred notes"><svg class="ico ico-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg>Starred</a>
   </div>
@@ -4598,6 +4626,8 @@
       </section>
     </div>
   </div>
+          <div><dt><kbd>p</kbd></dt><dd>Choose a project (Memories, Notes)</dd></div>
+
 </div>
 <script src="/console/static/interactions.js?v=<hash:11>"></script>
 <script src="/console/static/search.js?v=<hash:12>"></script>
@@ -5396,6 +5426,8 @@
       </section>
     </div>
   </div>
+          <div><dt><kbd>p</kbd></dt><dd>Choose a project (Memories, Notes)</dd></div>
+
 </div>
 <script src="/console/static/interactions.js?v=<hash:11>"></script>
 <script src="/console/static/search.js?v=<hash:12>"></script>
@@ -6438,6 +6470,8 @@ window.SEAM_NO_LIVE_REFRESH = true;
       </section>
     </div>
   </div>
+          <div><dt><kbd>p</kbd></dt><dd>Choose a project (Memories, Notes)</dd></div>
+
 </div>
 <script src="/console/static/interactions.js?v=<hash:11>"></script>
 <script src="/console/static/search.js?v=<hash:12>"></script>

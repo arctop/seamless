@@ -29,12 +29,7 @@
       {{range .KindMenu}}<a class="{{if .On}}on{{end}}" href="{{.Href}}"{{with .Title}} title="{{.}}"{{end}}>{{.Label}}{{with .Count}}<span class="n">{{.}}</span>{{end}}</a>{{end}}
     </div>
   </details>
-  <details class="menu lib-filter-menu">
-    <summary class="menu-btn" aria-label="Project: {{.ProjectLabel}}">{{icon "folder-tree"}}<span class="menu-k">Project</span><strong>{{.ProjectLabel}}</strong>{{icon "chevron-down"}}</summary>
-    <div class="menu-list" data-seam-query>
-      {{range .Projects}}<a class="{{if .On}}on{{end}}" href="{{.Href}}"{{with .Title}} title="{{.}}"{{end}}>{{.Label}}{{with .Count}}<span class="n">{{.}}</span>{{end}}</a>{{end}}
-    </div>
-  </details>
+  {{template "project-switcher" .Scope}}
   <div class="lib-flags" data-seam-query>
     <a class="lib-flag{{if .FavLink.On}} on{{end}}" href="{{.FavLink.Href}}" title="{{if .FavLink.On}}Show every memory again{{else}}Show only starred memories{{end}}">{{icon "star"}}Starred{{with .FavLink.Count}}<span class="n">{{.}}</span>{{end}}</a>
     {{if $.Level.AtLeast "standard"}}<a class="lib-flag{{if .NeverLink.On}} on{{end}}" href="{{.NeverLink.Href}}" title="{{if .NeverLink.On}}Show every memory again{{else}}Show only memories that have never reached an agent's context{{end}}">{{icon "eye-off"}}Never surfaced{{with .NeverLink.Count}}<span class="n">{{.}}</span>{{end}}</a>{{end}}

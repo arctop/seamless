@@ -207,6 +207,9 @@ func (s *Service) memoriesPage(ctx context.Context, lq libQuery) (memoriesData, 
 	}
 	data.libView = newLibView(lq, memoriesListPath, memoriesListPath, memorySortKeys)
 	data.Projects, data.ProjectLabel = libProjectMenu(lq, projectCounts, names, memoriesListPath, "Shared globally")
+	if data.Scope, err = s.projectSwitcher(ctx, data.Projects); err != nil {
+		return memoriesData{}, err
+	}
 	data.FavLink.Count = favs
 	data.KindMenu, data.KindLabel = memoryKindMenu(lq, kindCounts)
 	never := lq

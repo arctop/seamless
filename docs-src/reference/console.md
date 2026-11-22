@@ -345,6 +345,7 @@ a superseded or archived memory finds it here too, with its status.
 | `/` | Focus this screen's filter; open the palette where there is none |
 | `g` then a key | Go to a section (pressing `g` shows every key it can take, until your next key or `Esc`): `a` Access requests, `k` Approvers, `o` Overview, `n` Now, `i` Interactions, `f` Mishaps, `d` Diary, `w` Projects, `p` Plans, `t` Tasks, `s` Sessions, `b` Locks, `m` Memories, `e` Notes, `r` Retrieval, `g` Gardener, `h` Held, `l` Labs, `x` Trials, `y` System, `v` Privacy, `c` Devices, `,` Settings |
 | `j` / `k` | Next / previous item in a library rail |
+| `p` | Open the project switcher on Memories and Notes |
 | `a` / `x` | On the Gardener: apply / dismiss the open proposal. An apply that cannot be undone asks in the page first; press `a` again to confirm |
 | `[` | Collapse or expand the sidebar |
 | `?` | The shortcut sheet |
@@ -1291,6 +1292,20 @@ is filtered the header reads "3 of 128 active" beside a **Clear** link; when
 nothing matches, the rail says so and offers Clear and **Search everything**
 for the same text on [Search](#search).
 
+The project is chosen with the switcher, the **In All projects** button
+(`p` opens it). It lists **All projects**; **Recent**, the projects this
+browser last chose or visited (up to five, kept in this browser only);
+**Starred** projects; then every scope that holds a match, most active first
+by its latest session or task, as on [Projects](#projects), and **Shared
+globally** last. Each row counts what choosing it would show, the other
+filters applied. Projects with no activity in 30 days fold into one line
+that says how many there are, and typing finds them. Typing filters by slug
+or display name in the page, with no request; the arrow keys move, `Enter`
+chooses, `Esc` closes, and `Backspace` in an empty field goes back to All
+projects. A locked project this browser has not unlocked is listed with a
+lock and no count, and links to its unlock page. Without script the switcher
+is a plain menu of the same links.
+
 The whole state is in the URL - `?sort=`, `?group=project`, `?kind=`,
 `?project=` (a slug, or `global`), `?fav=1`, `?surfaced=never` and `?q=` - and
 it survives what you do on the page: opening another memory, changing the sort
@@ -1333,8 +1348,10 @@ Back works), and `j` / `k` step through the rail.
 The same library shape for notes: under **Recent** the rail is one list,
 newest first, each row carrying its project; **Group: Project** groups it by
 project (global `""` first), and sorting by title always does. Sortable by
-recency, title, or starred; filterable by **Project** and **Starred** and by a
-substring of the title, the description, a tag, or the project's slug or name,
+recency, title, or starred; filterable by **Project** (the same project
+switcher as Memories, where the global scope reads Global inbox), by
+**Starred**, and by a substring of the title, the description, a tag, or the
+project's slug or name,
 with the same "N of M" header, Clear, Search fallback and URL state as
 Memories. The
 reader renders the note as a document - uncapped body in a measured reading

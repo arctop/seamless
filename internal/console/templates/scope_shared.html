@@ -1,5 +1,50 @@
 {{/* The project switcher (plan:console-ux-pass UX 27), shared by the list
      screens that choose a project (parsed beside them in render.go:
-     Memories, Notes, Tasks and Plans). A placeholder until UX 27 fills it:
-     nothing calls it yet. Its script is static/scope.js. */}}
-{{define "project-switcher"}}{{end}}
+     Memories, Notes, Tasks and Plans). Called with a projectSwitcher
+     (scope.go), in the place of a screen's Project menu.
+
+     Without script it is a <details> menu of links, every scope listed, the
+     quiet ones under their own heading. static/scope.js adds the field that
+     filters these rows in the page, Recent (from this browser's storage), and
+     the keys. The field sits under data-live-skip, so a live refresh keeps
+     what was typed; every row keeps the screen's other filters in its link
+     and patches the view in place (data-seam-query), but a locked project's,
+     which goes to its unlock page. */}}
+{{define "project-switcher"}}<details class="menu scope" data-scope data-scope-current="{{.Value}}">
+  <summary class="menu-btn scope-btn" aria-label="Project: {{.Label}}" aria-keyshortcuts="p" title="Choose a project (p)"><span class="menu-k">In</span><strong>{{.Label}}</strong><kbd class="scope-key" aria-hidden="true">p</kbd>{{icon "chevron-down"}}</summary>
+  <div class="menu-list scope-pop">
+    <label class="scope-field" data-live-skip hidden>{{icon "search"}}<input type="text" placeholder="Type a project" aria-label="Type a project" role="combobox" aria-expanded="true" aria-controls="scope-list" aria-autocomplete="list" autocomplete="off" spellcheck="false"></label>
+    <div class="scope-list" id="scope-list">
+      {{template "scope-choice" .All}}
+      <div class="scope-sec" data-scope-recent hidden><p class="scope-head">Recent</p></div>
+      {{- with .Starred}}
+      <div class="scope-sec" data-scope-starred><p class="scope-head">Starred</p>
+      {{- range .}}
+      {{template "scope-choice" .}}
+      {{- end}}
+      </div>
+      {{- end}}
+      {{- with .Active}}
+      <p class="scope-head" data-scope-head>All, most active first</p>
+      {{- range .}}
+      {{template "scope-choice" .}}
+      {{- end}}
+      {{- end}}
+      {{- with .Quiet}}
+      <p class="scope-head" data-scope-head>{{len .}} quiet project{{if ne (len .) 1}}s{{end}}, no activity in 30 days<span class="scope-type">: type to find one</span></p>
+      <div class="scope-quiet" data-scope-quiet>
+      {{- range .}}
+      {{template "scope-choice" .}}
+      {{- end}}
+      </div>
+      {{- end}}
+      <p class="scope-none" data-scope-none hidden>No project matches <q></q>.</p>
+    </div>
+    <p class="scope-keys" aria-hidden="true"><span><kbd>&uarr;</kbd><kbd>&darr;</kbd> move</span><span><kbd>Enter</kbd> choose</span><span><kbd>Esc</kbd> close</span></p>
+  </div>
+</details>{{end}}
+
+{{/* One row: the star or the lock, the label, the count (none for a locked
+     project), then the hint. The count comes before the hint in the markup
+     and after it on screen (console.css orders them). */}}
+{{define "scope-choice"}}<a class="scope-o{{if .On}} on{{end}}" id="{{.ID}}" data-scope-v="{{.Value}}"{{with .Name}} data-scope-name="{{.}}" title="{{.}}"{{end}}{{if .Locked}} data-scope-locked{{else}} data-seam-query{{end}} href="{{.Href}}">{{if .Locked}}{{icon "lock"}}{{else if .Starred}}{{icon "star"}}{{end}}{{.Label}}{{if .Counted}}<span class="n">{{.Count}}</span>{{end}}{{with .Hint}}<span class="scope-hint">{{timeAs $.At .}}</span>{{end}}</a>{{end}}

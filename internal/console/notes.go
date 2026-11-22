@@ -129,6 +129,9 @@ func (s *Service) notesPage(ctx context.Context, lq libQuery) (notesData, error)
 	}
 	data.libView = newLibView(lq, "/console/notes", "/console/notes", noteSortKeys)
 	data.Projects, data.ProjectLabel = libProjectMenu(lq, projectCounts, names, "/console/notes", "Global inbox")
+	if data.Scope, err = s.projectSwitcher(ctx, data.Projects); err != nil {
+		return notesData{}, err
+	}
 	data.FavLink.Count = favs
 	return data, nil
 }

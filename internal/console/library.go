@@ -3,9 +3,9 @@ package console
 // The library screens' shared state and controls (Memories and Notes): the
 // URL state every link carries (libQuery), the choices a control offers
 // (libLink), what a page draws beyond its list (libView), and the Project
-// menu. Moved here from notes.go, unchanged, so the project switcher
-// (plan:console-ux-pass UX 27) and the item pages (UX 26) are written in
-// separate files.
+// menu, whose choices the project switcher (plan:console-ux-pass UX 27,
+// scope.go) orders and draws. Moved here from notes.go so the switcher and
+// the item pages (UX 26) are written in separate files.
 
 import (
 	"context"
@@ -184,6 +184,9 @@ type libLink struct {
 	Title string
 	Count int
 	On    bool
+	// Value is the choice's own query value where the control sets one: the
+	// Project menu's ?project= ("" for All projects, "global", or a slug).
+	Value string
 }
 
 // libField is one hidden input the text filter's form carries, so typing
@@ -209,6 +212,9 @@ type libView struct {
 	// Projects is the Project menu, ProjectLabel its current choice.
 	Projects     []libLink
 	ProjectLabel string
+	// Scope is the project switcher built from the Project menu
+	// (projectSwitcher, scope.go); a page draws it in the menu's place.
+	Scope projectSwitcher
 	// FavLink is the Starred toggle.
 	FavLink libLink
 	// ClearHref drops every filter and keeps the sort and the grouping;
@@ -267,7 +273,8 @@ func newLibView(q libQuery, list, base string, sortKeys []string) libView {
 // scope the screen holds (global first), with how many items match the other
 // filters there. The chosen scope stays listed when nothing matches in it, so
 // the menu always names the current choice. It returns the menu and that
-// choice's label.
+// choice's label. Each entry's Value is its ?project= value; the project
+// switcher (scope.go) orders and marks these same choices.
 func libProjectMenu(q libQuery, counts map[string]int, names map[string]string, list, globalLabel string) ([]libLink, string) {
 	all := q
 	all.Project = ""
@@ -299,7 +306,7 @@ func libProjectMenu(q libQuery, counts map[string]int, names map[string]string, 
 		if on {
 			label = lbl
 		}
-		menu = append(menu, libLink{Label: lbl, Href: o.href(list), Title: title, Count: counts[p], On: on})
+		menu = append(menu, libLink{Label: lbl, Href: o.href(list), Title: title, Count: counts[p], On: on, Value: o.Project})
 	}
 	return menu, label
 }
