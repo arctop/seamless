@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -38,16 +39,43 @@ import (
 	"github.com/arctop/seamless/internal/store"
 )
 
+// cmCrawlers is how many of a crawl's GETs are in flight at once. A crawl
+// sends a few hundred, and one after another they took most of the matrix's
+// two minutes under -race.
+const cmCrawlers = 8
+
 // crawl GETs every target as c, HTML and JSON. Nothing below a 500; no
 // locked project's secret or item id unless the project is in open (this
 // caller reads it), and then the secrets it saw are reported. sawOpen says
-// whether the owner's own content showed somewhere.
+// whether the owner's own content showed somewhere. The GETs go out
+// cmCrawlers at a time (each is a read, as a browser's parallel fetches
+// are); every answer is then judged in order on the test's goroutine.
 func (d *cmDaemon) crawl(t *testing.T, c cmCaller, targets []string, open ...string) (seen map[string]bool, sawOpen bool) {
 	t.Helper()
+	type answer struct {
+		status int
+		body   string
+		hdr    http.Header
+		err    error
+	}
+	answers := make([]answer, 2*len(targets))
+	slots := make(chan struct{}, cmCrawlers)
+	var wg sync.WaitGroup
+	for i := range answers {
+		wg.Go(func() {
+			slots <- struct{}{}
+			defer func() { <-slots }()
+			a := &answers[i]
+			a.status, a.body, a.hdr, a.err = c.fetch(http.MethodGet, targets[i/2], nil, i%2 == 1)
+		})
+	}
+	wg.Wait()
 	seen = map[string]bool{}
-	for _, target := range targets {
-		for _, asJSON := range []bool{false, true} {
-			status, body, hdr := c.do(t, http.MethodGet, target, nil, asJSON)
+	for i, target := range targets {
+		for j, asJSON := range []bool{false, true} {
+			a := answers[2*i+j]
+			require.NoError(t, a.err, "%s GET %s", c.name, target)
+			status, body, hdr := a.status, a.body, a.hdr
 			what := c.name + " GET " + target
 			if asJSON {
 				what += " (json)"
@@ -230,7 +258,7 @@ func cmFeed(t *testing.T, c cmCaller) <-chan string {
 	t.Cleanup(cancel)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/console/events", nil)
 	require.NoError(t, err)
-	c.decorate(t, req)
+	require.NoError(t, c.decorate(req))
 	client := c.client
 	if client == nil {
 		client = http.DefaultClient

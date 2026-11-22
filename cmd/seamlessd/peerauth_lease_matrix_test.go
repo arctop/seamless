@@ -424,7 +424,29 @@ func lmHookBody(id, cwd string) map[string]any {
 		"tool_input": map[string]any{"plan": "# Plan\n\nreconcile " + lmSearch}, "hook_event_name": "Hook"}
 }
 
+// lmDaemons is how many daemons the lease matrix runs on at once. On one
+// daemon the ten denied rows' sweeps took two minutes under -race, the
+// longest test in the gate, and the test runner splits a package's top-level
+// tests across processes, never one test's steps. A sweep counts the whole
+// database's sessions, leases and requests around every call, so two sweeps
+// cannot share a daemon. Each daemon is brought to the same state, sweeps
+// every lmDaemons-th denied row, and holds its own database to the closing
+// checks. The first also runs the restricted account's rows, the expired lease
+// and the door.
+const lmDaemons = 5
+
 func TestPeerAuthMatrix_Leases(t *testing.T) {
+	for part := range lmDaemons {
+		t.Run(fmt.Sprintf("daemon %d", part), func(t *testing.T) {
+			t.Parallel()
+			lmMatrix(t, part)
+		})
+	}
+}
+
+// lmMatrix is one daemon's run of the lease matrix: the denied rows whose
+// index is part modulo lmDaemons, and on part 0 the rows that follow them.
+func lmMatrix(t *testing.T, part int) {
 	ctx := context.Background()
 	d := newLMDaemon(t)
 	w := d.setup(t)
@@ -551,7 +573,10 @@ func TestPeerAuthMatrix_Leases(t *testing.T) {
 		{w.principal("D, revoked by the owner", "bridgeD", &lmAgentD, lmAgentD.Key()), []lmItems{w.fin, w.legal}, true},
 		{w.principal("E, revoked by its SessionEnd hook", "bridgeE", &lmAgentE, lmAgentE.Key()), []lmItems{w.fin, w.legal}, false},
 	}
-	for _, row := range deniedRows {
+	for i, row := range deniedRows {
+		if i%lmDaemons != part {
+			continue
+		}
 		t.Run("mcp: "+row.p.name, func(t *testing.T) {
 			filed := d.sweep(t, w, row.p, row.targets...)
 			if row.p.anchor == "" {
@@ -584,45 +609,48 @@ func TestPeerAuthMatrix_Leases(t *testing.T) {
 		})
 	}
 
-	t.Run("restricted account: every tool at every closed project", func(t *testing.T) { d.restrictedSweep(t, w) })
-	// After the sweep, before any lease expires: the account's hooks start
-	// sessions of its own under the agent ids the owner's leased sessions
-	// hold, whose handles are the owner's, qualified (SEAL A2). The sweep
-	// names the owner's handles and compares them with a ghost's the account
-	// never used, so it must run while the account holds none of them.
-	t.Run("restricted account's hooks and a2a", func(t *testing.T) { d.restrictedHooks(t, w) })
+	// The rows after the sweeps, on the first daemon only.
+	if part == 0 {
+		t.Run("restricted account: every tool at every closed project", func(t *testing.T) { d.restrictedSweep(t, w) })
+		// After the sweep, before any lease expires: the account's hooks start
+		// sessions of its own under the agent ids the owner's leased sessions
+		// hold, whose handles are the owner's, qualified (SEAL A2). The sweep
+		// names the owner's handles and compares them with a ghost's the account
+		// never used, so it must run while the account holds none of them.
+		t.Run("restricted account's hooks and a2a", func(t *testing.T) { d.restrictedHooks(t, w) })
 
-	// The expired lease, last: the daemon's clock moves past B's hour. A's
-	// lease (the session, capped at eight hours) carries on.
-	t.Run("expired lease", func(t *testing.T) {
-		d.clock.advance(61 * time.Minute)
-		require.Nil(t, lmMustLease(t, d, w.lease["B"].ID).RevokedAt, "expired, never revoked")
-		live, err := store.ActiveAccessLeases(ctx, d.db, lmAgentB.Key(), d.clock.now())
-		require.NoError(t, err)
-		require.Empty(t, live)
-		cliB := paClientHeaders(t, w.srv["bridgeB"].URL, "", lmAgentHeaders(lmAgentB))
-		text, isErr := paCall(t, cliB, "memory_read", map[string]any{"id": w.fin.memID})
-		require.True(t, isErr, text)
-		require.Contains(t, text, "project "+lmFin+" is locked (access ended at ", "the refusal tells a lapsed approval from none")
-		require.NotContains(t, text, lmFinSecret)
-		out := d.hook(t, w.srv["hookB"].URL, "", "session-start", &lmAgentB, map[string]any{"session_id": "claude-b", "cwd": "/work/finance", "source": "resume"})
-		require.NotContains(t, out, lmFinSecret)
-		require.Contains(t, out, "is locked")
-		cliA := paClientHeaders(t, w.srv["bridgeA"].URL, "", lmAgentHeaders(lmAgentA))
-		text, isErr = paCall(t, cliA, "memory_read", map[string]any{"id": w.fin.memID})
-		require.False(t, isErr, text)
-		require.Contains(t, text, lmFinSecret, "A's lease outlives B's")
-		d.sweep(t, w, w.principal("B, past its lease's end", "bridgeB", &lmAgentB, lmAgentB.Key()), w.fin, w.legal)
-	})
-
-	t.Run("another uid is refused at the door", func(t *testing.T) {
-		for _, path := range []string{"/api/mcp", "/api/hooks/session-start", "/console/", "/api/a2a", "/healthz", "/console/events"} {
-			resp, err := http.Post(w.srv["stranger"].URL+path, "application/json", strings.NewReader(`{}`))
+		// The expired lease, last: the daemon's clock moves past B's hour. A's
+		// lease (the session, capped at eight hours) carries on.
+		t.Run("expired lease", func(t *testing.T) {
+			d.clock.advance(61 * time.Minute)
+			require.Nil(t, lmMustLease(t, d, w.lease["B"].ID).RevokedAt, "expired, never revoked")
+			live, err := store.ActiveAccessLeases(ctx, d.db, lmAgentB.Key(), d.clock.now())
 			require.NoError(t, err)
-			_ = resp.Body.Close()
-			require.Equal(t, http.StatusForbidden, resp.StatusCode, path)
-		}
-	})
+			require.Empty(t, live)
+			cliB := paClientHeaders(t, w.srv["bridgeB"].URL, "", lmAgentHeaders(lmAgentB))
+			text, isErr := paCall(t, cliB, "memory_read", map[string]any{"id": w.fin.memID})
+			require.True(t, isErr, text)
+			require.Contains(t, text, "project "+lmFin+" is locked (access ended at ", "the refusal tells a lapsed approval from none")
+			require.NotContains(t, text, lmFinSecret)
+			out := d.hook(t, w.srv["hookB"].URL, "", "session-start", &lmAgentB, map[string]any{"session_id": "claude-b", "cwd": "/work/finance", "source": "resume"})
+			require.NotContains(t, out, lmFinSecret)
+			require.Contains(t, out, "is locked")
+			cliA := paClientHeaders(t, w.srv["bridgeA"].URL, "", lmAgentHeaders(lmAgentA))
+			text, isErr = paCall(t, cliA, "memory_read", map[string]any{"id": w.fin.memID})
+			require.False(t, isErr, text)
+			require.Contains(t, text, lmFinSecret, "A's lease outlives B's")
+			d.sweep(t, w, w.principal("B, past its lease's end", "bridgeB", &lmAgentB, lmAgentB.Key()), w.fin, w.legal)
+		})
+
+		t.Run("another uid is refused at the door", func(t *testing.T) {
+			for _, path := range []string{"/api/mcp", "/api/hooks/session-start", "/console/", "/api/a2a", "/healthz", "/console/events"} {
+				resp, err := http.Post(w.srv["stranger"].URL+path, "application/json", strings.NewReader(`{}`))
+				require.NoError(t, err)
+				_ = resp.Body.Close()
+				require.Equal(t, http.StatusForbidden, resp.StatusCode, path)
+			}
+		})
+	}
 
 	// Every lease is one the owner approved; nothing else created one.
 	t.Run("leases are the approvals", func(t *testing.T) {

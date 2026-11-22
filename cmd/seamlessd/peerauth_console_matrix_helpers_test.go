@@ -760,16 +760,18 @@ type cmCaller struct {
 
 // decorate adds the caller's credential to req and, for a browser, the proof
 // its key signs.
-func (c cmCaller) decorate(t *testing.T, req *http.Request) {
-	t.Helper()
+func (c cmCaller) decorate(req *http.Request) error {
 	if c.auth != nil {
 		c.auth(req)
 	}
 	if c.key != nil {
 		proof, err := browserproof.Sign(c.key, time.Now())
-		require.NoError(t, err)
+		if err != nil {
+			return err
+		}
 		req.Header.Set(browserproof.Header, proof)
 	}
+	return nil
 }
 
 // unlockHash is what an unlock stores for this browser holding cookie.
@@ -783,6 +785,14 @@ func (c cmCaller) unlockHash(t *testing.T, cookie string) string {
 
 func (c cmCaller) do(t *testing.T, method, target string, form url.Values, asJSON bool) (int, string, http.Header) {
 	t.Helper()
+	status, body, hdr, err := c.fetch(method, target, form, asJSON)
+	require.NoError(t, err, "%s %s %s", c.name, method, target)
+	return status, body, hdr
+}
+
+// fetch is do without the test: it reports a failure rather than ending the
+// test, so the crawl's workers can send requests off the test's goroutine.
+func (c cmCaller) fetch(method, target string, form url.Values, asJSON bool) (int, string, http.Header, error) {
 	var body io.Reader
 	if form != nil {
 		body = strings.NewReader(form.Encode())
@@ -790,7 +800,9 @@ func (c cmCaller) do(t *testing.T, method, target string, form url.Values, asJSO
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, method, c.base+target, body)
-	require.NoError(t, err)
+	if err != nil {
+		return 0, "", nil, err
+	}
 	if method == http.MethodPost {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		if c.browser {
@@ -800,17 +812,23 @@ func (c cmCaller) do(t *testing.T, method, target string, form url.Values, asJSO
 	if asJSON {
 		req.Header.Set("Accept", "application/json")
 	}
-	c.decorate(t, req)
+	if err := c.decorate(req); err != nil {
+		return 0, "", nil, err
+	}
 	client := c.client
 	if client == nil {
 		client = &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	}
 	resp, err := client.Do(req)
-	require.NoError(t, err)
+	if err != nil {
+		return 0, "", nil, err
+	}
 	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	return resp.StatusCode, string(raw), resp.Header
+	if err != nil {
+		return 0, "", nil, err
+	}
+	return resp.StatusCode, string(raw), resp.Header, nil
 }
 
 // bearer is the TCP key's caller.
