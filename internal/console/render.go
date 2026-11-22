@@ -108,10 +108,10 @@ var peekNames = []string{"memory", "note", "task", "project", "session", "event"
 // the full page render one source (page chrome aside). session and project are
 // absent on purpose: their fragments are deliberate compact summaries of much
 // richer bespoke surfaces (the session workspace, the tabbed project workspace);
-// memory, note and task are absent because their full pages are their own item
-// pages (itempage.go, templates/item_shared.html), and plan because its page is
-// the Plans screen's; each library screen's "<entity>-reader" block renders the
-// richer document view the ?reader=1 fragment serves.
+// memory, note, task and plan are absent because their full pages are their own
+// item pages (itempage.go, itempage_plan.go, templates/item_shared.html; a plan's
+// is drawn by the Plans screen); each library screen's "<entity>-reader" block
+// renders the richer document view the ?reader=1 fragment serves.
 var entityPeekPages = map[string]bool{"event": true}
 
 // pageData is the envelope every rendered page receives. Data holds the

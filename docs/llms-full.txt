@@ -19867,7 +19867,7 @@ a superseded or archived memory finds it here too, with its status.
 | `/` | Focus this screen's filter; open the palette where there is none |
 | `g` then a key | Go to a section (pressing `g` shows every key it can take, until your next key or `Esc`): `a` Access requests, `k` Approvers, `o` Overview, `n` Now, `i` Interactions, `f` Mishaps, `d` Diary, `w` Projects, `p` Plans, `t` Tasks, `s` Sessions, `b` Locks, `m` Memories, `e` Notes, `r` Retrieval, `g` Gardener, `h` Held, `l` Labs, `x` Trials, `y` System, `v` Privacy, `c` Devices, `,` Settings |
 | `j` / `k` | Next / previous item in a library rail, or, on [an item's own page](#item-page), in the list it is in |
-| `p` | Open the project switcher on Memories and Notes |
+| `p` | Open the project switcher on Memories, Notes and Plans |
 | `a` / `x` | On the Gardener: apply / dismiss the open proposal. An apply that cannot be undone asks in the page first; press `a` again to confirm |
 | `[` | Collapse or expand the sidebar |
 | `?` | The shortcut sheet |
@@ -20903,6 +20903,11 @@ Every item reads the same way:
     what it depends on and what it blocks. Its history and earlier versions
     follow the body.
 
+  - a plan (`/console/plans/{slug}?project=<slug>`, drawn by
+    [Plans](#plans)): its narrative note, the notes attached to it and its
+    project. A plan has no place in a list, so its page has no previous or
+    next.
+
 An archived or superseded memory keeps its banner and **Restore** at the top
 of the page, and a note [Held](#held) keeps says so there. A locked project's
 item answers as it always did, and its items are absent from every other
@@ -21151,22 +21156,37 @@ window. Every card carries its project as a chip that opens that project's
 Plans & tasks tab at the plan, and **Approve** on a card returns to the card on
 the board, its filters kept.
 
-The **Project** menu lists each project with a plan on the board and how many
-(starred projects first, then the global scope), and `?project=<slug>` narrows
-the board to one (`global` names the global scope); a project that is not
-there, or that is locked and not unlocked in this browser, is a 400. `?q=`
+The project is chosen with the switcher [Memories](#memories) draws, the **In
+All projects** button (`p` opens it): **All projects**, **Recent**,
+**Starred**, then each project with a plan on the board, most active first,
+and the global scope, **global**, last. Each row counts the plans choosing it
+would show, and keeps the text filter and the window; projects with no
+activity in 30 days fold away and typing finds them; a locked project this
+browser has not unlocked is listed with a lock and no count, and links to its
+unlock page. `?project=<slug>` narrows the board to one (`global` names the
+global scope); a project that is not there, or that is locked and not
+unlocked in this browser, is a 400. `?q=`
 keeps the plans whose title or slug holds the text, in any case
 (`plan:<slug>` works too). A title holding " -- " shows it as a dash that never
 splits across lines; the stored title is untouched.
 
 A plan is keyed by its project and slug: the same slug in two projects is two
 plans, with their own steps and notes. `/console/plans/{slug}?project=<slug>`
-is one plan's page: its card with every step row first, in dependency order (a
-step below the steps it depends on, otherwise in the order they were
-written), each with its holder, its blockers and the gates it waits on, then
-its narrative note, then the notes attached to it (supporting notes and agent
-caches). A plan whose steps exist with no note tagged `plan:<slug>` in its
-project still opens: its page says it has no narrative note yet. Every plan
+is one plan's [own page](#item-page), read as a memory, a note or a task is:
+the way back to the project's plans, project › Plans, then the title row (the
+narrative note's title with copy and the star; `plan:<slug>` to copy; the
+status in words, a capture's own or else the group the board puts the plan
+in; the stalled mark; and **Approve** while a capture awaits it, which returns
+to the page), then one line of facts: where it came from, its steps done of
+all and the rest counted by their words, its model tokens and when it was
+updated. The body column is its steps first, in dependency order (a step
+below the steps it depends on, otherwise in the order they were written),
+each with its holder, its blockers and the gates it waits on, then its
+narrative; beside it, the narrative note, the notes attached to it
+(supporting notes and agent caches) and the project, which opens its Plans &
+tasks tab at the plan when it has a workspace. A plan whose steps exist with
+no note tagged `plan:<slug>` in its project still opens: its page says it has
+no narrative note yet, and has nothing to star. Every plan
 link the console renders names its project (the board, the project tab, the
 plan's page, Overview, Now, the Diary, Search, the Tasks reader, notes and the
 Gardener); a slug that is a plan in more than one project, opened without `?project=`,

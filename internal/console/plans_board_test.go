@@ -296,9 +296,11 @@ func TestPvbPlans_SameSlugInTwoProjectsOpensSeparately(t *testing.T) {
 		"only the named project's capture was approved")
 }
 
-// The project menu counts each project's plans on the board, starred
-// projects first, and ?project= narrows the board to one (global names the
-// global scope); a project that is not there is a 400.
+// The project switcher (UX 32: the one Memories draws) counts each
+// project's plans on the board, the starred ones also under Starred, the
+// rest most active first and the global scope last, and ?project= narrows
+// the board to one (global names the global scope); a project that is not
+// there is a 400.
 func TestPvbBoard_ProjectFilterAndMenu(t *testing.T) {
 	db, mux := newConsole(t)
 	ctx := context.Background()
@@ -311,7 +313,7 @@ func TestPvbBoard_ProjectFilterAndMenu(t *testing.T) {
 	require.NoError(t, err)
 	pvbStep(t, db, "example-ops", "ops-one", "ops one", now, nil)
 	pvbStep(t, db, "example-ops", "ops-two", "ops two", now, nil)
-	pvbStep(t, db, "example-web", "web-one", "web one", now, nil)
+	pvbStep(t, db, "example-web", "web-one", "web one", now.Add(-time.Hour), nil)
 	pvbStep(t, db, "", "global-one", "global one", now, nil)
 
 	var all plansData
@@ -320,14 +322,29 @@ func TestPvbBoard_ProjectFilterAndMenu(t *testing.T) {
 		all.Projects, "every project with a plan on the board, counted; example-api has none")
 
 	page := getHTMLBody(t, mux, "/console/plans")
-	menu := page[strings.Index(page, "data-plan-projects"):]
-	menu = menu[:strings.Index(menu, "</details>")]
-	order := []int{strings.Index(menu, ">All projects<"), strings.Index(menu, ">example-web<"),
-		strings.Index(menu, ">global<"), strings.Index(menu, ">example-ops<")}
-	for i := 1; i < len(order); i++ {
-		require.Less(t, order[i-1], order[i], "All, the starred project, global, then the rest")
+	require.NotContains(t, page, "data-plan-projects", "the Project menu gave way to the switcher")
+	v := scParse(t, page)
+	require.Equal(t, "All projects", v.Label)
+	require.True(t, v.All.On)
+	require.Equal(t, 4, v.All.Count, "All projects counts every plan on the board")
+	values := func(rows []scRow) []string {
+		out := make([]string, 0, len(rows))
+		for _, r := range rows {
+			out = append(out, r.Value)
+		}
+		return out
 	}
-	require.Contains(t, menu, `href="/console/plans?project=example-ops"`)
+	require.Equal(t, []string{"example-web"}, values(v.Starred), "the starred project, under Starred")
+	require.Equal(t, []string{"example-ops", "example-web", "global"}, values(v.Active),
+		"most active first, the global scope last; example-api holds no plan")
+	counts := map[string]int{}
+	for _, r := range v.Active {
+		counts[r.Value] = r.Count
+		require.True(t, r.Query, "%s patches the board in place", r.Value)
+	}
+	require.Equal(t, map[string]int{"example-ops": 2, "example-web": 1, "global": 1}, counts)
+	require.Equal(t, "global", v.Active[2].Label, "the global scope in the board's own word")
+	require.Equal(t, "/console/plans?project=example-ops", v.Active[0].Href)
 
 	var ops plansData
 	getJSON(t, mux, "/console/plans?project=example-ops&format=json", &ops)

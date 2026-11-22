@@ -8522,9 +8522,6 @@ a.ov2-attn-main:hover > .ico-arrow-right { transform: translateX(2px); }
 .plan-shipped .done-plan > a:first-child { font-family: inherit; }
 .plan-shipped .done-plan .plan-slug { display: inline-flex; align-items: center; gap: 2px; font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--muted); }
 .plan-shipped .widen { margin: 0; border: 0; border-top: 1px solid var(--border); border-radius: 0; }
-.plan-page .plan-sheet > .plan-card { margin-bottom: 14px; }
-.plan-page .plan-narrative-body h3 .count { display: inline-flex; align-items: center; gap: 4px; }
-.plan-page .plan-narrative-body h3 .count .ico { width: 12px; height: 12px; }
 .plan-chooser .peek-refs li { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 @media (max-width: 480px) {
   .plan-group-hint { flex-basis: 100%; }
@@ -8804,3 +8801,26 @@ a.item-step:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
   .ov2-vitals:not(.dy-tiles) .ov2-vital-foot { flex-wrap: wrap; }
   .ov2-vitals:not(.dy-tiles) .ov2-spark { width: 72px; }
 }
+
+
+/* UX 32: a plan's own page (templates/plans.html's blocks in
+   item_shared.html's item-frame). The Plans accent; plan:<slug> to copy and
+   the status in words in the title row; the long facts (the steps counted by
+   their words, the model tokens) free to wrap; in the body column the card's
+   steps, then the narrative, each under a quiet heading; the project's slug
+   in mono in the context column. Tokens only. */
+.item-page[data-item="plan"] { --lib-accent: var(--pop-strong); }
+.item-actions .plan-slug {
+  display: inline-flex; align-items: center; gap: 2px; max-width: 100%; min-width: 0;
+  font-family: var(--font-mono); font-size: var(--text-xs); color: var(--muted); overflow-wrap: anywhere;
+}
+.item-actions .plan-stalled-why { font-size: var(--text-2xs); font-weight: 600; color: var(--warn); }
+.item-facts .item-fact[data-plan-progress], .item-facts .item-fact[data-plan-tokens] { white-space: normal; }
+.plan-page { display: flex; flex-direction: column; gap: 26px; min-width: 0; }
+.plan-page-hd {
+  display: flex; align-items: baseline; gap: 6px; margin: 0 0 10px; font-family: var(--font-sans);
+  font-size: var(--text-2xs); font-weight: 700; letter-spacing: var(--tracking-wide); text-transform: uppercase; color: var(--faint);
+}
+.plan-page-hd .count { color: var(--muted); font-weight: 600; letter-spacing: 0; }
+.plan-page .plan-page-card { margin-bottom: 0; }
+.item-card-title.mono { font-family: var(--font-mono); font-size: var(--text-sm); }

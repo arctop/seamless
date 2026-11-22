@@ -5,12 +5,14 @@ package console
 // (templates/plan_shared.html), grouped by the state the plan is in -- Needs
 // you, In progress, Stalled, Ready, Shipped -- top to bottom. Only Shipped is
 // windowed (?w=) and folded: an active plan is never hidden by a window. The
-// board filters by project (?project=, a menu with counts) and by text over
-// title and slug (?q=).
+// board filters by project (?project=, chosen with the project switcher the
+// other lists draw, scope.go) and by text over title and slug (?q=).
 //
 // A plan is keyed by its project and slug: /console/plans/{slug}?project=
-// opens one plan, its steps first in dependency order as the card's step
-// rows, then its narrative, then its attached notes. A slug that is a plan in
+// opens one plan on its own page, in the reading frame a memory, a note and
+// a task open in (itempage_plan.go): its steps first in dependency order as
+// the card's step rows, then its narrative, with its narrative note, its
+// attached notes and its project beside them. A slug that is a plan in
 // more than one project, asked for without ?project=, answers a chooser,
 // never one page holding both. The screen also carries the owner escape
 // hatch for Claude Code bug #20397 (an approval whose PostToolUse never
@@ -184,13 +186,13 @@ type plansData struct {
 	Locked []string `json:"locked,omitempty"`
 
 	// The HTML board: its groups, the shipped lines, its controls, and the
-	// URL its own actions return to. The plan page and the chooser render
-	// in the same screen instead (Plan, Chooser).
+	// URL its own actions return to. A plan's own page (itempage_plan.go)
+	// and the chooser render in the same screen instead (Item, Chooser).
 	Groups  []planGroupVM    `json:"-"`
 	Shipped []planTimelineVM `json:"-"`
 	View    *planView        `json:"-"`
 	Return  string           `json:"-"`
-	Plan    *planDetailData  `json:"-"`
+	Item    *planItemPage    `json:"-"`
 	Chooser *planChooserVM   `json:"-"`
 }
 
@@ -301,6 +303,8 @@ type planWaitRef struct {
 // marks a plan whose steps exist with no note tagged plan:<slug> in its
 // project: no body, no note to link or star, nothing to approve. Card is the
 // plan's card with every step row, which the page and the reader render.
+// Lead is a composed plan's narrative description, the page's lead (a
+// capture's description only restates its facts); HTML only.
 type planDetailData struct {
 	Row        planRow        `json:"plan"`
 	Body       template.HTML  `json:"-"`
@@ -312,6 +316,7 @@ type planDetailData struct {
 	NoNote     bool           `json:"noNote,omitempty"`
 	Card       planTimelineVM `json:"-"`
 	Return     string         `json:"-"`
+	Lead       string         `json:"-"`
 }
 
 // SourceText is the plan's source in the owner's words.
@@ -405,8 +410,8 @@ func (q planQuery) matches(title, slug string) bool {
 }
 
 // planView is the board's controls under its state: the text filter's
-// hidden fields, the project menu, the shipped window and the clear link.
-// HTML only.
+// hidden fields, the project menu and the switcher drawn from it, the
+// shipped window and the clear link. HTML only.
 type planView struct {
 	Query        planQuery
 	Filtered     bool
@@ -414,14 +419,24 @@ type planView struct {
 	Keep         []libField
 	Projects     []libLink
 	ProjectLabel string
-	Windows      []libLink
+	// Scope is the project switcher (scope.go) built from Projects: the
+	// board draws it in the place of a Project menu (plan:console-ux-pass
+	// UX 32), as Memories and Notes do.
+	Scope   projectSwitcher
+	Windows []libLink
 	// Wider is the windows past the current one, for the shipped fold's
 	// "shipped before this window" line.
 	Wider []libLink
 }
 
 // newPlanView draws the board's controls for state q over the menu counts.
-func newPlanView(q planQuery, counts []planProjectCount, starred map[string]bool) *planView {
+// The project menu is the switcher's input (projectSwitcher, scope.go): All
+// projects, then each scope with a plan on the board, its ?project= value
+// (Value), what choosing it shows (Count) and the project's display name
+// where it differs from its slug (Title, which typing in the switcher
+// matches); the switcher orders and marks them. The chosen scope stays
+// listed when it holds no plan, so the button always names it.
+func newPlanView(q planQuery, counts []planProjectCount, names map[string]string) *planView {
 	v := &planView{Query: q, Filtered: q.Project != "" || q.Q != ""}
 	with := func(mut func(*planQuery)) string {
 		o := q
@@ -447,35 +462,19 @@ func newPlanView(q planQuery, counts []planProjectCount, starred map[string]bool
 	if scoped && !slices.ContainsFunc(entries, func(c planProjectCount) bool { return c.Project == chosen }) {
 		entries = append(entries, planProjectCount{Project: chosen})
 	}
-	// Starred projects first, then the global scope, then the rest by slug.
-	rank := func(c planProjectCount) int {
-		switch {
-		case starred[c.Project]:
-			return 0
-		case c.Project == "":
-			return 1
-		default:
-			return 2
-		}
-	}
-	slices.SortStableFunc(entries, func(a, b planProjectCount) int {
-		if d := rank(a) - rank(b); d != 0 {
-			return d
-		}
-		return strings.Compare(a.Project, b.Project)
-	})
+	slices.SortStableFunc(entries, func(a, b planProjectCount) int { return strings.Compare(a.Project, b.Project) })
 	for _, c := range entries {
 		param, label := planProjectParam(c.Project), planProjectLabel(c.Project)
 		on := scoped && c.Project == chosen
 		if on {
 			v.ProjectLabel = label
 		}
-		title := fmt.Sprintf("%d plan%s", c.Plans, plural1(c.Plans))
-		if starred[c.Project] {
-			title += " · starred project"
+		title := names[c.Project]
+		if title == c.Project {
+			title = ""
 		}
 		v.Projects = append(v.Projects, libLink{Label: label, Href: with(func(o *planQuery) { o.Project = param }),
-			Title: title, Count: c.Plans, On: on})
+			Title: title, Count: c.Plans, On: on, Value: param})
 	}
 	past := false
 	for _, key := range store.RetrievalWindowKeys {
@@ -488,14 +487,6 @@ func newPlanView(q planQuery, counts []planProjectCount, starred map[string]bool
 		past = past || key == q.Window.Key
 	}
 	return v
-}
-
-// plural1 is "s" unless n is 1.
-func plural1(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
 }
 
 // planEntry is one plan before it is a card: its key, its steps' rollup (nil
@@ -620,14 +611,14 @@ func (s *Service) planEntries(ctx context.Context) ([]planEntry, error) {
 
 // planInputs is what every card and row of one page reads once: the token
 // rollups, the agent caches, the dropped steps, the pending settlements, the
-// projects with a workspace, and the session namer.
+// projects with a workspace and their display names, and the session namer.
 type planInputs struct {
 	tokens     map[store.PlanRef]store.PlanTokenRollup
 	agents     map[string]int
 	dropped    map[store.PlanRef]int
 	stale      planStaleSet
 	registered map[string]bool
-	starred    map[string]bool
+	names      map[string]string
 	namer      func(string) core.Session
 	now        time.Time
 }
@@ -635,7 +626,7 @@ type planInputs struct {
 // planInputsOf reads a page's planInputs through the request's handle.
 func (s *Service) planInputsOf(ctx context.Context, now time.Time) (*planInputs, error) {
 	db := s.db(ctx)
-	in := &planInputs{now: now, namer: s.sessionNamer(ctx), registered: map[string]bool{}, starred: map[string]bool{}}
+	in := &planInputs{now: now, namer: s.sessionNamer(ctx), registered: map[string]bool{}, names: map[string]string{}}
 	var err error
 	if in.tokens, err = store.PlanTokenRollups(ctx, db); err != nil {
 		return nil, err
@@ -653,7 +644,7 @@ func (s *Service) planInputsOf(ctx context.Context, now time.Time) (*planInputs,
 	}
 	for _, p := range projects {
 		in.registered[p.Slug] = true
-		in.starred[p.Slug] = p.Favorite
+		in.names[p.Slug] = p.Name
 	}
 	return in, nil
 }
@@ -927,7 +918,10 @@ func (s *Service) plansBoard(ctx context.Context, q planQuery, now time.Time, wi
 		data.Projects = append(data.Projects, planProjectCount{Project: p, Plans: n})
 	}
 	slices.SortFunc(data.Projects, func(a, b planProjectCount) int { return strings.Compare(a.Project, b.Project) })
-	data.View = newPlanView(q, data.Projects, in.starred)
+	data.View = newPlanView(q, data.Projects, in.names)
+	if data.View.Scope, err = s.projectSwitcher(ctx, data.View.Projects); err != nil {
+		return plansData{}, err
+	}
 
 	// Every active plan's steps first: the dependency walk and the
 	// locked-blocker index read the same in-memory set.
@@ -1180,6 +1174,9 @@ func (s *Service) planDetailIn(ctx context.Context, project, slug string, now ti
 		tl.Recent = s.planLedger(ctx, project, cache, in.namer)[slug]
 	}
 	d := planDetailData{Row: s.planRowOf(e, in, true), Card: tl, CanApprove: tl.CanApprove, NoNote: !hasNote, Return: ret}
+	if hasNote && !e.capture() {
+		d.Lead = strings.TrimSpace(primary.Description)
+	}
 	d.Row.State, d.Row.StalledDays = tl.State, tl.StalledDays
 	for _, n := range others {
 		d.Attached = append(d.Attached, planNoteRef{
@@ -1287,7 +1284,7 @@ func (s *Service) planDetail(w http.ResponseWriter, r *http.Request) {
 		s.renderReader(w, r, "plans", "plan-reader", d)
 		return
 	}
-	s.render(w, r, "plans", pageData{Title: "Plan " + d.Row.Title, Active: "plans", Data: plansData{Plan: &d, Return: d.Return}})
+	s.planPage(w, r, d)
 }
 
 // planChooser answers a slug that is a plan in more than one project, asked

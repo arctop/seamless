@@ -441,12 +441,14 @@ func TestPlanPeek_FragmentAndLibraryPage(t *testing.T) {
 	require.Contains(t, fb, "/console/notes/") // note refs are peek links
 	require.Contains(t, fb, `action="/console/plans/my-plan/approve?project=demo"`, "its Approve names the project")
 
-	// Default (no peek): the plan's page, not a library reader.
+	// Default (no peek): the plan's own page in the item frame (UX 32), not
+	// a library reader and not the board.
 	full := getPeek(t, mux, "/console/plans/my-plan?project=demo")
 	require.Equal(t, http.StatusOK, full.Code)
 	body := full.Body.String()
 	require.Contains(t, body, "<html")
-	require.Contains(t, body, `class="lib-page" data-library="plans"`)
+	require.Contains(t, body, `<div class="item-page" data-item="plan" data-item-id="my-plan">`)
+	require.NotContains(t, body, `class="lib-page"`)
 	require.Contains(t, body, `data-plan-scope data-return="/console/plans/my-plan?project=demo"`)
 	require.Contains(t, body, "Do the thing.")
 	require.NotContains(t, body, `id="lib-reader"`)

@@ -161,9 +161,12 @@
       .then(function (html) {
         box.classList.remove('dossier-error');
         box.innerHTML = html;
+        // The task's own page, as a page: the read-in-place panel leaves a
+        // data-no-panel link to navigate (the dossier already reads it here).
         var open = document.createElement('a');
         open.className = 'dossier-open';
         open.href = src;
+        open.setAttribute('data-no-panel', '');
         open.textContent = 'open full ↗';
         box.appendChild(open);
         box.setAttribute('data-loaded', '1');

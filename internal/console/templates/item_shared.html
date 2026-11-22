@@ -1,7 +1,8 @@
 {{/* An item's own page (plan:console-ux-pass UX 26): the one reading frame a
      memory, a note and a task open in from a link, without the library beside
-     it (parsed beside Memories, Notes and Tasks in render.go). Its dot is an
-     itemPage (itempage.go).
+     it (parsed beside Memories, Notes, Tasks and Plans in render.go). Its dot
+     is an itemPage (itempage.go), or a plan's planItemPage, which embeds one
+     (itempage_plan.go, UX 32).
 
      The frame draws what every kind shares: the way back (a static link to
      the collection, scoped to the item's project or to the list the URL
@@ -11,7 +12,9 @@
      beside a context column that stacks under it on a narrow screen. Each
      page that draws it defines the blocks its kind fills: item-banner (what
      the page says first), item-actions, item-facts, item-main (the body
-     column) and item-side (the context column). */}}
+     column) and item-side (the context column). The star is drawn when it
+     names its route (Action): a plan with no narrative note has nothing to
+     star. */}}
 {{define "item-frame"}}
 <div class="item-page" data-item="{{.Kind}}" data-item-id="{{.ID}}"{{with .Memory}} data-memory-kind="{{.Kind}}"{{end}}>
   <div class="item-top">
@@ -39,12 +42,12 @@
     </nav>
     <div class="item-titlerow">
       <h1 class="item-title{{if .Mono}} mono{{end}}">{{.Title}}{{copyBtn .Title}}
-        {{- with .Star}}
+        {{- with .Star}}{{if .Action}}
         <form class="star-form" method="post" action="{{.Action}}">
           <input type="hidden" name="favorite" value="{{if .On}}0{{else}}1{{end}}">
           <input type="hidden" name="next" value="{{.Next}}">
           <button class="star{{if .On}} on{{end}}" type="submit" aria-pressed="{{if .On}}true{{else}}false{{end}}" title="{{if .On}}Unstar{{else}}Star{{end}} this {{.Noun}}">{{icon "star"}}</button>
-        </form>
+        </form>{{end}}
         {{- end}}
       </h1>
       <div class="item-actions">{{template "item-actions" .}}</div>

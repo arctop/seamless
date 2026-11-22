@@ -1,15 +1,19 @@
 {{define "content"}}
+{{- with .Data.Item}}{{template "item-frame" .}}{{else}}
 {{with .Data}}
 <div class="lib-page" data-library="plans">
-{{if .Plan}}{{template "plan-page" .}}{{else if .Chooser}}{{template "plan-chooser-page" .}}{{else}}{{template "plan-board" .}}{{end}}
+{{if .Chooser}}{{template "plan-chooser-page" .}}{{else}}{{template "plan-board" .}}{{end}}
 </div><!-- .lib-page -->
 {{end}}
+{{- end}}
 {{end}}
 
 {{/* The board: every project's plans as the shared card (plan_shared.html),
      grouped by state top to bottom. Needs you and In progress cards open
      with their steps; Stalled and Ready cards show their head line and load
-     their steps when opened. Only Shipped is windowed (?w=) and folded. */}}
+     their steps when opened. Only Shipped is windowed (?w=) and folded. The
+     project is chosen with the switcher the other lists draw
+     (scope_shared.html), every other filter kept in its links. */}}
 {{define "plan-board"}}
 {{$v := .View}}
 <header class="mv2-bar">
@@ -35,12 +39,7 @@
   <button type="button" class="mv2-filter-toggle" data-filters-toggle aria-expanded="false" aria-controls="mv2-controls">{{icon "sliders"}}<span>Filters</span></button>
   <span class="mv2-spacer"></span>
   <div class="mv2-controls" id="mv2-controls">
-  <details class="menu lib-filter-menu" data-plan-projects>
-    <summary class="menu-btn" aria-label="Project: {{$v.ProjectLabel}}">{{icon "folder-tree"}}<span class="menu-k">Project</span><strong>{{$v.ProjectLabel}}</strong>{{icon "chevron-down"}}</summary>
-    <div class="menu-list" data-seam-query>
-      {{range $v.Projects}}<a class="{{if .On}}on{{end}}" href="{{.Href}}" title="{{if .Title}}{{.Title}}{{else}}{{.Count}} plans{{end}}">{{.Label}}<span class="n">{{.Count}}</span></a>{{end}}
-    </div>
-  </details>
+  {{template "project-switcher" $v.Scope}}
   <div class="mv2-sort">
     <span class="mv2-sort-label" title="The window applies to shipped plans only: an active plan is always on the board">Shipped</span>
     <div class="seg" data-seam-query>
@@ -90,19 +89,7 @@
 </div>
 {{end}}
 
-{{/* One plan's page: the card with every step row first, in dependency
-     order, then the narrative, then the attached notes. */}}
-{{define "plan-page"}}
-<header class="mv2-bar">
-  <h1>{{icon "map"}}<a href="/console/plans" title="Every project's plans">Plans</a></h1>{{about "One plan: its steps first, in the order they depend on each other, then its narrative note and the notes attached to it."}}
-  <span class="mv2-count" aria-label="plan:{{.Plan.Row.Slug}} in {{.Plan.Card.ProjectLabel}}"><strong>plan:{{.Plan.Row.Slug}}</strong><small>{{.Plan.Card.ProjectLabel}}</small></span>
-</header>
-<div class="plan-board plan-page" data-plan-scope data-return="{{.Return}}">
-{{template "plan-reader" .Plan}}
-</div>
-{{end}}
-
-{{/* The plan's body: the page's, and the ?reader=1 fragment. */}}
+{{/* The plan's body as one sheet: the ?reader=1 fragment. */}}
 {{define "plan-reader"}}
 <article class="reader-sheet plan-sheet" data-plan="{{.Row.Slug}}">
   {{template "plan-card" .Card}}
@@ -146,6 +133,103 @@
   </ul>
 </article>
 {{end}}
+
+{{/* A plan's own page (plan:console-ux-pass UX 32): the blocks
+     item_shared.html's item-frame asks the Plans screen for
+     (itempage_plan.go's planItemPage, its Plan a planDetailData). The title
+     row says what the plan card's head says: plan:<slug> to copy, the status
+     in words, the stalled and pending-settlement marks, and Approve while a
+     capture awaits it, which returns to this page. The body column is the
+     card's steps, in dependency order, then the narrative; the context
+     column the narrative note, the attached notes and the project. Without
+     a narrative note there is nothing to star, approve or link. */}}
+{{define "item-banner"}}{{end}}
+
+{{define "item-actions"}}{{with .Plan}}
+        <span class="plan-slug" title="The plan's tag, the form an agent takes: copy it">plan:{{.Row.Slug}}{{copyBtn (printf "plan:%s" .Row.Slug)}}</span>
+        {{- with .Card.StatusText}}
+        <span class="kind {{planTone $.Plan.Card.Status}}" data-plan-status="{{$.Plan.Card.Status}}">{{.}}</span>
+        {{- else}}{{with $.StateText}}
+        <span class="kind {{$.StateTone}}" data-plan-state="{{$.Plan.Card.State}}">{{.}}</span>
+        {{- end}}{{end}}
+        {{- if .Card.Stalled}}
+        <span class="kind warn" data-stalled title="Open steps, none in progress, and nothing moved for {{.Card.StalledDays}} days">stalled {{.Card.StalledDays}}d</span>{{if .Card.Claimable}}<span class="plan-stalled-why">ready work, nobody on it</span>{{end}}
+        {{- end}}
+        {{- if .Card.Stale}}
+        <a class="kind warn" href="/console/gardener" title="A gardener settlement is pending for this plan">stale?</a>
+        {{- end}}
+        {{- if .Card.CanApprove}}
+        <form class="plan-approve" method="post" action="{{.Card.ApproveAction}}">
+          <input type="hidden" name="next" value="{{.Return}}">
+          <button class="ract" type="submit" title="Approve the captured plan: flips it to approved and creates its tracking task">{{icon "check"}}Approve</button>
+        </form>
+        {{- end}}
+{{end}}{{end}}
+
+{{define "item-facts"}}{{with .Plan}}
+      <span class="item-fact" data-plan-source="{{.Row.Source}}">{{.SourceText}}{{if .Row.Basename}} &middot; <span class="mono">{{.Row.Basename}}.md</span>{{end}}</span>
+      {{- if .Row.Iteration}}
+      <span class="item-fact">iteration {{.Row.Iteration}}</span>{{end}}
+      {{- if .Row.Agents}}
+      <span class="item-fact">{{.Row.Agents}} agent run{{if ne .Row.Agents 1}}s{{end}}</span>{{end}}
+      <span class="item-fact" data-plan-progress>{{if .Card.NoteOnly}}no steps yet{{else}}{{.Card.Done}}/{{.Card.Total}} steps done{{if .Card.Dropped}} ({{.Card.Dropped}} dropped){{end}}{{range .Card.Counts}} &middot; <span data-count="{{.Key}}">{{.Text}}</span>{{end}}{{end}}</span>
+      {{- if .Row.TokenSessions}}
+      <span class="item-fact" data-plan-tokens title="Cumulative model tokens harvested from the transcripts of the sessions attributed to this plan (moved a step, or captured the plan). Whole-session totals: a session's full burn counts toward every plan it touched, so plan totals must not be summed. Claude Code reports tokens at session end, so a live session stays unreported until it finishes.">{{if .Row.Tokens}}~{{compactNum .Row.Tokens}} model tokens{{else}}model tokens pending{{end}} &middot; {{.Row.TokenSessions}} session{{if ne .Row.TokenSessions 1}}s{{end}}{{if .Row.TokenUnreported}} ({{.Row.TokenUnreported}} unreported){{end}}{{if .Row.TokenShared}} &middot; {{.Row.TokenShared}} shared with other plans{{end}}</span>
+      {{- end}}
+      <span class="item-fact">updated {{agoTime .Row.Updated}}</span>
+{{end}}{{end}}
+
+{{define "item-main"}}{{with .Plan}}
+      <div class="plan-page" data-plan-scope data-return="{{.Return}}">
+        <section class="plan-page-steps" aria-label="Steps">
+          {{- if not .Card.NoteOnly}}
+          <h2 class="plan-page-hd">Steps <span class="count">{{.Card.Total}}</span></h2>
+          {{- end}}
+          {{- with .Card}}
+          <div class="plan-card plan-page-card{{if .NoteOnly}} plan-noteonly{{end}}" id="{{.CardID}}"{{if .GatesOpen}} data-gates-open="{{.GatesOpen}}"{{end}}{{if .Stalled}} data-stalled="{{.StalledDays}}"{{end}}{{with .State}} data-plan-state="{{.}}"{{end}}>
+            {{- if .NoteOnly}}
+            <div class="plan-nosteps">{{if .CanApprove}}No steps yet. Approving the plan creates its tracking task.{{else if .Capture}}Approved. No steps yet.{{else}}No steps yet.{{end}}</div>
+            {{- else}}
+            <div class="plan-bar"><span class="done" style="width:{{.DonePct}}%"></span><span class="doing" style="width:{{.DoingPct}}%"></span></div>
+            {{template "plan-card-steps" .}}
+            {{- end}}
+          </div>
+          {{- end}}
+        </section>
+        <section class="plan-page-narrative" aria-label="Narrative">
+          <h2 class="plan-page-hd">Narrative</h2>
+          {{if .NoNote}}<div class="peek-note" data-no-note>No narrative note yet. A note tagged <span class="mono">plan:{{.Row.Slug}}</span> in {{.Card.ProjectLabel}} becomes this plan's narrative; its steps are above.</div>{{else if .BodyLoaded}}<div class="prose doc">{{.Body}}</div>{{else}}<div class="peek-note">Body unavailable</div>{{end}}
+        </section>
+      </div>
+{{end}}{{end}}
+
+{{define "item-side"}}{{with .Plan}}
+      {{- if not .NoNote}}
+      <section class="item-card" data-item-card="narrative">
+        <h2 class="item-card-hd">Narrative note</h2>
+        <a class="item-card-title" href="/console/notes/{{.Row.NoteID}}">{{.Card.TitleHTML}}</a>
+      </section>
+      {{- end}}
+      {{- with .Attached}}
+      <section class="item-card" data-item-card="attached">
+        <h2 class="item-card-hd">Attached notes <span class="count">{{len .}}</span></h2>
+        <ul class="item-list">
+          {{- range .}}
+          <li><a href="/console/notes/{{.ID}}">{{.Title}}</a>{{if .IsAgent}} <span class="badge">agent-cache</span>{{end}} <span class="muted">{{agoTime .Updated}}</span></li>
+          {{- end}}
+        </ul>
+      </section>
+      {{- end}}
+      <section class="item-card" data-item-card="project">
+        <h2 class="item-card-hd">Project</h2>
+        {{- if .Card.ProjectHref}}
+        <a class="item-card-title mono" href="{{.Card.ProjectHref}}" data-plan-project="{{.Card.ProjectLabel}}" title="Open {{.Card.ProjectLabel}}'s Plans &amp; tasks at this plan">{{.Card.ProjectLabel}}</a>
+        {{- else}}
+        <span class="item-card-title mono" data-plan-project="{{.Card.ProjectLabel}}">{{.Card.ProjectLabel}}</span>
+        {{- end}}
+        <a class="item-all" href="{{$.Plans.Href}}">{{$.Plans.Label}}{{icon "arrow-right"}}</a>
+      </section>
+{{end}}{{end}}
 
 {{define "scripts"}}
 <script>

@@ -141,7 +141,7 @@
       </section>
     </div>
   </div>
-          <div><dt><kbd>p</kbd></dt><dd>Choose a project (Memories, Notes)</dd></div>
+          <div><dt><kbd>p</kbd></dt><dd>Choose a project (Memories, Notes, Plans)</dd></div>
 
 </div>
 <script src="/console/static/interactions.js?v=<hash:11>"></script>
@@ -1036,7 +1036,7 @@
       </section>
     </div>
   </div>
-          <div><dt><kbd>p</kbd></dt><dd>Choose a project (Memories, Notes)</dd></div>
+          <div><dt><kbd>p</kbd></dt><dd>Choose a project (Memories, Notes, Plans)</dd></div>
 
 </div>
 <script src="/console/static/interactions.js?v=<hash:11>"></script>
@@ -1909,7 +1909,7 @@
       </section>
     </div>
   </div>
-          <div><dt><kbd>p</kbd></dt><dd>Choose a project (Memories, Notes)</dd></div>
+          <div><dt><kbd>p</kbd></dt><dd>Choose a project (Memories, Notes, Plans)</dd></div>
 
 </div>
 <script src="/console/static/interactions.js?v=<hash:11>"></script>
@@ -2777,7 +2777,7 @@
       </section>
     </div>
   </div>
-          <div><dt><kbd>p</kbd></dt><dd>Choose a project (Memories, Notes)</dd></div>
+          <div><dt><kbd>p</kbd></dt><dd>Choose a project (Memories, Notes, Plans)</dd></div>
 
 </div>
 <script src="/console/static/interactions.js?v=<hash:11>"></script>
@@ -3286,9 +3286,12 @@
       .then(function (html) {
         box.classList.remove('dossier-error');
         box.innerHTML = html;
+        
+        
         var open = document.createElement('a');
         open.className = 'dossier-open';
         open.href = src;
+        open.setAttribute('data-no-panel', '');
         open.textContent = 'open full ↗';
         box.appendChild(open);
         box.setAttribute('data-loaded', '1');
@@ -4483,12 +4486,20 @@
   <button type="button" class="mv2-filter-toggle" data-filters-toggle aria-expanded="false" aria-controls="mv2-controls"><svg class="ico ico-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg><span>Filters</span></button>
   <span class="mv2-spacer"></span>
   <div class="mv2-controls" id="mv2-controls">
-  <details class="menu lib-filter-menu" data-plan-projects>
-    <summary class="menu-btn" aria-label="Project: All"><svg class="ico ico-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg><span class="menu-k">Project</span><strong>All</strong><svg class="ico ico-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
-    <div class="menu-list" data-seam-query>
-      <a class="on" href="/console/plans" title="2 plans">All projects<span class="n">2</span></a><a class="" href="/console/plans?project=example-open-alpha" title="2 plans">example-open-alpha<span class="n">2</span></a>
+  <details class="menu scope" data-scope data-scope-current="">
+  <summary class="menu-btn scope-btn" aria-label="Project: All projects" aria-keyshortcuts="p" title="Choose a project (p)"><span class="menu-k">In</span><strong>All projects</strong><kbd class="scope-key" aria-hidden="true">p</kbd><svg class="ico ico-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+  <div class="menu-list scope-pop">
+    <label class="scope-field" data-live-skip hidden><svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><input type="text" placeholder="Type a project" aria-label="Type a project" role="combobox" aria-expanded="true" aria-controls="scope-list" aria-autocomplete="list" autocomplete="off" spellcheck="false"></label>
+    <div class="scope-list" id="scope-list">
+      <a class="scope-o on" id="sc-o-all" data-scope-v="" data-seam-query href="/console/plans">All projects<span class="n">2</span></a>
+      <div class="scope-sec" data-scope-recent hidden><p class="scope-head">Recent</p></div>
+      <p class="scope-head" data-scope-head>All, most active first</p>
+      <a class="scope-o" id="sc-o-example-open-alpha" data-scope-v="example-open-alpha" data-seam-query href="/console/plans?project=example-open-alpha">example-open-alpha<span class="n">2</span><span class="scope-hint"><time datetime="<time>" data-clock="title" title="<time> UTC">active <age></time></span></a>
+      <p class="scope-none" data-scope-none hidden>No project matches <q></q>.</p>
     </div>
-  </details>
+    <p class="scope-keys" aria-hidden="true"><span><kbd>&uarr;</kbd><kbd>&darr;</kbd> move</span><span><kbd>Enter</kbd> choose</span><span><kbd>Esc</kbd> close</span></p>
+  </div>
+</details>
   <div class="mv2-sort">
     <span class="mv2-sort-label" title="The window applies to shipped plans only: an active plan is always on the board">Shipped</span>
     <div class="seg" data-seam-query>
@@ -4630,7 +4641,7 @@
       </section>
     </div>
   </div>
-          <div><dt><kbd>p</kbd></dt><dd>Choose a project (Memories, Notes)</dd></div>
+          <div><dt><kbd>p</kbd></dt><dd>Choose a project (Memories, Notes, Plans)</dd></div>
 
 </div>
 <script src="/console/static/interactions.js?v=<hash:11>"></script>
@@ -5139,9 +5150,12 @@
       .then(function (html) {
         box.classList.remove('dossier-error');
         box.innerHTML = html;
+        
+        
         var open = document.createElement('a');
         open.className = 'dossier-open';
         open.href = src;
+        open.setAttribute('data-no-panel', '');
         open.textContent = 'open full ↗';
         box.appendChild(open);
         box.setAttribute('data-loaded', '1');
@@ -5431,7 +5445,7 @@
       </section>
     </div>
   </div>
-          <div><dt><kbd>p</kbd></dt><dd>Choose a project (Memories, Notes)</dd></div>
+          <div><dt><kbd>p</kbd></dt><dd>Choose a project (Memories, Notes, Plans)</dd></div>
 
 </div>
 <script src="/console/static/interactions.js?v=<hash:11>"></script>
@@ -6476,7 +6490,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
       </section>
     </div>
   </div>
-          <div><dt><kbd>p</kbd></dt><dd>Choose a project (Memories, Notes)</dd></div>
+          <div><dt><kbd>p</kbd></dt><dd>Choose a project (Memories, Notes, Plans)</dd></div>
 
 </div>
 <script src="/console/static/interactions.js?v=<hash:11>"></script>
