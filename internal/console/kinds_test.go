@@ -43,3 +43,18 @@ func TestLibKindChipsExplainThemselves(t *testing.T) {
 	peek := getPeek(t, mux, "/console/memories/"+m.ID+"?peek=1").Body.String()
 	require.Contains(t, peek, `<span class="kind" title="`+gloss+`">stage</span>`)
 }
+
+// The one list's kind chip reads its kind in the kind's color on the
+// row's own ground. The [data-kind="..."] rules paint the kind dots that
+// same color as a background, and they match the chip too (it carries
+// data-kind), so without its own background the chip was a solid blob
+// with its word in its own color: unreadable.
+func TestConsoleCSS_KindChipKeepsItsWordReadable(t *testing.T) {
+	css := string(consoleCSS)
+	require.Contains(t, css, `[data-kind="stage"]      { background: var(--k-stage); }`, "the dot rule this guards against is still there")
+	i := strings.Index(css, ".ri-chip.ri-kind {")
+	require.GreaterOrEqual(t, i, 0)
+	rule := css[i : i+strings.Index(css[i:], "}")]
+	require.Contains(t, rule, "color: var(--lib-item-accent);")
+	require.Contains(t, rule, "background: none;", "the chip clears the kind background its data-kind attribute picks up")
+}

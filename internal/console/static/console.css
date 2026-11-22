@@ -7923,7 +7923,7 @@ body:has(.build-notice-card:not([hidden])) .main { padding-bottom: calc(112px + 
   display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border: 1px solid var(--border);
   border-radius: var(--radius-pill); color: var(--muted); font-family: var(--font-mono); line-height: 1.5;
 }
-.ri-chip.ri-kind { color: var(--lib-item-accent); }
+.ri-chip.ri-kind { color: var(--lib-item-accent); background: none; } /* the [data-kind] rule paints dots that color; the chip's text is it */
 .ri-chip.ri-kind::before { content: ""; width: 5px; height: 5px; border-radius: 2px; background: currentColor; }
 
 /* Nothing matches: say so, then the way out and the wider search. */
