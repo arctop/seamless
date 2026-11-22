@@ -19694,11 +19694,13 @@ is for.
 ### The command palette
 
 `Cmd/Ctrl+K`, the sidebar's search field, or `/` on a screen with no filter of
-its own opens the palette. With nothing typed it offers **Recent** (the entities
-you last opened in this browser), **Jump to** (every section the sidebar offers,
-with its shortcut, plus Search, Context, and each Settings section the level
-shows), and **Actions** (switch theme, collapse the sidebar, the shortcut sheet,
-change the experience level). Typing matches sections and actions instantly;
+its own opens the palette. With nothing typed it offers **Recent** (the
+memories, notes, tasks, plans, sessions, projects, labs and trials you last
+opened in this browser, by their titles; an event page is never kept), **Jump
+to** (every section the sidebar offers, with its shortcut, plus Search,
+Context, and each Settings section the level shows), and **Actions** (switch
+theme, collapse the sidebar, the shortcut sheet, change the experience level).
+Typing matches sections and actions instantly;
 from two characters on it also searches memories, notes, tasks, plans, trials,
 projects, and sessions through the same route as [Search](#search), showing the
 groups the level offers. Each group shows up to five, starred matches first and
@@ -20505,20 +20507,45 @@ recorded trial, the same covered-ness test the coverage numbers apply. The
 Overview's continuity vital links straight to `?retained=no`, so its click
 answers "which sessions dropped knowledge".
 
+A row is titled by what the session is doing: the task it holds with a live
+claim (and how many more it holds), else its first prompt, chosen and
+shortened as the [Diary](#diary)'s about line is. Findings its agent wrote come
+first, so a session that has them keeps its name as the title and shows them.
+A titled row's second line is the session's generated name (`cc/...`).
+
+`?project=<slug>` lists one project's sessions (`global` lists the global
+scope's), over all time unless a window is chosen, and every filter and sort
+link keeps it. A value that names no project this console reads is refused
+like any other bad value; a locked project's refusal says it is locked, and
+its sessions stay out.
+
 The list defaults to the last 24 hours (`?w=24h|7d|30d|all`; any other value is
 refused). When that leaves most sessions out, the list ends by saying so ("3 of 212 sessions were active in the last 24h") and
 offers the wider windows in place, so a quiet day never reads as an empty
-system. A row names its host only when the session ran on a different machine
+system. The list shows the newest 200 sessions its filters keep, and past
+that says so ("Newest 200 of 559"). The search and every filter apply before
+that cap, so a session older than the newest 200 is still found; each word
+searched for must appear in the session's name, project, findings or id.
+A row names its host only when the session ran on a different machine
 from the console's, and its source only when it was not a normal startup.
 
 A day view (`?day=YYYY-MM-DD`, what a click on the momentum calendar opens)
 lists the sessions started on that day, whatever the window. While the
 [Diary](#diary) is on, its heading carries **Open in Diary**, that day's page.
 
-A session's page is the workspace: its findings (rendered), its full event
-timeline as interaction rows, per-session counts (tool calls, memory reads and
-writes, items injected, and read-after-inject), the tasks it currently claims with
-their lease countdowns, and the memories it produced.
+A session's page is the workspace: its findings (rendered), its event
+timeline as interaction rows, per-session counts over the events the timeline
+holds (tool calls, memory reads and writes, items injected, and
+read-after-inject), the tasks it currently claims with their lease countdowns,
+and what it did: **Tasks moved** (each task it created, claimed, released,
+closed or reopened, with those moves in order), the notes it wrote, and the
+memories it produced. Only items this console still reads are listed, each
+linking to its page. With none, the card says what fits the session: an
+active one has nothing durable yet, a finished one moved no task and wrote
+nothing. The timeline holds 500 events; a longer session's says "The first
+500 of N events" and links to the latest 500 (`?timeline=latest`, which links
+back; any other value is refused). The page's title, the browser tab's, is
+the session's name and project.
 
 A [flagged session](/guides/data/#flagged-transcripts) carries a badge with its
 verdict (good, bad or notable) and its reason on the list, the peek and its

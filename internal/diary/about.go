@@ -55,3 +55,13 @@ func firstLine(text string) string {
 	}
 	return ""
 }
+
+// ExplicitFindings reports whether findings are the agent's own, the test
+// SessionDay.About applies before it reads a first prompt: the console's
+// Sessions list titles a row by its first prompt only when they are not.
+func ExplicitFindings(findings string) bool { return explicitFindings(findings) }
+
+// FirstLine is text's first line with words in it, as plain text, capped at
+// AboutMaxRunes: how SessionDay.About shows a prompt or findings, and how the
+// console's Sessions list shows a session's first prompt.
+func FirstLine(text string) string { return firstLine(text) }

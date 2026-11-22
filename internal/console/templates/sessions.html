@@ -1,12 +1,13 @@
 {{define "content"}}
 {{with .Data}}
-{{$filter := .Filter}}{{$sort := .Sort}}{{$query := .Query}}{{$day := .Day}}{{$retained := .Retained}}{{$verdict := .Verdict}}{{$w := .WindowParam}}
+{{$filter := .Filter}}{{$sort := .Sort}}{{$query := .Query}}{{$day := .Day}}{{$retained := .Retained}}{{$verdict := .Verdict}}{{$w := .WindowParam}}{{$project := .Project}}
 <div class="ops-page" data-ops="sessions">
 <header class="mv2-bar">
   <h1>{{icon "terminal"}}Sessions</h1>{{about "Follow active runs, reopen completed findings, and inspect the work each agent left behind."}}
   <span class="mv2-count" aria-label="{{.Total}} sessions, {{.Active}} live">
     <strong>{{.Total}}</strong>recorded<small>{{.Active}} live{{if .Idle}} &middot; {{.Idle}} idle{{end}} &middot; {{if .Day}}{{.DayLabel}}{{else}}{{.WindowLabel}}{{end}} view</small>
-  </span>
+  </span>{{with .Project}}
+  <span class="lib-active-filter" data-project-filter="{{.}}">{{icon "folder-tree"}}<span>Project <strong class="mono">{{.}}</strong></span><a href="/console/sessions?status={{$filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{$sort}}&amp;q={{$query}}&amp;day={{$day}}&amp;retained={{$retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}" data-seam-query>Clear</a></span>{{end}}
   <form class="search lib-query" method="get" action="/console/sessions" data-seam-query>
     {{icon "search"}}
     <input name="q" aria-label="Search sessions by name, project, or findings" placeholder="Search name, project, findings&hellip;" value="{{.Query}}">
@@ -15,7 +16,8 @@
     <input type="hidden" name="sort" value="{{.Sort}}">
     <input type="hidden" name="day" value="{{.Day}}">
     <input type="hidden" name="retained" value="{{.Retained}}">{{with .Verdict}}
-    <input type="hidden" name="verdict" value="{{.}}">{{end}}
+    <input type="hidden" name="verdict" value="{{.}}">{{end}}{{with .Project}}
+    <input type="hidden" name="project" value="{{.}}">{{end}}
   </form>
   <button type="button" class="mv2-filter-toggle" data-filters-toggle aria-expanded="false" aria-controls="mv2-controls">{{icon "sliders"}}<span>Filters</span></button>
   <span class="mv2-spacer"></span>
@@ -23,19 +25,19 @@
   <div class="mv2-sort">
     <span class="mv2-sort-label">Status</span>
     <div class="seg" data-seam-query>
-      <a class="{{if eq .Filter ""}}on{{end}}" href="/console/sessions?sort={{.Sort}}{{with $w}}&amp;w={{.}}{{end}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}">All</a>
-      <a class="{{if eq .Filter "active"}}on{{end}}" href="/console/sessions?status=active{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}">Active</a>
-      <a class="{{if eq .Filter "completed"}}on{{end}}" href="/console/sessions?status=completed{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}">Completed</a>
-      <a class="{{if eq .Filter "expired"}}on{{end}}" href="/console/sessions?status=expired{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}">Expired</a>
+      <a class="{{if eq .Filter ""}}on{{end}}" href="/console/sessions?sort={{.Sort}}{{with $w}}&amp;w={{.}}{{end}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}{{with $project}}&amp;project={{.}}{{end}}">All</a>
+      <a class="{{if eq .Filter "active"}}on{{end}}" href="/console/sessions?status=active{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}{{with $project}}&amp;project={{.}}{{end}}">Active</a>
+      <a class="{{if eq .Filter "completed"}}on{{end}}" href="/console/sessions?status=completed{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}{{with $project}}&amp;project={{.}}{{end}}">Completed</a>
+      <a class="{{if eq .Filter "expired"}}on{{end}}" href="/console/sessions?status=expired{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}{{with $project}}&amp;project={{.}}{{end}}">Expired</a>
     </div>
   </div>
   {{if $.Level.AtLeast "standard"}}
   <div class="mv2-sort">
     <span class="mv2-sort-label">Retained</span>
     <div class="seg" data-seam-query>
-      <a class="{{if eq .Retained ""}}on{{end}}" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}{{with $verdict}}&amp;verdict={{.}}{{end}}">All</a>
-      <a class="{{if eq .Retained "yes"}}on{{end}}" title="Sessions that left a durable artifact behind: findings, a memory, a note, or a trial" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained=yes{{with $verdict}}&amp;verdict={{.}}{{end}}">Knowledge</a>
-      <a class="{{if eq .Retained "no"}}on{{end}}" title="Sessions that retained nothing durable" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained=no{{with $verdict}}&amp;verdict={{.}}{{end}}">Nothing</a>
+      <a class="{{if eq .Retained ""}}on{{end}}" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}{{with $verdict}}&amp;verdict={{.}}{{end}}{{with $project}}&amp;project={{.}}{{end}}">All</a>
+      <a class="{{if eq .Retained "yes"}}on{{end}}" title="Sessions that left a durable artifact behind: findings, a memory, a note, or a trial" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained=yes{{with $verdict}}&amp;verdict={{.}}{{end}}{{with $project}}&amp;project={{.}}{{end}}">Knowledge</a>
+      <a class="{{if eq .Retained "no"}}on{{end}}" title="Sessions that retained nothing durable" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained=no{{with $verdict}}&amp;verdict={{.}}{{end}}{{with $project}}&amp;project={{.}}{{end}}">Nothing</a>
     </div>
   </div>
   {{end}}
@@ -43,11 +45,11 @@
   <div class="mv2-sort">
     <span class="mv2-sort-label">Flag</span>
     <div class="seg" data-seam-query>
-      <a class="{{if eq .Verdict ""}}on{{end}}" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}">All</a>
-      <a class="{{if eq .Verdict "flagged"}}on{{end}}" title="Sessions flagged with any verdict" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}&amp;verdict=flagged">Flagged</a>
-      <a class="{{if eq .Verdict "good"}}on{{end}}" title="Flagged as going unusually well" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}&amp;verdict=good">Good</a>
-      <a class="{{if eq .Verdict "bad"}}on{{end}}" title="Flagged as going unusually badly" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}&amp;verdict=bad">Bad</a>
-      <a class="{{if eq .Verdict "notable"}}on{{end}}" title="Flagged as worth re-reading" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}&amp;verdict=notable">Notable</a>
+      <a class="{{if eq .Verdict ""}}on{{end}}" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $project}}&amp;project={{.}}{{end}}">All</a>
+      <a class="{{if eq .Verdict "flagged"}}on{{end}}" title="Sessions flagged with any verdict" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}&amp;verdict=flagged{{with $project}}&amp;project={{.}}{{end}}">Flagged</a>
+      <a class="{{if eq .Verdict "good"}}on{{end}}" title="Flagged as going unusually well" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}&amp;verdict=good{{with $project}}&amp;project={{.}}{{end}}">Good</a>
+      <a class="{{if eq .Verdict "bad"}}on{{end}}" title="Flagged as going unusually badly" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}&amp;verdict=bad{{with $project}}&amp;project={{.}}{{end}}">Bad</a>
+      <a class="{{if eq .Verdict "notable"}}on{{end}}" title="Flagged as worth re-reading" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}&amp;verdict=notable{{with $project}}&amp;project={{.}}{{end}}">Notable</a>
     </div>
   </div>
   {{- end}}
@@ -55,15 +57,15 @@
   <details class="menu sort-menu">
     <summary class="menu-btn" aria-label="Sort: {{sortLabel .Sort}}">{{icon "arrow-up-down"}}<span class="menu-k">Sort</span><strong>{{sortLabel .Sort}}</strong>{{icon "chevron-down"}}</summary>
     <div class="menu-list" data-seam-query>
-      <a class="{{if eq .Sort "recent"}}on{{end}}" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort=recent&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}">Recent</a>
-      <a class="{{if eq .Sort "name"}}on{{end}}" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort=name&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}">Name</a>
+      <a class="{{if eq .Sort "recent"}}on{{end}}" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort=recent&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}{{with $project}}&amp;project={{.}}{{end}}">Recent</a>
+      <a class="{{if eq .Sort "name"}}on{{end}}" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort=name&amp;q={{.Query}}&amp;day={{.Day}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}{{with $project}}&amp;project={{.}}{{end}}">Name</a>
     </div>
   </details>
   {{end}}
   <div class="mv2-sort">
     <span class="mv2-sort-label">Updated</span>
     <div class="seg" data-seam-query>
-      {{range .Windows}}<a class="{{if .Active}}on{{end}}" href="/console/sessions?status={{$filter}}&amp;w={{.Key}}&amp;sort={{$sort}}&amp;q={{$query}}&amp;retained={{$retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}">{{.Label}}</a>{{end}}
+      {{range .Windows}}<a class="{{if .Active}}on{{end}}" href="/console/sessions?status={{$filter}}&amp;w={{.Key}}&amp;sort={{$sort}}&amp;q={{$query}}&amp;retained={{$retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}{{with $project}}&amp;project={{.}}{{end}}">{{.Label}}</a>{{end}}
     </div>
   </div>
   </div>
@@ -77,7 +79,7 @@
     <span class="mom-cal-streak"><strong>{{.Current}}</strong>{{if .Ember}}<span class="mom-cal-ember" title="{{.EmberTitle}}">{{icon "flame"}}</span>{{end}}<small>day capture streak</small></span>
     <span class="mom-cal-streak"><strong>{{.Longest}}</strong><small>longest ever</small></span>
     {{end}}
-    {{if .Day}}<span class="mom-cal-day" title="The session map below is focused on this day">{{.DayLabel}}<a class="mom-cal-day-x" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}" data-seam-query aria-label="Clear the day focus" title="Back to the {{.WindowLabel}} view">&times;</a></span>{{end}}
+    {{if .Day}}<span class="mom-cal-day" title="The session map below is focused on this day">{{.DayLabel}}<a class="mom-cal-day-x" href="/console/sessions?status={{.Filter}}{{with $w}}&amp;w={{.}}{{end}}&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;retained={{.Retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}{{with $project}}&amp;project={{.}}{{end}}" data-seam-query aria-label="Clear the day focus" title="Back to the {{.WindowLabel}} view">&times;</a></span>{{end}}
     <span class="mom-cal-key"><span class="mom-cal-ramp" title="Cell intensity scales with sessions that day">less<i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i>more</span><i class="mom-cal-key-dot"></i>day that captured knowledge</span>
   </header>
   <div class="mom-cal-scroll" data-scroll-end>{{.Calendar}}</div>
@@ -88,7 +90,7 @@
   <header class="ops-stage-head">
     <div class="ops-stage-title">
       <span class="ops-stage-eyebrow">Session map</span>
-      <strong>{{len .Sessions}} run{{if ne (len .Sessions) 1}}s{{end}} {{if .Day}}on {{.DayLabel}}{{else}}in this view{{end}}</strong>{{with .DiaryHref}}<a class="dy-open-chip" href="{{.}}" title="This day's page in the Diary">{{icon "book-open"}}Open in Diary</a>{{end}}
+      <strong>{{if .Capped}}Newest {{len .Sessions}} of {{.Matched}} runs{{else}}{{len .Sessions}} run{{if ne (len .Sessions) 1}}s{{end}}{{end}} {{if .Day}}on {{.DayLabel}}{{else}}in this view{{end}}</strong>{{with .DiaryHref}}<a class="dy-open-chip" href="{{.}}" title="This day's page in the Diary">{{icon "book-open"}}Open in Diary</a>{{end}}
     </div>
     <div class="ops-stage-meta"><span class="status-key live"><span class="live-dot"></span>{{.Active}} live</span>{{if .Idle}}<span class="status-key idle">{{.Idle}} idle</span>{{end}}<span class="status-key done">{{.Completed}} completed</span><span class="status-key expired">{{.Expired}} expired</span></div>
   </header>
@@ -105,8 +107,9 @@
       <div class="sess-main">
         <span class="sess-state {{if .Live}}live{{else}}idle{{end}}" aria-hidden="true"></span>
         <div class="sess-copy">
-          <div class="id-line"><a href="/console/sessions/{{.ID}}" data-peek>{{if .Name}}{{.Name}}{{else}}{{shortID .ID}}{{end}}</a>{{copyBtn .ID}}{{agentPill .Harness .Model}}{{if .Verdict}} <span class="badge {{.Tone}} flag-badge" data-verdict="{{.Verdict}}" title="Flagged {{.Verdict}}{{with .Reason}}: {{.}}{{end}}{{if .Kept}} &middot; transcript copy kept{{end}}">{{icon "flag"}}{{.Verdict}}</span>{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{if not (sameHost .Host $.HostName)}}<span class="kind faint" title="Ran on another machine">{{.Host}}</span>{{end}}{{if and .Source (ne .Source "startup")}}<span class="kind faint" title="How this session began">{{.Source}}</span>{{end}}{{if .Tokens}}<span class="kind faint" title="Real model tokens consumed this session, harvested from the transcript">{{compactNum .Tokens}} tok</span>{{end}}{{if not .Live}}<span class="kind faint" title="No activity within the idle window and no live claim; the reaper will mark it expired">idle</span>{{end}}</div>
-          {{if .Verdict}}{{with .Reason}}<div class="find flag-reason">{{icon "flag"}}{{.}}</div>{{end}}{{end}}{{if .Findings}}<div class="find">{{.Findings}}</div>{{else}}<div class="find faint">Work in progress &mdash; no findings yet</div>{{end}}
+          <div class="id-line"><a{{if .Headline}} class="sess-headline{{if eq .HeadlineFrom "prompt"}} is-prompt{{end}}"{{end}} href="/console/sessions/{{.ID}}" data-peek>{{.Heading}}</a>{{copyBtn .ID}}{{agentPill .Harness .Model}}{{if .Verdict}} <span class="badge {{.Tone}} flag-badge" data-verdict="{{.Verdict}}" title="Flagged {{.Verdict}}{{with .Reason}}: {{.}}{{end}}{{if .Kept}} &middot; transcript copy kept{{end}}">{{icon "flag"}}{{.Verdict}}</span>{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{if not (sameHost .Host $.HostName)}}<span class="kind faint" title="Ran on another machine">{{.Host}}</span>{{end}}{{if and .Source (ne .Source "startup")}}<span class="kind faint" title="How this session began">{{.Source}}</span>{{end}}{{if .Tokens}}<span class="kind faint" title="Real model tokens consumed this session, harvested from the transcript">{{compactNum .Tokens}} tok</span>{{end}}{{if not .Live}}<span class="kind faint" title="No activity within the idle window and no live claim; the reaper will mark it expired">idle</span>{{end}}</div>{{if .Headline}}
+          <div class="find sess-name"><span class="mono">{{.NameOrID}}</span> &middot; {{if eq .HeadlineFrom "task"}}holds this task{{else}}its first prompt{{end}}</div>{{end}}
+          {{if .Verdict}}{{with .Reason}}<div class="find flag-reason">{{icon "flag"}}{{.}}</div>{{end}}{{end}}{{if .Findings}}<div class="find">{{.Findings}}</div>{{else if not .Headline}}<div class="find faint">Work in progress &mdash; no findings yet</div>{{end}}
         </div>
       </div>
       <span class="proj">{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{icon "folder-tree"}}{{.Project}}</a>{{else}}global{{end}}</span>
@@ -127,7 +130,8 @@
       <div class="sess-main">
         <span class="sess-state completed" aria-hidden="true"></span>
         <div class="sess-copy">
-          <div class="id-line"><a href="/console/sessions/{{.ID}}" data-peek>{{if .Name}}{{.Name}}{{else}}{{shortID .ID}}{{end}}</a>{{copyBtn .ID}}{{agentPill .Harness .Model}}{{if .Verdict}} <span class="badge {{.Tone}} flag-badge" data-verdict="{{.Verdict}}" title="Flagged {{.Verdict}}{{with .Reason}}: {{.}}{{end}}{{if .Kept}} &middot; transcript copy kept{{end}}">{{icon "flag"}}{{.Verdict}}</span>{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{if not (sameHost .Host $.HostName)}}<span class="kind faint" title="Ran on another machine">{{.Host}}</span>{{end}}{{if and .Source (ne .Source "startup")}}<span class="kind faint" title="How this session began">{{.Source}}</span>{{end}}{{if .Tokens}}<span class="kind faint" title="Real model tokens consumed this session, harvested from the transcript">{{compactNum .Tokens}} tok</span>{{end}}</div>
+          <div class="id-line"><a{{if .Headline}} class="sess-headline{{if eq .HeadlineFrom "prompt"}} is-prompt{{end}}"{{end}} href="/console/sessions/{{.ID}}" data-peek>{{.Heading}}</a>{{copyBtn .ID}}{{agentPill .Harness .Model}}{{if .Verdict}} <span class="badge {{.Tone}} flag-badge" data-verdict="{{.Verdict}}" title="Flagged {{.Verdict}}{{with .Reason}}: {{.}}{{end}}{{if .Kept}} &middot; transcript copy kept{{end}}">{{icon "flag"}}{{.Verdict}}</span>{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{if not (sameHost .Host $.HostName)}}<span class="kind faint" title="Ran on another machine">{{.Host}}</span>{{end}}{{if and .Source (ne .Source "startup")}}<span class="kind faint" title="How this session began">{{.Source}}</span>{{end}}{{if .Tokens}}<span class="kind faint" title="Real model tokens consumed this session, harvested from the transcript">{{compactNum .Tokens}} tok</span>{{end}}</div>{{if .Headline}}
+          <div class="find sess-name"><span class="mono">{{.NameOrID}}</span> &middot; {{if eq .HeadlineFrom "task"}}holds this task{{else}}its first prompt{{end}}</div>{{end}}
           {{if .Verdict}}{{with .Reason}}<div class="find flag-reason">{{icon "flag"}}{{.}}</div>{{end}}{{end}}<div class="find">{{if .Findings}}{{.Findings}}{{else}}No findings recorded{{end}}</div>
         </div>
       </div>
@@ -150,7 +154,8 @@
       <div class="sess-main">
         <span class="sess-state expired" aria-hidden="true"></span>
         <div class="sess-copy">
-          <div class="id-line"><a href="/console/sessions/{{.ID}}" data-peek>{{if .Name}}{{.Name}}{{else}}{{shortID .ID}}{{end}}</a>{{copyBtn .ID}}{{agentPill .Harness .Model}}{{if .Verdict}} <span class="badge {{.Tone}} flag-badge" data-verdict="{{.Verdict}}" title="Flagged {{.Verdict}}{{with .Reason}}: {{.}}{{end}}{{if .Kept}} &middot; transcript copy kept{{end}}">{{icon "flag"}}{{.Verdict}}</span>{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{if not (sameHost .Host $.HostName)}}<span class="kind faint" title="Ran on another machine">{{.Host}}</span>{{end}}{{if and .Source (ne .Source "startup")}}<span class="kind faint" title="How this session began">{{.Source}}</span>{{end}}{{if .Tokens}}<span class="kind faint" title="Real model tokens consumed this session, harvested from the transcript">{{compactNum .Tokens}} tok</span>{{end}}<span class="kind faint" title="Reaped after going idle without a graceful session_end">reaped</span></div>
+          <div class="id-line"><a{{if .Headline}} class="sess-headline{{if eq .HeadlineFrom "prompt"}} is-prompt{{end}}"{{end}} href="/console/sessions/{{.ID}}" data-peek>{{.Heading}}</a>{{copyBtn .ID}}{{agentPill .Harness .Model}}{{if .Verdict}} <span class="badge {{.Tone}} flag-badge" data-verdict="{{.Verdict}}" title="Flagged {{.Verdict}}{{with .Reason}}: {{.}}{{end}}{{if .Kept}} &middot; transcript copy kept{{end}}">{{icon "flag"}}{{.Verdict}}</span>{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{if not (sameHost .Host $.HostName)}}<span class="kind faint" title="Ran on another machine">{{.Host}}</span>{{end}}{{if and .Source (ne .Source "startup")}}<span class="kind faint" title="How this session began">{{.Source}}</span>{{end}}{{if .Tokens}}<span class="kind faint" title="Real model tokens consumed this session, harvested from the transcript">{{compactNum .Tokens}} tok</span>{{end}}<span class="kind faint" title="Reaped after going idle without a graceful session_end">reaped</span></div>{{if .Headline}}
+          <div class="find sess-name"><span class="mono">{{.NameOrID}}</span> &middot; {{if eq .HeadlineFrom "task"}}holds this task{{else}}its first prompt{{end}}</div>{{end}}
           {{if .Verdict}}{{with .Reason}}<div class="find flag-reason">{{icon "flag"}}{{.}}</div>{{end}}{{end}}<div class="find">{{if .Findings}}{{.Findings}}{{else}}No findings recorded{{end}}</div>
         </div>
       </div>
@@ -166,22 +171,30 @@
 {{end}}
 {{if not .Sessions}}
 {{if .Query}}
-<div class="empty dotgrid"><span class="empty-ico">{{icon "terminal"}}</span><div>No sessions match &ldquo;{{.Query}}&rdquo;{{if .Filter}} with status "{{.Filter}}"{{end}}{{if eq .Retained "yes"}} that retained knowledge{{else if eq .Retained "no"}} that retained nothing{{end}}{{if eq .Verdict "flagged"}} flagged{{else if .Verdict}} flagged {{.Verdict}}{{end}}{{if .Day}} on {{.DayLabel}}{{else if ne .Window "all"}} in the last {{.WindowLabel}}{{end}}.</div></div>
+<div class="empty dotgrid"><span class="empty-ico">{{icon "terminal"}}</span><div>No sessions match &ldquo;{{.Query}}&rdquo;{{with .Project}} in {{if eq . "global"}}the global scope{{else}}{{.}}{{end}}{{end}}{{if .Filter}} with status "{{.Filter}}"{{end}}{{if eq .Retained "yes"}} that retained knowledge{{else if eq .Retained "no"}} that retained nothing{{end}}{{if eq .Verdict "flagged"}} flagged{{else if .Verdict}} flagged {{.Verdict}}{{end}}{{if .Day}} on {{.DayLabel}}{{else if ne .Window "all"}} in the last {{.WindowLabel}}{{end}}.</div></div>
 {{else if eq .Retained "no"}}
 {{/* The continuity vital links here; an empty list is the GOOD outcome and
      must read as one, not as a dead end. */}}
-<div class="empty dotgrid"><span class="empty-ico">{{icon "brain"}}</span><div>Nothing dropped &mdash; every session{{if .Filter}} with status "{{.Filter}}"{{end}}{{if .Day}} on {{.DayLabel}}{{else if ne .Window "all"}} in the last {{.WindowLabel}}{{end}} retained knowledge.</div></div>
+<div class="empty dotgrid"><span class="empty-ico">{{icon "brain"}}</span><div>Nothing dropped &mdash; every session{{with .Project}} in {{if eq . "global"}}the global scope{{else}}{{.}}{{end}}{{end}}{{if .Filter}} with status "{{.Filter}}"{{end}}{{if .Day}} on {{.DayLabel}}{{else if ne .Window "all"}} in the last {{.WindowLabel}}{{end}} retained knowledge.</div></div>
 {{else}}
-<div class="empty dotgrid"><span class="empty-ico">{{icon "terminal"}}</span><div>No sessions{{if .Filter}} with status "{{.Filter}}"{{end}}{{if eq .Retained "yes"}} that retained knowledge{{end}}{{if eq .Verdict "flagged"}} flagged{{else if .Verdict}} flagged {{.Verdict}}{{end}}{{if .Day}} on {{.DayLabel}}{{else if ne .Window "all"}} in the last {{.WindowLabel}}{{else}} yet{{end}} &mdash; each hooked agent run records a session here.</div></div>
+<div class="empty dotgrid"><span class="empty-ico">{{icon "terminal"}}</span><div>No sessions{{with .Project}} in {{if eq . "global"}}the global scope{{else}}{{.}}{{end}}{{end}}{{if .Filter}} with status "{{.Filter}}"{{end}}{{if eq .Retained "yes"}} that retained knowledge{{end}}{{if eq .Verdict "flagged"}} flagged{{else if .Verdict}} flagged {{.Verdict}}{{end}}{{if .Day}} on {{.DayLabel}}{{else if ne .Window "all"}} in the last {{.WindowLabel}}{{else}} yet{{end}} &mdash; each hooked agent run records a session here.</div></div>
 {{end}}
 {{end}}
+{{/* A capped list says so: the newest of how many, and that the search and
+     the filters reach the rest (they are the query's, not the page's). */ -}}
+{{if .Capped}}
+<div class="widen" role="note" data-capped>
+  {{icon "history"}}
+  <span>The newest {{len .Sessions}} of {{.Matched}} sessions {{if .Day}}on {{.DayLabel}}{{else}}in this view{{end}} are listed. The search and the filters look through all {{.Matched}}.</span>
+</div>
+{{end -}}
 {{/* A windowed list must never read as "that's everything": say what the
      window left out and offer the wider ones in place. */}}
 {{if and (ne .Window "all") (not .Day)}}
 <div class="widen" role="note">
   {{icon "history"}}
-  <span>{{if and .Sessions (not .Filter) (not .Query) (not .Retained) (not .Verdict)}}{{len .Sessions}} of {{.Total}} sessions were active in the last {{.WindowLabel}}.{{else}}Showing sessions active in the last {{.WindowLabel}}.{{end}}</span>
-  <span class="widen-acts" data-seam-query>Widen to {{range .Windows}}{{if .Wider}}<a href="/console/sessions?status={{$filter}}&amp;w={{.Key}}&amp;sort={{$sort}}&amp;q={{$query}}&amp;retained={{$retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}">{{.Label}}</a>{{end}}{{end}}</span>
+  <span>{{if and .Sessions (not .Filter) (not .Query) (not .Retained) (not .Verdict) (not .Project) (not .Capped)}}{{len .Sessions}} of {{.Total}} sessions were active in the last {{.WindowLabel}}.{{else}}Showing sessions active in the last {{.WindowLabel}}.{{end}}</span>
+  <span class="widen-acts" data-seam-query>Widen to {{range .Windows}}{{if .Wider}}<a href="/console/sessions?status={{$filter}}&amp;w={{.Key}}&amp;sort={{$sort}}&amp;q={{$query}}&amp;retained={{$retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}{{with $project}}&amp;project={{.}}{{end}}">{{.Label}}</a>{{end}}{{end}}</span>
 </div>
 {{end}}
   </div><!-- .list-pane -->

@@ -81,7 +81,7 @@
   {{with .Conversation}}{{template "conversation" .}}{{end}}
 
   <div class="session-workspace">
-    <main class="session-primary">
+    <div class="session-primary">
       <!-- data-live-skip: the volume histogram is JS-drawn, and the kind filter +
            row expand/clamp state are client-owned -- a live morph would clobber
            all three. This card stays a page-load snapshot; the review and
@@ -91,6 +91,13 @@
           <div><span class="session-card-eyebrow">Trace</span><h2>Activity timeline</h2><p>Inspect calls, injected context, plans, and errors in execution order.</p></div>
           <span class="session-card-count">{{len .Interactions}} interaction{{if ne (len .Interactions) 1}}s{{end}}</span>
         </header>
+        {{if .TimelineCapped}}
+        <div class="widen session-timeline-cap" role="note">
+          {{icon "history"}}
+          <span>{{if .TimelineLatest}}The latest {{len .Timeline}} of {{.Events}} events.{{else}}The first {{len .Timeline}} of {{.Events}} events.{{end}}</span>
+          <span class="widen-acts">{{if .TimelineLatest}}<a href="/console/sessions/{{.Session.ID}}">The first {{len .Timeline}}</a>{{else}}<a href="/console/sessions/{{.Session.ID}}?timeline=latest">The latest {{len .Timeline}}</a>{{end}}</span>
+        </div>
+        {{end}}
         {{if .Interactions}}
         {{if .Strip.Show}}
         <div class="ptl" aria-label="Session wall clock: each block is as wide as the time it took">
@@ -138,12 +145,12 @@
           <div class="session-timeline-empty"><span>{{icon "activity"}}</span><div><strong>No interactions recorded</strong><p>This session has no captured calls or lifecycle events to review.</p></div></div>
         {{end}}
       </section>
-    </main>
+    </div><!-- .session-primary -->
 
     <aside class="session-inspector" aria-label="Session inspector">
       <section class="card session-work-card">
         <header class="session-card-head"><div><span class="session-card-eyebrow">Outputs</span><h2>Work products</h2></div></header>
-        {{if or .ClaimedTasks .Memories .Trials}}
+        {{if or .ClaimedTasks .TasksMoved .Notes .Memories (and .ShowTrials .Trials)}}
           {{if .ClaimedTasks}}
           <div class="session-work-section">
             <h3>Claimed tasks <span>{{len .ClaimedTasks}}</span></h3>
@@ -151,6 +158,22 @@
               {{range .ClaimedTasks}}
               <a id="{{.ID}}" href="/console/tasks/{{.ID}}" data-peek><span>{{.Title}}</span><small>{{if .PlanSlug}}plan:{{.PlanSlug}}{{end}}{{if and .PlanSlug .LeaseLeft}} &middot; {{end}}{{if .LeaseLeft}}{{.LeaseLeft}}{{end}}</small></a>
               {{end}}
+            </div>
+          </div>
+          {{end}}
+          {{if .TasksMoved}}
+          <div class="session-work-section" id="session-tasks-moved">
+            <h3>Tasks moved <span>{{len .TasksMoved}}</span></h3>
+            <div class="session-entity-list">
+              {{range .TasksMoved}}<a id="moved-{{.ID}}" href="/console/tasks/{{.ID}}" data-peek title="{{if .PlanSlug}}plan:{{.PlanSlug}} &middot; {{end}}{{.MovesText}}"><span>{{.Title}}</span><small>{{.MovesText}}</small></a>{{end}}
+            </div>
+          </div>
+          {{end}}
+          {{if .Notes}}
+          <div class="session-work-section" id="session-notes-written">
+            <h3>Notes written <span>{{len .Notes}}</span></h3>
+            <div class="session-entity-list">
+              {{range .Notes}}<a id="note-{{.ID}}" href="/console/notes/{{.ID}}" data-peek><span>{{.Title}}</span><small>{{.What}}</small></a>{{end}}
             </div>
           </div>
           {{end}}
@@ -171,7 +194,9 @@
           </div>
           {{end}}
         {{else}}
-          <div class="session-inspector-empty">Nothing durable yet. Findings and memories are usually harvested when the session ends.</div>
+          {{if eq .Session.Status "active"}}<div class="session-inspector-empty">Nothing durable yet. Findings and memories are usually harvested when the session ends.</div>
+          {{else if .Findings}}<div class="session-inspector-empty">It moved no task and wrote no note or memory; what it found is in its findings.</div>
+          {{else}}<div class="session-inspector-empty">It ended without moving a task or writing a note or memory.</div>{{end}}
         {{end}}
       </section>
 

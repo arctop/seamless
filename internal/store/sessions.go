@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/arctop/seamless/internal/access"
@@ -794,30 +796,65 @@ type SessionFilter struct {
 	// Since keeps the sessions updated since then, as ListSessions reads it;
 	// zero means all time.
 	Since time.Time
+	// CreatedFrom and CreatedTo keep the sessions created in [CreatedFrom,
+	// CreatedTo), each bound applied when it is set: the console's day view.
+	CreatedFrom, CreatedTo time.Time
 	// Flagged keeps only flagged sessions, and Verdict (one of
 	// core.FlagVerdicts, implying Flagged) only those with that verdict.
 	Flagged bool
 	Verdict core.SessionVerdict
+	// ByProject keeps only the sessions of Project, "" being the global
+	// scope's; without it Project is ignored and every project is listed.
+	ByProject bool
+	Project   string
+	// Retained keeps the sessions that left a durable artifact behind, or
+	// those that kept nothing (SessionRetained); "" keeps both.
+	Retained SessionRetained
+	// Query keeps the sessions whose name, project, findings or id hold
+	// every whitespace-separated term of it (SessionTerms), "" keeping all.
+	Query string
 	// Limit caps the rows (default 100).
 	Limit int
 }
 
-// ListSessionsWhere is ListSessions with the whole filter: the console's
-// Sessions list and its flag filter.
-func ListSessionsWhere(ctx context.Context, db *sql.DB, f SessionFilter) ([]core.Session, error) {
-	limit := f.Limit
-	if limit <= 0 {
-		limit = 100
-	}
-	query := `SELECT ` + sessionCols + ` FROM sessions`
-	args := []any{}
-	where := ""
+// SessionRetained is SessionFilter.Retained: whether a session retained
+// knowledge by GetSessionCoverage's covered-ness test, non-empty findings or
+// a written memory or note or a recorded trial.
+type SessionRetained string
+
+// The SessionFilter.Retained values.
+const (
+	SessionRetainedAny SessionRetained = ""
+	SessionRetainedYes SessionRetained = "yes" // left a durable artifact behind
+	SessionRetainedNo  SessionRetained = "no"  // kept nothing
+)
+
+// sessionArtifact is the event half of the covered-ness test over the
+// sessions row a statement reads (SessionsWithArtifacts' kinds): it wrote a
+// memory or a note, or recorded a trial. Three binds: the kinds.
+const sessionArtifact = `EXISTS (SELECT 1 FROM events e WHERE e.session_id = sessions.id AND e.kind IN (?, ?, ?))`
+
+// sessionSearched is the text a SessionFilter.Query term is looked for in,
+// lowercased: the session's name, project, findings and id.
+const sessionSearched = `lower(name || ' ' || project_slug || ' ' || findings || ' ' || id)`
+
+// SessionTerms splits a search into the terms SessionFilter.Query keeps a
+// session by, lowercased: each must appear in its name, project, findings
+// or id. The fold is Go's, the column's is SQLite's lower(), which folds
+// ASCII letters only, so a term matches other letters only in the case it
+// is typed in.
+func SessionTerms(q string) []string {
+	return strings.Fields(strings.ToLower(q))
+}
+
+// where is the filter as a WHERE clause ("" for none) and its binds, for
+// the statements that read the sessions table by its own name. now is the
+// instant a claim's lease is judged at.
+func (f SessionFilter) where(now time.Time) (string, []any) {
+	var conds []string
+	var args []any
 	add := func(cond string, vals ...any) {
-		if where == "" {
-			where = " WHERE " + cond
-		} else {
-			where += " AND " + cond
-		}
+		conds = append(conds, cond)
 		args = append(args, vals...)
 	}
 	if f.Status != "" {
@@ -825,7 +862,13 @@ func ListSessionsWhere(ctx context.Context, db *sql.DB, f SessionFilter) ([]core
 	}
 	if !f.Since.IsZero() {
 		add(`(updated_at >= ? OR (status = 'active' AND `+sessionHoldsLive+`))`,
-			core.FormatTime(f.Since), core.FormatTime(time.Now().UTC()))
+			core.FormatTime(f.Since), core.FormatTime(now))
+	}
+	if !f.CreatedFrom.IsZero() {
+		add(`created_at >= ?`, core.FormatTime(f.CreatedFrom))
+	}
+	if !f.CreatedTo.IsZero() {
+		add(`created_at < ?`, core.FormatTime(f.CreatedTo))
 	}
 	switch {
 	case f.Verdict != "":
@@ -833,7 +876,45 @@ func ListSessionsWhere(ctx context.Context, db *sql.DB, f SessionFilter) ([]core
 	case f.Flagged:
 		add(`verdict IS NOT NULL`)
 	}
-	query += where + ` ORDER BY updated_at DESC, id DESC LIMIT ?`
+	if f.ByProject {
+		add(`project_slug = ?`, f.Project)
+	}
+	kinds := []any{string(core.EventMemoryWritten), string(core.EventNoteWritten), string(core.EventTrialRecorded)}
+	switch f.Retained {
+	case SessionRetainedYes:
+		add(`(findings <> '' OR `+sessionArtifact+`)`, kinds...)
+	case SessionRetainedNo:
+		add(`(findings = '' AND NOT `+sessionArtifact+`)`, kinds...)
+	}
+	for _, term := range SessionTerms(f.Query) {
+		add(`instr(`+sessionSearched+`, ?) > 0`, term)
+	}
+	if len(conds) == 0 {
+		return "", nil
+	}
+	return " WHERE " + strings.Join(conds, " AND "), args
+}
+
+// CountSessionsWhere counts every session the filter keeps, its Limit
+// aside: the N of a list that shows the newest Limit of them.
+func CountSessionsWhere(ctx context.Context, db *sql.DB, f SessionFilter) (int, error) {
+	where, args := f.where(time.Now().UTC())
+	var n int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sessions`+where, args...).Scan(&n); err != nil {
+		return 0, fmt.Errorf("store.CountSessionsWhere: %w", err)
+	}
+	return n, nil
+}
+
+// ListSessionsWhere is ListSessions with the whole filter: the console's
+// Sessions list, its filters and its search.
+func ListSessionsWhere(ctx context.Context, db *sql.DB, f SessionFilter) ([]core.Session, error) {
+	limit := f.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+	where, args := f.where(time.Now().UTC())
+	query := `SELECT ` + sessionCols + ` FROM sessions` + where + ` ORDER BY updated_at DESC, id DESC LIMIT ?`
 	args = append(args, limit)
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -849,6 +930,91 @@ func ListSessionsWhere(ctx context.Context, db *sql.DB, f SessionFilter) ([]core
 		out = append(out, s)
 	}
 	return out, rows.Err()
+}
+
+// sessionClaimChunk bounds the session ids one ClaimsHeldBy statement binds.
+const sessionClaimChunk = 500
+
+// ClaimsHeldBy returns the in-progress tasks each of the given sessions
+// claimed, keyed by session ULID, each list oldest-created first (ties by
+// id, TasksClaimedBy's order): TasksClaimedBy's rows that are still in
+// progress, for a whole list of sessions in one statement per chunk rather
+// than one per session. A lease may have lapsed: the caller judges each
+// with core.Task.ClaimLive. A session holding none is absent, and an id that
+// is not ULID-shaped (TasksClaimedBy's guard) is skipped, never matched.
+func ClaimsHeldBy(ctx context.Context, db *sql.DB, sessionIDs []string) (map[string][]core.Task, error) {
+	ids := slices.DeleteFunc(slices.Clone(sessionIDs), func(id string) bool { return !LooksLikeSessionULID(id) })
+	slices.Sort(ids)
+	ids = slices.Compact(ids)
+	out := map[string][]core.Task{}
+	for chunk := range slices.Chunk(ids, sessionClaimChunk) {
+		rows, err := db.QueryContext(ctx, `SELECT `+taskCols+` FROM tasks
+			WHERE claimed_by IN (`+placeholders(len(chunk))+`) AND status = ?
+			ORDER BY created_at ASC, id ASC`, append(anySlice(chunk), string(core.TaskInProgress))...)
+		if err != nil {
+			return nil, fmt.Errorf("store.ClaimsHeldBy: %w", err)
+		}
+		tasks, err := scanTasksWithDeps(ctx, db, rows)
+		if err != nil {
+			return nil, fmt.Errorf("store.ClaimsHeldBy: %w", err)
+		}
+		for _, t := range tasks {
+			out[t.ClaimedBy] = append(out[t.ClaimedBy], t)
+		}
+	}
+	return out, nil
+}
+
+// SessionFirstPrompts returns each of the given sessions' first prompt with
+// words in it, of its whole life, keyed by session id; a session with none, or
+// one the handle does not hold, is absent. The prompt-bearing events are
+// DiaryFirstPrompts' (diaryPromptKinds, the prompt payload key). Where that
+// reads a day's prompts through the kind index and keeps its sessions' firsts,
+// this walks each session's own events from its start (idx_events_session,
+// +kind keeping the kind index out) and stops at its first prompt: a list of
+// sessions costs a few rows each, however many prompts the log holds. A
+// payload that is not JSON is read as holding no prompt.
+func SessionFirstPrompts(ctx context.Context, db *sql.DB, sessionIDs []string) (map[string]string, error) {
+	ids := slices.DeleteFunc(slices.Clone(sessionIDs), func(id string) bool { return id == "" })
+	slices.Sort(ids)
+	ids = slices.Compact(ids)
+	kinds := make([]any, len(diaryPromptKinds))
+	for i, k := range diaryPromptKinds {
+		kinds[i] = string(k)
+	}
+	const prompt = `json_extract(CASE WHEN json_valid(e.payload) THEN e.payload ELSE '{}' END, '$.prompt')`
+	out := map[string]string{}
+	for chunk := range slices.Chunk(ids, sessionClaimChunk) {
+		rows, err := db.QueryContext(ctx, `SELECT s.id, COALESCE((SELECT `+prompt+` FROM events e
+			 WHERE e.session_id = s.id AND +e.kind IN (`+placeholders(len(kinds))+`)
+			   AND instr(e.payload, '"prompt":') > 0
+			   AND trim(COALESCE(`+prompt+`, ''), ' ' || char(9, 10, 13)) <> ''
+			 ORDER BY e.ts, e.id LIMIT 1), '')
+			FROM sessions s WHERE s.id IN (`+placeholders(len(chunk))+`)`,
+			append(slices.Clone(kinds), anySlice(chunk)...)...)
+		if err != nil {
+			return nil, fmt.Errorf("store.SessionFirstPrompts: %w", err)
+		}
+		if err := scanSessionPrompts(rows, out); err != nil {
+			return nil, fmt.Errorf("store.SessionFirstPrompts: %w", err)
+		}
+	}
+	return out, nil
+}
+
+// scanSessionPrompts scans SessionFirstPrompts' rows into out, closing rows.
+func scanSessionPrompts(rows *sql.Rows, out map[string]string) error {
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var id, prompt string
+		if err := rows.Scan(&id, &prompt); err != nil {
+			return fmt.Errorf("scan: %w", err)
+		}
+		if strings.TrimSpace(prompt) != "" {
+			out[id] = prompt
+		}
+	}
+	return rows.Err()
 }
 
 // LiveSessionCount counts the sessions live right now (core.Session.LiveAsOf,

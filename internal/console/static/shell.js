@@ -645,9 +645,22 @@
   /* ---- Recents for the palette --------------------------------------------- */
 
   // An entity page, or a rail/reader link to one, is worth offering again. The
-  // palette reads this list when it opens with an empty query.
-  var ENTITY = /^\/console\/(memories|notes|tasks|plans|sessions|projects|labs|trials|events)\/[^/]+/;
-  var KIND = { memories: 'Memory', notes: 'Note', tasks: 'Task', plans: 'Plan', sessions: 'Session', projects: 'Project', labs: 'Lab', trials: 'Trial', events: 'Event' };
+  // palette reads this list when it opens with an empty query. An event is
+  // not: it is one step inside a session, opened in passing, and a run of them
+  // would push every page worth reopening out of the eight slots.
+  var ENTITY = /^\/console\/(memories|notes|tasks|plans|sessions|projects|labs|trials)\/[^/]+/;
+  var KIND = { memories: 'Memory', notes: 'Note', tasks: 'Task', plans: 'Plan', sessions: 'Session', projects: 'Project', labs: 'Lab', trials: 'Trial' };
+  // A title that is only a kind and a short id ("Task 4EKWAKDH") never
+  // replaces a readable one the list already keeps for that page.
+  var BARE = /^(Memory|Note|Task|Plan|Session|Project|Lab|Trial) [0-9A-Z]{8}$/;
+  // The kept list, without what it no longer offers (an event kept before
+  // events left it).
+  function recentList() {
+    var list;
+    try { list = JSON.parse(read('seamless-recent') || '[]'); } catch (e) { list = []; }
+    if (!Array.isArray(list)) return [];
+    return list.filter(function (r) { return r && typeof r.href === 'string' && ENTITY.test(r.href); });
+  }
   function remember(href, title) {
     var url;
     try { url = new URL(href, location.origin); } catch (e) { return; }
@@ -655,13 +668,21 @@
     if (!m || !title) return;
     title = title.replace(/\s*·\s*Seamless$/, '').trim();
     if (!title) return;
-    var list;
-    try { list = JSON.parse(read('seamless-recent') || '[]'); } catch (e) { list = []; }
-    if (!Array.isArray(list)) list = [];
-    list = list.filter(function (r) { return r && r.href !== url.pathname; });
+    var list = recentList();
+    var kept = list.filter(function (r) { return r.href === url.pathname; })[0];
+    if (kept && kept.title && BARE.test(title) && !BARE.test(kept.title)) title = kept.title;
+    list = list.filter(function (r) { return r.href !== url.pathname; });
     list.unshift({ href: url.pathname, title: title.slice(0, 120), kind: KIND[m[1]] || '' });
     store('seamless-recent', JSON.stringify(list.slice(0, 8)));
   }
+  // On every page, so the palette stops offering what the list no longer
+  // keeps even where nothing new is remembered.
+  (function tidy() {
+    var raw = read('seamless-recent');
+    if (raw === null) return;
+    var kept = JSON.stringify(recentList().slice(0, 8));
+    if (kept !== raw) store('seamless-recent', kept);
+  })();
   remember(location.pathname, document.title);
   document.addEventListener('click', function (e) {
     var a = e.target.closest ? e.target.closest('a[href]') : null;

@@ -8087,6 +8087,19 @@ a.project-global-line:focus-visible { outline: none; box-shadow: var(--shadow-fo
 .btn[data-armed] { color: var(--danger-ink); background: var(--danger); border-color: var(--danger); }
 .confirm-note { display: inline-block; max-width: 100%; margin-left: 8px; font-size: var(--text-xs); color: var(--danger); vertical-align: middle; }
 
+/* UX 09: a session row is titled by what the session is doing (sessions.html):
+   the task it holds, or its first prompt in quotes as the Diary shows one, in
+   prose; its generated name is the second line. The ops pages' active-filter
+   chip (a project on Sessions and Mishaps) takes the brand accent the library
+   pages set for theirs. */
+.sess-row .id-line a.sess-headline { font-family: var(--font-sans); font-size: var(--text-sm); }
+.sess-row .id-line a.sess-headline.is-prompt { font-style: italic; font-weight: 500; }
+.sess-row .id-line a.sess-headline.is-prompt::before { content: "\201C"; }
+.sess-row .id-line a.sess-headline.is-prompt::after { content: "\201D"; }
+.sess-row .sess-name .mono { font-size: var(--text-2xs); }
+.ops-page .lib-active-filter { --lib-accent: var(--brand); }
+.session-timeline-card .session-timeline-cap { margin: 0 0 12px; }
+
 /* UX 18: library restore and delete. The inactive banner ends with Restore; a
    reader or peek action armed by the in-page confirm wears the danger tone, as
    .btn does; a plan narrative's confirmation box sits beside Delete. */
