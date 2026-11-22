@@ -62,8 +62,9 @@ lock pill. Nothing about an isolated project's pages turns scary or
 half-rendered - the pill and the Overview control are the whole story.
 
 The one exception is a [locked project](/guides/peer-auth/) under `peer_auth`:
-there the threat *is* your own account, so the console shows its name and counts,
-and nothing inside it until you unlock it in that browser. A session's
+there the threat *is* your own account, so the console shows its name, its counts
+and when it was last active, and nothing inside it until you unlock it in that
+browser. A session's
 [Conversation card](/reference/console/#conversation) follows the same rule: a
 locked project in it shows its name and nothing more.
 
