@@ -1,5 +1,5 @@
 {{define "peek-body"}}
-<article class="peek-entity">
+<article class="peek-entity" data-panel-project="{{.Project}}">
   <header class="peek-head">
     <span class="kind" title="{{.KindGloss}}">{{.Kind}}</span>
     <span class="badge {{if eq .Status "active"}}ok{{else if eq .Status "superseded"}}warn{{end}}">{{.Status}}</span>

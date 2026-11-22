@@ -176,6 +176,25 @@
     {{template "content" .}}
   </main>{{end}}
 </div>
+{{/* Read in place (static/panel.js, plan:console-ux-pass UX 31): one wide
+     panel over the page for a link to a memory, a note, a task, a plan, a
+     session, an event or a trial, and the scrim under it. It sits outside the
+     view a morph replaces, so the page behind keeps updating while it is
+     open and the panel stays as it is; the patch layout never carries it.
+     Hidden until a link opens it; Open full page gets its href then. */}}
+<div class="read-scrim" id="read-scrim" hidden></div>
+<section class="read-panel" id="read-panel" role="dialog" aria-label="Read in place" tabindex="-1" hidden>
+  <header class="read-panel-head">
+    <p class="read-panel-where" data-panel-where></p>
+    <div class="read-panel-acts">
+      <button class="read-panel-btn read-panel-key" type="button" data-panel-step="-1" aria-label="Previous item" aria-keyshortcuts="k" title="Previous item (k)"><kbd>k</kbd><span aria-hidden="true">&uarr;</span></button>
+      <button class="read-panel-btn read-panel-key" type="button" data-panel-step="1" aria-label="Next item" aria-keyshortcuts="j" title="Next item (j)"><kbd>j</kbd><span aria-hidden="true">&darr;</span></button>
+      <a class="read-panel-btn read-panel-full" data-panel-full data-no-panel>Open full page{{icon "arrow-up-right"}}</a>
+      <button class="read-panel-btn read-panel-close" type="button" data-panel-close aria-label="Close and go back" aria-keyshortcuts="Escape"><kbd>Esc</kbd>Close</button>
+    </div>
+  </header>
+  <div class="read-panel-body" id="read-panel-body"></div>
+</section>
 <div class="nav-progress" aria-hidden="true"></div>
 <button id="live-pill" type="button" hidden>new activity &middot; refresh</button>
 <div id="live-toast" role="status" aria-live="polite" hidden></div>
@@ -487,30 +506,37 @@
   if (pill) pill.onclick = function () { apply(true); };
 })();
 (function () {
-  /* Whole-row navigation on screens WITHOUT a detail pane (overview,
-     project-detail, gardener, ...): a .row-link[data-href] row navigates to
-     its full page. [data-peek] anchors on these screens need no JS -- they
-     navigate natively; the attribute only matters where a pane exists.
-     Split list screens are owned by the pane IIFE below -- stand down there. */
-  if (document.querySelector('.list-detail-split')) return;
+  /* Whole-row clicks: a .row-link[data-href] row (the Overview's projects, a
+     project's tabs, Sessions, Search, Mishaps, a plan's steps in the reading
+     panel) opens what it names. An item reads in the panel (static/panel.js:
+     SeamPanel.open answers false for anything it does not read); anything
+     else opens as its page. Inner links, buttons and forms act on their own,
+     and a row inside the Diary's or Interactions' detail split is the
+     split's (below). data-peek is only a hint: the row's href decides. */
   document.addEventListener('click', function (e) {
+    if (e.defaultPrevented) return;
     var row = e.target.closest ? e.target.closest('.row-link[data-href]') : null;
-    if (!row) return;
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+    if (!row || row.closest('.list-detail-split')) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     if (e.target.closest('a, button, form')) return; // inner links + inline actions act normally
     var sel = window.getSelection && window.getSelection();
     if (sel && sel.type === 'Range' && sel.toString()) return;
-    location.href = row.getAttribute('data-href');
+    var href = row.getAttribute('data-href');
+    if (window.SeamPanel && window.SeamPanel.open(href, row)) return;
+    location.href = href;
   });
 })();
 (function () {
-  /* Detail-below split: on a list screen wrapped in .list-detail-split, a
-     [data-peek] row/link fetches the entity fragment (?peek=1) and loads it into
-     #detail-pane below the list. The clicked row is
+  /* Detail split: the Diary and Interactions keep a pane of their own beside
+     the list (every other screen reads in the panel, static/panel.js). Inside
+     the .list-detail-split, a [data-peek] row/link fetches the entity
+     fragment (?peek=1) and loads it into #detail-pane. The clicked row is
      marked .selected/aria-current; a #peek= hash + one history entry make browser
      Back deselect, while in-pane wiki-links/chips drill into the same pane (each a
-     new history entry, so Back steps back through them). Inert unless the page has
-     the split. Fragments are same-origin auto-escaped html/template output. */
+     new history entry, so Back steps back through them). A history entry the
+     reading panel owns (state.seamPanel) is the panel's, never the pane's.
+     Inert unless the page has the split. Fragments are same-origin
+     auto-escaped html/template output. */
   // Nodes are re-queried lazily (not cached at load): the SSE live client can
   // morph the list in place and replace these nodes, so the controls must always
   // resolve the current DOM rather than hold a reference that goes stale.
@@ -609,10 +635,14 @@
     teardown();
   }
 
+  function panelEntry() { return !!(history.state && history.state.seamPanel); }
+
   document.addEventListener('click', function (e) {
+    if (e.defaultPrevented) return;
     var closeHit = e.target.closest ? e.target.closest('.detail-close') : null;
     if (closeHit) { e.preventDefault(); requestClose(); return; }
     var peek = e.target.closest ? e.target.closest('[data-peek]') : null;
+    if (peek && !peek.closest('.list-detail-split')) peek = null; // outside the split: the reading panel's
     if (peek) {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; // modified click -> new tab
       if (e.target.closest('button, form')) return;                       // inline actions act normally
@@ -634,16 +664,17 @@
     location.href = row.getAttribute('data-href');
   });
 
-  document.addEventListener('keydown', function (e) { var p = pane(); if (e.key === 'Escape' && p && !p.hidden) requestClose(); });
+  document.addEventListener('keydown', function (e) { var p = pane(); if (e.key === 'Escape' && !e.defaultPrevented && p && !p.hidden) requestClose(); });
   // Browser Back/Forward: reflect the URL's #peek= state in the pane.
   window.addEventListener('popstate', function () {
+    if (panelEntry()) return;
     var mm = location.hash.match(/^#peek=(.+)$/);
     if (mm) { var hp = decodeURIComponent(mm[1]); pushed = true; load(hp); mark(hp); }
     else { var p = pane(); if (p && !p.hidden) teardown(); }
   });
   // Deep-link on load: adopt the current #peek without pushing (Back leaves the
   // page rather than reopening), matching a shared/bookmarked detail URL.
-  var m = location.hash.match(/^#peek=(.+)$/);
+  var m = panelEntry() ? null : location.hash.match(/^#peek=(.+)$/);
   if (m) {
     try { var h0 = decodeURIComponent(m[1]); pushed = false; load(h0); mark(h0); } catch (e) {}
   }
@@ -705,7 +736,7 @@
 })();
 (function () {
   /* Quick-copy: document-level delegation on .copy-btn[data-copy] so it keeps
-     working after the detail pane swaps .detail-pane-body innerHTML. Copies the
+     working after the reading panel or a detail pane swaps its content. Copies the
      FULL value, flashes a check for ~1s, and stops propagation so copying
      inside a table row doesn't also select the row / navigate. */
   function flash(btn) {

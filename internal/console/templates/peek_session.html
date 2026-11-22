@@ -1,5 +1,5 @@
 {{define "peek-body"}}
-<article class="peek-entity session-peek">
+<article class="peek-entity session-peek" data-panel-project="{{.Session.ProjectSlug}}">
   <header class="session-peek-topline">
     <div class="session-peek-badges">
       {{if eq .Session.Status "active"}}

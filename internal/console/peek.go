@@ -16,13 +16,15 @@ import (
 )
 
 // The detail handlers here serve a single entity four ways: JSON for the CLI,
-// an HTML fragment for the in-page detail pane (?peek=1), a reader fragment
+// an HTML fragment for the reading panel (?peek=1), a reader fragment
 // for the library screens' in-place swap (?reader=1), and -- by default -- for
 // a memory, a note and a task, the item's own page (itempage.go: the item
 // alone in one reading frame, a shareable, no-JS URL). Entity references
-// across the console link to these routes; on split list screens (sessions) a
-// data-peek link loads the ?peek=1 fragment into the pane without a page
-// navigation.
+// across the console link to these routes; a plain click on one reads its
+// ?peek=1 fragment in the reading panel (static/panel.js) without a page
+// navigation, or, on the Diary and Interactions, in their detail pane. Each
+// fragment's root names its project (data-panel-project) for the panel's
+// header.
 
 // memoryRef is a compact pointer to another memory (a supersession neighbor),
 // enough to render a peek link.

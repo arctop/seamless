@@ -2032,6 +2032,20 @@ first press and posts on the second. Without script the form posts on the
 first press, so a route behind a confirm must still be safe to call. No
 template calls `confirm()` (`TestSwNoNativeConfirm`).
 
+
+An item link reads in place: a plain click on a link to a memory, note, task,
+plan, session, event or trial opens its `?peek=1` fragment in one panel over
+the page (`static/panel.js`, `window.SeamPanel`), which sits outside `.main`,
+so a live morph never touches it and the page behind is never reloaded. A
+modified click, or a link from outside the console, opens the item's own
+page. A link that must navigate carries `data-no-panel`. A script that
+handles an item link in place loads before panel.js (layout.html's script
+order) and calls `preventDefault`; one that closes something on Esc does so
+in a capture listener registered before panel.js's and calls
+`preventDefault`, so one Esc closes only the innermost thing. A new `?peek=1`
+kind gets a decision in panel.js's `ITEM` (`TestPnReadsTheItemKindsOnly`),
+and its fragment's root names its project in `data-panel-project`.
+
 The shared parts of Settings and the lock screens are built once (UX 33):
 `{{hint "..."}}` and `{{hintFor "<name>" "..."}}` put an explanation one hover
 away instead of a paragraph (ids stay unique per page through render's pass,

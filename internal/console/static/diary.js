@@ -5,9 +5,9 @@
    Each one clicks the page's own in-place link (data-seam-query), so the
    shared navigation client loads the day, and history works as it does for
    the link. The keys stand down while a g-chord is under way (shell.js owns
-   the next key: g then d opens the Diary), while typing, while a dialog is
-   open, and inside a chart or the detail pane, whose own keys move their own
-   cursor.
+   the next key: g then d opens the Diary), while typing, while a dialog or
+   the reading panel (static/panel.js) is open, and inside a chart or the
+   detail pane, whose own keys move their own cursor.
 
    Today is live. The page opts out of the layout's refresh on every event
    (SEAM_NO_LIVE_REFRESH) and refreshes itself from the same stream
@@ -55,6 +55,7 @@
   document.addEventListener('keydown', function (e) {
     if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.repeat) return;
     if (!page() || typing(e.target) || overlayOpen()) return;
+    if (window.SeamPanel && window.SeamPanel.isOpen()) return;
     if (document.querySelector('.chord-hint')) return;
     if (e.target && e.target.closest && e.target.closest('.chart, #detail-pane, details.menu[open]')) return;
     var done = false;

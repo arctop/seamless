@@ -94,8 +94,7 @@
     </div>
     <div class="ops-stage-meta"><span class="status-key live"><span class="live-dot"></span>{{.Active}} live</span>{{if .Idle}}<span class="status-key idle">{{.Idle}} idle</span>{{end}}<span class="status-key done">{{.Completed}} completed</span><span class="status-key expired">{{.Expired}} expired</span></div>
   </header>
-<div class="list-detail-split ops-split sessions-split">
-  <div class="list-pane">
+<div class="ops-list">
 {{if .Sessions}}
 
 {{if and (or (eq .Filter "") (eq .Filter "active")) (or .Active .Idle)}}
@@ -197,15 +196,7 @@
   <span class="widen-acts" data-seam-query>Widen to {{range .Windows}}{{if .Wider}}<a href="/console/sessions?status={{$filter}}&amp;w={{.Key}}&amp;sort={{$sort}}&amp;q={{$query}}&amp;retained={{$retained}}{{with $verdict}}&amp;verdict={{.}}{{end}}{{with $project}}&amp;project={{.}}{{end}}">{{.Label}}</a>{{end}}{{end}}</span>
 </div>
 {{end}}
-  </div><!-- .list-pane -->
-  <section id="detail-pane" class="detail-pane" hidden aria-live="polite" aria-label="Session detail">
-    <div class="detail-pane-chrome">
-      <a class="detail-open btn small" href="#">open full &nearr;</a>
-      <button class="detail-close btn small" type="button" aria-label="Close detail">&times;</button>
-    </div>
-    <div class="detail-pane-body"></div>
-  </section>
-</div><!-- .list-detail-split -->
+</div><!-- .ops-list -->
 </section>
 </div><!-- .ops-page -->
 {{end}}

@@ -75,6 +75,20 @@
   <div class="seam" id="seam" aria-hidden="true"></div>
 ==== shell common tail ====
 </div>
+
+<div class="read-scrim" id="read-scrim" hidden></div>
+<section class="read-panel" id="read-panel" role="dialog" aria-label="Read in place" tabindex="-1" hidden>
+  <header class="read-panel-head">
+    <p class="read-panel-where" data-panel-where></p>
+    <div class="read-panel-acts">
+      <button class="read-panel-btn read-panel-key" type="button" data-panel-step="-1" aria-label="Previous item" aria-keyshortcuts="k" title="Previous item (k)"><kbd>k</kbd><span aria-hidden="true">&uarr;</span></button>
+      <button class="read-panel-btn read-panel-key" type="button" data-panel-step="1" aria-label="Next item" aria-keyshortcuts="j" title="Next item (j)"><kbd>j</kbd><span aria-hidden="true">&darr;</span></button>
+      <a class="read-panel-btn read-panel-full" data-panel-full data-no-panel>Open full page<svg class="ico ico-arrow-up-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg></a>
+      <button class="read-panel-btn read-panel-close" type="button" data-panel-close aria-label="Close and go back" aria-keyshortcuts="Escape"><kbd>Esc</kbd>Close</button>
+    </div>
+  </header>
+  <div class="read-panel-body" id="read-panel-body"></div>
+</section>
 <div class="nav-progress" aria-hidden="true"></div>
 <button id="live-pill" type="button" hidden>new activity &middot; refresh</button>
 <div id="live-toast" role="status" aria-live="polite" hidden></div>
@@ -382,15 +396,17 @@
 (function () {
   
 
-  if (document.querySelector('.list-detail-split')) return;
   document.addEventListener('click', function (e) {
+    if (e.defaultPrevented) return;
     var row = e.target.closest ? e.target.closest('.row-link[data-href]') : null;
-    if (!row) return;
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+    if (!row || row.closest('.list-detail-split')) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     if (e.target.closest('a, button, form')) return; 
     var sel = window.getSelection && window.getSelection();
     if (sel && sel.type === 'Range' && sel.toString()) return;
-    location.href = row.getAttribute('data-href');
+    var href = row.getAttribute('data-href');
+    if (window.SeamPanel && window.SeamPanel.open(href, row)) return;
+    location.href = href;
   });
 })();
 (function () {
@@ -494,10 +510,14 @@
     teardown();
   }
 
+  function panelEntry() { return !!(history.state && history.state.seamPanel); }
+
   document.addEventListener('click', function (e) {
+    if (e.defaultPrevented) return;
     var closeHit = e.target.closest ? e.target.closest('.detail-close') : null;
     if (closeHit) { e.preventDefault(); requestClose(); return; }
     var peek = e.target.closest ? e.target.closest('[data-peek]') : null;
+    if (peek && !peek.closest('.list-detail-split')) peek = null; 
     if (peek) {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; 
       if (e.target.closest('button, form')) return;                       
@@ -519,16 +539,17 @@
     location.href = row.getAttribute('data-href');
   });
 
-  document.addEventListener('keydown', function (e) { var p = pane(); if (e.key === 'Escape' && p && !p.hidden) requestClose(); });
+  document.addEventListener('keydown', function (e) { var p = pane(); if (e.key === 'Escape' && !e.defaultPrevented && p && !p.hidden) requestClose(); });
   
   window.addEventListener('popstate', function () {
+    if (panelEntry()) return;
     var mm = location.hash.match(/^#peek=(.+)$/);
     if (mm) { var hp = decodeURIComponent(mm[1]); pushed = true; load(hp); mark(hp); }
     else { var p = pane(); if (p && !p.hidden) teardown(); }
   });
   
   
-  var m = location.hash.match(/^#peek=(.+)$/);
+  var m = panelEntry() ? null : location.hash.match(/^#peek=(.+)$/);
   if (m) {
     try { var h0 = decodeURIComponent(m[1]); pushed = false; load(h0); mark(h0); } catch (e) {}
   }
@@ -971,6 +992,20 @@
   </main>
 ==== /console/ tail ====
 </div>
+
+<div class="read-scrim" id="read-scrim" hidden></div>
+<section class="read-panel" id="read-panel" role="dialog" aria-label="Read in place" tabindex="-1" hidden>
+  <header class="read-panel-head">
+    <p class="read-panel-where" data-panel-where></p>
+    <div class="read-panel-acts">
+      <button class="read-panel-btn read-panel-key" type="button" data-panel-step="-1" aria-label="Previous item" aria-keyshortcuts="k" title="Previous item (k)"><kbd>k</kbd><span aria-hidden="true">&uarr;</span></button>
+      <button class="read-panel-btn read-panel-key" type="button" data-panel-step="1" aria-label="Next item" aria-keyshortcuts="j" title="Next item (j)"><kbd>j</kbd><span aria-hidden="true">&darr;</span></button>
+      <a class="read-panel-btn read-panel-full" data-panel-full data-no-panel>Open full page<svg class="ico ico-arrow-up-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg></a>
+      <button class="read-panel-btn read-panel-close" type="button" data-panel-close aria-label="Close and go back" aria-keyshortcuts="Escape"><kbd>Esc</kbd>Close</button>
+    </div>
+  </header>
+  <div class="read-panel-body" id="read-panel-body"></div>
+</section>
 <div class="nav-progress" aria-hidden="true"></div>
 <button id="live-pill" type="button" hidden>new activity &middot; refresh</button>
 <div id="live-toast" role="status" aria-live="polite" hidden></div>
@@ -1278,15 +1313,17 @@
 (function () {
   
 
-  if (document.querySelector('.list-detail-split')) return;
   document.addEventListener('click', function (e) {
+    if (e.defaultPrevented) return;
     var row = e.target.closest ? e.target.closest('.row-link[data-href]') : null;
-    if (!row) return;
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+    if (!row || row.closest('.list-detail-split')) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     if (e.target.closest('a, button, form')) return; 
     var sel = window.getSelection && window.getSelection();
     if (sel && sel.type === 'Range' && sel.toString()) return;
-    location.href = row.getAttribute('data-href');
+    var href = row.getAttribute('data-href');
+    if (window.SeamPanel && window.SeamPanel.open(href, row)) return;
+    location.href = href;
   });
 })();
 (function () {
@@ -1390,10 +1427,14 @@
     teardown();
   }
 
+  function panelEntry() { return !!(history.state && history.state.seamPanel); }
+
   document.addEventListener('click', function (e) {
+    if (e.defaultPrevented) return;
     var closeHit = e.target.closest ? e.target.closest('.detail-close') : null;
     if (closeHit) { e.preventDefault(); requestClose(); return; }
     var peek = e.target.closest ? e.target.closest('[data-peek]') : null;
+    if (peek && !peek.closest('.list-detail-split')) peek = null; 
     if (peek) {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; 
       if (e.target.closest('button, form')) return;                       
@@ -1415,16 +1456,17 @@
     location.href = row.getAttribute('data-href');
   });
 
-  document.addEventListener('keydown', function (e) { var p = pane(); if (e.key === 'Escape' && p && !p.hidden) requestClose(); });
+  document.addEventListener('keydown', function (e) { var p = pane(); if (e.key === 'Escape' && !e.defaultPrevented && p && !p.hidden) requestClose(); });
   
   window.addEventListener('popstate', function () {
+    if (panelEntry()) return;
     var mm = location.hash.match(/^#peek=(.+)$/);
     if (mm) { var hp = decodeURIComponent(mm[1]); pushed = true; load(hp); mark(hp); }
     else { var p = pane(); if (p && !p.hidden) teardown(); }
   });
   
   
-  var m = location.hash.match(/^#peek=(.+)$/);
+  var m = panelEntry() ? null : location.hash.match(/^#peek=(.+)$/);
   if (m) {
     try { var h0 = decodeURIComponent(m[1]); pushed = false; load(h0); mark(h0); } catch (e) {}
   }
@@ -1845,6 +1887,20 @@
   </main>
 ==== /console/projects tail ====
 </div>
+
+<div class="read-scrim" id="read-scrim" hidden></div>
+<section class="read-panel" id="read-panel" role="dialog" aria-label="Read in place" tabindex="-1" hidden>
+  <header class="read-panel-head">
+    <p class="read-panel-where" data-panel-where></p>
+    <div class="read-panel-acts">
+      <button class="read-panel-btn read-panel-key" type="button" data-panel-step="-1" aria-label="Previous item" aria-keyshortcuts="k" title="Previous item (k)"><kbd>k</kbd><span aria-hidden="true">&uarr;</span></button>
+      <button class="read-panel-btn read-panel-key" type="button" data-panel-step="1" aria-label="Next item" aria-keyshortcuts="j" title="Next item (j)"><kbd>j</kbd><span aria-hidden="true">&darr;</span></button>
+      <a class="read-panel-btn read-panel-full" data-panel-full data-no-panel>Open full page<svg class="ico ico-arrow-up-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg></a>
+      <button class="read-panel-btn read-panel-close" type="button" data-panel-close aria-label="Close and go back" aria-keyshortcuts="Escape"><kbd>Esc</kbd>Close</button>
+    </div>
+  </header>
+  <div class="read-panel-body" id="read-panel-body"></div>
+</section>
 <div class="nav-progress" aria-hidden="true"></div>
 <button id="live-pill" type="button" hidden>new activity &middot; refresh</button>
 <div id="live-toast" role="status" aria-live="polite" hidden></div>
@@ -2152,15 +2208,17 @@
 (function () {
   
 
-  if (document.querySelector('.list-detail-split')) return;
   document.addEventListener('click', function (e) {
+    if (e.defaultPrevented) return;
     var row = e.target.closest ? e.target.closest('.row-link[data-href]') : null;
-    if (!row) return;
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+    if (!row || row.closest('.list-detail-split')) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     if (e.target.closest('a, button, form')) return; 
     var sel = window.getSelection && window.getSelection();
     if (sel && sel.type === 'Range' && sel.toString()) return;
-    location.href = row.getAttribute('data-href');
+    var href = row.getAttribute('data-href');
+    if (window.SeamPanel && window.SeamPanel.open(href, row)) return;
+    location.href = href;
   });
 })();
 (function () {
@@ -2264,10 +2322,14 @@
     teardown();
   }
 
+  function panelEntry() { return !!(history.state && history.state.seamPanel); }
+
   document.addEventListener('click', function (e) {
+    if (e.defaultPrevented) return;
     var closeHit = e.target.closest ? e.target.closest('.detail-close') : null;
     if (closeHit) { e.preventDefault(); requestClose(); return; }
     var peek = e.target.closest ? e.target.closest('[data-peek]') : null;
+    if (peek && !peek.closest('.list-detail-split')) peek = null; 
     if (peek) {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; 
       if (e.target.closest('button, form')) return;                       
@@ -2289,16 +2351,17 @@
     location.href = row.getAttribute('data-href');
   });
 
-  document.addEventListener('keydown', function (e) { var p = pane(); if (e.key === 'Escape' && p && !p.hidden) requestClose(); });
+  document.addEventListener('keydown', function (e) { var p = pane(); if (e.key === 'Escape' && !e.defaultPrevented && p && !p.hidden) requestClose(); });
   
   window.addEventListener('popstate', function () {
+    if (panelEntry()) return;
     var mm = location.hash.match(/^#peek=(.+)$/);
     if (mm) { var hp = decodeURIComponent(mm[1]); pushed = true; load(hp); mark(hp); }
     else { var p = pane(); if (p && !p.hidden) teardown(); }
   });
   
   
-  var m = location.hash.match(/^#peek=(.+)$/);
+  var m = panelEntry() ? null : location.hash.match(/^#peek=(.+)$/);
   if (m) {
     try { var h0 = decodeURIComponent(m[1]); pushed = false; load(h0); mark(h0); } catch (e) {}
   }
@@ -2714,6 +2777,20 @@
   </main>
 ==== /console/projects/example-open-alpha tail ====
 </div>
+
+<div class="read-scrim" id="read-scrim" hidden></div>
+<section class="read-panel" id="read-panel" role="dialog" aria-label="Read in place" tabindex="-1" hidden>
+  <header class="read-panel-head">
+    <p class="read-panel-where" data-panel-where></p>
+    <div class="read-panel-acts">
+      <button class="read-panel-btn read-panel-key" type="button" data-panel-step="-1" aria-label="Previous item" aria-keyshortcuts="k" title="Previous item (k)"><kbd>k</kbd><span aria-hidden="true">&uarr;</span></button>
+      <button class="read-panel-btn read-panel-key" type="button" data-panel-step="1" aria-label="Next item" aria-keyshortcuts="j" title="Next item (j)"><kbd>j</kbd><span aria-hidden="true">&darr;</span></button>
+      <a class="read-panel-btn read-panel-full" data-panel-full data-no-panel>Open full page<svg class="ico ico-arrow-up-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg></a>
+      <button class="read-panel-btn read-panel-close" type="button" data-panel-close aria-label="Close and go back" aria-keyshortcuts="Escape"><kbd>Esc</kbd>Close</button>
+    </div>
+  </header>
+  <div class="read-panel-body" id="read-panel-body"></div>
+</section>
 <div class="nav-progress" aria-hidden="true"></div>
 <button id="live-pill" type="button" hidden>new activity &middot; refresh</button>
 <div id="live-toast" role="status" aria-live="polite" hidden></div>
@@ -3021,15 +3098,17 @@
 (function () {
   
 
-  if (document.querySelector('.list-detail-split')) return;
   document.addEventListener('click', function (e) {
+    if (e.defaultPrevented) return;
     var row = e.target.closest ? e.target.closest('.row-link[data-href]') : null;
-    if (!row) return;
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+    if (!row || row.closest('.list-detail-split')) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     if (e.target.closest('a, button, form')) return; 
     var sel = window.getSelection && window.getSelection();
     if (sel && sel.type === 'Range' && sel.toString()) return;
-    location.href = row.getAttribute('data-href');
+    var href = row.getAttribute('data-href');
+    if (window.SeamPanel && window.SeamPanel.open(href, row)) return;
+    location.href = href;
   });
 })();
 (function () {
@@ -3133,10 +3212,14 @@
     teardown();
   }
 
+  function panelEntry() { return !!(history.state && history.state.seamPanel); }
+
   document.addEventListener('click', function (e) {
+    if (e.defaultPrevented) return;
     var closeHit = e.target.closest ? e.target.closest('.detail-close') : null;
     if (closeHit) { e.preventDefault(); requestClose(); return; }
     var peek = e.target.closest ? e.target.closest('[data-peek]') : null;
+    if (peek && !peek.closest('.list-detail-split')) peek = null; 
     if (peek) {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; 
       if (e.target.closest('button, form')) return;                       
@@ -3158,16 +3241,17 @@
     location.href = row.getAttribute('data-href');
   });
 
-  document.addEventListener('keydown', function (e) { var p = pane(); if (e.key === 'Escape' && p && !p.hidden) requestClose(); });
+  document.addEventListener('keydown', function (e) { var p = pane(); if (e.key === 'Escape' && !e.defaultPrevented && p && !p.hidden) requestClose(); });
   
   window.addEventListener('popstate', function () {
+    if (panelEntry()) return;
     var mm = location.hash.match(/^#peek=(.+)$/);
     if (mm) { var hp = decodeURIComponent(mm[1]); pushed = true; load(hp); mark(hp); }
     else { var p = pane(); if (p && !p.hidden) teardown(); }
   });
   
   
-  var m = location.hash.match(/^#peek=(.+)$/);
+  var m = panelEntry() ? null : location.hash.match(/^#peek=(.+)$/);
   if (m) {
     try { var h0 = decodeURIComponent(m[1]); pushed = false; load(h0); mark(h0); } catch (e) {}
   }
@@ -4240,8 +4324,7 @@
     </div>
     <div class="ops-stage-meta"><span class="status-key live"><span class="live-dot"></span>1 live</span><span class="status-key done">5 completed</span><span class="status-key expired">0 expired</span></div>
   </header>
-<div class="list-detail-split ops-split sessions-split">
-  <div class="list-pane">
+<div class="ops-list">
 
 
 
@@ -4351,14 +4434,6 @@
   <span class="widen-acts" data-seam-query>Widen to <a href="/console/sessions?status=&amp;w=7d&amp;sort=recent&amp;q=&amp;retained=">7d</a><a href="/console/sessions?status=&amp;w=30d&amp;sort=recent&amp;q=&amp;retained=">30d</a><a href="/console/sessions?status=&amp;w=all&amp;sort=recent&amp;q=&amp;retained=">All time</a></span>
 </div>
 
-  </div>
-  <section id="detail-pane" class="detail-pane" hidden aria-live="polite" aria-label="Session detail">
-    <div class="detail-pane-chrome">
-      <a class="detail-open btn small" href="#">open full &nearr;</a>
-      <button class="detail-close btn small" type="button" aria-label="Close detail">&times;</button>
-    </div>
-    <div class="detail-pane-body"></div>
-  </section>
 </div>
 </section>
 </div>
@@ -4495,6 +4570,20 @@
   </main>
 ==== /console/plans tail ====
 </div>
+
+<div class="read-scrim" id="read-scrim" hidden></div>
+<section class="read-panel" id="read-panel" role="dialog" aria-label="Read in place" tabindex="-1" hidden>
+  <header class="read-panel-head">
+    <p class="read-panel-where" data-panel-where></p>
+    <div class="read-panel-acts">
+      <button class="read-panel-btn read-panel-key" type="button" data-panel-step="-1" aria-label="Previous item" aria-keyshortcuts="k" title="Previous item (k)"><kbd>k</kbd><span aria-hidden="true">&uarr;</span></button>
+      <button class="read-panel-btn read-panel-key" type="button" data-panel-step="1" aria-label="Next item" aria-keyshortcuts="j" title="Next item (j)"><kbd>j</kbd><span aria-hidden="true">&darr;</span></button>
+      <a class="read-panel-btn read-panel-full" data-panel-full data-no-panel>Open full page<svg class="ico ico-arrow-up-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg></a>
+      <button class="read-panel-btn read-panel-close" type="button" data-panel-close aria-label="Close and go back" aria-keyshortcuts="Escape"><kbd>Esc</kbd>Close</button>
+    </div>
+  </header>
+  <div class="read-panel-body" id="read-panel-body"></div>
+</section>
 <div class="nav-progress" aria-hidden="true"></div>
 <button id="live-pill" type="button" hidden>new activity &middot; refresh</button>
 <div id="live-toast" role="status" aria-live="polite" hidden></div>
@@ -4802,15 +4891,17 @@
 (function () {
   
 
-  if (document.querySelector('.list-detail-split')) return;
   document.addEventListener('click', function (e) {
+    if (e.defaultPrevented) return;
     var row = e.target.closest ? e.target.closest('.row-link[data-href]') : null;
-    if (!row) return;
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+    if (!row || row.closest('.list-detail-split')) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     if (e.target.closest('a, button, form')) return; 
     var sel = window.getSelection && window.getSelection();
     if (sel && sel.type === 'Range' && sel.toString()) return;
-    location.href = row.getAttribute('data-href');
+    var href = row.getAttribute('data-href');
+    if (window.SeamPanel && window.SeamPanel.open(href, row)) return;
+    location.href = href;
   });
 })();
 (function () {
@@ -4914,10 +5005,14 @@
     teardown();
   }
 
+  function panelEntry() { return !!(history.state && history.state.seamPanel); }
+
   document.addEventListener('click', function (e) {
+    if (e.defaultPrevented) return;
     var closeHit = e.target.closest ? e.target.closest('.detail-close') : null;
     if (closeHit) { e.preventDefault(); requestClose(); return; }
     var peek = e.target.closest ? e.target.closest('[data-peek]') : null;
+    if (peek && !peek.closest('.list-detail-split')) peek = null; 
     if (peek) {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; 
       if (e.target.closest('button, form')) return;                       
@@ -4939,16 +5034,17 @@
     location.href = row.getAttribute('data-href');
   });
 
-  document.addEventListener('keydown', function (e) { var p = pane(); if (e.key === 'Escape' && p && !p.hidden) requestClose(); });
+  document.addEventListener('keydown', function (e) { var p = pane(); if (e.key === 'Escape' && !e.defaultPrevented && p && !p.hidden) requestClose(); });
   
   window.addEventListener('popstate', function () {
+    if (panelEntry()) return;
     var mm = location.hash.match(/^#peek=(.+)$/);
     if (mm) { var hp = decodeURIComponent(mm[1]); pushed = true; load(hp); mark(hp); }
     else { var p = pane(); if (p && !p.hidden) teardown(); }
   });
   
   
-  var m = location.hash.match(/^#peek=(.+)$/);
+  var m = panelEntry() ? null : location.hash.match(/^#peek=(.+)$/);
   if (m) {
     try { var h0 = decodeURIComponent(m[1]); pushed = false; load(h0); mark(h0); } catch (e) {}
   }
@@ -5300,6 +5396,20 @@
   </main>
 ==== /console/gardener tail ====
 </div>
+
+<div class="read-scrim" id="read-scrim" hidden></div>
+<section class="read-panel" id="read-panel" role="dialog" aria-label="Read in place" tabindex="-1" hidden>
+  <header class="read-panel-head">
+    <p class="read-panel-where" data-panel-where></p>
+    <div class="read-panel-acts">
+      <button class="read-panel-btn read-panel-key" type="button" data-panel-step="-1" aria-label="Previous item" aria-keyshortcuts="k" title="Previous item (k)"><kbd>k</kbd><span aria-hidden="true">&uarr;</span></button>
+      <button class="read-panel-btn read-panel-key" type="button" data-panel-step="1" aria-label="Next item" aria-keyshortcuts="j" title="Next item (j)"><kbd>j</kbd><span aria-hidden="true">&darr;</span></button>
+      <a class="read-panel-btn read-panel-full" data-panel-full data-no-panel>Open full page<svg class="ico ico-arrow-up-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg></a>
+      <button class="read-panel-btn read-panel-close" type="button" data-panel-close aria-label="Close and go back" aria-keyshortcuts="Escape"><kbd>Esc</kbd>Close</button>
+    </div>
+  </header>
+  <div class="read-panel-body" id="read-panel-body"></div>
+</section>
 <div class="nav-progress" aria-hidden="true"></div>
 <button id="live-pill" type="button" hidden>new activity &middot; refresh</button>
 <div id="live-toast" role="status" aria-live="polite" hidden></div>
@@ -5607,15 +5717,17 @@
 (function () {
   
 
-  if (document.querySelector('.list-detail-split')) return;
   document.addEventListener('click', function (e) {
+    if (e.defaultPrevented) return;
     var row = e.target.closest ? e.target.closest('.row-link[data-href]') : null;
-    if (!row) return;
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+    if (!row || row.closest('.list-detail-split')) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     if (e.target.closest('a, button, form')) return; 
     var sel = window.getSelection && window.getSelection();
     if (sel && sel.type === 'Range' && sel.toString()) return;
-    location.href = row.getAttribute('data-href');
+    var href = row.getAttribute('data-href');
+    if (window.SeamPanel && window.SeamPanel.open(href, row)) return;
+    location.href = href;
   });
 })();
 (function () {
@@ -5719,10 +5831,14 @@
     teardown();
   }
 
+  function panelEntry() { return !!(history.state && history.state.seamPanel); }
+
   document.addEventListener('click', function (e) {
+    if (e.defaultPrevented) return;
     var closeHit = e.target.closest ? e.target.closest('.detail-close') : null;
     if (closeHit) { e.preventDefault(); requestClose(); return; }
     var peek = e.target.closest ? e.target.closest('[data-peek]') : null;
+    if (peek && !peek.closest('.list-detail-split')) peek = null; 
     if (peek) {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; 
       if (e.target.closest('button, form')) return;                       
@@ -5744,16 +5860,17 @@
     location.href = row.getAttribute('data-href');
   });
 
-  document.addEventListener('keydown', function (e) { var p = pane(); if (e.key === 'Escape' && p && !p.hidden) requestClose(); });
+  document.addEventListener('keydown', function (e) { var p = pane(); if (e.key === 'Escape' && !e.defaultPrevented && p && !p.hidden) requestClose(); });
   
   window.addEventListener('popstate', function () {
+    if (panelEntry()) return;
     var mm = location.hash.match(/^#peek=(.+)$/);
     if (mm) { var hp = decodeURIComponent(mm[1]); pushed = true; load(hp); mark(hp); }
     else { var p = pane(); if (p && !p.hidden) teardown(); }
   });
   
   
-  var m = location.hash.match(/^#peek=(.+)$/);
+  var m = panelEntry() ? null : location.hash.match(/^#peek=(.+)$/);
   if (m) {
     try { var h0 = decodeURIComponent(m[1]); pushed = false; load(h0); mark(h0); } catch (e) {}
   }
@@ -6346,6 +6463,20 @@ window.SEAM_NO_LIVE_REFRESH = true;
   </main>
 ==== /console/settings tail ====
 </div>
+
+<div class="read-scrim" id="read-scrim" hidden></div>
+<section class="read-panel" id="read-panel" role="dialog" aria-label="Read in place" tabindex="-1" hidden>
+  <header class="read-panel-head">
+    <p class="read-panel-where" data-panel-where></p>
+    <div class="read-panel-acts">
+      <button class="read-panel-btn read-panel-key" type="button" data-panel-step="-1" aria-label="Previous item" aria-keyshortcuts="k" title="Previous item (k)"><kbd>k</kbd><span aria-hidden="true">&uarr;</span></button>
+      <button class="read-panel-btn read-panel-key" type="button" data-panel-step="1" aria-label="Next item" aria-keyshortcuts="j" title="Next item (j)"><kbd>j</kbd><span aria-hidden="true">&darr;</span></button>
+      <a class="read-panel-btn read-panel-full" data-panel-full data-no-panel>Open full page<svg class="ico ico-arrow-up-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></svg></a>
+      <button class="read-panel-btn read-panel-close" type="button" data-panel-close aria-label="Close and go back" aria-keyshortcuts="Escape"><kbd>Esc</kbd>Close</button>
+    </div>
+  </header>
+  <div class="read-panel-body" id="read-panel-body"></div>
+</section>
 <div class="nav-progress" aria-hidden="true"></div>
 <button id="live-pill" type="button" hidden>new activity &middot; refresh</button>
 <div id="live-toast" role="status" aria-live="polite" hidden></div>
@@ -6653,15 +6784,17 @@ window.SEAM_NO_LIVE_REFRESH = true;
 (function () {
   
 
-  if (document.querySelector('.list-detail-split')) return;
   document.addEventListener('click', function (e) {
+    if (e.defaultPrevented) return;
     var row = e.target.closest ? e.target.closest('.row-link[data-href]') : null;
-    if (!row) return;
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+    if (!row || row.closest('.list-detail-split')) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     if (e.target.closest('a, button, form')) return; 
     var sel = window.getSelection && window.getSelection();
     if (sel && sel.type === 'Range' && sel.toString()) return;
-    location.href = row.getAttribute('data-href');
+    var href = row.getAttribute('data-href');
+    if (window.SeamPanel && window.SeamPanel.open(href, row)) return;
+    location.href = href;
   });
 })();
 (function () {
@@ -6765,10 +6898,14 @@ window.SEAM_NO_LIVE_REFRESH = true;
     teardown();
   }
 
+  function panelEntry() { return !!(history.state && history.state.seamPanel); }
+
   document.addEventListener('click', function (e) {
+    if (e.defaultPrevented) return;
     var closeHit = e.target.closest ? e.target.closest('.detail-close') : null;
     if (closeHit) { e.preventDefault(); requestClose(); return; }
     var peek = e.target.closest ? e.target.closest('[data-peek]') : null;
+    if (peek && !peek.closest('.list-detail-split')) peek = null; 
     if (peek) {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; 
       if (e.target.closest('button, form')) return;                       
@@ -6790,16 +6927,17 @@ window.SEAM_NO_LIVE_REFRESH = true;
     location.href = row.getAttribute('data-href');
   });
 
-  document.addEventListener('keydown', function (e) { var p = pane(); if (e.key === 'Escape' && p && !p.hidden) requestClose(); });
+  document.addEventListener('keydown', function (e) { var p = pane(); if (e.key === 'Escape' && !e.defaultPrevented && p && !p.hidden) requestClose(); });
   
   window.addEventListener('popstate', function () {
+    if (panelEntry()) return;
     var mm = location.hash.match(/^#peek=(.+)$/);
     if (mm) { var hp = decodeURIComponent(mm[1]); pushed = true; load(hp); mark(hp); }
     else { var p = pane(); if (p && !p.hidden) teardown(); }
   });
   
   
-  var m = location.hash.match(/^#peek=(.+)$/);
+  var m = panelEntry() ? null : location.hash.match(/^#peek=(.+)$/);
   if (m) {
     try { var h0 = decodeURIComponent(m[1]); pushed = false; load(h0); mark(h0); } catch (e) {}
   }
@@ -6980,8 +7118,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
   
 </section>
 
-<div class="list-detail-split search-split">
-  <div class="list-pane">
+<div class="ops-list search-list">
 
     <div class="search-results-head">
       <div class="search-breakdown" aria-label="Result counts by type" data-seam-query>
@@ -7296,14 +7433,6 @@ Wave one is the staging ... </div>
       
     </section>
 
-  </div>
-  <section id="detail-pane" class="detail-pane" hidden aria-live="polite" aria-label="Result detail">
-    <div class="detail-pane-chrome">
-      <a class="detail-open btn small" href="#">open full &nearr;</a>
-      <button class="detail-close btn small" type="button" aria-label="Close detail">&times;</button>
-    </div>
-    <div class="detail-pane-body"></div>
-  </section>
 </div>
 
 

@@ -119,8 +119,10 @@ var searchAccents = map[string]string{
 }
 
 // searchRow is one result, already resolved to the URL it links to. Href is
-// always an in-console path; Peek marks the rows the detail pane can load as a
-// fragment (every kind here can, but the flag keeps the template honest).
+// always an in-console path; Peek marks the rows that have a ?peek=1 fragment
+// (every kind here has, but the flag keeps the template honest). It is a hint
+// only: the reading panel (static/panel.js) opens by the row's href, and a
+// project's row opens the project's page.
 type searchRow struct {
 	Kind        string                    `json:"kind"`
 	ID          string                    `json:"id"`

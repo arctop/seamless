@@ -319,6 +319,35 @@ the live refresh like the rest of the page.
 Every screen title carries an (i) button that says, in one line, what the screen
 is for.
 
+
+### Read in place {#read-in-place}
+
+A plain click on a link to a memory, a note, a task, a plan, a session, an
+event or a trial opens it in a wide panel over the page. The page stays as it
+was behind it: never reloaded, its scroll and open folds kept, its live
+updates going on. A click on a row of Sessions, Search, Mishaps or a project's
+tabs does the same. A project link still opens the project.
+
+- The panel's header says where the item lives (its project, then Memories,
+  Notes, Tasks and so on, or a task's `plan:<slug>`), with **k** and **j**
+  for the previous and next item of the list it was opened from, **Open full
+  page**, and **Esc Close**. On a phone it takes the whole screen.
+- `Esc`, **Close**, a click beside the panel or the browser's Back closes it,
+  and focus goes back to the link that opened it. A link inside the panel
+  opens that item in it, a step that Back takes back.
+- The address carries `#peek=` and the item, so a reload opens the panel
+  again.
+- An action inside it (**Mark done**, the star, **Archive** and the rest)
+  applies there: its message shows, and the panel shows the item as it is
+  now, or closes when the item is gone (a deleted note). The page behind
+  catches up through its live refresh.
+- A `Cmd`/`Ctrl`-click, a middle click, or a link from outside the console (an
+  agent's message, a new tab) opens [the item's own page](#item-page). When
+  you go there from a console page (**Open full page**), its way back reads
+  **Back to** that page's title and returns there.
+- The [Diary](#diary) and [Interactions](#interactions) keep the pane they
+  open beside the day or the feed.
+
 ### Hints, switches that save at once, and time left {#shared-parts}
 
 Settings and the lock screens share a few parts.
@@ -376,6 +405,8 @@ a superseded or archived memory finds it here too, with its status.
 | `a` / `x` | On the Gardener: apply / dismiss the open proposal. An apply that cannot be undone asks in the page first; press `a` again to confirm |
 | `[` | Collapse or expand the sidebar |
 | `?` | The shortcut sheet |
+| `Esc` / `k` / `j` | In the [reading panel](#read-in-place): close it / the previous / the next item of the list it was opened from |
+
 | `Esc` | Close the palette, a menu, a [hint](#shared-parts), the sheet, or the drawer |
 
 The `g` map is read from the sidebar itself, so a section switched off in
@@ -491,7 +522,8 @@ Every route answers in the shape the caller asked for:
 - **JSON** when the caller sets `?format=json` or an `Accept` header that wants
   JSON and not HTML. This is how `seam` reads the console's data.
 - **An HTML fragment** for entity details when the caller passes `?peek=1` - the
-  detail pane loads it without a page navigation - or `?reader=1`, the richer
+  [reading panel](#read-in-place) (or the Diary's or Interactions' pane) loads
+  it without a page navigation - or `?reader=1`, the richer
   reader fragment the library screens (notes, tasks, plans, labs,
   trials) swap in place.
 
@@ -1274,7 +1306,7 @@ Overview's mishap card and the check-in's mishap count open it too.
 - **Reports** - each with its type (or `untyped`), its text with the type
   prefix taken off, its project (click it to keep only that scope's reports),
   the session that reported it with its agent, and the memories it named.
-  Click a row to open its event beside the list.
+  Click a row to read its event in the [reading panel](#read-in-place).
 - **Memories named** - every memory the reports in view named, with how many
   named it. A memory many reports name is one that is not preventing its
   mishap.
@@ -2590,4 +2622,4 @@ common destinations. A 404 names the missing
 entity and a 400 names the bad parameter and its valid values. A 500 stays
 generic in the browser - the detail is in the log, not the response. Fragment
 fetches (`?peek=1`) get a fragment-shaped error, since a full page injected into
-the detail pane would nest the whole console inside itself.
+the reading panel would nest the whole console inside itself.

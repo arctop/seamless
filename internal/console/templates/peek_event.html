@@ -1,5 +1,5 @@
 {{define "peek-body"}}
-<article class="peek-entity event-peek">
+<article class="peek-entity event-peek" data-panel-project="{{.Event.Project}}">
   <header class="peek-head"><span class="kind {{.Trace.Tone}}" title="{{.Event.Kind}}">{{evtLabel .Event.Kind}}</span><span class="event-peek-time">{{agoTime .Event.When}}</span></header>
   <h2 class="peek-title">{{.Headline}}</h2>
   <p class="event-peek-context">{{.Eyebrow}}{{if .Trace.SessionName}} <span>&middot;</span> {{.Trace.SessionName}}{{end}}</p>

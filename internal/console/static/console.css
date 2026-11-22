@@ -1718,9 +1718,6 @@ tr:hover .copy-btn, tr:focus-within .copy-btn,
 .list-detail-split .row-link.selected td { background: var(--brand-soft); }
 .list-detail-split .row-link.selected td:first-child { box-shadow: inset 2px 0 0 var(--brand); }
 .list-detail-split .row-link.selected:hover td { background: var(--brand-soft); }
-/* Session rows are grid divs, not table cells -- give them the same selected wash. */
-.list-detail-split .sess-row.selected,
-.list-detail-split .sess-row.selected:hover { background: var(--brand-soft); box-shadow: inset 2px 0 0 var(--brand); }
 
 /* --- Interactions: live transport feed (Sentry-style stream) --- */
 .ix-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 4px 0 14px; flex-wrap: wrap; }
@@ -2396,7 +2393,7 @@ mark { background: var(--match); color: var(--match-ink); padding: 0 3px; border
 .search-result:last-child { border-bottom: 0; }
 .search-result::before { content: ""; position: absolute; inset: 12px auto 12px 0; width: 4px; border-radius: 0 4px 4px 0; background: var(--search-accent); opacity: 0.8; }
 .search-result:hover { background: color-mix(in oklab, var(--search-accent) 7%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--search-accent) 18%, transparent); }
-.search-result.selected, .search-result.selected:hover { background: color-mix(in oklab, var(--search-accent) 11%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--search-accent) 26%, transparent); }
+.search-result[data-panel-current], .search-result[data-panel-current]:hover { background: color-mix(in oklab, var(--search-accent) 11%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--search-accent) 26%, transparent); }
 .search-result-body { min-width: 0; }
 .search-result-titleline { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .search-result-titleline strong { min-width: 0; }
@@ -2949,7 +2946,7 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
 
 /* Session map: status is carried by a small rail, while project/source remain
    secondary columns until the right-hand detail workspace opens. */
-.sessions-stage .list-detail-split { margin-top: 10px; }
+.sessions-stage .ops-list { margin-top: 10px; }
 .sessions-stage .ops-stage-meta { gap: 10px; }
 .status-key { display: inline-flex; align-items: center; gap: 5px; }
 .status-key.live { color: var(--ok); }
@@ -2982,8 +2979,8 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
   justify-self: end; padding: 2px 7px; border-radius: var(--radius-pill);
   background: var(--surface-2); border: 1px solid var(--border); color: var(--muted);
 }
-.ops-page .list-detail-split .sess-row.selected,
-.ops-page .list-detail-split .sess-row.selected:hover {
+.ops-page .sess-row[data-panel-current],
+.ops-page .sess-row[data-panel-current]:hover {
   border-left-color: var(--lib-accent); background: color-mix(in oklab, var(--lib-accent) 10%, var(--surface));
   box-shadow: none;
 }
@@ -3004,9 +3001,6 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
   background: color-mix(in oklab, var(--lib-accent) 7%, var(--surface));
 }
 .ops-split.detail-open .detail-pane-body { padding: 22px; }
-.sessions-split.detail-open .sess-row { grid-template-columns: minmax(0, 1fr) 58px; }
-.sessions-split.detail-open .sess-row .proj,
-.sessions-split.detail-open .sess-row .src { display: none; }
 
 /* Interaction stream: make the filter hierarchy legible, keep history imports
    explicit, and expose the live in-view count. */
@@ -3082,9 +3076,6 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
   .interactions-split.detail-open { display: flex; flex-direction: column; }
   .ops-split.detail-open .list-pane { width: 100%; max-height: none; overflow: visible; }
   .ops-split.detail-open .detail-pane { position: static; width: 100%; max-height: none; }
-  .sessions-split.detail-open .sess-row { grid-template-columns: minmax(0, 1fr) 170px 58px; }
-  .sessions-split.detail-open .sess-row .proj,
-  .sessions-split.detail-open .sess-row .src { display: block; }
 }
 
 @media (max-width: 720px) {
@@ -3092,11 +3083,8 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
   .ops-stage-meta { justify-content: flex-start; text-align: left; }
   .ops-stage-dot { display: none; }
   .sess-group-note { display: none; }
-  .sess-row,
-  .sessions-split.detail-open .sess-row { grid-template-columns: minmax(0, 1fr) 58px; gap: 10px; }
-  .sess-row .proj, .sess-row .src,
-  .sessions-split.detail-open .sess-row .proj,
-  .sessions-split.detail-open .sess-row .src { display: none; }
+  .sess-row { grid-template-columns: minmax(0, 1fr) 58px; gap: 10px; }
+  .sess-row .proj, .sess-row .src { display: none; }
   .ix-session-filter { align-items: flex-start; width: 100%; max-width: none; }
   .ix-session-filter .ix-tabs { justify-content: flex-start; }
   .ix-controls .ix-actions { width: 100%; justify-content: space-between; }
@@ -8771,6 +8759,68 @@ a.item-step:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
   .ov2-vitals:not(.dy-tiles) .ov2-vital-num strong { font-size: var(--text-2xl); }
   .ov2-vitals:not(.dy-tiles) .ov2-vital-foot { flex-wrap: wrap; }
   .ov2-vitals:not(.dy-tiles) .ov2-spark { width: 72px; }
+}
+
+
+/* UX 31: read in place -- one wide panel over the page for every item link
+   (static/panel.js; its markup is in layout.html, outside .main). It slides
+   in from the right over a scrim that leaves the sidebar clear, and takes the
+   whole width on a phone. Its body scrolls on its own, and the prose in it is
+   not capped (.prose keeps its 340px cap everywhere else). */
+.read-scrim {
+  position: fixed; top: 0; right: 0; bottom: 0; left: var(--sidebar-width); z-index: 63;
+  background: var(--scrim); animation: seam-fade var(--dur-med) var(--ease-out) both;
+}
+.read-scrim[hidden], .read-panel[hidden] { display: none; }
+.read-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 64;
+  width: min(720px, calc(100vw - var(--sidebar-width)));
+  display: flex; flex-direction: column;
+  background: var(--surface-solid); color: var(--ink);
+  border-left: 1px solid var(--border-strong); box-shadow: var(--shadow-lg);
+  animation: read-panel-in var(--dur-med) var(--ease-out) both;
+}
+.read-panel:focus { outline: none; }
+@keyframes read-panel-in { from { transform: translateX(28px); opacity: 0.4; } to { transform: none; opacity: 1; } }
+.read-panel-head {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 12px 18px; border-bottom: 1px solid var(--border);
+}
+.read-panel-where { margin: 0; min-width: 0; color: var(--muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.read-panel-where a { color: var(--brand-strong); text-decoration: none; }
+.read-panel-where a:hover { text-decoration: underline; }
+.read-panel-sep { margin: 0 6px; color: var(--faint); }
+.read-panel-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.read-panel-btn {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 5px 10px;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  background: transparent; color: var(--ink-2); font: inherit; font-size: var(--text-xs);
+  text-decoration: none; cursor: pointer;
+}
+.read-panel-btn:hover { color: var(--ink); background: var(--surface-2); }
+.read-panel-btn:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+.read-panel-btn:disabled { opacity: 0.45; cursor: default; background: transparent; color: var(--ink-2); }
+.read-panel-btn kbd { padding: 0; border: 0; background: none; color: var(--muted); font-family: var(--font-mono); font-size: var(--text-2xs); }
+.read-panel-key { font-family: var(--font-mono); }
+.read-panel-full .ico { width: 13px; height: 13px; }
+.read-panel-close { background: var(--surface-2); color: var(--ink); }
+.read-panel-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 22px 26px 32px; }
+.read-panel-body[aria-busy="true"] { opacity: 0.6; transition: opacity var(--dur-fast) var(--ease-out); }
+.read-panel .peek-title { font-size: var(--text-xl); line-height: 1.25; }
+.read-panel .prose { max-height: none; overflow: visible; font-size: var(--text-md); line-height: 1.7; }
+.read-panel-error { margin: 0; color: var(--muted); font-size: var(--text-sm); }
+/* The row the panel reads from, while it is open (panel.js marks it
+   data-panel-current; Sessions, Mishaps and Search mark theirs above). */
+tbody tr.row-link[data-panel-current] td { background: var(--brand-soft); }
+tbody tr.row-link[data-panel-current] td:first-child { box-shadow: inset 2px 0 0 var(--brand); }
+/* Sessions, Search and Mishaps: the list stays full width, as it did before
+   a detail opened beside it. */
+.ops-list { display: flow-root; min-width: 0; }
+@media (max-width: 720px) {
+  .read-scrim { left: 0; }
+  .read-panel { width: 100%; border-left: 0; }
+  .read-panel-head { padding: 10px 14px; }
+  .read-panel-body { padding: 18px 16px 28px; }
 }
 
 

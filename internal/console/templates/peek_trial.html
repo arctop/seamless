@@ -1,5 +1,5 @@
 {{define "peek-body"}}
-<article class="peek-entity">
+<article class="peek-entity" data-panel-project="{{.Project}}">
   <header class="peek-head">
     <span class="mono-id">{{shortID .ID}}</span>{{copyBtn .ID}}
     {{if .Outcome}}<span class="badge {{outcomeTone .Outcome}}">{{.Outcome}}</span>{{end}}
