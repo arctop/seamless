@@ -1,6 +1,7 @@
-{{/* Settings > Features: the optional features' switches. Parsed with the
-     settings page (render.go), whose dispatch calls it with the page's
-     data, so $ reads as it does there ($.Level, $.Features, $.Data). */}}
+{{/* Settings > Features: one row per optional feature, each switch saving at
+     once. Parsed with the settings page (render.go), whose dispatch calls it
+     with the page's data, so $ reads as it does there ($.Level, $.Features,
+     $.Data). */}}
 {{define "settings-features"}}{{with .Data}}
     <section class="settings-zone settings-section" id="features">
       <header class="settings-section-head">
@@ -11,38 +12,26 @@
         {{if $.Level.AtLeast "standard"}}{{if .FeaturesOverridden}}{{template "source-chip" (sourceChip "override" "Stored in this console, by a save here or by the upgrade that kept the features already in use: these switches win over the config file and its environment variables until you reset them." "features-reset" "Clear the stored override and go back to the file/env configuration? No data is deleted.")}}{{else}}{{template "source-chip" (sourceChip "file" "From the config file and its environment variables. Saving here stores your choice, which wins until you reset it." "")}}{{end}}{{end}}
       </header>
 
-      <article class="features-workbench">
-        <form method="post" action="/console/settings/features" data-features-form>
-          <div class="features-grid">
-            {{range .Features}}
-            <section class="feature-card{{if .Enabled}} is-on{{end}}" data-feature="{{.Key}}">
-              <header class="feature-card-head">
-                <h4>{{.Label}}</h4>
-                <span class="badge {{if .Enabled}}ok{{end}} feature-state-pill">{{if .Enabled}}Enabled{{else}}Disabled{{end}}</span>
-              </header>
-              <p class="feature-blurb">{{.Blurb}}</p>
-              <label class="brief-toggle feature-toggle">
-                <input type="checkbox" name="{{.Field}}" value="1"{{if .Enabled}} checked{{end}}>
-                <span class="brief-switch" aria-hidden="true"></span>
-                <span><strong>Available in the console and to agents</strong><small>{{if $.Level.AtLeast "standard"}}{{.WhenOff}}{{else}}{{.WhenOffPlain}}{{end}}</small></span>
-              </label>
-              {{if .DataKept}}<p class="feature-data">{{icon "database"}}<span>{{.DataKept}}</span></p>{{end}}
-            </section>
-            {{end}}
+      {{/* A switch saves at once (data-autosave, shell.js "Switches that save
+           at once"): the whole form posts, every switch as it stands, so the
+           route rebuilds the set from checkbox presence as it always has. The
+           toast names the feature (the switch's aria-label), adds
+           data-autosave-note, and offers Undo. A row's hint holds what the
+           feature is and what turning it off hides; its chip, the data it
+           keeps. Without script the Save button posts the form. */ -}}
+      <form class="feature-rows" method="post" action="/console/settings/features" data-features-form data-autosave data-autosave-note="Agents see it from their next session.">
+        {{range .Features}}
+        <div class="feature-row{{if .Enabled}} is-on{{end}}" data-feature="{{.Key}}">
+          <span class="feature-row-ico" aria-hidden="true">{{icon .Icon}}</span>
+          <div class="feature-row-text">
+            <div class="feature-row-head"><strong class="feature-row-name">{{.Label}}</strong>{{if $.Level.AtLeast "standard"}}{{hintFor .Label .Hint}}{{else}}{{hintFor .Label .HintPlain}}{{end}}{{with .Kept}}<span class="badge compact quiet feature-row-kept">{{.}}</span>{{end}}</div>
+            <p class="feature-row-line" id="feature-line-{{.Key}}">{{.Line}}</p>
           </div>
-
-          <footer class="brief-actions settings-savebar">
-            <div class="brief-state" id="features-state" role="status" aria-live="polite">
-              <span class="state-dot"></span>
-              <span>Saving applies in the console now and to agents from their next session.</span>
-            </div>
-            <div class="btn-row">
-              <button class="btn" type="button" data-form-discard>Discard</button>
-              <button class="btn primary" type="submit">{{icon "check"}} Save features</button>
-            </div>
-          </footer>
-        </form>
-        {{if .FeaturesOverridden}}<form id="features-reset" method="post" action="/console/settings/features/reset"></form>{{end}}
-      </article>
+          <label class="set-switch"><input type="checkbox" role="switch" name="{{.Field}}" value="1" aria-label="{{.Label}}" aria-describedby="feature-line-{{.Key}}"{{if .Enabled}} checked{{end}}><span class="brief-switch" aria-hidden="true"></span></label>
+        </div>
+        {{end}}
+        <div class="feature-rows-save"><button class="btn small primary" type="submit">{{icon "check"}} Save features</button></div>
+      </form>
+      {{if .FeaturesOverridden}}<form id="features-reset" method="post" action="/console/settings/features/reset"></form>{{end}}
     </section>
 {{end}}{{end}}

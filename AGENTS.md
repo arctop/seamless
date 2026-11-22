@@ -2055,6 +2055,8 @@ counts down; `templates/kit_shared.html` holds `source-chip` and `steps`; and
 `.set-seg`, `.set-unit` and `.door`. A form whose switches, radios or selects
 save at once carries `data-autosave`: `shell.js` submits it through the shared
 POST path (navigation.js, never a fetch of its own), and the toast offers Undo
-or Try again. Its action must be a route registered through `post()`
+or Try again. A `data-autosave-note` on the form, or on the control's row, adds
+its sentence after the toast's words (Features: "Agents see it from their next
+session."). Its action must be a route registered through `post()`
 (`TestKtAutosave_FormsPostToRegisteredRoutes`); a form with a typed value keeps
 its Save bar.

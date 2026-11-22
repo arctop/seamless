@@ -265,7 +265,7 @@ func TestWrHeads_PlainWords(t *testing.T) {
 	_, std := newConsoleLevel(t, config.Features{}, "standard")
 	require.NotContains(t, getHTMLBody(t, std, "/console/settings?s=workspaces"), "Repo routes with no project")
 	require.Contains(t, getHTMLBody(t, std, "/console/settings?s=experience"),
-		"<li>Settings \u203a Workspaces: each repo route&#39;s host and the repo routes with no project</li>")
+		"<span class=\"level-card-detail\">Settings \u203a Workspaces: each repo route&#39;s host and the repo routes with no project</span>")
 }
 
 // ?format=json keeps exactly the fields it had: the directory's counts are a

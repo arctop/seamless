@@ -901,11 +901,13 @@ func TestSettingsFeaturesZone_MarkupContract(t *testing.T) {
 	require.Contains(t, body, `data-features-form`)
 	require.Contains(t, body, `name="feature_research"`)
 	require.Contains(t, body, `name="feature_momentum"`)
-	require.Contains(t, body, `class="brief-switch"`, "the toggle uses the shared switch markup")
-	require.Contains(t, body, "Disabled", "the state pill says which way the switch is")
+	require.Contains(t, body, `<label class="set-switch"><input type="checkbox" role="switch" name="feature_research" value="1" aria-label="Research labs &amp; trials"`,
+		"the toggle is the shared switch, named for its feature")
+	require.NotContains(t, body, `feature-state-pill`, "the switch says which way it is; no Enabled/Disabled pill")
 	require.Contains(t, body, "3 agent tools (lab_open, trial_record, trial_query)")
-	require.Contains(t, body, "Data kept: 1 trial across 1 lab.",
-		"the reassurance line reports the data of a feature that is currently off")
+	require.Contains(t, body, `<span class="badge compact quiet feature-row-kept">1 trial kept</span>`,
+		"the data-kept chip reports the data of a feature that is currently off")
+	require.Contains(t, body, "Data kept: 1 trial across 1 lab.", "the hint says what the data is")
 	require.NotContains(t, body, `action="/console/settings/features/reset"`,
 		"reset is offered only while a stored override exists")
 	require.Contains(t, body, `<span class="src-chip is-file">`, "the source chip says where the switches come from")
@@ -922,7 +924,7 @@ func TestSettingsFeaturesZone_ShowsLiveDataAndOverrideState(t *testing.T) {
 
 	body := getPeek(t, mux, "/console/settings?s=features").Body.String()
 	require.Contains(t, body, "Data kept: 1 trial across 1 lab.")
-	require.Contains(t, body, "Enabled")
+	require.Contains(t, body, `name="feature_research" value="1" aria-label="Research labs &amp; trials" aria-describedby="feature-line-research" checked>`)
 	require.Contains(t, body, `action="/console/settings/features/reset"`)
 	require.Contains(t, body, `<span class="src-chip is-override">`)
 	require.Contains(t, body, `<span class="src-chip-label">Set here</span>`)
@@ -1099,24 +1101,29 @@ func TestSettingsJSON_ExposesTheFeatureContract(t *testing.T) {
 func TestFeatureStyles_ZoneAndDisabledPage(t *testing.T) {
 	css := string(consoleCSS)
 
-	require.Contains(t, css, ".features-workbench")
-	require.Contains(t, css, ".features-grid")
-	require.Contains(t, css, ".feature-card")
+	require.Contains(t, css, ".feature-rows")
+	require.Contains(t, css, ".feature-row {")
 	require.Contains(t, css, ".feature-off")
 	require.Contains(t, css, ".settings-subnav", "Settings is one section at a time, with a sub-nav")
+	for _, gone := range []string{".features-workbench", ".features-grid", ".feature-card", ".feature-state-pill", ".feature-blurb",
+		".feature-toggle", ".feature-data"} {
+		require.NotContains(t, css, gone, "the cards' rules left with the cards")
+	}
 }
 
-// The features form rides the same snapshot-based dirty tracker the briefing
-// form uses, and the page stays opted out of the live SSE morph so a half-filled
-// form is never clobbered.
+// The features form saves at once (data-autosave): no Save bar, so no dirty
+// tracker either, while the briefing form keeps both. The page stays opted
+// out of the live SSE morph so a half-filled form elsewhere is never
+// clobbered.
 func TestSettingsFeaturesForm_DirtyStateAndNoLiveRefresh(t *testing.T) {
 	source := settingsPageSource(t)
 	page := string(source)
 
 	require.Contains(t, page, "window.SEAM_NO_LIVE_REFRESH = true")
-	require.Contains(t, page, "enhanceDirtyForm('[data-features-form]', 'features-state'")
+	require.NotContains(t, page, "enhanceDirtyForm('[data-features-form]'", "a form that saves at once is never dirty")
 	require.Contains(t, page, "enhanceDirtyForm('[data-briefing-form]', 'brief-state'")
-	require.Contains(t, page, `id="features-state"`)
+	require.NotContains(t, page, `id="features-state"`)
+	require.Contains(t, page, `<form class="feature-rows" method="post" action="/console/settings/features" data-features-form data-autosave data-autosave-note=`)
 }
 
 // The disabled page is a plain server-rendered page: no GET form, no reload, and

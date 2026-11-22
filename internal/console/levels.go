@@ -197,6 +197,15 @@ type levelCard struct {
 	// promise what the gates do not do.
 	Items   []string
 	Details []string
+	// Screens and Sections are Items as the Experience card's chips: the
+	// screens, then each Settings section by its own name.
+	Screens  []string
+	Sections []string
+	// DetailsLabel counts Details for the chip that opens them in a hint
+	// ("6 details", drawn "+6 details"), and DetailsID is that hint's id;
+	// both are empty when there are none.
+	DetailsLabel string
+	DetailsID    string
 	// Current marks the level in force.
 	Current bool
 }
@@ -218,6 +227,11 @@ func levelCards(feats config.Features, current level) []levelCard {
 			card.Lead = "Shows"
 		}
 		card.Items, card.Details = levelAddsScreens(feats, lvl), levelAddsSurfaces(lvl)
+		card.Screens, card.Sections = levelScreens(feats, lvl), levelSections(lvl)
+		if n := len(card.Details); n > 0 {
+			card.DetailsLabel = plural(n, "detail", "details")
+			card.DetailsID = hintID("level details "+lvl.String(), strings.Join(card.Details, "\n"))
+		}
 		out = append(out, card)
 	}
 	return out
@@ -232,22 +246,33 @@ func levelAdds(feats config.Features, lvl level) []string {
 
 // levelAddsScreens names the screens and Settings sections lvl adds.
 func levelAddsScreens(feats config.Features, lvl level) []string {
+	items := levelScreens(feats, lvl)
+	if sections := levelSections(lvl); len(sections) > 0 {
+		items = append(items, "Settings: "+joinWithAnd(sections))
+	}
+	return items
+}
+
+// levelScreens names the screens lvl adds, in sidebar order.
+func levelScreens(feats config.Features, lvl level) []string {
 	var items []string
 	for _, sc := range screens {
 		if sc.Min == lvl && sc.visibleAt(feats, lvl) {
 			items = append(items, sc.Label)
 		}
 	}
+	return items
+}
+
+// levelSections names the Settings sections lvl adds, in sub-nav order.
+func levelSections(lvl level) []string {
 	var sections []string
 	for _, sec := range settingsSections {
 		if sec.Min == lvl {
 			sections = append(sections, sec.Label)
 		}
 	}
-	if len(sections) > 0 {
-		items = append(items, "Settings: "+joinWithAnd(sections))
-	}
-	return items
+	return sections
 }
 
 // levelAddsSurfaces names the in-page surfaces lvl adds, grouped by page:

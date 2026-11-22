@@ -58,13 +58,15 @@ func TestSwTrialsOutcomeLinksOpenTheList(t *testing.T) {
 	require.NotContains(t, failed, "boot passes")
 }
 
-// Item 6: the line under "Available in the console and to agents" says what
-// turning the switch off does, on a card that is on and on one that is off.
+// Item 6: a feature's row says what turning its switch off does, in the
+// row's hint (UX 35: the "Available in the console and to agents" line is
+// gone), on a row that is on.
 func TestSwFeatureSwitchSaysWhatOffDoes(t *testing.T) {
 	_, mux := newConsoleFeatures(t, config.Features{Research: true})
 	page := getHTMLBody(t, mux, "/console/settings?s=features")
-	require.Contains(t, page, `<span><strong>Available in the console and to agents</strong><small>Turning this off hides the Labs &amp; Trials screens`,
+	require.Contains(t, page, `working the same lab. Turning this off hides the Labs &amp; Trials screens`,
 		"an enabled switch says what switching it off takes away")
+	require.NotContains(t, page, "Available in the console and to agents")
 	require.NotContains(t, page, "<small>Hides ")
 	require.Equal(t, "Turning this off hides nothing on its own.", featureWhenOff(features.Feature{}))
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"html/template"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -630,8 +631,9 @@ func rawJSONString(t *testing.T, mux *http.ServeMux, path string) string {
 	return rr.Body.String()
 }
 
-// Settings -> Experience: three cards, the current one marked, each with a
-// list GENERATED from the registries; the precedence line names who set it.
+// Settings -> Experience: three cards, the current one marked, each with
+// chips GENERATED from the registries (screens, then Settings sections); the
+// source chip names who set it.
 func TestExperienceSection_CardsAreGenerated(t *testing.T) {
 	db, mux := newConsoleLevel(t, config.Features{Research: true}, "basic")
 	page := getPeek(t, mux, "/console/settings?s=experience").Body.String()
@@ -644,25 +646,52 @@ func TestExperienceSection_CardsAreGenerated(t *testing.T) {
 	}
 	basic, standard, advanced := card("basic"), card("standard"), card("advanced")
 	require.Contains(t, basic, "is-current")
-	require.Contains(t, basic, "In use")
-	require.Contains(t, standard, "Use Standard")
+	require.Contains(t, basic, `<span class="badge ok">In use</span>`)
+	require.NotContains(t, basic, `type="submit"`, "the level in use offers no button")
+	require.Contains(t, standard, `<button class="btn small" type="submit">Use Standard</button>`)
 	for _, item := range []string{"Overview", "Mishaps", "Projects", "Plans", "Tasks", "Sessions", "Memories", "Notes",
-		"Gardener", "Settings", "Search", "Settings: Experience, Features, Your setup, Updates, and Backups"} {
+		"Gardener", "Settings", "Search"} {
 		require.Contains(t, basic, "<li>"+item+"</li>")
 	}
-	for _, item := range []string{"Now", "Labs", "Trials", "System", "Privacy", "Settings: Briefing and Workspaces"} {
+	for _, item := range []string{"Now", "Labs", "Trials", "System", "Privacy"} {
 		require.Contains(t, standard, "<li>"+item+"</li>")
 	}
 	for _, item := range []string{"Projects", "Plans", "Tasks"} {
 		require.NotContains(t, standard, "<li>"+item+"</li>", "Basic shows %s, so Standard does not add it", item)
 	}
+	// Each Settings section is a chip of its own on the card of the level
+	// that adds it, read from the sub-nav's registry (never a list here).
+	section := func(label string) string {
+		return `<li class="level-card-section">` + string(icon("settings")) + `<span class="level-card-sr">Settings: </span>` +
+			template.HTMLEscapeString(label) + `</li>`
+	}
+	cards := map[level]string{levelBasic: basic, levelStandard: standard, levelAdvanced: advanced}
+	for _, sec := range settingsSections {
+		for lvl, c := range cards {
+			require.Equal(t, sec.Min == lvl, strings.Contains(c, section(sec.Label)), "%s on the %s card", sec.Label, lvl)
+		}
+	}
+	require.NotContains(t, basic, "<li>Settings: ", "no section list in one chip")
 	// The pitches say what each level is for, and Basic's names the work.
 	require.Contains(t, basic, "Just the essentials: the work you follow and what your agents remember.")
 	require.Contains(t, standard, "Watch your agents live, curate knowledge and look after the server.")
-	for _, item := range []string{"Interactions", "Retrieval", "Context", "Settings: Knowledge engine"} {
+	for _, item := range []string{"Interactions", "Retrieval", "Context"} {
 		require.Contains(t, advanced, "<li>"+item+"</li>")
 	}
 	require.NotContains(t, standard, "<li>Interactions</li>", "each card lists what IT adds")
+	// The finer details fold into a "+N details" chip whose hint lists them;
+	// Basic has none, so no chip.
+	require.NotContains(t, basic, "level-card-more")
+	for lvl, c := range map[level]string{levelStandard: standard, levelAdvanced: advanced} {
+		details := levelAddsSurfaces(lvl)
+		require.NotEmpty(t, details)
+		require.Contains(t, c, `<li class="level-card-more"><span class="hint"><button type="button" class="hint-btn" aria-describedby="hint-`)
+		require.Contains(t, c, ">+"+plural(len(details), "detail", "details")+"</button>", lvl)
+		for _, d := range details {
+			require.Contains(t, c, `<span class="level-card-detail">`+template.HTMLEscapeString(d)+`</span>`, lvl)
+		}
+		require.NotContains(t, c, "<ul class=\"level-card-details\">", "no bullet list of details")
+	}
 	require.Contains(t, page, `<span class="src-chip is-file">`, "the source chip names who set the level")
 	require.Contains(t, page, "From the config file or its environment variables (console.level).")
 	require.Contains(t, page, `data-theme-choice`)

@@ -86,7 +86,7 @@ nothing, and their rows say so.
 | Choose the console level | `POST /console/settings/level` | Stores the [experience level](#choose-how-much-you-see) as a row that wins over file and env. Presentation only: nothing an agent receives changes. |
 | Reset the console level | `POST /console/settings/level/reset` | Clears that row, back to the file/env level. |
 | Dismiss the welcome card | `POST /console/settings/level/welcome` | Records that the Overview welcome card was seen, without choosing a level. With the card's write-screening box ticked, it also turns that feature on, as a level choice with the box ticked does. |
-| Save optional features | `POST /console/settings/features` | Writes the feature switches as a stored **override row** in the DB. It changes what is exposed - console screens and the matching agent tools - and deletes nothing. |
+| Save optional features | `POST /console/settings/features` | Writes every feature switch as a stored **override row** in the DB; a switch posts the whole form as soon as it changes. It changes what is exposed - console screens and the matching agent tools - and deletes nothing. |
 | Reset optional features | `POST /console/settings/features/reset` | Clears the override row, reverting to the file/env configuration - which, unless you set the keys there, means every optional feature is off again. Still deletes nothing. |
 | Turn update checks on or off | `POST /console/settings/updates` | Stores the console's `update.check` override (`check=on` or `off`). It cannot turn checks on while the config file or environment says `update.check: false` - that is final, and the form says so. Off is your decision alone: refused (403) from an agent's process on the peer_auth socket and from a paired device, whatever checks are now; on is open to them. Installs nothing. |
 | Reset update checks | `POST /console/settings/updates/reset` | Clears that override - both switches - handing them back to the config file (or, without one, the build's default). A build that is not a published release does not check by default, so there a reset that drops this console's `check=on` turns checks off, and automatic updates with them: it is refused like turning them off, unless the file or environment locks checks off already. It is refused even where the file's `update.check: true` would keep them on, since the console cannot see the file's update block under its own override. Every other reset, and every reset on a release build, is open to any caller. |
@@ -2261,15 +2261,20 @@ plus `consoleLevel`, `consoleLevelOverridden`, `consoleLevelSource`, and
 `/console/settings?s=experience`
 
 The three [levels](#choose-how-much-you-see) side by side - Basic, Standard,
-Advanced - the current one marked, each with a one-line pitch and a list of what
-it shows, generated from the same registries the sidebar and the page gates
-read, so the list cannot promise something the level does not do. Choosing one
-applies at once: the sidebar and the page update in place, and if the new level
+Advanced - as cards of one height, the one in force marked **In use**. Each has
+a one-line pitch and chips for what it shows (Basic) or adds (the others): its
+screens, then its Settings sections, each with a gear. The finer controls a
+level adds inside pages fold into a **+N details** chip, whose
+[hint](#shared-parts) lists them. All of it is generated from the same
+registries the sidebar and the page gates read, so a card cannot promise
+something the level does not do. Choosing one is the card's **Use** button, and
+it applies at once: the sidebar and the page update in place, and if the new level
 hides the screen you were on you land on the Overview with a note. The source chip
 says **Config file**, or **Set here** once a level is stored, whether you chose it
 in this console or the upgrade set it (its hint says which); **Reset** hands the
-choice back to `console.level`. The same
-section holds the theme and a button for the shortcut sheet. The theme is
+choice back to `console.level`. Below the cards, one card holds two rows:
+**Theme**, and **Keyboard** (`?` for every shortcut, `⌘K` to search or jump,
+and a button for the shortcut sheet). The theme is
 **System**, **Light**, or **Dark**, kept per browser. System is what a browser
 starts on: it follows your computer's light or dark appearance, and follows it
 live when it changes. Light and Dark pin one theme. The sidebar's sun and moon
@@ -2282,10 +2287,15 @@ screen, and picking System here goes back to following the computer.
 
 Optional features are the parts of Seamless you can switch on and off, and they
 ship **off**: a fresh install exposes none of them until you turn one on. The
-section renders one card per feature - a toggle, an Enabled/Disabled pill, what the
-feature is, a generated line naming exactly what turning it off takes away
-("Turning this off hides the Labs & Trials screens, ..."), and a live count of
-the data it holds either way ("Data kept: 12 trials across 3 labs").
+section is one row per feature: its icon, its name, a one-line description, a
+chip for the data it keeps when it holds any ("8 trials kept", "1 write held"),
+and its switch. The name's [hint](#shared-parts) holds the rest: what the
+feature is, a generated sentence naming exactly what turning it off takes away
+("Turning this off hides the Labs & Trials screens, ..."), and, while it holds
+data, what is kept ("Data kept: 12 trials across 3 labs"). A switch saves as
+soon as you flip it, with no Save button: the toast names the change
+("Momentum is off. Agents see it from their next session.") and offers
+**Undo**. Without JavaScript the section keeps a **Save features** button.
 
 There are six today:
 
@@ -2387,9 +2397,9 @@ rather than what the console shows. On, every agent write to a memory or note
 is screened, the suspicious ones - and any change to a binding rule by a
 session that read outside text, and any supersede or delete of a constraint -
 wait on the [Held](#held) screen instead of landing, and briefing and recall
-lines carry owner-confirmed or agent-written marks. Its card's data line counts
+lines carry owner-confirmed or agent-written marks. Its row's chip counts
 the writes waiting; turning it off stops screening new writes and releases
-none of them. With restricted local accounts configured, the card says the
+none of them. With restricted local accounts configured, the row's hint says the
 Held screen stays for their proposals and only its screening parts go. The
 [write screening guide](/guides/write-screening/) has the screens, the reasons
 and the events.
@@ -2419,8 +2429,8 @@ hook answers and writes exactly as before.
 **Nothing is ever deleted.** Switching a feature off gates exposure and nothing
 else: the trials stay in the database, its screens answer with a short "switched
 off" page that links back here (a JSON caller gets a 403), and switching it back
-on restores every surface exactly as it was. That is what the data-kept line on
-each card is for - it reports the feature's own rows whether it is on or off.
+on restores every surface exactly as it was. That is what the data-kept chip on
+each row is for - it reports the feature's own rows whether it is on or off.
 
 **When the change lands** has four different answers:
 
@@ -2433,7 +2443,7 @@ each card is for - it reports the feature's own rows whether it is on or off.
 | A client's tool list | The next time it lists tools, in practice its next session. Seamless declares `listChanged: false` and sends no tool-list notification, so a connected client keeps the list it already has. |
 | The client-side skill | The next `seamlessd install-hooks` run. The daemon does not reach into `~/.claude/skills` on a toggle, so `seamlessd doctor` raises an **info** line while a skill for a disabled feature is still sitting in a client's skill home. |
 
-Saving writes a **stored override** row in the database - the same layer the
+Each save writes a **stored override** row in the database - the same layer the
 briefing form uses. It wins over file and env, never touches your config file,
 and holds until **Reset** on the source chip clears it; reset means back to
 the file/env configuration, which unless you set `features:` there is off.
@@ -2443,8 +2453,8 @@ installation that already holds trial data seeds the override with research on,
 so a feature that now ships off does not disappear from under data you were
 already using. That is why the chip's hint says the choice is stored here, by a
 save or by that upgrade, rather than crediting you with it - and reset clears it
-like any other. At Basic the section keeps the cards, what each hides, and the
-data-kept line, and leaves out the agent tool names and the source chip.
+like any other. At Basic the section keeps the rows, what each hides, and the
+data-kept chip, and leaves out the agent tool names and the source chip.
 
 ### Your setup
 

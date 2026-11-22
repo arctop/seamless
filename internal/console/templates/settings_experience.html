@@ -14,36 +14,46 @@
         {{if not .ConsoleLevelOverridden}}{{template "source-chip" (sourceChip "file" "From the config file or its environment variables (console.level). Choosing a level here stores it, and it wins until you reset it." "")}}{{else if eq .ConsoleLevelSource "seeded"}}{{template "source-chip" (sourceChip "override" "Set by the upgrade: this installation was in use before levels existed, so it kept every screen. Reset hands the level back to the config file." "level-reset")}}{{else}}{{template "source-chip" (sourceChip "override" "Chosen in this console, so it wins over the config file and its environment variables until you reset it." "level-reset")}}{{end}}
       </header>
 
+      {{/* Three cards of equal height (levels.go levelCards): the pitch, what
+           the level shows or adds as chips (its screens, then its Settings
+           sections), and its finer details behind a "+N details" chip that
+           opens them in a hint (the .hint parts, shell.js). Choosing a level
+           is the card's button. */ -}}
       <div class="level-cards">
         {{range .LevelCards}}
         <form class="level-card{{if .Current}} is-current{{end}}" method="post" action="/console/settings/level" data-level-card="{{.Level}}">
           <input type="hidden" name="level" value="{{.Level}}">
           <input type="hidden" name="return" value="/console/settings?s=experience">
-          <header class="level-card-head"><h3>{{.Level.Label}}</h3>{{if .Current}}<span class="badge ok">Current</span>{{end}}</header>
+          <header class="level-card-head"><h3>{{.Level.Label}}</h3>{{if .Current}}<span class="badge ok">In use</span>{{end}}</header>
           <p class="level-card-line">{{.Line}}</p>
-          <div class="level-card-items"><span class="level-card-lead">{{.Lead}}</span><ul>{{range .Items}}<li>{{.}}</li>{{end}}</ul>
-            {{with .Details}}<ul class="level-card-details">{{range .}}<li>{{.}}</li>{{end}}</ul>{{end}}</div>
-          {{if .Current}}<button class="btn small" type="button" disabled>In use</button>{{else}}<button class="btn small primary" type="submit">Use {{.Level.Label}}</button>{{end}}
+          <div class="level-card-items"><span class="level-card-lead" id="level-lead-{{.Level}}">{{.Lead}}</span><ul aria-labelledby="level-lead-{{.Level}}">{{range .Screens}}<li>{{.}}</li>{{end}}{{range .Sections}}<li class="level-card-section">{{icon "settings"}}<span class="level-card-sr">Settings: </span>{{.}}</li>{{end}}{{if .DetailsLabel}}<li class="level-card-more"><span class="hint"><button type="button" class="hint-btn" aria-describedby="{{.DetailsID}}">+{{.DetailsLabel}}</button><span class="hint-pop" id="{{.DetailsID}}" role="tooltip">{{range .Details}}<span class="level-card-detail">{{.}}</span>{{end}}</span></span></li>{{end}}</ul></div>
+          {{if not .Current}}<button class="btn small" type="submit">Use {{.Level.Label}}</button>{{end}}
         </form>
         {{end}}
       </div>
       {{if .ConsoleLevelOverridden}}<form id="level-reset" method="post" action="/console/settings/level/reset"><input type="hidden" name="return" value="/console/settings?s=experience"></form>{{end}}
 
-      <div class="experience-extras">
-        <section class="experience-group" aria-labelledby="experience-theme-title">
-          <h3 id="experience-theme-title">Theme</h3>
-          <div class="seg theme-choice" role="radiogroup" aria-labelledby="experience-theme-title" data-theme-choice>
-            <label><input type="radio" name="theme" value="system"><span>System</span></label>
-            <label><input type="radio" name="theme" value="light"><span>Light</span></label>
-            <label><input type="radio" name="theme" value="dark"><span>Dark</span></label>
+      {{/* Theme and Keyboard: two rows of one card. */ -}}
+      <div class="experience-rows">
+        <div class="experience-row" role="group" aria-labelledby="experience-theme-title">
+          <span class="experience-row-label" id="experience-theme-title">Theme</span>
+          <div class="experience-row-value">
+            <div class="seg theme-choice" role="radiogroup" aria-labelledby="experience-theme-title" data-theme-choice>
+              <label><input type="radio" name="theme" value="system"><span>System</span></label>
+              <label><input type="radio" name="theme" value="light"><span>Light</span></label>
+              <label><input type="radio" name="theme" value="dark"><span>Dark</span></label>
+            </div>
+            <span class="experience-row-note">This browser only{{hintFor "Theme" "System follows your computer’s light or dark appearance. The sidebar’s sun and moon pick Light or Dark."}}</span>
           </div>
-          <p>System follows your computer&rsquo;s light or dark appearance. Kept in this browser only; the sidebar&rsquo;s sun and moon pick Light or Dark.</p>
-        </section>
-        <section class="experience-group" aria-labelledby="experience-keys-title">
-          <h3 id="experience-keys-title">Keyboard</h3>
-          <p>Press <kbd>?</kbd> anywhere for every shortcut, <kbd>&#8984;</kbd><kbd>K</kbd> to search or jump.</p>
+        </div>
+        <div class="experience-row" role="group" aria-labelledby="experience-keys-title">
+          <span class="experience-row-label" id="experience-keys-title">Keyboard</span>
+          <div class="experience-row-value">
+            <span class="experience-keys"><kbd>?</kbd> every shortcut</span>
+            <span class="experience-keys"><kbd>&#8984;</kbd><kbd>K</kbd> search or jump</span>
+          </div>
           <button class="btn small" type="button" data-keys-open>{{icon "keyboard"}} Show shortcuts</button>
-        </section>
+        </div>
       </div>
     </section>
 {{end}}{{end}}

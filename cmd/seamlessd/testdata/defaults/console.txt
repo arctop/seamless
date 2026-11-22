@@ -5973,11 +5973,10 @@ window.SEAM_NO_LIVE_REFRESH = true;
         <form class="level-card is-current" method="post" action="/console/settings/level" data-level-card="basic">
           <input type="hidden" name="level" value="basic">
           <input type="hidden" name="return" value="/console/settings?s=experience">
-          <header class="level-card-head"><h3>Basic</h3><span class="badge ok">Current</span></header>
+          <header class="level-card-head"><h3>Basic</h3><span class="badge ok">In use</span></header>
           <p class="level-card-line">Just the essentials: the work you follow and what your agents remember.</p>
-          <div class="level-card-items"><span class="level-card-lead">Shows</span><ul><li>Overview</li><li>Mishaps</li><li>Projects</li><li>Plans</li><li>Tasks</li><li>Sessions</li><li>Memories</li><li>Notes</li><li>Gardener</li><li>Settings</li><li>Search</li><li>Settings: Experience, Features, Your setup, Updates, and Backups</li></ul>
-            </div>
-          <button class="btn small" type="button" disabled>In use</button>
+          <div class="level-card-items"><span class="level-card-lead" id="level-lead-basic">Shows</span><ul aria-labelledby="level-lead-basic"><li>Overview</li><li>Mishaps</li><li>Projects</li><li>Plans</li><li>Tasks</li><li>Sessions</li><li>Memories</li><li>Notes</li><li>Gardener</li><li>Settings</li><li>Search</li><li class="level-card-section"><svg class="ico ico-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span class="level-card-sr">Settings: </span>Experience</li><li class="level-card-section"><svg class="ico ico-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span class="level-card-sr">Settings: </span>Features</li><li class="level-card-section"><svg class="ico ico-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span class="level-card-sr">Settings: </span>Your setup</li><li class="level-card-section"><svg class="ico ico-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span class="level-card-sr">Settings: </span>Updates</li><li class="level-card-section"><svg class="ico ico-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span class="level-card-sr">Settings: </span>Backups</li></ul></div>
+          
         </form>
         
         <form class="level-card" method="post" action="/console/settings/level" data-level-card="standard">
@@ -5985,9 +5984,8 @@ window.SEAM_NO_LIVE_REFRESH = true;
           <input type="hidden" name="return" value="/console/settings?s=experience">
           <header class="level-card-head"><h3>Standard</h3></header>
           <p class="level-card-line">Watch your agents live, curate knowledge and look after the server.</p>
-          <div class="level-card-items"><span class="level-card-lead">Adds</span><ul><li>Now</li><li>Labs</li><li>Trials</li><li>System</li><li>Privacy</li><li>Settings: Briefing and Workspaces</li></ul>
-            <ul class="level-card-details"><li>Overview: the observation window, the vitals, and the projects table and the knowledge rail</li><li>Sessions: the Retained filter, the Sort menu, and a session&#39;s review signals</li><li>Memories: the Reach and Utility sorts, how often each memory surfaced, the Never surfaced filter, and the utility score in the reader</li><li>Gardener: the Type and Source filters, the project-split example, the Hidden forever list, Retarget on a proposal, and Hide forever on a proposal</li><li>Search: the Updated window and the Sort control</li><li>Settings › Features: the source chip and the agent tool names</li></ul></div>
-          <button class="btn small primary" type="submit">Use Standard</button>
+          <div class="level-card-items"><span class="level-card-lead" id="level-lead-standard">Adds</span><ul aria-labelledby="level-lead-standard"><li>Now</li><li>Labs</li><li>Trials</li><li>System</li><li>Privacy</li><li class="level-card-section"><svg class="ico ico-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span class="level-card-sr">Settings: </span>Briefing</li><li class="level-card-section"><svg class="ico ico-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span class="level-card-sr">Settings: </span>Workspaces</li><li class="level-card-more"><span class="hint"><button type="button" class="hint-btn" aria-describedby="hint-74d65dc7">+6 details</button><span class="hint-pop" id="hint-74d65dc7" role="tooltip"><span class="level-card-detail">Overview: the observation window, the vitals, and the projects table and the knowledge rail</span><span class="level-card-detail">Sessions: the Retained filter, the Sort menu, and a session&#39;s review signals</span><span class="level-card-detail">Memories: the Reach and Utility sorts, how often each memory surfaced, the Never surfaced filter, and the utility score in the reader</span><span class="level-card-detail">Gardener: the Type and Source filters, the project-split example, the Hidden forever list, Retarget on a proposal, and Hide forever on a proposal</span><span class="level-card-detail">Search: the Updated window and the Sort control</span><span class="level-card-detail">Settings › Features: the source chip and the agent tool names</span></span></span></li></ul></div>
+          <button class="btn small" type="submit">Use Standard</button>
         </form>
         
         <form class="level-card" method="post" action="/console/settings/level" data-level-card="advanced">
@@ -5995,29 +5993,33 @@ window.SEAM_NO_LIVE_REFRESH = true;
           <input type="hidden" name="return" value="/console/settings?s=experience">
           <header class="level-card-head"><h3>Advanced</h3></header>
           <p class="level-card-line">Every screen, every knob, every number.</p>
-          <div class="level-card-items"><span class="level-card-lead">Adds</span><ul><li>Interactions</li><li>Retrieval</li><li>Context</li><li>Settings: Knowledge engine</li></ul>
-            <ul class="level-card-details"><li>Settings › Workspaces: each repo route&#39;s host and the repo routes with no project</li><li>Event pages: the decoded payload fields and the raw payload</li></ul></div>
-          <button class="btn small primary" type="submit">Use Advanced</button>
+          <div class="level-card-items"><span class="level-card-lead" id="level-lead-advanced">Adds</span><ul aria-labelledby="level-lead-advanced"><li>Interactions</li><li>Retrieval</li><li>Context</li><li class="level-card-section"><svg class="ico ico-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg><span class="level-card-sr">Settings: </span>Knowledge engine</li><li class="level-card-more"><span class="hint"><button type="button" class="hint-btn" aria-describedby="hint-d02d80d2">+2 details</button><span class="hint-pop" id="hint-d02d80d2" role="tooltip"><span class="level-card-detail">Settings › Workspaces: each repo route&#39;s host and the repo routes with no project</span><span class="level-card-detail">Event pages: the decoded payload fields and the raw payload</span></span></span></li></ul></div>
+          <button class="btn small" type="submit">Use Advanced</button>
         </form>
         
       </div>
       
 
-      <div class="experience-extras">
-        <section class="experience-group" aria-labelledby="experience-theme-title">
-          <h3 id="experience-theme-title">Theme</h3>
-          <div class="seg theme-choice" role="radiogroup" aria-labelledby="experience-theme-title" data-theme-choice>
-            <label><input type="radio" name="theme" value="system"><span>System</span></label>
-            <label><input type="radio" name="theme" value="light"><span>Light</span></label>
-            <label><input type="radio" name="theme" value="dark"><span>Dark</span></label>
+      <div class="experience-rows">
+        <div class="experience-row" role="group" aria-labelledby="experience-theme-title">
+          <span class="experience-row-label" id="experience-theme-title">Theme</span>
+          <div class="experience-row-value">
+            <div class="seg theme-choice" role="radiogroup" aria-labelledby="experience-theme-title" data-theme-choice>
+              <label><input type="radio" name="theme" value="system"><span>System</span></label>
+              <label><input type="radio" name="theme" value="light"><span>Light</span></label>
+              <label><input type="radio" name="theme" value="dark"><span>Dark</span></label>
+            </div>
+            <span class="experience-row-note">This browser only<span class="hint"><button type="button" class="hint-btn" aria-label="About Theme" aria-describedby="hint-f8a886cf"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></button><span class="hint-pop" id="hint-f8a886cf" role="tooltip">System follows your computer’s light or dark appearance. The sidebar’s sun and moon pick Light or Dark.</span></span></span>
           </div>
-          <p>System follows your computer&rsquo;s light or dark appearance. Kept in this browser only; the sidebar&rsquo;s sun and moon pick Light or Dark.</p>
-        </section>
-        <section class="experience-group" aria-labelledby="experience-keys-title">
-          <h3 id="experience-keys-title">Keyboard</h3>
-          <p>Press <kbd>?</kbd> anywhere for every shortcut, <kbd>&#8984;</kbd><kbd>K</kbd> to search or jump.</p>
+        </div>
+        <div class="experience-row" role="group" aria-labelledby="experience-keys-title">
+          <span class="experience-row-label" id="experience-keys-title">Keyboard</span>
+          <div class="experience-row-value">
+            <span class="experience-keys"><kbd>?</kbd> every shortcut</span>
+            <span class="experience-keys"><kbd>&#8984;</kbd><kbd>K</kbd> search or jump</span>
+          </div>
           <button class="btn small" type="button" data-keys-open><svg class="ico ico-keyboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/></svg> Show shortcuts</button>
-        </section>
+        </div>
       </div>
     </section>
 
@@ -6324,7 +6326,6 @@ window.SEAM_NO_LIVE_REFRESH = true;
   function enhanceSettings() {
     followReembed();
     enhanceDirtyForm('[data-briefing-form]', 'brief-state', 'Unsaved changes — save to use them for new sessions.');
-    enhanceDirtyForm('[data-features-form]', 'features-state', 'Unsaved changes — save to apply them.');
     enhanceDirtyForm('[data-backups-form]', 'backups-state', 'Unsaved changes — save to use them from the next backup.');
     enhanceFamilies();
     refreshPreview();

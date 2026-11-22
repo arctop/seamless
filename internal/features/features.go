@@ -2,7 +2,7 @@
 // the owner can switch on and off from the console without losing any data.
 //
 // It is the single source of truth every surface derives from -- the MCP tool
-// filter, the console route gate and nav, the Settings cards, the docs, and the
+// filter, the console route gate and nav, the Settings rows, the docs, and the
 // guard tests. Adding a future optional feature is one registry entry plus one
 // config.Features field plus tagging its surfaces; nothing else hand-maintains a
 // list of what a feature covers.
@@ -101,8 +101,12 @@ type Feature struct {
 	Key Key
 	// Label is the owner-facing name, shown in Settings.
 	Label string
-	// Blurb is one sentence explaining what the feature is.
+	// Blurb is one sentence explaining what the feature is. The docs and the
+	// doctor read it, and the Settings row keeps it in its hint.
 	Blurb string
+	// Line is the feature in one short sentence (at most lineMax runes),
+	// the description on its Settings row.
+	Line string
 	// Tools are the MCP tool names hidden from tools/list and rejected by
 	// tools/call while the feature is off. Every name must exist in
 	// mcp.Catalog() (asserted by a guard test in internal/mcp).
@@ -152,13 +156,18 @@ func (f Feature) Set(c *config.Features, on bool) {
 	f.set(c, on)
 }
 
+// lineMax is the most runes a Feature.Line may hold: one line on a Settings
+// row.
+const lineMax = 80
+
 // registry is the ordered feature list. Order is stable and is the order the
-// Settings cards render in.
+// Settings rows render in.
 var registry = []Feature{
 	{
 		Key:           Research,
 		Label:         "Research labs & trials",
 		Blurb:         "Systematic investigations recorded as trials -- expected vs actual, shared across agents working the same lab.",
+		Line:          "Experiments with expected and actual results, shared across agents.",
 		Tools:         []string{"lab_open", "trial_record", "trial_query"},
 		NavIDs:        []string{"labs", "trials"},
 		RoutePrefixes: []string{"/console/labs", "/console/trials"},
@@ -171,6 +180,7 @@ var registry = []Feature{
 		Key:   Momentum,
 		Label: "Momentum",
 		Blurb: "Gentle progress cues on existing screens -- plan finish lines, capture streaks, knowledge payoffs, and project growth -- judged from real activity, never invented.",
+		Line:  "Quiet progress cues: finish lines, streaks and payoffs.",
 		Surfaces: []string{
 			"the plan finish-line cards on Overview (and their agent-briefing emphasis)",
 			"the capture calendar and streak on Sessions",
@@ -189,6 +199,7 @@ var registry = []Feature{
 		Key:   Gamification,
 		Label: "Gamification",
 		Blurb: "An arcade layer on the Now screen -- the day tape, personal records, the hot-streak pulse, and celebration moments -- every number judged from real recorded activity, never invented.",
+		Line:  "An arcade layer on Now: the day tape, records and streaks.",
 		Surfaces: []string{
 			"the day tape on Now",
 			"the personal-records rail on Now",
@@ -203,6 +214,7 @@ var registry = []Feature{
 		Key:           Screening,
 		Label:         "Write screening",
 		Blurb:         "Screens every agent write to memories and notes for secrets, injection markers, hidden characters, encoded blobs and unlisted links, and holds suspicious ones -- with any change to a binding rule by a session that read outside text -- out of briefings and recall until you release them. It also reviews the existing corpus on this machine, keeps files changed outside Seamless out of briefings until you accept them, and adds a lockdown switch.",
+		Line:          "Holds a suspicious agent write until you release it.",
 		NavIDs:        []string{"held"},
 		RoutePrefixes: []string{"/console/held"},
 		Surfaces: []string{
@@ -216,6 +228,7 @@ var registry = []Feature{
 		Key:           RepoLocks,
 		Label:         "Repo locks",
 		Blurb:         "Locks on a repository's refs -- its main branch, or a tag pattern -- that agents declare once and hold while they land changes, so landings happen one at a time across machines.",
+		Line:          "Agents take turns landing on a repository branch.",
 		Tools:         []string{"locks_list", "locks_declare", "locks_acquire", "locks_release"},
 		NavIDs:        []string{"locks"},
 		RoutePrefixes: []string{"/console/locks"},
@@ -230,6 +243,7 @@ var registry = []Feature{
 		Key:           Diary,
 		Label:         "Diary",
 		Blurb:         "A page for each day of work: what was worked on, which agents did it, and what it took in agent time and model tokens, with the meaningful work in the spotlight and short question-and-answer sessions folded away. While it is on, a Claude Code session's token usage is kept current as the session runs, read after a prompt is answered, at most once every three minutes.",
+		Line:          "A page for each day: what was worked on, by whom, and what it cost.",
 		NavIDs:        []string{"diary"},
 		RoutePrefixes: []string{"/console/diary"},
 		Surfaces: []string{

@@ -131,11 +131,12 @@ func (s *Service) featureOff(w http.ResponseWriter, r *http.Request, key feature
 }
 
 // ---------------------------------------------------------------------------
-// Settings cards
+// Settings rows
 // ---------------------------------------------------------------------------
 
-// featureCard is one optional feature as the Settings zone renders it -- and, by
-// the same struct, as `GET /console/settings?format=json` exposes it. Key and
+// featureCard is one optional feature as the Settings section renders it (one
+// row: its icon, name, hint, data-kept chip, line and switch) -- and, by the
+// same struct, as `GET /console/settings?format=json` exposes it. Key and
 // Enabled are the machine-readable contract (`seam doctor` computes the expected
 // tool count from Tools and Enabled); the rest is owner-facing copy.
 type featureCard struct {
@@ -147,6 +148,8 @@ type featureCard struct {
 	Tools   []string `json:"tools"`
 	// Field is the form field name the toggle submits under.
 	Field string `json:"field"`
+	// Line is the registry's one short sentence, the row's description.
+	Line string `json:"line"`
 	// WhenOff spells out what switching this off hides, generated from the
 	// registry rather than transcribed, so it cannot drift from what the gates
 	// actually do.
@@ -157,6 +160,39 @@ type featureCard struct {
 	// DataKept is the live reassurance line ("Data kept: 12 trials across 3
 	// labs"), empty when the console has no count to offer for this feature.
 	DataKept string `json:"dataKept,omitempty"`
+	// Kept is DataKept as the row's chip ("12 trials kept", "1 write held"),
+	// empty while the feature holds no data.
+	Kept string `json:"-"`
+	// Icon is the row's glyph (featureIcons).
+	Icon string `json:"-"`
+	// Hint is the row's (i) hint at Standard and above: what the feature is
+	// (Blurb), what turning it off hides (WhenOff) and, while it holds data,
+	// what stays (DataKept). HintPlain is the same at Basic, with WhenOffPlain.
+	Hint      string `json:"-"`
+	HintPlain string `json:"-"`
+}
+
+// featureIcons are the rows' glyphs, by feature. A feature missing here gets
+// featureIconDefault; a guard test keeps every registered feature in the map
+// and every glyph in lucidePaths.
+var featureIcons = map[features.Key]string{
+	features.Research:     "flask-conical",
+	features.Momentum:     "sparkles",
+	features.Gamification: "trophy",
+	features.Screening:    "shield",
+	features.RepoLocks:    "git-branch",
+	features.Diary:        "book-open",
+}
+
+// featureIconDefault is the Features section's own glyph.
+const featureIconDefault = "toggle-right"
+
+// featureIcon is a feature's row glyph.
+func featureIcon(key features.Key) string {
+	if name, ok := featureIcons[key]; ok {
+		return name
+	}
+	return featureIconDefault
 }
 
 // featureFieldPrefix namespaces the toggle form fields, so the features form's
@@ -193,12 +229,12 @@ const heldStaysForProposals = " The Held screen stays, for restricted accounts' 
 // when toolNames is set (WhenOff) and counting them otherwise (WhenOffPlain:
 // agents lose the matching tools without their identifiers spelled out).
 // keepsHeld says the Held screen outlives the screening switch (restricted
-// accounts are configured, peer_auth.restricted): the screening card then
+// accounts are configured, peer_auth.restricted): the screening row then
 // names the screen's screening parts instead of the screen, and says the
-// screen stays. Every other card, and every card of an install without
-// restricted accounts, is unchanged. The sentence sits under the switch's
-// "Available in the console and to agents", on cards that are on and off
-// alike, so it names the act ("Turning this off hides ..."), never a state.
+// screen stays. Every other row, and every row of an install without
+// restricted accounts, is unchanged. The sentence sits in the row's hint, on
+// rows that are on and off alike, so it names the act ("Turning this off
+// hides ..."), never a state.
 func featureHides(f features.Feature, toolNames, keepsHeld bool) string {
 	parts := slices.Clone(f.Surfaces)
 	navIDs := f.NavIDs
@@ -273,25 +309,57 @@ func featureDataKept(key features.Key, n navCounts) string {
 	}
 }
 
-// featureCards builds the Settings zone's cards from the registry, in registry
-// order, so a newly registered feature appears with no template change. counts
-// must be the RAW nav counts (not the feature-filtered ones the sidebar uses):
-// the reassurance line has to report the data of a feature that is off.
+// featureKept is featureDataKept as a chip: the feature's own data in a few
+// words ("12 trials kept", "1 write held"), or "" while it holds none, so a
+// row shows a chip only when there is data to keep.
+func featureKept(key features.Key, n navCounts) string {
+	switch key {
+	case features.Research:
+		if n.Trials == 0 {
+			return ""
+		}
+		return plural(n.Trials, "trial", "trials") + " kept"
+	case features.Screening:
+		if n.Held == 0 {
+			return ""
+		}
+		return plural(n.Held, "write held", "writes held")
+	default:
+		return ""
+	}
+}
+
+// featureHint joins a row's hint: what the feature is, what turning it off
+// hides, and -- only while the feature holds data (kept is set) -- the
+// data-kept sentence, so the hint says what stays.
+func featureHint(blurb, whenOff, kept, dataKept string) string {
+	parts := []string{blurb, whenOff}
+	if kept != "" && dataKept != "" {
+		parts = append(parts, dataKept)
+	}
+	return strings.Join(slices.DeleteFunc(parts, func(p string) bool { return p == "" }), " ")
+}
+
+// featureCards builds the Settings section's rows from the registry, in
+// registry order, so a newly registered feature appears with no template
+// change. counts must be the RAW nav counts (not the feature-filtered ones the
+// sidebar uses): the data-kept chip and line have to report the data of a
+// feature that is off.
 func featureCards(cfg config.Features, counts navCounts) []featureCard {
 	return featureCardsFor(cfg, counts, false)
 }
 
 // featureCardsFor is featureCards for an install whose restricted local
 // accounts (peer_auth.restricted, Config.RestrictedAccounts) may be
-// configured. With restricted set, the screening card's "what disappears"
+// configured. With restricted set, the screening row's "what disappears"
 // line stays true: switching screening off leaves the Held screen up for the
 // accounts' proposals (heldProposals) and takes away only its screening
-// parts. With restricted false every card is exactly featureCards'.
+// parts. With restricted false every row is exactly featureCards'.
 func featureCardsFor(cfg config.Features, counts navCounts, restricted bool) []featureCard {
 	reg := features.Registry()
 	cards := make([]featureCard, 0, len(reg))
 	for _, f := range reg {
-		cards = append(cards, featureCard{
+		c := featureCard{
 			Key:          string(f.Key),
 			Label:        f.Label,
 			Blurb:        f.Blurb,
@@ -299,12 +367,18 @@ func featureCardsFor(cfg config.Features, counts navCounts, restricted bool) []f
 			Default:      f.Default,
 			Tools:        f.Tools,
 			Field:        featureField(f.Key),
+			Line:         f.Line,
 			WhenOff:      featureHides(f, true, restricted),
 			WhenOffPlain: featureHides(f, false, restricted),
 			// The counts are the feature's own data, so they are reported
 			// whether it is on or off -- that is the whole point of the line.
 			DataKept: featureDataKept(f.Key, counts),
-		})
+			Kept:     featureKept(f.Key, counts),
+			Icon:     featureIcon(f.Key),
+		}
+		c.Hint = featureHint(c.Blurb, c.WhenOff, c.Kept, c.DataKept)
+		c.HintPlain = featureHint(c.Blurb, c.WhenOffPlain, c.Kept, c.DataKept)
+		cards = append(cards, c)
 	}
 	return cards
 }

@@ -3227,30 +3227,6 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
 .gardener-rules span { overflow: hidden; color: var(--muted); font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; }
 .gardener-rules strong { color: var(--ink-2); font-family: var(--font-mono); font-size: var(--text-xs); font-weight: 600; white-space: nowrap; }
 
-/* Optional features (Settings zone 02): one card per registry feature. It
-   borrows the briefing workbench's chrome -- same head, same config-flow
-   breadcrumb, same sticky save bar -- because it is the same kind of surface:
-   an editable runtime layer over the file/env config. */
-.features-workbench {
-  overflow: clip; border: 1px solid color-mix(in oklab, var(--k-decision) 28%, var(--border)); border-radius: var(--radius-lg);
-  background: var(--surface); box-shadow: var(--shadow-md);
-}
-.features-workbench form[data-features-form] { padding: 14px; }
-.features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
-.feature-card {
-  --group-accent: var(--muted); min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-md);
-  background: color-mix(in oklab, var(--group-accent) 3%, var(--surface));
-  box-shadow: inset 0 2px 0 color-mix(in oklab, var(--group-accent) 70%, transparent);
-}
-.feature-card.is-on { --group-accent: var(--k-decision); border-color: color-mix(in oklab, var(--k-decision) 26%, var(--border)); }
-.feature-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.feature-card-head h4 { margin: 0; font-family: var(--font-display); font-size: var(--text-sm); font-weight: 650; }
-.feature-state-pill { flex: none; }
-.feature-blurb { margin: 7px 0 12px; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
-.feature-toggle { background: var(--surface); }
-.feature-data { display: flex; align-items: flex-start; gap: 7px; margin: 10px 0 0; color: var(--faint); font-size: var(--text-2xs); line-height: 1.4; }
-.feature-data > .ico { width: 13px; height: 13px; flex: none; margin-top: 1px; }
-
 /* The friendly page a gated route answers with: an explanation and the way
    back, never an error. */
 .feature-off {
@@ -6222,13 +6198,6 @@ html:not(.js) [data-form-discard] { display: none; }
   background: color-mix(in oklab, var(--ink) 4%, transparent); color: var(--ink-2); line-height: 1.5;
 }
 .level-card > .btn { align-self: flex-start; }
-.experience-extras { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.experience-group {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 13px 15px;
-  border: 1px solid var(--border); border-radius: var(--radius-md); background: color-mix(in oklab, var(--ink) 3%, transparent);
-}
-.experience-group h3 { margin: 0; font-family: var(--font-display); font-size: var(--text-sm); font-weight: 650; }
-.experience-group p { margin: 0; color: var(--muted); font-size: var(--text-xs); }
 .theme-choice { display: inline-flex; }
 .theme-choice label { position: relative; display: inline-flex; align-items: center; cursor: pointer; }
 .theme-choice input { position: absolute; opacity: 0; pointer-events: none; }
@@ -6277,7 +6246,7 @@ html:not(.js) [data-form-discard] { display: none; }
   .level-cards { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 720px) {
-  .level-welcome-cards, .experience-extras { grid-template-columns: minmax(0, 1fr); }
+  .level-welcome-cards { grid-template-columns: minmax(0, 1fr); }
   .level-welcome-head { flex-direction: column; }
 }
 
@@ -6329,16 +6298,6 @@ html:not(.js) [data-form-discard] { display: none; }
    Below Standard a session has no review-signal scorecard; its findings take
    the whole row instead of leaving the scorecard's column empty. */
 .session-review-grid:not(:has(.session-scorecard)) { grid-template-columns: minmax(0, 1fr); }
-/* The finer controls a level adds read as plain lines under the screen chips:
-   they are sentences, and a pill around a sentence reads as a button. */
-.level-card-items ul.level-card-details { display: block; margin-top: 9px; }
-.level-card-items ul.level-card-details li {
-  position: relative; margin: 0 0 4px; padding: 0 0 0 12px; border: 0; border-radius: 0; background: none;
-  color: var(--muted); line-height: 1.45;
-}
-.level-card-items ul.level-card-details li::before {
-  content: ""; position: absolute; left: 1px; top: 0.62em; width: 4px; height: 4px; border-radius: 50%; background: var(--faint);
-}
 
 /* ---- Briefing preview (console levels T12) ----------------------------------
    The briefing a new session would start with, under the form's current values,
@@ -9699,6 +9658,71 @@ tbody tr.row-link[data-panel-current] td:first-child { box-shadow: inset 2px 0 0
    step's rules go after its own marker line, never above another's. ---- */
 
 /* UX 35: Settings > Features rows and Experience level cards. */
+
+/* Features (templates/settings_features.html): one card of rows, one per
+   optional feature: its glyph, its name with a hint (what the feature is and
+   what turning it off hides) and a chip for the data it keeps, its line, and
+   its switch (UX 33's .set-switch), which saves at once. The glyph lights
+   while the switch is on. Without script the form's Save button posts it;
+   with script the switch is the save, so the button goes. */
+.feature-rows, .experience-rows {
+  margin: 0; border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: color-mix(in oklab, var(--ink) 2%, var(--surface)); box-shadow: inset 0 1px 0 var(--sheen);
+}
+.feature-row { display: flex; align-items: center; gap: 14px; min-width: 0; padding: 14px 18px; }
+.feature-row + .feature-row, .experience-row + .experience-row { border-top: 1px solid var(--border); }
+.feature-row-ico {
+  display: grid; flex: none; place-items: center; width: 34px; height: 34px;
+  border-radius: var(--radius-sm); background: var(--surface-2); color: var(--faint);
+  transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.feature-row-ico .ico { width: 17px; height: 17px; }
+.feature-row:has(> .set-switch > input:checked) .feature-row-ico { background: var(--brand-soft); color: var(--brand); }
+.feature-row-text { flex: 1 1 auto; min-width: 0; }
+.feature-row-head { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
+.feature-row-name { color: var(--ink); font-size: var(--text-base); font-weight: 650; }
+.feature-row-head .hint { vertical-align: 0; }
+.feature-row-line { margin: 2px 0 0; color: var(--muted); font-size: var(--text-sm); line-height: 1.45; }
+.feature-row > .set-switch { margin-left: auto; }
+.feature-rows-save { padding: 12px 18px; border-top: 1px solid var(--border); }
+.js .feature-rows-save { display: none; }
+
+/* Experience (templates/settings_experience.html): three level cards, as
+   tall as the tallest (the grid stretches them), each with its chips: the
+   screens, the Settings sections it adds (a gear and the section's name),
+   and its finer details behind a "+N details" chip that opens them in a
+   hint. Theme and Keyboard are two rows of one card. */
+.level-card-items li.level-card-section { display: inline-flex; align-items: center; gap: 4px; }
+.level-card-section .ico { flex: none; width: 11px; height: 11px; color: var(--faint); }
+.level-card-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.level-card-items li.level-card-more { padding: 0; border: 0; background: none; }
+.level-card-more .hint { vertical-align: 0; }
+.level-card-more .hint-btn {
+  width: auto; height: auto; padding: 2px 9px; border: 1px solid transparent; border-radius: var(--radius-pill);
+  background: var(--brand-soft); color: var(--brand); font: inherit; font-weight: 650; line-height: 1.5; cursor: pointer;
+}
+.level-card-more .hint-btn:hover, .level-card-more .hint:focus-within .hint-btn, .level-card-more .hint.is-pinned .hint-btn {
+  border-color: color-mix(in oklab, var(--brand) 40%, transparent);
+}
+.level-card-more .hint-pop { width: min(320px, calc(100vw - 32px)); }
+.level-card-detail { display: block; }
+.level-card-detail + .level-card-detail { margin-top: 6px; }
+.experience-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-width: 0; padding: 12px 18px; }
+.experience-row-label { flex: 0 0 110px; color: var(--muted); font-size: var(--text-sm); }
+.experience-row-value {
+  display: flex; flex: 1 1 260px; flex-wrap: wrap; align-items: center; gap: 6px 14px; min-width: 0;
+  color: var(--ink-2); font-size: var(--text-sm);
+}
+.experience-row-note { display: inline-flex; align-items: center; gap: 2px; color: var(--faint); font-size: var(--text-xs); }
+.experience-row-note .hint { vertical-align: 0; }
+.experience-keys { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.experience-row > .btn { margin-left: auto; }
+@media (max-width: 720px) {
+  .feature-row { gap: 12px; padding: 12px 14px; }
+  .experience-row { padding: 12px 14px; }
+  .experience-row-label { flex-basis: 100%; }
+  .experience-row > .btn { margin-left: 0; }
+}
 
 /* UX 36: Settings > Updates, Backups and Your setup. */
 

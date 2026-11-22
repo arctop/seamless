@@ -993,8 +993,10 @@
   // place, never a fetch of this script's own. While it is out the control
   // (a radio's whole group) is disabled and aria-busy. navigation.js ends it
   // with seam:submitted. Saved, the toast names the change ("Momentum is
-  // off.", by the control's data-autosave-label, aria-label or label), with
-  // Undo, which posts the values the form held before the change. Not saved
+  // off.", by the control's data-autosave-label, aria-label or label), adds
+  // the data-autosave-note its row or form carries, when one does ("Agents
+  // see it from their next session."), and offers Undo, which posts the
+  // values the form held before the change. Not saved
   // (no answer, or the server's ?error=), the control goes back and the
   // toast says why, with Try again. The values a form holds are read when
   // the page is drawn and after every morph, so they are the server's.
@@ -1041,10 +1043,18 @@
     var label = el.labels && el.labels[0];
     return words(label) || el.value;
   }
+  // autoNote is the sentence a saved change adds after its words: the
+  // data-autosave-note of the control's nearest holder inside the form (the
+  // form itself included), or none.
+  function autoNote(el, form) {
+    var noted = el.closest('[data-autosave-note]');
+    return noted && form.contains(noted) ? ' ' + noted.getAttribute('data-autosave-note') : '';
+  }
   // describe words a field's state, read now, while the page shows it: the
   // toast that follows the save may come after a morph.
   function describe(form, control) {
     var name = autoLabel(control, form);
+    var note = autoNote(control, form);
     var field = control.name;
     var choices = {};
     if (control.type === 'radio') {
@@ -1056,9 +1066,9 @@
     }
     return function (list) {
       var values = list.filter(function (p) { return p[0] === field; }).map(function (p) { return p[1]; });
-      if (!name) return 'Saved.';
-      if (control.type === 'checkbox') return name + ' is ' + (values.indexOf(control.value) !== -1 ? 'on' : 'off') + '.';
-      return name + ': ' + (choices[values[0]] || values[0] || 'none') + '.';
+      if (!name) return 'Saved.' + note;
+      if (control.type === 'checkbox') return name + ' is ' + (values.indexOf(control.value) !== -1 ? 'on' : 'off') + '.' + note;
+      return name + ': ' + (choices[values[0]] || values[0] || 'none') + '.' + note;
     };
   }
   function autoGroup(form, control) {

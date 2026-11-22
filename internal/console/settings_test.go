@@ -796,8 +796,8 @@ func TestSettingsSections_EveryPostReturnsToItsSection(t *testing.T) {
 func TestSettingsSections_SaveBarAndLegacyAnchors(t *testing.T) {
 	source := settingsPageSource(t)
 	page := string(source)
-	require.Equal(t, 2, strings.Count(page, `class="brief-actions settings-savebar"`), "one bar per editable form")
-	require.Equal(t, 2, strings.Count(page, `type="button" data-form-discard`))
+	require.Equal(t, 1, strings.Count(page, `class="brief-actions settings-savebar"`), "one bar per form with a typed value (Features' switches save at once)")
+	require.Equal(t, 1, strings.Count(page, `type="button" data-form-discard`))
 	require.Contains(t, page, "form.reset();")
 	require.NotContains(t, page, "data-filters-toggle", "no Filters toggle on a page with no filters")
 	require.NotContains(t, page, "settings-mode", "the briefing-source chip gave way to per-section precedence lines")
