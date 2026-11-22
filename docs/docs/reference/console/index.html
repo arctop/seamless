@@ -2027,7 +2027,12 @@ local storage). A link that names neither, such as the sidebar's, shows the
 remembered pair, drawn in place without a reload; a URL that names a view or
 a sort wins. A fresh browser starts on Activity, sorted by Recent.</p>
 <p>Selecting a project opens the <strong>project workspace</strong> - a seven-tab page over that
-project alone:</p>
+project alone. It opens on Plans &amp; tasks (<code>?tab=plans</code> is the same tab), and a
+load reads and renders only the tab it shows: the header and the tab counts
+come from the project's board row. A tab is a <code>?tab=</code> link that loads in place,
+so switching keeps the page, back and forward walk the tabs, and a live
+refresh redraws only the tab on screen. <code>?from=&lt;project&gt;</code> with no tab opens
+Memories, and <code>?isolate=&lt;state&gt;</code> with no tab opens Overview.</p>
 <div class="table-wrap">
 <table>
 <thead>
@@ -2038,16 +2043,16 @@ project alone:</p>
 </thead>
 <tbody>
 <tr>
-<td>Overview</td>
-<td>The project's metrics, memory kinds, injection trend, recent events.</td>
+<td>Plans &amp; tasks</td>
+<td>Per-plan step timelines with each step's <a href="#tasks">status words</a>, claiming session, lease countdown, and blocking dependency; plus the ready queue. Each row copies its task's whole id, and each plan's head copies <code>plan:&lt;slug&gt;</code>. A step in progress that no live claim holds carries a strip under its row: <strong>claim lapsed</strong> offers <em>release claim</em>, <strong>unclaimed</strong> (marked in progress with no claim at all) opens the task under its row.</td>
 </tr>
 <tr>
-<td>Plans &amp; tasks</td>
-<td>Per-plan step timelines with each step's <a href="#tasks">status words</a>, claiming session, lease countdown, and blocking dependency; plus the ready queue. Each row copies its task's whole id, and each plan's head copies <code>plan:&lt;slug&gt;</code>.</td>
+<td>Overview</td>
+<td>The project's metrics, memory kinds, injection trend, its Isolation card, and its own recent events.</td>
 </tr>
 <tr>
 <td>Sessions</td>
-<td>The project's sessions, with the tasks each currently holds.</td>
+<td>The project's sessions counted by state (live, idle, completed, expired), the newest 60 of them, and a link to all of them on the Sessions screen. A live session names each task it holds by title, linked to the task.</td>
 </tr>
 <tr>
 <td>Memories</td>
@@ -2079,7 +2084,8 @@ Plans &amp; tasks then lists the tasks themselves, any status. A locked project
 this browser has not unlocked is named only; the items listed are this
 project's own. A project with no stamped item shows no bar.</p>
 <p>A retired project still renders, with its banner - kept for provenance. Only an
-unknown slug is a 404.</p>
+unknown slug is a 404. An error page under <code>/console/projects/&lt;slug&gt;</code> (a
+mistyped tab, say) offers <strong>Back to <project></strong> when that project exists.</p>
 <h2 id="sessions">Sessions</h2>
 <p><code>/console/sessions</code>, <code>/console/sessions/{id}</code>, <code>/console/sessions/{id}/transcript</code></p>
 <p>The list separates <strong>active</strong> (live: active and heartbeated within the idle TTL)

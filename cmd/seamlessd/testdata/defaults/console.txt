@@ -768,14 +768,14 @@
       <a id="<id:40>" class="ov2-evt" data-sev="system" href="/console/events/<id:40>">
         <time title="<time> UTC"><age></time>
         <span class="kindchip" title="session.ended"><svg class="ico ico-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>Session ended</span>
-        <p>session ended <span class="mono-id"><id:57>~8</span></p>
+        <p>session ended <span class="mono-id"><id:45>~8</span></p>
         <span class="ov2-evt-scope">example-confidential</span>
       </a>
       
       <a id="<id:41>" class="ov2-evt" data-sev="system" href="/console/events/<id:41>">
         <time title="<time> UTC"><age></time>
         <span class="kindchip" title="session.ended"><svg class="ico ico-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>Session ended</span>
-        <p>session ended <span class="mono-id"><id:60>~8</span></p>
+        <p>session ended <span class="mono-id"><id:46>~8</span></p>
         <span class="ov2-evt-scope">example-open-beta</span>
       </a>
       
@@ -2103,7 +2103,7 @@
         <span class="chip-parent"><svg class="ico ico-git-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>root project</span>
         <form class="star-form" method="post" action="/console/favorites/project/example-open-alpha">
           <input type="hidden" name="favorite" value="1">
-          <input type="hidden" name="next" value="/console/projects/example-open-alpha">
+          <input type="hidden" name="next" value="/console/projects/example-open-alpha?tab=tasks">
           <button class="star" type="submit" aria-pressed="false" title="Star this project"><svg class="ico ico-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg></button>
         </form>
       </div>
@@ -2112,11 +2112,12 @@
   </div>
 </div>
 
-<div class="tabs" id="tabs">
+
+<div class="tabs" id="tabs" data-seam-query>
   
-  <a data-tab="overview" href="?tab=overview" class="on"><svg class="ico ico-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>Overview</a>
+  <a data-tab="tasks" href="?tab=tasks" class="on"><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>Plans &amp; tasks <span class="pill">3</span></a>
   
-  <a data-tab="tasks" href="?tab=tasks" class=""><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>Plans &amp; tasks <span class="pill">3</span></a>
+  <a data-tab="overview" href="?tab=overview" class=""><svg class="ico ico-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>Overview</a>
   
   <a data-tab="sessions" href="?tab=sessions" class=""><svg class="ico ico-terminal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>Sessions <span class="pill">2</span></a>
   
@@ -2127,78 +2128,11 @@
 </div>
 
 
-<div class="tabpanel on" data-panel="overview">
-  <div class="metricbar">
-    <div class="m"><div class="k">Active memories</div><div class="v">3</div></div>
-    <div class="m"><div class="k">Sessions</div><div class="v">2 <small>&middot; 1 live</small></div></div>
-    <div class="m"><div class="k">Open tasks</div><div class="v">3</div></div>
-    <div class="m"><div class="k">Reach</div><div class="v brand judged-row">100%<span class="delta" data-good="yes"><span aria-hidden="true">&uarr;</span>100pt</span></div><div class="judged-band" title="vs prior 24h"><span class="band ok">at or above 55% target</span></div></div>
-    <div class="m"><div class="k">Coverage</div><div class="v ok judged-row">100%</div><div class="judged-band" title="vs prior 24h"><span class="band ok">at or above 80% target</span></div></div>
-  </div>
-  <div class="two">
-    <div class="card">
-      <h2>Retrieval trend <span class="h2-meta">24h</span></h2>
-      <div class="area" data-hover="{&#34;w&#34;:560,&#34;h&#34;:150,&#34;top&#34;:14,&#34;bot&#34;:142,&#34;pts&#34;:[{&#34;x&#34;:12,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:34.33333333333333,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:56.666666666666664,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:79,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:101.33333333333333,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:123.66666666666667,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:146,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:168.33333333333334,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:190.66666666666666,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:213,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:235.33333333333334,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:257.66666666666663,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:280,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:302.3333333333333,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:324.6666666666667,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:347,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:369.3333333333333,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:391.6666666666667,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:414,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:436.3333333333333,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:458.6666666666667,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:481,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:503.3333333333333,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:525.6666666666667,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:548,&#34;y&#34;:14,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;15 injections&#34;}]}"><svg viewBox="0 0 560 150" class="area-svg" style="color:var(--brand)" role="img" aria-label="Injection trend across 25 periods; peak 15 at <hh>:00" tabindex="0"><defs><linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="currentColor" stop-opacity="0.34"/><stop offset="100%" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs><line x1="12" x2="548" y1="46.0" y2="46.0" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 5" vector-effect="non-scaling-stroke"/><line x1="12" x2="548" y1="78.0" y2="78.0" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 5" vector-effect="non-scaling-stroke"/><line x1="12" x2="548" y1="110.0" y2="110.0" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 5" vector-effect="non-scaling-stroke"/><line x1="12" x2="548" y1="142.0" y2="142.0" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 5" vector-effect="non-scaling-stroke"/><path class="area-fill" d="M12.0 142.0 L34.3 142.0 L56.7 142.0 L79.0 142.0 L101.3 142.0 L123.7 142.0 L146.0 142.0 L168.3 142.0 L190.7 142.0 L213.0 142.0 L235.3 142.0 L257.7 142.0 L280.0 142.0 L302.3 142.0 L324.7 142.0 L347.0 142.0 L369.3 142.0 L391.7 142.0 L414.0 142.0 L436.3 142.0 L458.7 142.0 L481.0 142.0 L503.3 142.0 L525.7 142.0 L548.0 14.0 L548.0 142.0 L12.0 142.0 Z" fill="url(#areaGrad)"/><path class="area-line" d="M12.0 142.0 L34.3 142.0 L56.7 142.0 L79.0 142.0 L101.3 142.0 L123.7 142.0 L146.0 142.0 L168.3 142.0 L190.7 142.0 L213.0 142.0 L235.3 142.0 L257.7 142.0 L280.0 142.0 L302.3 142.0 L324.7 142.0 L347.0 142.0 L369.3 142.0 L391.7 142.0 L414.0 142.0 L436.3 142.0 L458.7 142.0 L481.0 142.0 L503.3 142.0 L525.7 142.0 L548.0 14.0 " fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" pathLength="1"/><g class="area-head"><circle class="area-head-halo" cx="548.0" cy="14.0" r="4" fill="currentColor"/><circle cx="548.0" cy="14.0" r="3.5" fill="currentColor" stroke="var(--surface-solid)" stroke-width="2" vector-effect="non-scaling-stroke"/></g><g class="area-peak"><line x1="548.0" x2="548.0" y1="14.0" y2="142.0" stroke="var(--pop)" stroke-width="1.5" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/><circle cx="548.0" cy="14.0" r="4" fill="var(--pop)" stroke="var(--surface-solid)" stroke-width="2.5" vector-effect="non-scaling-stroke"/></g></svg><div class="area-ticks"><span><hh>:00</span><span><hh>:00</span><span><hh>:00</span></div></div>
-    </div>
-    <div class="card">
-      <h2>Memories by kind <span class="h2-meta">3</span></h2>
-      <div class="legend"><div class="legend-row"><span class="kdot" style="background:var(--k-constraint)"></span><span class="legend-label">constraint</span><span class="legend-bar"><span style="width:100%;background:var(--k-constraint)"></span></span><span class="legend-val">1</span></div><div class="legend-row"><span class="kdot" style="background:var(--k-convention)"></span><span class="legend-label">convention</span><span class="legend-bar"><span style="width:100%;background:var(--k-convention)"></span></span><span class="legend-val">1</span></div><div class="legend-row"><span class="kdot" style="background:var(--k-stage)"></span><span class="legend-label">stage</span><span class="legend-bar"><span style="width:100%;background:var(--k-stage)"></span></span><span class="legend-val">1</span></div></div>
-    </div>
-  </div>
-  
-  <div class="section" style="margin-top:16px">
-    <div class="card iso-card" id="isolation">
-      <h2>Isolation <span class="h2-meta">open</span></h2>
-      
-      <form class="iso-form" method="post" action="/console/projects/example-open-alpha/isolation">
-        <div class="seg iso-seg">
-          <button type="submit" name="state" value="open" class="on" aria-pressed="true">Open</button><button type="submit" name="state" value="confidential" class="" aria-pressed="false">Confidential</button><button type="submit" name="state" value="sealed" class="" aria-pressed="false">Sealed</button>
-        </div>
-      </form>
-      <ul class="iso-promises">
-        <li class="on">Open — shares normally. Global knowledge flows in; family surfaces may include it.</li><li class="">Confidential — nothing leaves. Agents in other projects never see this project&#39;s knowledge, and agents here cannot write outside it.</li><li class="">Sealed — nothing in or out. Agents here see only this project: no global memories, no family, no cross-project reads.</li>
-      </ul>
-      <div class="iso-lock" id="lock" data-lock-setup>
-        <p class="muted"><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Locking a project needs peer_auth, which runs the daemon as an account of its own. To turn it on, run <code>seamlessd peer-auth setup</code> on this computer, as yourself: it shows the whole move, asks once, and asks for your password where it needs root.</p>
-      </div>
-    </div>
-  </div>
-
-  <div class="section" style="margin-top:16px">
-    <div class="card">
-      <h2>Recent activity</h2>
-      
-      <div class="table-wrap">
-      <table>
-        <thead><tr><th>When</th><th>Event</th><th>Detail</th></tr></thead>
-        <tbody>
-          
-          <tr id="<id:44>" class="row-link" data-href="/console/events/<id:44>"><td class="muted"><age></td><td><a href="/console/events/<id:44>"><span class="kind " title="session.ended">Session ended</span></a></td><td>session ended</td></tr>
-          
-          <tr id="<id:38>" class="row-link" data-href="/console/events/<id:38>"><td class="muted"><age></td><td><a href="/console/events/<id:38>"><span class="kind " title="agent.mishap">Mishap reported</span></a></td><td>mishap: none worth noting</td></tr>
-          
-          <tr id="<id:45>" class="row-link" data-href="/console/events/<id:45>"><td class="muted"><age></td><td><a href="/console/events/<id:45>"><span class="kind " title="session.ended">Session ended</span></a></td><td>session ended</td></tr>
-          
-          <tr id="<id:46>" class="row-link" data-href="/console/events/<id:46>"><td class="muted"><age></td><td><a href="/console/events/<id:46>"><span class="kind brand" title="retrieval.injected">Context injected</span></a></td><td>context injected</td></tr>
-          
-          <tr id="<id:47>" class="row-link" data-href="/console/events/<id:47>"><td class="muted"><age></td><td><a href="/console/events/<id:47>"><span class="kind " title="session.started">Session started</span></a></td><td>session started</td></tr>
-          
-          <tr id="<id:48>" class="row-link" data-href="/console/events/<id:48>"><td class="muted"><age></td><td><a href="/console/events/<id:48>"><span class="kind brand" title="retrieval.injected">Context injected</span></a></td><td>subagent-start injection</td></tr>
-          
-          <tr id="<id:49>" class="row-link" data-href="/console/events/<id:49>"><td class="muted"><age></td><td><a href="/console/events/<id:49>"><span class="kind " title="task.transition">Task moved</span></a></td><td>task -&gt; open</td></tr>
-          
-          <tr id="<id:50>" class="row-link" data-href="/console/events/<id:50>"><td class="muted"><age></td><td><a href="/console/events/<id:50>"><span class="kind ok" title="plan.approved">Plan approved</span></a></td><td>approved plan example-deploy-plan</td></tr>
-          
-        </tbody>
-      </table>
-      </div>
-      
-    </div>
-  </div>
-</div>
 
 
-<div class="tabpanel" data-panel="tasks">
+
+
+<div class="tabpanel on" data-panel="tasks" id="tabpanel-tasks">
   
   
   
@@ -2329,142 +2263,16 @@
 </div>
 
 
-<div class="tabpanel" data-panel="sessions">
-  <div class="card">
-    <h2>Sessions <span class="h2-meta">1 active &middot; 1 completed</span></h2>
-    
-    <div class="sess">
-      
-      <div id="<id:27>" class="r"><div><div class="id"><a href="/console/sessions/<id:27>">cc/dg-claud-393af69c59c44e2b</a><span class="kind">startup</span><span class="kind">ambient</span></div><div class="find">Staged the example deploy and recorded the cache trial.</div></div><span class="when"><age></span></div>
-      
-      <div id="<id:1>" class="r"><div><div class="id"><a href="/console/sessions/<id:1>"><sess:1></a><span class="badge ok"><span class="live-dot"></span>active</span></div><div class="find">Staged the example deploy; promotion is next.</div></div><span class="when"><age></span></div>
-      
-    </div>
-    
-  </div>
-</div>
-
-
-<div class="tabpanel" data-panel="memories">
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Name</th><th>Kind</th><th>Lineage</th><th class="num">Inj</th><th class="num">Read</th><th>Updated</th></tr></thead>
-      <tbody>
-        
-        <tr id="<id:3>" class="row-link" data-href="/console/memories/<id:3>"><td class="mem-name"><a href="/console/memories/<id:3>"><strong>example-layout-convention</strong></a><div class="desc">Example services keep their configs under deploy/example</div></td><td><span class="kind">convention</span></td><td><span class="lineage"><svg class="ico ico-git-commit-horizontal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><line x1="3" x2="9" y1="12" y2="12"/><line x1="15" x2="21" y1="12" y2="12"/></svg>from <sess:1></span></td><td class="num">4</td><td class="num">1</td><td class="muted"><age></td></tr>
-        
-        <tr id="<id:5>" class="row-link" data-href="/console/memories/<id:5>"><td class="mem-name"><a href="/console/memories/<id:5>"><strong>example-cache-gotcha</strong></a><div class="desc">The example cache keeps stale entries for ten minutes after a deploy</div></td><td><span class="kind">gotcha</span></td><td><span class="lineage" style="color:var(--pop-strong)"><svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>superseded by <id:7></span></td><td class="num">0</td><td class="num">1</td><td class="muted"><age></td></tr>
-        
-        <tr id="<id:4>" class="row-link" data-href="/console/memories/<id:4>"><td class="mem-name"><a href="/console/memories/<id:4>"><strong>example-migration-stage</strong></a><div class="desc">The example data migration waits on the owner&#39;s sign-off</div></td><td><span class="kind">stage</span></td><td><span class="lineage"><svg class="ico ico-git-commit-horizontal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><line x1="3" x2="9" y1="12" y2="12"/><line x1="15" x2="21" y1="12" y2="12"/></svg>from <sess:1></span></td><td class="num">4</td><td class="num">0</td><td class="muted"><age></td></tr>
-        
-        <tr id="<id:2>" class="row-link" data-href="/console/memories/<id:2>"><td class="mem-name"><a href="/console/memories/<id:2>"><strong>example-deploy-gate</strong></a><div class="desc">Every example deploy goes through the staging gate first</div></td><td><span class="kind">constraint</span></td><td><span class="lineage"><svg class="ico ico-git-commit-horizontal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><line x1="3" x2="9" y1="12" y2="12"/><line x1="15" x2="21" y1="12" y2="12"/></svg>from <sess:1></span></td><td class="num">7</td><td class="num">3</td><td class="muted"><age></td></tr>
-        
-        
-        <tr class="subhead-row"><td colspan="6">Inherited &mdash; counted in parent/global scope, not example-open-alpha</td></tr>
-        
-        <tr id="<id:6>" class="row-link" data-href="/console/memories/<id:6>"><td class="mem-name"><a href="/console/memories/<id:6>"><strong>example-style-reference</strong></a><div class="desc">Where the shared example style guide lives</div></td><td><span class="kind">reference</span></td><td><span class="lineage"><svg class="ico ico-git-commit-horizontal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><line x1="3" x2="9" y1="12" y2="12"/><line x1="15" x2="21" y1="12" y2="12"/></svg>from <sess:1></span></td><td class="num">7</td><td class="num">0</td><td class="muted"><age></td></tr>
-        
-        
-      </tbody>
-    </table>
-  </div>
-</div>
-
-
-<div class="tabpanel" data-panel="notes">
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Title</th><th>Tags</th><th>Updated</th></tr></thead>
-      <tbody>
-        
-        <tr id="<id:29>" class="row-link" data-href="/console/notes/<id:29>"><td class="mem-name"><a href="/console/notes/<id:29>"><strong>Example deploy plan</strong></a><div class="desc">Captured Claude Code plan example-deploy-plan.md (iteration 1, approved)</div></td><td><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="badge">plan:example-deploy-plan</span><span class="badge">cc-plan</span><span class="badge">created-by:agent</span><span class="badge">plan-status:approved</span></div></td><td class="muted"><age></td></tr>
-        
-        <tr id="<id:8>" class="row-link" data-href="/console/notes/<id:8>"><td class="mem-name"><a href="/console/notes/<id:8>"><strong>Example rollout narrative</strong></a><div class="desc">How the example rollout goes</div></td><td><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="badge">rollout</span><span class="badge">created-by:agent</span><span class="badge">plan:example-rollout</span><span class="badge">waves</span></div></td><td class="muted"><age></td></tr>
-        
-      </tbody>
-    </table>
-  </div>
-</div>
-
-
-<dropped: the Interactions tab panel>
-<div class="tabpanel" data-panel="context">
-  
-
-<section class="context-rule-grid" aria-label="Effective briefing flow rules">
-  <article class="context-rule active">
-    <span class="context-rule-icon global"><svg class="ico ico-database" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg></span>
-    <div><span class="context-rule-label">Global memory</span><strong>1 active</strong><small>eligible in 6 known project scopes</small></div>
-    <span class="context-rule-state on">always on</span>
-  </article>
-  <article class="context-rule active">
-    <span class="context-rule-icon parent"><svg class="ico ico-git-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span>
-    <div><span class="context-rule-label">Parent memory</span><strong>0 configured</strong><small>registry-wide shared-parent links at SessionStart</small></div>
-    <span class="context-rule-state on">enabled</span>
-  </article>
-  <article class="context-rule active">
-    <span class="context-rule-icon family"><svg class="ico ico-share-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg></span>
-    <div><span class="context-rule-label">Sibling findings</span><strong>2 per briefing</strong><small>recent findings across configured families</small></div>
-    <span class="context-rule-state on">enabled</span>
-  </article>
-  <article class="context-rule">
-    <span class="context-rule-icon sibling"><svg class="ico ico-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg></span>
-    <div><span class="context-rule-label">Sibling memories</span><strong>not shared</strong><small>non-constraint, non-stage memories only</small></div>
-    <span class="context-rule-state off">disabled</span>
-  </article>
-</section>
-
-<section class="context-section" aria-labelledby="context-scopes-title">
-  <header class="context-section-head">
-    <div><span class="context-section-kicker">Briefing paths</span><h2 id="context-scopes-title">What example-open-alpha receives and shares</h2></div>
-    <span class="context-section-note">Active memories are eligibility pools; age and token-budget trims still apply.</span>
-  </header>
-  
-  <div class="context-scope-grid focused">
-    
-    <article class="context-scope-card">
-      <header class="context-scope-head">
-        <span class="tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
-        <div class="context-scope-identity">
-          <div class="context-scope-title"><a href="/console/projects/example-open-alpha?tab=context">example-open-alpha</a></div>
-          <span class="context-role">standalone scope</span>
-        </div>
-        <a class="context-focus-link" href="/console/context?scope=project&amp;project=example-open-alpha">focus <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
-      </header>
-      
-      <div class="context-pool-strip" aria-label="Memory pools">
-        <span><small>local</small><strong>3</strong></span>
-        <span><small>global</small><strong>+1</strong></span>
-        
-      </div>
-      <div class="context-flow-columns">
-        <section class="context-flow-column">
-          <h3><svg class="ico ico-arrow-down-to-line" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17V3"/><path d="m6 11 6 6 6-6"/><path d="M19 21H5"/></svg> Receives</h3>
-          
-          <div class="context-flow global">
-            <span class="context-flow-icon"><svg class="ico ico-database" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg></span>
-            <div><strong>Global memory</strong><span>1 active memory eligible in every project briefing before age and budget trims.</span></div>
-            <span class="context-flow-state">on</span>
-          </div>
-          
-        </section>
-        <section class="context-flow-column">
-          <h3><svg class="ico ico-share-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg> Publishes / shares</h3>
-          <div class="context-flow-empty">No outgoing context edges.</div>
-        </section>
-      </div>
-      
-    </article>
-    
-  </div>
-  
-</section>
 
 
 
 
 
-</div>
+
+
+
+
+
 
 
   </main>
@@ -2924,28 +2732,6 @@
 (function () {
   
 
-  var bar = document.getElementById('tabs');
-  if (!bar) return;
-  var tabs = bar.querySelectorAll('[data-tab]');
-  var panels = document.querySelectorAll('.tabpanel[data-panel]');
-  function activate(key) {
-    var found = false;
-    panels.forEach(function (p) { var on = p.getAttribute('data-panel') === key; p.classList.toggle('on', on); if (on) found = true; });
-    if (!found) return;
-    tabs.forEach(function (t) { t.classList.toggle('on', t.getAttribute('data-tab') === key); });
-    try { history.replaceState(null, '', location.pathname + '?tab=' + key); } catch (e) {}
-  }
-  bar.addEventListener('click', function (e) {
-    var t = e.target.closest ? e.target.closest('[data-tab]') : null;
-    if (!t) return;
-    e.preventDefault();
-    activate(t.getAttribute('data-tab'));
-  });
-})();
-
-(function () {
-  
-
   var PANEL = '.tabpanel[data-panel="tasks"]';
   function inPanel(el) { return !!(el && el.closest && el.closest(PANEL)); }
   function pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -2985,13 +2771,7 @@
   
   
   
-  document.addEventListener('click', function (e) {
-    var chip = e.target.closest ? e.target.closest('[data-jump]') : null;
-    if (!chip || !inPanel(chip) || e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
-    e.preventDefault(); 
-    var id = (chip.getAttribute('href') || '').replace(/^#/, '');
-    var target = id ? document.getElementById(id) : null;
-    if (!target) return;
+  function reveal(target) {
     for (var p = target.parentElement; p; p = p.parentElement) {
       if (p.tagName === 'DETAILS') p.open = true;
       if (p.matches && p.matches(PANEL)) break;
@@ -3000,6 +2780,27 @@
     target.classList.remove('flash');
     void target.offsetWidth;
     target.classList.add('flash');
+  }
+  document.addEventListener('click', function (e) {
+    var chip = e.target.closest ? e.target.closest('[data-jump]') : null;
+    if (!chip || !inPanel(chip) || e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+    e.preventDefault(); 
+    var id = (chip.getAttribute('href') || '').replace(/^#/, '');
+    var target = id ? document.getElementById(id) : null;
+    if (target) reveal(target);
+  });
+
+  
+  
+  
+  document.addEventListener('click', function (e) {
+    var open = e.target.closest ? e.target.closest('[data-open-step]') : null;
+    if (!open || !inPanel(open) || e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+    var row = document.getElementById(open.getAttribute('data-open-step'));
+    if (!row || row.tagName !== 'DETAILS') return;
+    e.preventDefault();
+    row.open = true;
+    reveal(row);
   });
   document.addEventListener('animationend', function (e) {
     if (e.target.classList && e.target.classList.contains('flash')) e.target.classList.remove('flash');
@@ -3051,10 +2852,16 @@
   
 
   if (!window.IX) return;
-  var feed = document.getElementById('ix-pfeed');
-  var kinds = document.getElementById('ix-pkinds');
-  window.IX.mountVolume(document.getElementById('ix-pvol'), feed, kinds);
-  window.IX.wireKindFilter(kinds, feed);
+  function mount() {
+    var feed = document.getElementById('ix-pfeed');
+    var kinds = document.getElementById('ix-pkinds');
+    if (!feed || feed.seamIxMounted) return;
+    feed.seamIxMounted = true;
+    window.IX.mountVolume(document.getElementById('ix-pvol'), feed, kinds);
+    window.IX.wireKindFilter(kinds, feed);
+  }
+  mount();
+  document.addEventListener('seam:content-updated', mount);
 })();
 </script>
 
@@ -3102,7 +2909,7 @@
         <span class="chip-parent"><svg class="ico ico-git-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>root project</span>
         <form class="star-form" method="post" action="/console/favorites/project/example-confidential">
           <input type="hidden" name="favorite" value="1">
-          <input type="hidden" name="next" value="/console/projects/example-confidential">
+          <input type="hidden" name="next" value="/console/projects/example-confidential?tab=tasks">
           <button class="star" type="submit" aria-pressed="false" title="Star this project"><svg class="ico ico-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg></button>
         </form>
       </div>
@@ -3111,11 +2918,12 @@
   </div>
 </div>
 
-<div class="tabs" id="tabs">
+
+<div class="tabs" id="tabs" data-seam-query>
   
-  <a data-tab="overview" href="?tab=overview" class="on"><svg class="ico ico-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>Overview</a>
+  <a data-tab="tasks" href="?tab=tasks" class="on"><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>Plans &amp; tasks <span class="pill">2</span></a>
   
-  <a data-tab="tasks" href="?tab=tasks" class=""><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>Plans &amp; tasks <span class="pill">2</span></a>
+  <a data-tab="overview" href="?tab=overview" class=""><svg class="ico ico-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>Overview</a>
   
   <a data-tab="sessions" href="?tab=sessions" class=""><svg class="ico ico-terminal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>Sessions <span class="pill">2</span></a>
   
@@ -3126,78 +2934,11 @@
 </div>
 
 
-<div class="tabpanel on" data-panel="overview">
-  <div class="metricbar">
-    <div class="m"><div class="k">Active memories</div><div class="v">1</div></div>
-    <div class="m"><div class="k">Sessions</div><div class="v">2</div></div>
-    <div class="m"><div class="k">Open tasks</div><div class="v">2</div></div>
-    <div class="m"><div class="k">Reach</div><div class="v brand judged-row">100%<span class="delta" data-good="yes"><span aria-hidden="true">&uarr;</span>100pt</span></div><div class="judged-band" title="vs prior 24h"><span class="band ok">at or above 55% target</span></div></div>
-    <div class="m"><div class="k">Coverage</div><div class="v ok judged-row">100%</div><div class="judged-band" title="vs prior 24h"><span class="band ok">at or above 80% target</span></div></div>
-  </div>
-  <div class="two">
-    <div class="card">
-      <h2>Retrieval trend <span class="h2-meta">24h</span></h2>
-      <div class="area" data-hover="{&#34;w&#34;:560,&#34;h&#34;:150,&#34;top&#34;:14,&#34;bot&#34;:142,&#34;pts&#34;:[{&#34;x&#34;:12,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:34.33333333333333,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:56.666666666666664,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:79,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:101.33333333333333,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:123.66666666666667,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:146,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:168.33333333333334,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:190.66666666666666,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:213,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:235.33333333333334,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:257.66666666666663,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:280,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:302.3333333333333,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:324.6666666666667,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:347,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:369.3333333333333,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:391.6666666666667,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:414,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:436.3333333333333,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:458.6666666666667,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:481,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:503.3333333333333,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:525.6666666666667,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:548,&#34;y&#34;:14,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;3 injections&#34;}]}"><svg viewBox="0 0 560 150" class="area-svg" style="color:var(--brand)" role="img" aria-label="Injection trend across 25 periods; peak 3 at <hh>:00" tabindex="0"><defs><linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="currentColor" stop-opacity="0.34"/><stop offset="100%" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs><line x1="12" x2="548" y1="46.0" y2="46.0" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 5" vector-effect="non-scaling-stroke"/><line x1="12" x2="548" y1="78.0" y2="78.0" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 5" vector-effect="non-scaling-stroke"/><line x1="12" x2="548" y1="110.0" y2="110.0" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 5" vector-effect="non-scaling-stroke"/><line x1="12" x2="548" y1="142.0" y2="142.0" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 5" vector-effect="non-scaling-stroke"/><path class="area-fill" d="M12.0 142.0 L34.3 142.0 L56.7 142.0 L79.0 142.0 L101.3 142.0 L123.7 142.0 L146.0 142.0 L168.3 142.0 L190.7 142.0 L213.0 142.0 L235.3 142.0 L257.7 142.0 L280.0 142.0 L302.3 142.0 L324.7 142.0 L347.0 142.0 L369.3 142.0 L391.7 142.0 L414.0 142.0 L436.3 142.0 L458.7 142.0 L481.0 142.0 L503.3 142.0 L525.7 142.0 L548.0 14.0 L548.0 142.0 L12.0 142.0 Z" fill="url(#areaGrad)"/><path class="area-line" d="M12.0 142.0 L34.3 142.0 L56.7 142.0 L79.0 142.0 L101.3 142.0 L123.7 142.0 L146.0 142.0 L168.3 142.0 L190.7 142.0 L213.0 142.0 L235.3 142.0 L257.7 142.0 L280.0 142.0 L302.3 142.0 L324.7 142.0 L347.0 142.0 L369.3 142.0 L391.7 142.0 L414.0 142.0 L436.3 142.0 L458.7 142.0 L481.0 142.0 L503.3 142.0 L525.7 142.0 L548.0 14.0 " fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" pathLength="1"/><g class="area-head"><circle class="area-head-halo" cx="548.0" cy="14.0" r="4" fill="currentColor"/><circle cx="548.0" cy="14.0" r="3.5" fill="currentColor" stroke="var(--surface-solid)" stroke-width="2" vector-effect="non-scaling-stroke"/></g><g class="area-peak"><line x1="548.0" x2="548.0" y1="14.0" y2="142.0" stroke="var(--pop)" stroke-width="1.5" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/><circle cx="548.0" cy="14.0" r="4" fill="var(--pop)" stroke="var(--surface-solid)" stroke-width="2.5" vector-effect="non-scaling-stroke"/></g></svg><div class="area-ticks"><span><hh>:00</span><span><hh>:00</span><span><hh>:00</span></div></div>
-    </div>
-    <div class="card">
-      <h2>Memories by kind <span class="h2-meta">1</span></h2>
-      <div class="legend"><div class="legend-row"><span class="kdot" style="background:var(--k-gotcha)"></span><span class="legend-label">gotcha</span><span class="legend-bar"><span style="width:100%;background:var(--k-gotcha)"></span></span><span class="legend-val">1</span></div></div>
-    </div>
-  </div>
-  
-  <div class="section" style="margin-top:16px">
-    <div class="card iso-card" id="isolation">
-      <h2>Isolation <span class="h2-meta">confidential</span></h2>
-      
-      <form class="iso-form" method="post" action="/console/projects/example-confidential/isolation">
-        <div class="seg iso-seg">
-          <button type="submit" name="state" value="open" class="" aria-pressed="false">Open</button><button type="submit" name="state" value="confidential" class="on" aria-pressed="true">Confidential</button><button type="submit" name="state" value="sealed" class="" aria-pressed="false">Sealed</button>
-        </div>
-      </form>
-      <ul class="iso-promises">
-        <li class="">Open — shares normally. Global knowledge flows in; family surfaces may include it.</li><li class="on">Confidential — nothing leaves. Agents in other projects never see this project&#39;s knowledge, and agents here cannot write outside it.</li><li class="">Sealed — nothing in or out. Agents here see only this project: no global memories, no family, no cross-project reads.</li>
-      </ul>
-      <div class="iso-lock" id="lock" data-lock-setup>
-        <p class="muted"><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Locking a project needs peer_auth, which runs the daemon as an account of its own. To turn it on, run <code>seamlessd peer-auth setup</code> on this computer, as yourself: it shows the whole move, asks once, and asks for your password where it needs root.</p>
-      </div>
-    </div>
-  </div>
-
-  <div class="section" style="margin-top:16px">
-    <div class="card">
-      <h2>Recent activity</h2>
-      
-      <div class="table-wrap">
-      <table>
-        <thead><tr><th>When</th><th>Event</th><th>Detail</th></tr></thead>
-        <tbody>
-          
-          <tr id="<id:40>" class="row-link" data-href="/console/events/<id:40>"><td class="muted"><age></td><td><a href="/console/events/<id:40>"><span class="kind " title="session.ended">Session ended</span></a></td><td>session ended</td></tr>
-          
-          <tr id="<id:43>" class="row-link" data-href="/console/events/<id:43>"><td class="muted"><age></td><td><a href="/console/events/<id:43>"><span class="kind " title="session.ended">Session ended</span></a></td><td>session ended</td></tr>
-          
-          <tr id="<id:51>" class="row-link" data-href="/console/events/<id:51>"><td class="muted"><age></td><td><a href="/console/events/<id:51>"><span class="kind brand" title="retrieval.injected">Context injected</span></a></td><td>context injected</td></tr>
-          
-          <tr id="<id:52>" class="row-link" data-href="/console/events/<id:52>"><td class="muted"><age></td><td><a href="/console/events/<id:52>"><span class="kind brand" title="retrieval.injected">Context injected</span></a></td><td>session-start injection</td></tr>
-          
-          <tr id="<id:53>" class="row-link" data-href="/console/events/<id:53>"><td class="muted"><age></td><td><a href="/console/events/<id:53>"><span class="kind " title="session.started">Session started</span></a></td><td>ambient session started</td></tr>
-          
-          <tr id="<id:54>" class="row-link" data-href="/console/events/<id:54>"><td class="muted"><age></td><td><a href="/console/events/<id:54>"><span class="kind ok" title="note.written">Note written</span></a></td><td>wrote note Confidential example ledger notes</td></tr>
-          
-          <tr id="<id:55>" class="row-link" data-href="/console/events/<id:55>"><td class="muted"><age></td><td><a href="/console/events/<id:55>"><span class="kind " title="task.transition">Task moved</span></a></td><td>task -&gt; open</td></tr>
-          
-          <tr id="<id:56>" class="row-link" data-href="/console/events/<id:56>"><td class="muted"><age></td><td><a href="/console/events/<id:56>"><span class="kind brand" title="retrieval.injected">Context injected</span></a></td><td>context injected</td></tr>
-          
-        </tbody>
-      </table>
-      </div>
-      
-    </div>
-  </div>
-</div>
 
 
-<div class="tabpanel" data-panel="tasks">
+
+
+<div class="tabpanel on" data-panel="tasks" id="tabpanel-tasks">
   
   
   <div class="empty">No active plans in example-confidential</div>
@@ -3224,134 +2965,16 @@
 </div>
 
 
-<div class="tabpanel" data-panel="sessions">
-  <div class="card">
-    <h2>Sessions <span class="h2-meta">0 active &middot; 2 completed</span></h2>
-    
-    <div class="sess">
-      
-      <div id="<id:57>" class="r"><div><div class="id"><a href="/console/sessions/<id:57>">cc/dg-claud-e62f1f8d52a16194</a><span class="kind">startup</span><span class="kind">ambient</span></div><div class="find">(auto) session ended, no summary harvested</div></div><span class="when"><age></span></div>
-      
-      <div id="<id:20>" class="r"><div><div class="id"><a href="/console/sessions/<id:20>"><sess:2></a><span class="kind">explicit</span></div><div class="find">Closed the confidential ledger.</div></div><span class="when"><age></span></div>
-      
-    </div>
-    
-  </div>
-</div>
-
-
-<div class="tabpanel" data-panel="memories">
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Name</th><th>Kind</th><th>Lineage</th><th class="num">Inj</th><th class="num">Read</th><th>Updated</th></tr></thead>
-      <tbody>
-        
-        <tr id="<id:21>" class="row-link" data-href="/console/memories/<id:21>"><td class="mem-name"><a href="/console/memories/<id:21>"><strong>example-confidential-gotcha</strong></a><div class="desc">The confidential example ledger closes on the fifth</div></td><td><span class="kind">gotcha</span></td><td><span class="lineage"><svg class="ico ico-git-commit-horizontal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><line x1="3" x2="9" y1="12" y2="12"/><line x1="15" x2="21" y1="12" y2="12"/></svg>from <sess:2></span></td><td class="num">3</td><td class="num">0</td><td class="muted"><age></td></tr>
-        
-        
-        <tr class="subhead-row"><td colspan="6">Inherited &mdash; counted in parent/global scope, not example-confidential</td></tr>
-        
-        <tr id="<id:6>" class="row-link" data-href="/console/memories/<id:6>"><td class="mem-name"><a href="/console/memories/<id:6>"><strong>example-style-reference</strong></a><div class="desc">Where the shared example style guide lives</div></td><td><span class="kind">reference</span></td><td><span class="lineage"><svg class="ico ico-git-commit-horizontal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><line x1="3" x2="9" y1="12" y2="12"/><line x1="15" x2="21" y1="12" y2="12"/></svg>from <sess:1></span></td><td class="num">7</td><td class="num">0</td><td class="muted"><age></td></tr>
-        
-        
-      </tbody>
-    </table>
-  </div>
-</div>
-
-
-<div class="tabpanel" data-panel="notes">
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Title</th><th>Tags</th><th>Updated</th></tr></thead>
-      <tbody>
-        
-        <tr id="<id:22>" class="row-link" data-href="/console/notes/<id:22>"><td class="mem-name"><a href="/console/notes/<id:22>"><strong>Confidential example ledger notes</strong></a><div class="desc">Inbound description</div></td><td><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="badge">created-by:agent</span></div></td><td class="muted"><age></td></tr>
-        
-      </tbody>
-    </table>
-  </div>
-</div>
-
-
-<dropped: the Interactions tab panel>
-<div class="tabpanel" data-panel="context">
-  
-
-<section class="context-rule-grid" aria-label="Effective briefing flow rules">
-  <article class="context-rule active">
-    <span class="context-rule-icon global"><svg class="ico ico-database" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg></span>
-    <div><span class="context-rule-label">Global memory</span><strong>1 active</strong><small>eligible in 6 known project scopes</small></div>
-    <span class="context-rule-state on">always on</span>
-  </article>
-  <article class="context-rule active">
-    <span class="context-rule-icon parent"><svg class="ico ico-git-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span>
-    <div><span class="context-rule-label">Parent memory</span><strong>0 configured</strong><small>registry-wide shared-parent links at SessionStart</small></div>
-    <span class="context-rule-state on">enabled</span>
-  </article>
-  <article class="context-rule active">
-    <span class="context-rule-icon family"><svg class="ico ico-share-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg></span>
-    <div><span class="context-rule-label">Sibling findings</span><strong>2 per briefing</strong><small>recent findings across configured families</small></div>
-    <span class="context-rule-state on">enabled</span>
-  </article>
-  <article class="context-rule">
-    <span class="context-rule-icon sibling"><svg class="ico ico-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg></span>
-    <div><span class="context-rule-label">Sibling memories</span><strong>not shared</strong><small>non-constraint, non-stage memories only</small></div>
-    <span class="context-rule-state off">disabled</span>
-  </article>
-</section>
-
-<section class="context-section" aria-labelledby="context-scopes-title">
-  <header class="context-section-head">
-    <div><span class="context-section-kicker">Briefing paths</span><h2 id="context-scopes-title">What example-confidential receives and shares</h2></div>
-    <span class="context-section-note">Active memories are eligibility pools; age and token-budget trims still apply.</span>
-  </header>
-  
-  <div class="context-scope-grid focused">
-    
-    <article class="context-scope-card">
-      <header class="context-scope-head">
-        <span class="tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
-        <div class="context-scope-identity">
-          <div class="context-scope-title"><a href="/console/projects/example-confidential?tab=context">example-confidential</a></div>
-          <span class="context-role">standalone scope</span>
-        </div>
-        <a class="context-focus-link" href="/console/context?scope=project&amp;project=example-confidential">focus <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
-      </header>
-      
-      <div class="context-pool-strip" aria-label="Memory pools">
-        <span><small>local</small><strong>1</strong></span>
-        <span><small>global</small><strong>+1</strong></span>
-        
-      </div>
-      <div class="context-flow-columns">
-        <section class="context-flow-column">
-          <h3><svg class="ico ico-arrow-down-to-line" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17V3"/><path d="m6 11 6 6 6-6"/><path d="M19 21H5"/></svg> Receives</h3>
-          
-          <div class="context-flow global">
-            <span class="context-flow-icon"><svg class="ico ico-database" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg></span>
-            <div><strong>Global memory</strong><span>1 active memory eligible in every project briefing before age and budget trims.</span></div>
-            <span class="context-flow-state">on</span>
-          </div>
-          
-        </section>
-        <section class="context-flow-column">
-          <h3><svg class="ico ico-share-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg> Publishes / shares</h3>
-          <div class="context-flow-empty">No outgoing context edges.</div>
-        </section>
-      </div>
-      
-    </article>
-    
-  </div>
-  
-</section>
 
 
 
 
 
-</div>
+
+
+
+
+
 
 
   </main>
@@ -3397,7 +3020,7 @@
         <span class="chip-parent"><svg class="ico ico-git-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>root project</span>
         <form class="star-form" method="post" action="/console/favorites/project/example-sealed">
           <input type="hidden" name="favorite" value="1">
-          <input type="hidden" name="next" value="/console/projects/example-sealed">
+          <input type="hidden" name="next" value="/console/projects/example-sealed?tab=tasks">
           <button class="star" type="submit" aria-pressed="false" title="Star this project"><svg class="ico ico-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg></button>
         </form>
       </div>
@@ -3406,11 +3029,12 @@
   </div>
 </div>
 
-<div class="tabs" id="tabs">
+
+<div class="tabs" id="tabs" data-seam-query>
   
-  <a data-tab="overview" href="?tab=overview" class="on"><svg class="ico ico-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>Overview</a>
+  <a data-tab="tasks" href="?tab=tasks" class="on"><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>Plans &amp; tasks <span class="pill">0</span></a>
   
-  <a data-tab="tasks" href="?tab=tasks" class=""><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>Plans &amp; tasks <span class="pill">0</span></a>
+  <a data-tab="overview" href="?tab=overview" class=""><svg class="ico ico-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg>Overview</a>
   
   <a data-tab="sessions" href="?tab=sessions" class=""><svg class="ico ico-terminal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg>Sessions <span class="pill">1</span></a>
   
@@ -3421,68 +3045,11 @@
 </div>
 
 
-<div class="tabpanel on" data-panel="overview">
-  <div class="metricbar">
-    <div class="m"><div class="k">Active memories</div><div class="v">1</div></div>
-    <div class="m"><div class="k">Sessions</div><div class="v">1</div></div>
-    <div class="m"><div class="k">Open tasks</div><div class="v">0</div></div>
-    <div class="m"><div class="k">Reach</div><div class="v brand judged-row">0%<span class="delta" data-good="neutral">flat</span></div><div class="judged-band" title="vs prior 24h"><span class="band warn">below 55% target</span></div></div>
-    <div class="m"><div class="k">Coverage</div><div class="v ok judged-row">100%</div><div class="judged-band" title="vs prior 24h"><span class="band ok">at or above 80% target</span></div></div>
-  </div>
-  <div class="two">
-    <div class="card">
-      <h2>Retrieval trend <span class="h2-meta">24h</span></h2>
-      <div class="area" data-hover="{&#34;w&#34;:560,&#34;h&#34;:150,&#34;top&#34;:14,&#34;bot&#34;:142,&#34;pts&#34;:[{&#34;x&#34;:12,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:34.33333333333333,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:56.666666666666664,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:79,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:101.33333333333333,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:123.66666666666667,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:146,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:168.33333333333334,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:190.66666666666666,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:213,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:235.33333333333334,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:257.66666666666663,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:280,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:302.3333333333333,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:324.6666666666667,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:347,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:369.3333333333333,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:391.6666666666667,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:414,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:436.3333333333333,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:458.6666666666667,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:481,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:503.3333333333333,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:525.6666666666667,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;},{&#34;x&#34;:548,&#34;y&#34;:142,&#34;label&#34;:&#34;<hh>:00&#34;,&#34;value&#34;:&#34;0 injections&#34;}]}"><svg viewBox="0 0 560 150" class="area-svg" style="color:var(--brand)" role="img" aria-label="Injection trend across 25 periods; peak 0 at <hh>:00" tabindex="0"><defs><linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="currentColor" stop-opacity="0.34"/><stop offset="100%" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs><line x1="12" x2="548" y1="46.0" y2="46.0" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 5" vector-effect="non-scaling-stroke"/><line x1="12" x2="548" y1="78.0" y2="78.0" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 5" vector-effect="non-scaling-stroke"/><line x1="12" x2="548" y1="110.0" y2="110.0" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 5" vector-effect="non-scaling-stroke"/><line x1="12" x2="548" y1="142.0" y2="142.0" stroke="var(--border)" stroke-width="1" stroke-dasharray="2 5" vector-effect="non-scaling-stroke"/><path class="area-fill" d="M12.0 142.0 L34.3 142.0 L56.7 142.0 L79.0 142.0 L101.3 142.0 L123.7 142.0 L146.0 142.0 L168.3 142.0 L190.7 142.0 L213.0 142.0 L235.3 142.0 L257.7 142.0 L280.0 142.0 L302.3 142.0 L324.7 142.0 L347.0 142.0 L369.3 142.0 L391.7 142.0 L414.0 142.0 L436.3 142.0 L458.7 142.0 L481.0 142.0 L503.3 142.0 L525.7 142.0 L548.0 142.0 L548.0 142.0 L12.0 142.0 Z" fill="url(#areaGrad)"/><path class="area-line" d="M12.0 142.0 L34.3 142.0 L56.7 142.0 L79.0 142.0 L101.3 142.0 L123.7 142.0 L146.0 142.0 L168.3 142.0 L190.7 142.0 L213.0 142.0 L235.3 142.0 L257.7 142.0 L280.0 142.0 L302.3 142.0 L324.7 142.0 L347.0 142.0 L369.3 142.0 L391.7 142.0 L414.0 142.0 L436.3 142.0 L458.7 142.0 L481.0 142.0 L503.3 142.0 L525.7 142.0 L548.0 142.0 " fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" pathLength="1"/><g class="area-head"><circle class="area-head-halo" cx="548.0" cy="142.0" r="4" fill="currentColor"/><circle cx="548.0" cy="142.0" r="3.5" fill="currentColor" stroke="var(--surface-solid)" stroke-width="2" vector-effect="non-scaling-stroke"/></g><g class="area-peak"><line x1="12.0" x2="12.0" y1="142.0" y2="142.0" stroke="var(--pop)" stroke-width="1.5" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/><circle cx="12.0" cy="142.0" r="4" fill="var(--pop)" stroke="var(--surface-solid)" stroke-width="2.5" vector-effect="non-scaling-stroke"/></g></svg><div class="area-ticks"><span><hh>:00</span><span><hh>:00</span><span><hh>:00</span></div></div>
-    </div>
-    <div class="card">
-      <h2>Memories by kind <span class="h2-meta">1</span></h2>
-      <div class="legend"><div class="legend-row"><span class="kdot" style="background:var(--k-gotcha)"></span><span class="legend-label">gotcha</span><span class="legend-bar"><span style="width:100%;background:var(--k-gotcha)"></span></span><span class="legend-val">1</span></div></div>
-    </div>
-  </div>
-  
-  <div class="section" style="margin-top:16px">
-    <div class="card iso-card" id="isolation">
-      <h2>Isolation <span class="h2-meta">sealed</span></h2>
-      
-      <form class="iso-form" method="post" action="/console/projects/example-sealed/isolation">
-        <div class="seg iso-seg">
-          <button type="submit" name="state" value="open" class="" aria-pressed="false">Open</button><button type="submit" name="state" value="confidential" class="" aria-pressed="false">Confidential</button><button type="submit" name="state" value="sealed" class="on" aria-pressed="true">Sealed</button>
-        </div>
-      </form>
-      <ul class="iso-promises">
-        <li class="">Open — shares normally. Global knowledge flows in; family surfaces may include it.</li><li class="">Confidential — nothing leaves. Agents in other projects never see this project&#39;s knowledge, and agents here cannot write outside it.</li><li class="on">Sealed — nothing in or out. Agents here see only this project: no global memories, no family, no cross-project reads.</li>
-      </ul>
-      <div class="iso-lock" id="lock" data-lock-setup>
-        <p class="muted"><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Locking a project needs peer_auth, which runs the daemon as an account of its own. To turn it on, run <code>seamlessd peer-auth setup</code> on this computer, as yourself: it shows the whole move, asks once, and asks for your password where it needs root.</p>
-      </div>
-    </div>
-  </div>
-
-  <div class="section" style="margin-top:16px">
-    <div class="card">
-      <h2>Recent activity</h2>
-      
-      <div class="table-wrap">
-      <table>
-        <thead><tr><th>When</th><th>Event</th><th>Detail</th></tr></thead>
-        <tbody>
-          
-          <tr id="<id:42>" class="row-link" data-href="/console/events/<id:42>"><td class="muted"><age></td><td><a href="/console/events/<id:42>"><span class="kind " title="session.ended">Session ended</span></a></td><td>session ended</td></tr>
-          
-          <tr id="<id:58>" class="row-link" data-href="/console/events/<id:58>"><td class="muted"><age></td><td><a href="/console/events/<id:58>"><span class="kind ok" title="memory.written">Memory written</span></a></td><td>wrote memory example-sealed-rule</td></tr>
-          
-          <tr id="<id:59>" class="row-link" data-href="/console/events/<id:59>"><td class="muted"><age></td><td><a href="/console/events/<id:59>"><span class="kind " title="session.started">Session started</span></a></td><td>session started</td></tr>
-          
-        </tbody>
-      </table>
-      </div>
-      
-    </div>
-  </div>
-</div>
 
 
-<div class="tabpanel" data-panel="tasks">
+
+
+<div class="tabpanel on" data-panel="tasks" id="tabpanel-tasks">
   
   
   <div class="empty">No active plans in example-sealed</div>
@@ -3496,131 +3063,16 @@
 </div>
 
 
-<div class="tabpanel" data-panel="sessions">
-  <div class="card">
-    <h2>Sessions <span class="h2-meta">0 active &middot; 1 completed</span></h2>
-    
-    <div class="sess">
-      
-      <div id="<id:25>" class="r"><div><div class="id"><a href="/console/sessions/<id:25>"><sess:3></a><span class="kind">explicit</span></div><div class="find">Rotated the sealed vault keys.</div></div><span class="when"><age></span></div>
-      
-    </div>
-    
-  </div>
-</div>
-
-
-<div class="tabpanel" data-panel="memories">
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Name</th><th>Kind</th><th>Lineage</th><th class="num">Inj</th><th class="num">Read</th><th>Updated</th></tr></thead>
-      <tbody>
-        
-        <tr id="<id:26>" class="row-link" data-href="/console/memories/<id:26>"><td class="mem-name"><a href="/console/memories/<id:26>"><strong>example-sealed-rule</strong></a><div class="desc">The sealed example vault rotates keys weekly</div></td><td><span class="kind">gotcha</span></td><td><span class="lineage"><svg class="ico ico-git-commit-horizontal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><line x1="3" x2="9" y1="12" y2="12"/><line x1="15" x2="21" y1="12" y2="12"/></svg>from <sess:3></span></td><td class="num">0</td><td class="num">0</td><td class="muted"><age></td></tr>
-        
-        
-        <tr class="subhead-row"><td colspan="6">Inherited &mdash; counted in parent/global scope, not example-sealed</td></tr>
-        
-        <tr id="<id:6>" class="row-link" data-href="/console/memories/<id:6>"><td class="mem-name"><a href="/console/memories/<id:6>"><strong>example-style-reference</strong></a><div class="desc">Where the shared example style guide lives</div></td><td><span class="kind">reference</span></td><td><span class="lineage"><svg class="ico ico-git-commit-horizontal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><line x1="3" x2="9" y1="12" y2="12"/><line x1="15" x2="21" y1="12" y2="12"/></svg>from <sess:1></span></td><td class="num">7</td><td class="num">0</td><td class="muted"><age></td></tr>
-        
-        
-      </tbody>
-    </table>
-  </div>
-</div>
-
-
-<div class="tabpanel" data-panel="notes">
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Title</th><th>Tags</th><th>Updated</th></tr></thead>
-      <tbody>
-        <tr><td colspan="3"><div class="empty">No notes in example-sealed</div></td></tr>
-        
-      </tbody>
-    </table>
-  </div>
-</div>
-
-
-<dropped: the Interactions tab panel>
-<div class="tabpanel" data-panel="context">
-  
-
-<section class="context-rule-grid" aria-label="Effective briefing flow rules">
-  <article class="context-rule active">
-    <span class="context-rule-icon global"><svg class="ico ico-database" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg></span>
-    <div><span class="context-rule-label">Global memory</span><strong>1 active</strong><small>eligible in 6 known project scopes</small></div>
-    <span class="context-rule-state on">always on</span>
-  </article>
-  <article class="context-rule active">
-    <span class="context-rule-icon parent"><svg class="ico ico-git-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg></span>
-    <div><span class="context-rule-label">Parent memory</span><strong>0 configured</strong><small>registry-wide shared-parent links at SessionStart</small></div>
-    <span class="context-rule-state on">enabled</span>
-  </article>
-  <article class="context-rule active">
-    <span class="context-rule-icon family"><svg class="ico ico-share-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg></span>
-    <div><span class="context-rule-label">Sibling findings</span><strong>2 per briefing</strong><small>recent findings across configured families</small></div>
-    <span class="context-rule-state on">enabled</span>
-  </article>
-  <article class="context-rule">
-    <span class="context-rule-icon sibling"><svg class="ico ico-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg></span>
-    <div><span class="context-rule-label">Sibling memories</span><strong>not shared</strong><small>non-constraint, non-stage memories only</small></div>
-    <span class="context-rule-state off">disabled</span>
-  </article>
-</section>
-
-<section class="context-section" aria-labelledby="context-scopes-title">
-  <header class="context-section-head">
-    <div><span class="context-section-kicker">Briefing paths</span><h2 id="context-scopes-title">What example-sealed receives and shares</h2></div>
-    <span class="context-section-note">Active memories are eligibility pools; age and token-budget trims still apply.</span>
-  </header>
-  
-  <div class="context-scope-grid focused">
-    
-    <article class="context-scope-card">
-      <header class="context-scope-head">
-        <span class="tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
-        <div class="context-scope-identity">
-          <div class="context-scope-title"><a href="/console/projects/example-sealed?tab=context">example-sealed</a></div>
-          <span class="context-role">standalone scope</span>
-        </div>
-        <a class="context-focus-link" href="/console/context?scope=project&amp;project=example-sealed">focus <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
-      </header>
-      
-      <div class="context-pool-strip" aria-label="Memory pools">
-        <span><small>local</small><strong>1</strong></span>
-        <span><small>global</small><strong>+1</strong></span>
-        
-      </div>
-      <div class="context-flow-columns">
-        <section class="context-flow-column">
-          <h3><svg class="ico ico-arrow-down-to-line" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17V3"/><path d="m6 11 6 6 6-6"/><path d="M19 21H5"/></svg> Receives</h3>
-          
-          <div class="context-flow global">
-            <span class="context-flow-icon"><svg class="ico ico-database" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg></span>
-            <div><strong>Global memory</strong><span>1 active memory eligible in every project briefing before age and budget trims.</span></div>
-            <span class="context-flow-state">on</span>
-          </div>
-          
-        </section>
-        <section class="context-flow-column">
-          <h3><svg class="ico ico-share-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg> Publishes / shares</h3>
-          <div class="context-flow-empty">No outgoing context edges.</div>
-        </section>
-      </div>
-      
-    </article>
-    
-  </div>
-  
-</section>
 
 
 
 
 
-</div>
+
+
+
+
+
 
 
   </main>
@@ -4244,11 +3696,11 @@
   <h2><span class="sess-group-title">Completed <span class="count">5</span></span><span class="sess-group-note">Findings retained for future work</span></h2>
   <div class="sess-list">
     
-    <div id="<id:57>" class="sess-row row-link" data-href="/console/sessions/<id:57>" data-peek>
+    <div id="<id:45>" class="sess-row row-link" data-href="/console/sessions/<id:45>" data-peek>
       <div class="sess-main">
         <span class="sess-state completed" aria-hidden="true"></span>
         <div class="sess-copy">
-          <div class="id-line"><a class="sess-headline is-prompt" href="/console/sessions/<id:57>" data-peek>Which day of the month the confidential ledger closes on?</a><button type="button" class="copy-btn" data-copy="<id:57>" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button><span class="agent-pill cc" title="Claude Code">cc</span><span class="kind faint" title="Ran on another machine">dg-host.example</span></div>
+          <div class="id-line"><a class="sess-headline is-prompt" href="/console/sessions/<id:45>" data-peek>Which day of the month the confidential ledger closes on?</a><button type="button" class="copy-btn" data-copy="<id:45>" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button><span class="agent-pill cc" title="Claude Code">cc</span><span class="kind faint" title="Ran on another machine">dg-host.example</span></div>
           <div class="find sess-name"><span class="mono">cc/dg-claud-e62f1f8d52a16194</span> &middot; its first prompt</div>
           <div class="find">(auto) session ended, no summary harvested</div>
         </div>
@@ -4257,11 +3709,11 @@
       <span class="when" title="<time> UTC"><age></span>
     </div>
     
-    <div id="<id:60>" class="sess-row row-link" data-href="/console/sessions/<id:60>" data-peek>
+    <div id="<id:46>" class="sess-row row-link" data-href="/console/sessions/<id:46>" data-peek>
       <div class="sess-main">
         <span class="sess-state completed" aria-hidden="true"></span>
         <div class="sess-copy">
-          <div class="id-line"><a href="/console/sessions/<id:60>" data-peek>cc/dg-claud-84915c73e46aa6d5</a><button type="button" class="copy-btn" data-copy="<id:60>" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button><span class="agent-pill cc" title="Claude Code">cc</span><span class="kind faint" title="Ran on another machine">dg-host.example</span></div>
+          <div class="id-line"><a href="/console/sessions/<id:46>" data-peek>cc/dg-claud-84915c73e46aa6d5</a><button type="button" class="copy-btn" data-copy="<id:46>" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button><span class="agent-pill cc" title="Claude Code">cc</span><span class="kind faint" title="Ran on another machine">dg-host.example</span></div>
           <div class="find">(auto) session ended, no summary harvested</div>
         </div>
       </div>

@@ -49,7 +49,7 @@ func TestLock_AbsentWithoutPeerAuth(t *testing.T) {
 	require.NoError(t, err)
 
 	page := func() string {
-		req := httptest.NewRequest(http.MethodGet, "/console/projects/"+lockableSlug, nil)
+		req := httptest.NewRequest(http.MethodGet, "/console/projects/"+lockableSlug+"?tab=overview", nil)
 		req.AddCookie(consoleCookie())
 		rr := do(mux, req)
 		require.Equal(t, http.StatusOK, rr.Code)
@@ -85,7 +85,7 @@ func TestLock_NeedsAnEnrolledPasskey(t *testing.T) {
 	lc := newLockedConsole(t)
 	lockable(t, lc)
 
-	for _, target := range []string{"/console/projects/" + lockableSlug, "/console/lock/" + lockableSlug} {
+	for _, target := range []string{"/console/projects/" + lockableSlug + "?tab=overview", "/console/lock/" + lockableSlug} {
 		_, page := lc.get(t, target, "")
 		require.Contains(t, page, "data-needs-passkey", target)
 		require.Contains(t, page, `href="/console/approvers"`, target)
@@ -104,7 +104,7 @@ func TestLock_LockThenRemove(t *testing.T) {
 	require.NoError(t, err)
 	enrollPasskeyByCode(t, lc.db, lc.svc, key, "key")
 
-	_, page := lc.get(t, "/console/projects/"+lockableSlug, "")
+	_, page := lc.get(t, "/console/projects/"+lockableSlug+"?tab=overview", "")
 	require.Contains(t, page, `href="/console/lock/`+lockableSlug+`"`)
 	_, page = lc.get(t, "/console/lock/"+lockableSlug, "")
 	require.Contains(t, page, `id="lock-form"`)
@@ -197,7 +197,7 @@ func TestLock_FenceStaysUp(t *testing.T) {
 	rr := lc.lockChange(t, key, lockableSlug, approval.LockActionAdd)
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 
-	_, page := lc.get(t, "/console/projects/"+lockableSlug, "")
+	_, page := lc.get(t, "/console/projects/"+lockableSlug+"?tab=overview", "")
 	require.Contains(t, page, "must stay confidential or sealed", "the open option is off")
 
 	open := func(slug, unlock string) *httptest.ResponseRecorder {

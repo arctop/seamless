@@ -15,7 +15,7 @@
         {{if .IsRoot}}<span class="chip-parent">{{icon "git-branch"}}root project</span>{{else}}<span class="chip-parent">{{icon "git-branch"}}child of {{.Parent}}</span>{{end}}
         <form class="star-form" method="post" action="/console/favorites/project/{{.Slug}}">
           <input type="hidden" name="favorite" value="{{if .Favorite}}0{{else}}1{{end}}">
-          <input type="hidden" name="next" value="/console/projects/{{.Slug}}">
+          <input type="hidden" name="next" value="/console/projects/{{.Slug}}?tab={{.ActiveTab}}">
           <button class="star{{if .Favorite}} on{{end}}" type="submit" aria-pressed="{{if .Favorite}}true{{else}}false{{end}}" title="{{if .Favorite}}Unstar{{else}}Star{{end}} this project">{{icon "star"}}</button>
         </form>
       </div>
@@ -24,18 +24,27 @@
   </div>
 </div>
 
-<div class="tabs" id="tabs">
+{{/* The tab bar. Each tab is a real ?tab= link, and the page renders only
+     the active tab's panel. data-seam-query hands the links to the console's
+     in-place client (static/navigation.js): a switch fetches the tab, morphs
+     the view and pushes history, so back and forward walk the tabs and the
+     document never reloads. Without script the links navigate. */}}
+<div class="tabs" id="tabs" data-seam-query>
   {{range .Tabs}}
   <a data-tab="{{.Key}}" href="?tab={{.Key}}{{with $.Data.CameFrom}}{{with .Active}}&amp;from={{.}}{{end}}{{end}}" class="{{if .Active}}on{{end}}">{{icon .Icon}}{{.Label}}{{if .HasCount}} <span class="pill">{{.Count}}</span>{{end}}</a>
   {{end}}
 </div>
 
-<!-- TAB: overview -->
-<div class="tabpanel{{if eq .ActiveTab "overview"}} on{{end}}" data-panel="overview">
+{{/* One panel per page: the active tab's. Each panel is keyed by its tab, so
+     the in-place morph replaces the panel a switch leaves rather than morphing
+     one tab's markup into another's (the Interactions panel is data-live-skip,
+     which a morph would otherwise keep whole). */}}
+{{if eq .ActiveTab "overview"}}
+<div class="tabpanel on" data-panel="overview" id="tabpanel-overview">
   <div class="metricbar">
     <div class="m"><div class="k">Active memories</div><div class="v">{{.Metrics.Memories}}</div></div>
     <div class="m"><div class="k">Sessions</div><div class="v">{{.Metrics.Sessions}}{{if .Metrics.Live}} <small>&middot; {{.Metrics.Live}} live</small>{{end}}</div></div>
-    <div class="m"><div class="k">Open tasks</div><div class="v">{{.Metrics.OpenTasks}}{{if .Metrics.Blocked}} <small>&middot; {{.Metrics.Blocked}} blk</small>{{end}}</div></div>
+    <div class="m"><div class="k">Open tasks</div><div class="v">{{.Metrics.OpenTasks}}{{if .Metrics.Blocked}} <small>&middot; {{.Metrics.Blocked}} blocked</small>{{end}}</div></div>
     <div class="m"><div class="k">Reach</div><div class="v brand judged-row">{{if .Metrics.HasReach}}{{.Metrics.ReachRate}}%{{else}}&mdash;{{end}}{{deltaChip .Metrics.ReachDelta}}</div><div class="judged-band" title="{{.Metrics.PriorLabel}}">{{bandLine .Metrics.ReachBand}}</div></div>
     <div class="m"><div class="k">Coverage</div><div class="v ok judged-row">{{if .Metrics.HasCoverage}}{{.Metrics.Coverage}}%{{else}}&mdash;{{end}}{{deltaChip .Metrics.CoverageDelta}}</div><div class="judged-band" title="{{.Metrics.PriorLabel}}">{{bandLine .Metrics.CoverageBand}}</div></div>
   </div>
@@ -106,12 +115,14 @@
     </div>
   </div>
 </div>
+{{end}}
 
-<!-- TAB: tasks. Each plan is a live card: rollup, narrative status, the last few
-     transitions, and step rows that expand IN PLACE into a lazily fetched task
-     dossier. The dossier container carries data-live-skip so an SSE morph never
-     clobbers the client-owned fragment inside it. -->
-<div class="tabpanel{{if eq .ActiveTab "tasks"}} on{{end}}" data-panel="tasks">{{with .CameFrom}}{{template "came-from" (.Bar "tasks")}}{{end}}
+{{/* Plans & tasks. Each plan is a live card: rollup, narrative status, the
+     last few transitions, and step rows that expand IN PLACE into a lazily
+     fetched task dossier. The dossier container carries data-live-skip so an
+     SSE morph never clobbers the client-owned fragment inside it. */}}
+{{if eq .ActiveTab "tasks"}}
+<div class="tabpanel on" data-panel="tasks" id="tabpanel-tasks">{{with .CameFrom}}{{template "came-from" (.Bar "tasks")}}{{end}}
   {{$proj := .Slug}}
   {{/* The ?notice= flash an owner action redirects back with is rendered once,
        by the shared layout banner. */}}
@@ -180,23 +191,26 @@
     {{else}}<div class="empty">Nothing claimable right now</div>{{end}}
   </div>{{end}}
 </div>
+{{end}}
 
-<!-- TAB: sessions -->
-<div class="tabpanel{{if eq .ActiveTab "sessions"}} on{{end}}" data-panel="sessions">
+{{if eq .ActiveTab "sessions"}}
+<div class="tabpanel on" data-panel="sessions" id="tabpanel-sessions">
   <div class="card">
-    <h2>Sessions <span class="h2-meta">{{.Metrics.Live}} active &middot; {{sub .Metrics.Sessions .Metrics.Live}} completed</span></h2>
+    {{with .SessionTally}}<h2>Sessions <span class="h2-meta" data-session-tally>{{.Live}} live{{if .Idle}} &middot; {{.Idle}} idle{{end}} &middot; {{.Completed}} completed &middot; {{.Expired}} expired</span></h2>{{end}}
     {{if .Sessions}}
     <div class="sess">
       {{range .Sessions}}
-      <div id="{{.ID}}" class="r"><div><div class="id"><a href="/console/sessions/{{.ID}}">{{.Name}}</a>{{if .Active}}<span class="badge ok"><span class="live-dot"></span>active</span>{{else}}<span class="kind">{{.Source}}</span>{{end}}{{if .Ambient}}<span class="kind">ambient</span>{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{range .Holds}}<span class="claim">{{icon "lock"}}holds {{.}}</span>{{end}}</div>{{if .Findings}}<div class="find">{{.Findings}}</div>{{end}}</div><span class="when">{{ago .Updated}}</span></div>
+      <div id="{{.ID}}" class="r"><div><div class="id"><a href="/console/sessions/{{.ID}}">{{.Name}}</a>{{if .Live}}<span class="badge ok" data-session-state="live"><span class="live-dot"></span>live</span>{{else}}<span class="kind" data-session-state="{{.State}}">{{.State}}</span>{{end}}{{if and .Source (ne .Source "startup")}}<span class="kind faint" title="How this session began">{{.Source}}</span>{{end}}{{if .Ambient}}<span class="kind">ambient</span>{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{range .Holds}}<span class="claim" title="The task this session holds a claim on">{{icon "terminal"}}<a href="/console/tasks/{{.ID}}">{{.Title}}</a></span>{{end}}</div>{{if .Findings}}<div class="find">{{.Findings}}</div>{{end}}</div><span class="when">{{ago .Updated}}</span></div>
       {{end}}
     </div>
     {{else}}<div class="empty">No sessions in {{.Slug}}</div>{{end}}
+    <p class="sess-more">{{if lt (len .Sessions) .SessionTally.Total}}{{len .Sessions}} of {{.SessionTally.Total}} &middot; {{end}}<a href="/console/sessions?project={{.Slug}}">all sessions</a></p>
   </div>
 </div>
+{{end}}
 
-<!-- TAB: memories -->
-<div class="tabpanel{{if eq .ActiveTab "memories"}} on{{end}}" data-panel="memories">{{with .CameFrom}}{{template "came-from" (.Bar "memories")}}{{end}}
+{{if eq .ActiveTab "memories"}}
+<div class="tabpanel on" data-panel="memories" id="tabpanel-memories">{{with .CameFrom}}{{template "came-from" (.Bar "memories")}}{{end}}
   <div class="table-wrap">
     <table>
       <thead><tr><th>Name</th><th>Kind</th><th>Lineage</th><th class="num">Inj</th><th class="num">Read</th><th>Updated</th></tr></thead>
@@ -214,9 +228,10 @@
     </table>
   </div>
 </div>
+{{end}}
 
-<!-- TAB: notes -->
-<div class="tabpanel{{if eq .ActiveTab "notes"}} on{{end}}" data-panel="notes">{{with .CameFrom}}{{template "came-from" (.Bar "notes")}}{{end}}
+{{if eq .ActiveTab "notes"}}
+<div class="tabpanel on" data-panel="notes" id="tabpanel-notes">{{with .CameFrom}}{{template "came-from" (.Bar "notes")}}{{end}}
   <div class="table-wrap">
     <table>
       <thead><tr><th>Title</th><th>Tags</th><th>Updated</th></tr></thead>
@@ -229,12 +244,15 @@
     </table>
   </div>
 </div>
+{{end}}
 
-<!-- TAB: interactions. data-live-skip: the volume histogram is JS-drawn, and the
-     kind filter + row expand/clamp state are client-owned -- a live morph would
-     clobber all three. The dedicated /console/interactions screen is the live
-     surface; this panel stays a page-load snapshot. -->
-<div class="tabpanel{{if eq .ActiveTab "interactions"}} on{{end}}" data-panel="interactions" data-live-skip>
+{{/* The Interactions panel is data-live-skip: the volume histogram is
+     JS-drawn, and the kind filter + row expand/clamp state are client-owned --
+     a live morph would clobber all three. The dedicated /console/interactions
+     screen is the live surface; this panel stays a snapshot of when the tab
+     was opened. */}}
+{{if eq .ActiveTab "interactions"}}
+<div class="tabpanel on" data-panel="interactions" id="tabpanel-interactions" data-live-skip>
   {{if .Interactions}}
   <div class="ix-volume empty" id="ix-pvol" data-vol="{{.IxVolumeJSON}}" aria-hidden="true"></div>
   <div class="ix-controls">
@@ -272,17 +290,19 @@
     {{end}}
   </div>
 </div>
+{{end}}
 
-<!-- TAB: context -->
-<div class="tabpanel{{if eq .ActiveTab "context"}} on{{end}}" data-panel="context">
+{{if eq .ActiveTab "context"}}
+<div class="tabpanel on" data-panel="context" id="tabpanel-context">
   {{template "context-map" .Context}}
 </div>
+{{end}}
 {{end}}
 {{end}}
 
 <!-- One step row. A <details> so the dossier expands in place; the summary
      carries the grid the old div row had, and the state dot replaces the
-     disclosure triangle. The lapsed-claim strip sits OUTSIDE the details on
+     disclosure triangle. The claim strip sits OUTSIDE the details on
      purpose: a form nested in a summary would toggle the row on every click.
      The copy button inside the summary does not: the shared copy handler
      (layout.html) cancels the click's default, and with it the toggle. -->
@@ -304,16 +324,24 @@
   </summary>
   <div class="step-dossier" id="dossier-{{.ID}}" data-live-skip data-dossier="/console/tasks/{{.ID}}"></div>
 </details>
-{{/* No confirm on this release, unlike the dossier's: the lease is already
-     gone, so any agent can reclaim the step anyway -- there is no live holder
-     to interrupt, only a stale claim to clear. */}}
+{{/* The claim strip: a step in progress that nobody's live claim holds,
+     worded in the one task vocabulary. A lapsed claim is released here, with
+     no confirm, unlike the dossier's: the lease is already gone, so any agent
+     can reclaim the step anyway -- there is no live holder to interrupt, only
+     a stale claim to clear. A claimless step names no holder to release, so
+     its strip opens the step's dossier (the task's peek) instead. */}}
 {{if .LeaseLapsed}}
-<div class="step-alert">
-  {{icon "triangle-alert"}}<span>lease lapsed &mdash; reclaimable</span>
+<div class="step-alert" data-claim-strip="{{.Alert.Key}}">
+  {{icon "triangle-alert"}}<b>{{.Alert.Text}}</b><span>{{.Alert.Hint}}</span>
   <form method="post" action="/console/tasks/{{.ID}}/release">
     <input type="hidden" name="next" value="/console/projects/{{.Project}}?tab=tasks">
     <button class="link-act danger" type="submit" title="Takes the lapsed claim off the step">release claim</button>
   </form>
+</div>
+{{else if .Claimless}}
+<div class="step-alert" data-claim-strip="{{.Alert.Key}}">
+  {{icon "triangle-alert"}}<b>{{.Alert.Text}}</b><span>{{.Alert.Hint}}</span>
+  <a class="link-act" href="/console/tasks/{{.ID}}" data-open-step="{{.ID}}" title="Opens the task under its row">open the task</a>
 </div>
 {{end}}
 {{end}}
@@ -395,46 +423,6 @@
 {{define "scripts"}}
 <script>
 (function () {
-  /* Project-detail tabs: server renders every panel (the active one via ?tab=),
-     JS switches them client-side without a reload and syncs ?tab= for deep-links.
-     Without JS the tab links navigate to the server-rendered tab. */
-  var bar = document.getElementById('tabs');
-  if (!bar) return;
-  var tabs = bar.querySelectorAll('[data-tab]');
-  var panels = document.querySelectorAll('.tabpanel[data-panel]');
-  function activate(key) {
-    var found = false;
-    panels.forEach(function (p) { var on = p.getAttribute('data-panel') === key; p.classList.toggle('on', on); if (on) found = true; });
-    if (!found) return;
-    tabs.forEach(function (t) { t.classList.toggle('on', t.getAttribute('data-tab') === key); });
-    try { history.replaceState(null, '', location.pathname + '?tab=' + key); } catch (e) {}
-  }
-  bar.addEventListener('click', function (e) {
-    var t = e.target.closest ? e.target.closest('[data-tab]') : null;
-    if (!t) return;
-    e.preventDefault();
-    activate(t.getAttribute('data-tab'));
-  });
-})();{{if .Data.CameFrom}}
-
-(function () {
-  /* The came-from filter (?from=) holds across a tab switch: the switch above
-     writes ?tab= alone, and a live refresh re-reads that URL. The active
-     source rides on the filter bar, which every in-place load redraws. */
-  var bar = document.getElementById('tabs');
-  if (!bar) return;
-  bar.addEventListener('click', function (e) {
-    var t = e.target.closest ? e.target.closest('[data-tab]') : null;
-    var on = document.querySelector('[data-camefrom-active]');
-    if (!t || !on) return;
-    try {
-      history.replaceState(null, '', location.pathname + '?tab=' + encodeURIComponent(t.getAttribute('data-tab')) +
-        '&from=' + encodeURIComponent(on.getAttribute('data-camefrom-active')));
-    } catch (err) {}
-  });
-})();{{end}}
-
-(function () {
   /* Plans & tasks panel. Step rows are <details>; opening one fetches the task's
      peek fragment into its dossier once and the client owns it from then on
      (the container is data-live-skip, so a live morph leaves it alone). Every
@@ -481,13 +469,7 @@
   // Chain / ledger chips scroll to their step instead of navigating. Blockers
   // are always live rows, but a ledger entry can point into a folded done run,
   // so open every <details> above the target first.
-  document.addEventListener('click', function (e) {
-    var chip = e.target.closest ? e.target.closest('[data-jump]') : null;
-    if (!chip || !inPanel(chip) || e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
-    e.preventDefault(); // also stops the click from toggling the row it sits in
-    var id = (chip.getAttribute('href') || '').replace(/^#/, '');
-    var target = id ? document.getElementById(id) : null;
-    if (!target) return;
+  function reveal(target) {
     for (var p = target.parentElement; p; p = p.parentElement) {
       if (p.tagName === 'DETAILS') p.open = true;
       if (p.matches && p.matches(PANEL)) break;
@@ -496,6 +478,27 @@
     target.classList.remove('flash');
     void target.offsetWidth;
     target.classList.add('flash');
+  }
+  document.addEventListener('click', function (e) {
+    var chip = e.target.closest ? e.target.closest('[data-jump]') : null;
+    if (!chip || !inPanel(chip) || e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+    e.preventDefault(); // also stops the click from toggling the row it sits in
+    var id = (chip.getAttribute('href') || '').replace(/^#/, '');
+    var target = id ? document.getElementById(id) : null;
+    if (target) reveal(target);
+  });
+
+  // A claimless step's strip opens the step's own row, whose dossier is the
+  // task's peek (the toggle listener above loads it). Without script the link
+  // opens the task's page.
+  document.addEventListener('click', function (e) {
+    var open = e.target.closest ? e.target.closest('[data-open-step]') : null;
+    if (!open || !inPanel(open) || e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+    var row = document.getElementById(open.getAttribute('data-open-step'));
+    if (!row || row.tagName !== 'DETAILS') return;
+    e.preventDefault();
+    row.open = true;
+    reveal(row);
   });
   document.addEventListener('animationend', function (e) {
     if (e.target.classList && e.target.classList.contains('flash')) e.target.classList.remove('flash');
@@ -545,14 +548,23 @@
 
 (function () {
   /* Interactions tab: the shared IX module auto-formats the server-rendered
-     request/response bodies (enhance) on load; here we draw the project's volume
-     histogram and wire the category filter, reusing the shared IX helpers so it
-     matches the live feed. */
+     request/response bodies (enhance) on load and after each in-place morph;
+     here we draw the project's volume histogram and wire the category filter,
+     reusing the shared IX helpers so it matches the live feed. The panel is
+     on the page only while its tab is open, and a tab switch brings it in
+     place, so this mounts each panel it finds once: on load and after every
+     morph (seam:content-updated). */
   if (!window.IX) return;
-  var feed = document.getElementById('ix-pfeed');
-  var kinds = document.getElementById('ix-pkinds');
-  window.IX.mountVolume(document.getElementById('ix-pvol'), feed, kinds);
-  window.IX.wireKindFilter(kinds, feed);
+  function mount() {
+    var feed = document.getElementById('ix-pfeed');
+    var kinds = document.getElementById('ix-pkinds');
+    if (!feed || feed.seamIxMounted) return;
+    feed.seamIxMounted = true;
+    window.IX.mountVolume(document.getElementById('ix-pvol'), feed, kinds);
+    window.IX.wireKindFilter(kinds, feed);
+  }
+  mount();
+  document.addEventListener('seam:content-updated', mount);
 })();
 </script>
 {{end}}

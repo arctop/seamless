@@ -17,6 +17,7 @@
   {{/* Drawn from the screen registry at this level, so a lost Basic owner is
        never sent somewhere their sidebar does not go. */}}
   <nav class="err-actions" aria-label="Go somewhere else">
+    {{with .Back}}<a class="btn primary" href="{{.Href}}" data-error-back>{{icon "box"}}Back to {{.Label}}</a>{{end}}
     {{range .Links}}<a class="btn" href="{{.Href}}">{{icon .Icon}}{{.Label}}</a>{{end}}
   </nav>
 </div>

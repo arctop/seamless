@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -41,6 +42,8 @@ func getHTMLBody(t *testing.T, mux *http.ServeMux, path string) string {
 	return rr.Body.String()
 }
 
+// Every tab renders, each on a page of its own: the page draws the tab it
+// shows and no other panel.
 func TestProjectWorkspace_RendersAllTabs(t *testing.T) {
 	db, mux := newConsole(t)
 	ctx := context.Background()
@@ -69,15 +72,22 @@ func TestProjectWorkspace_RendersAllTabs(t *testing.T) {
 	// Memories tab lineage cell, and memories-by-kind.
 	insertRawMemory(t, db, mustID(t), "seamless", "cc/s1", now)
 
-	body := getHTMLBody(t, mux, "/console/projects/seamless")
-	for _, panel := range projectTabKeys {
-		require.Contains(t, body, `data-panel="`+panel+`"`, "panel %q must render", panel)
+	for _, tab := range projectTabKeys {
+		body := getHTMLBody(t, mux, "/console/projects/seamless?tab="+tab)
+		require.Contains(t, body, `<div class="tabpanel on" data-panel="`+tab+`"`, "panel %q must render", tab)
+		require.Equal(t, 1, strings.Count(body, `<div class="tabpanel`), "tab %q: one panel per page", tab)
+		require.Contains(t, body, "root project", "the shared-briefing banner (no parent/children), on every tab")
 	}
+	body := getHTMLBody(t, mux, "/console/projects/seamless?tab=tasks")
 	require.Contains(t, body, "plan:demo", "plan slug on the tasks panel")
-	require.Contains(t, body, "cc/s1", "the claiming session appears on the sessions panel")
 	require.Contains(t, body, "Build project detail", "the plan step title")
-	require.Contains(t, body, "root project", "the shared-briefing banner (no parent/children)")
-	require.Contains(t, body, "holds demo step", "the session's inline claim indicator")
+	sessions := tabPanel(t, getHTMLBody(t, mux, "/console/projects/seamless?tab=sessions"), "sessions")
+	require.Contains(t, sessions, "cc/s1", "the claiming session appears on the sessions panel")
+	claim := between(t, sessions, "Build project detail", `<span class="claim"`, "</span>")
+	require.Contains(t, claim, `<a href="/console/tasks/`+taskID+`">Build project detail</a>`,
+		"the session names the task it holds by title, linked to the task")
+	require.Contains(t, claim, "ico-terminal", "with the step rows' holder icon")
+	require.NotContains(t, sessions, "ico-lock", "a claim is never drawn as a lock")
 }
 
 func TestProjectWorkspace_DeepLinkTabAndFamilyChild(t *testing.T) {

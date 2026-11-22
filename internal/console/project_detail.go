@@ -2,8 +2,15 @@ package console
 
 // The project-detail workspace turns the thin project peek into a full tabbed
 // page: the peek fragment stays the at-a-glance summary, while the full page
-// (the "open" target) is a 7-tab workspace over the project's health,
-// plans/tasks, sessions, memories, notes, interactions, and context flow.
+// (the "open" target) is a 7-tab workspace over the project's plans/tasks,
+// health, sessions, memories, notes, interactions, and context flow.
+//
+// It opens on Plans & tasks, the tab the owner follows plans from
+// (plan:console-ux-pass D1), and a load reads and renders one tab: the active
+// one. The tab bar's links are real ?tab= navigations that the console's
+// in-place client takes (static/navigation.js), so a switch keeps the document
+// and morphs only the view, and a live refresh re-reads the tab on screen. The
+// header and the tab pills come from the board's one batched row.
 //
 // This file is the route dispatch and page assembly. The tab panels live in
 // project_tabs.go; the Context panel reuses the same durable topology builder
@@ -13,6 +20,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 	"runtime"
 	"slices"
 	"strings"
@@ -23,13 +31,26 @@ import (
 	"github.com/arctop/seamless/internal/validate"
 )
 
-// projectTabKeys are the workspace tabs in bar order. A ?tab= deep-link outside
-// this set is a 400 (never a silent fallback to Overview), matching the board's
-// strict-param policy so an agent driving the console by URL sees the fix.
-var projectTabKeys = []string{"overview", "tasks", "sessions", "memories", "notes", "interactions", "context"}
+// projectTabKeys are the workspace tabs in bar order, the work first. A ?tab=
+// deep-link outside this set (and its aliases) is a 400, never a silent
+// fallback to the default tab, matching the board's strict-param policy so an
+// agent driving the console by URL sees the fix.
+var projectTabKeys = []string{"tasks", "overview", "sessions", "memories", "notes", "interactions", "context"}
+
+// projectDefaultTab is the tab a link that names none opens: Plans & tasks.
+// Two parameters choose another when no tab is named: ?from= opens Memories
+// (the came-from filter's bar lives on the tabs it narrows) and ?isolate=
+// opens Overview (the tighten confirm lives on its Isolation card).
+const projectDefaultTab = "tasks"
+
+// projectTabAliases are names a link may use for a tab, answered with a
+// permanent redirect to the tab's key: "relations" is the Context tab's old
+// name, "plans" the word the owner uses for Plans & tasks.
+var projectTabAliases = map[string]string{"relations": "context", "plans": "tasks"}
 
 // projectWorkspaceData is the full project-detail page payload: the header, the
-// tab bar (with counts), and every tab's server-rendered panel.
+// tab bar (with counts), and the active tab's server-rendered panel. Only the
+// active tab's fields are filled; the others stay empty.
 type projectWorkspaceData struct {
 	Slug        string
 	Name        string
@@ -70,7 +91,8 @@ type projectWorkspaceData struct {
 	Ready         []taskRow
 	Blocked       int // open tasks blocked by an unfinished dependency
 
-	Sessions []projSessionVM
+	Sessions     []projSessionVM
+	SessionTally store.ProjectSessionTally // the project's sessions by state, the tab's header
 
 	Memories  []projMemoryVM
 	Inherited []projMemoryVM // global/parent memories a strict project count excludes
@@ -173,22 +195,23 @@ func (s *Service) projectSummary(w http.ResponseWriter, r *http.Request, p core.
 	s.renderDetail(w, r, "project", pageData{Title: "Project " + p.Slug, Active: "projects", Data: d})
 }
 
-// projectWorkspace builds and renders the full tabbed workspace page.
+// projectWorkspace builds and renders the full tabbed workspace page: the
+// header and tab bar, and the one panel ?tab= names.
 func (s *Service) projectWorkspace(w http.ResponseWriter, r *http.Request, p core.Project) {
 	ctx := r.Context()
 	slug := p.Slug
 
 	query := r.URL.Query()
-	tab := "overview"
+	tab, chosen := projectDefaultTab, false
 	if values, ok := query["tab"]; ok {
 		if len(values) != 1 {
 			s.badRequest(w, r, "parameter \"tab\" must be provided exactly once")
 			return
 		}
-		tab = values[0]
+		tab, chosen = values[0], true
 	}
-	if tab == "relations" {
-		query.Set("tab", "context")
+	if key, ok := projectTabAliases[tab]; ok {
+		query.Set("tab", key)
 		http.Redirect(w, r, r.URL.Path+"?"+query.Encode(), http.StatusPermanentRedirect)
 		return
 	}
@@ -211,6 +234,10 @@ func (s *Service) projectWorkspace(w http.ResponseWriter, r *http.Request, p cor
 			return
 		}
 		pending = state
+		if !chosen {
+			// The confirm panel lives on Overview's Isolation card.
+			tab = "overview"
+		}
 	}
 	// The came-from filter (?from=<project>): strict like ?tab=. A project
 	// no item names is a filter that matches nothing, not an error.
@@ -225,10 +252,10 @@ func (s *Service) projectWorkspace(w http.ResponseWriter, r *http.Request, p cor
 			return
 		}
 		from = values[0]
-		if _, chosen := query["tab"]; !chosen {
+		if !chosen {
 			// The bar lives on the tabs it narrows: a link that names only
-			// the filter opens Memories, not an Overview that shows no bar
-			// while its tab counts are already narrowed (P13, 2026-11-14).
+			// the filter opens Memories, not a tab that shows no bar while
+			// its tab counts are already narrowed (P13, 2026-11-14).
 			tab = "memories"
 		}
 	}
@@ -241,31 +268,14 @@ func (s *Service) projectWorkspace(w http.ResponseWriter, r *http.Request, p cor
 		IsRoot: p.ParentSlug == "", TrendWin: win.Label,
 		Isolation: isolationOf(p), IsolationOptions: isolationOptions(isolationOf(p)),
 	}
-	lock, err := s.lockViewFor(r, slug, isolationOf(p))
-	if err != nil {
-		s.serverError(w, r, err)
-		return
-	}
-	data.Lock = lock
-	data.LockSetup = lock == nil && (lockSetupGOOS == "darwin" || lockSetupGOOS == "linux")
-	if lock.Locked() {
-		disableUnfenced(data.IsolationOptions)
-	}
-	if pending != "" {
-		confirm, err := s.isolationPendingConfirm(ctx, slug, pending)
-		if err != nil {
-			s.serverError(w, r, err)
-			return
-		}
-		data.IsolationConfirm = confirm
-	}
 	if data.Name == "" {
 		data.Name = slug
 	}
 	data.TileClass, data.TileIcon = "grp", "server"
 
-	// Header + metric bar: strict per-slug health from the same batched query the
-	// board uses, so a single row equals the board row exactly.
+	// Header, metric bar and tab pills: strict per-slug health from the same
+	// batched query the board uses, so a single row equals the board row
+	// exactly, and no tab's own rows are read to count them.
 	board, err := store.ProjectsWithCounts(ctx, s.db(ctx), win, now, s.cfg.SessionIdleTTL)
 	if err != nil {
 		s.serverError(w, r, err)
@@ -288,80 +298,37 @@ func (s *Service) projectWorkspace(w http.ResponseWriter, r *http.Request, p cor
 		HasReach: row.Active > 0, ReachRate: row.ReachRate,
 	}
 	data.Blocked = row.Blocked
-	if cov, cerr := store.GetSessionCoverageForProject(ctx, s.db(ctx), slug, win.Since); cerr == nil && cov.Total > 0 {
-		data.Metrics.HasCoverage = true
-		data.Metrics.Coverage = percent(cov.Covered, cov.Total)
-	}
-	prior, hasPrior := s.priorProjectVitals(ctx, slug, win, now)
-	data.Metrics.PriorLabel = priorLabel(win, hasPrior)
-	data.Metrics.ReachDelta = pointDelta(data.Metrics.ReachRate, prior.ReachRate, hasPrior && data.Metrics.HasReach, riseGood)
-	data.Metrics.ReachBand = floorBand(data.Metrics.ReachRate, reachTargetPct, data.Metrics.HasReach)
-	data.Metrics.CoverageDelta = pointDelta(data.Metrics.Coverage, prior.Coverage, hasPrior && data.Metrics.HasCoverage && prior.CovTotal > 0, riseGood)
-	data.Metrics.CoverageBand = floorBand(data.Metrics.Coverage, continuityTargetPct, data.Metrics.HasCoverage)
 
-	if err := s.fillOverviewTab(ctx, &data, slug, win); err != nil {
-		s.serverError(w, r, err)
-		return
-	}
-	if err := s.fillTasksTab(ctx, &data, slug); err != nil {
-		s.serverError(w, r, err)
-		return
-	}
-	if err := s.fillSessionsTab(ctx, &data, slug); err != nil {
-		s.serverError(w, r, err)
-		return
-	}
-	if err := s.fillMemoriesTab(ctx, &data, slug); err != nil {
-		s.serverError(w, r, err)
-		return
-	}
-	if err := s.fillNotesTab(ctx, &data, slug); err != nil {
-		s.serverError(w, r, err)
-		return
-	}
-	if err := s.fillInteractionsTab(ctx, &data, slug); err != nil {
-		s.serverError(w, r, err)
-		return
-	}
-	cameFrom, keep, err := s.cameFromFor(ctx, slug, from)
-	if err != nil {
-		s.serverError(w, r, err)
-		return
-	}
-	if cameFrom != nil {
-		// The came-from rows are read by id, without their blockers: read
-		// them, so each row's word tells ready from blocked.
-		if err := s.readRowBlockers(ctx, cameFrom.Tasks); err != nil {
+	// The came-from filter reads its sources for the bars of the tabs it
+	// narrows, and its items whenever one is chosen: the tab links carry it
+	// and the narrowed pills count what those tabs list.
+	var keep map[string]map[string]bool
+	if _, narrows := cameFromTabs[tab]; narrows || from != "" {
+		cameFrom, k, err := s.cameFromFor(ctx, slug, from)
+		if err != nil {
 			s.serverError(w, r, err)
 			return
 		}
+		data.CameFrom, keep = cameFrom, k
 	}
-	data.CameFrom = cameFrom
-	s.applyCameFrom(ctx, &data, keep)
-	contextData, found, err := s.buildContextData(ctx, slug)
-	if err != nil {
+
+	if err := s.fillProjectTab(r, &data, tab, win, now, pending); err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	if !found {
-		s.serverError(w, r, fmt.Errorf("console.projectWorkspace: registered scope %q missing from context topology", slug))
-		return
-	}
-	contextData.Scope = "project"
-	contextData.Project = slug
-	data.Context = contextData
+	s.applyCameFrom(ctx, &data, keep)
 
-	taskCount, memCount := data.Metrics.OpenTasks, data.Metrics.Memories
+	taskCount, memCount, noteCount := data.Metrics.OpenTasks, data.Metrics.Memories, row.Notes
 	if data.CameFromOn() {
 		// Narrowed, a tab counts what it lists.
-		taskCount, memCount = len(data.CameFrom.Tasks), len(data.Memories)
+		taskCount, memCount, noteCount = len(data.CameFrom.Tasks), len(keep[core.ItemKindMemory]), len(keep[core.ItemKindNote])
 	}
 	data.Tabs = []projectTabVM{
-		{Key: "overview", Label: "Overview", Icon: "gauge"},
 		{Key: "tasks", Label: "Plans & tasks", Icon: "list-checks", Count: taskCount, HasCount: true},
+		{Key: "overview", Label: "Overview", Icon: "gauge"},
 		{Key: "sessions", Label: "Sessions", Icon: "terminal", Count: data.Metrics.Sessions, HasCount: true},
 		{Key: "memories", Label: "Memories", Icon: "brain", Count: memCount, HasCount: true},
-		{Key: "notes", Label: "Notes", Icon: "file-text", Count: len(data.Notes), HasCount: true},
+		{Key: "notes", Label: "Notes", Icon: "file-text", Count: noteCount, HasCount: true},
 		{Key: "interactions", Label: "Interactions", Icon: "activity"},
 		{Key: "context", Label: "Context", Icon: "share-2"},
 	}
@@ -385,6 +352,78 @@ func (s *Service) projectWorkspace(w http.ResponseWriter, r *http.Request, p cor
 
 	pd.Data = data
 	s.render(w, r, "projectdetail", pd)
+}
+
+// fillProjectTab reads and fills the one panel the page renders. pending is
+// the ?isolate= state Overview's confirm panel renders ("" for none).
+func (s *Service) fillProjectTab(r *http.Request, data *projectWorkspaceData, tab string, win store.RetrievalWindow, now time.Time, pending core.Isolation) error {
+	ctx := r.Context()
+	slug := data.Slug
+	switch tab {
+	case "tasks":
+		if data.CameFromOn() {
+			// The filter lists the tasks themselves, read by id without
+			// their blockers: read them, so each row's word tells ready
+			// from blocked. The plans are not shown, so not read.
+			return s.readRowBlockers(ctx, data.CameFrom.Tasks)
+		}
+		return s.fillTasksTab(ctx, data, slug)
+	case "overview":
+		return s.fillOverviewTab(r, data, win, now, pending)
+	case "sessions":
+		return s.fillSessionsTab(ctx, data, slug)
+	case "memories":
+		return s.fillMemoriesTab(ctx, data, slug)
+	case "notes":
+		return s.fillNotesTab(ctx, data, slug)
+	case "interactions":
+		return s.fillInteractionsTab(ctx, data, slug)
+	case "context":
+		contextData, found, err := s.buildContextData(ctx, slug)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return fmt.Errorf("console.projectWorkspace: registered scope %q missing from context topology", slug)
+		}
+		contextData.Scope = "project"
+		contextData.Project = slug
+		data.Context = contextData
+		return nil
+	}
+	return fmt.Errorf("console.fillProjectTab: tab %q has no panel", tab)
+}
+
+// errorBack is the styled error page's way back to the project a console URL
+// under /console/projects/<slug> names.
+type errorBack struct {
+	Href  string
+	Label string
+}
+
+// errorBackFor names the project r's path is under, for the error page's
+// "Back to <project>": nil for any other path, and for a slug this request
+// does not read (unknown, or a locked project its handle hides), so the page
+// never links to a project it cannot open.
+func (s *Service) errorBackFor(r *http.Request) *errorBack {
+	rest, ok := strings.CutPrefix(r.URL.Path, "/console/projects/")
+	if !ok {
+		return nil
+	}
+	slug, _, _ := strings.Cut(rest, "/")
+	if slug == "" || validate.Name(slug) != nil {
+		return nil
+	}
+	ctx := r.Context()
+	p, found, err := store.ProjectBySlug(ctx, s.db(ctx), slug)
+	if err != nil || !found {
+		return nil
+	}
+	label := p.Name
+	if label == "" {
+		label = p.Slug
+	}
+	return &errorBack{Href: "/console/projects/" + url.PathEscape(p.Slug), Label: label}
 }
 
 // projectTabFollowsScreen reports whether a workspace tab is a whole console

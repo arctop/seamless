@@ -747,6 +747,10 @@ type errorData struct {
 	// screens this level offers; SearchNoun names what the search box covers.
 	Links      []screen
 	SearchNoun string
+	// Back is the way back to the project a URL under
+	// /console/projects/<slug> names (project_detail.go errorBackFor); nil
+	// elsewhere, and for a project this request cannot read.
+	Back *errorBack
 }
 
 // errorDestinations are the screens the styled error page offers, in order,
@@ -798,6 +802,7 @@ func (s *Service) renderErrorPage(w http.ResponseWriter, r *http.Request, status
 		Status: status, Heading: heading, Message: msg,
 		Links:      errorLinks(pd.Screens),
 		SearchNoun: searchScopeNoun(searchScopesFor(pd.Features, pd.Level)),
+		Back:       s.errorBackFor(r),
 	}
 	var buf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&buf, "layout", pd); err != nil {

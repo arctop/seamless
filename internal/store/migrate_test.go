@@ -93,3 +93,42 @@ func TestMigrate_PresentSkipsWhatIsAlreadyThere(t *testing.T) {
 		})
 	}
 }
+
+// Migration 056: the events table gains its (project_slug, ts) index -- on a
+// database from before it, on a fresh one, and again on one whose migration
+// record was cut back below 056 (IF NOT EXISTS: a re-run is harmless). It
+// adds no table, so the filtered handle's inventory is unchanged.
+func TestPvMigration056_EventsProjectIndex(t *testing.T) {
+	ctx := context.Background()
+	hasIndex := func(db *sql.DB) bool {
+		t.Helper()
+		var n int
+		require.NoError(t, db.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'idx_events_project' AND tbl_name = 'events'`).Scan(&n))
+		return n == 1
+	}
+	db := openPartialDB(t, 56)
+	v, err := SchemaVersion(db)
+	require.NoError(t, err)
+	require.Equal(t, 55, v, "the fixture is the previous release's schema")
+	require.False(t, hasIndex(db))
+	_, err = db.ExecContext(ctx, `INSERT INTO events (id, ts, kind, project_slug) VALUES ('01M80OLDEVENTAAAAAAAAAAAAA', ?, 'memory.written', 'example-ops')`,
+		core.FormatTime(time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)))
+	require.NoError(t, err)
+
+	require.NoError(t, migrate(db, migrationList()))
+	require.True(t, hasIndex(db))
+	var n int
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT COUNT(*) FROM events WHERE project_slug = 'example-ops'`).Scan(&n))
+	require.Equal(t, 1, n, "the rows are untouched")
+
+	_, err = db.ExecContext(ctx, `DELETE FROM schema_migrations WHERE version >= 56`)
+	require.NoError(t, err)
+	require.NoError(t, migrate(db, migrationList()), "a cut-back record migrates forward again")
+	v, err = SchemaVersion(db)
+	require.NoError(t, err)
+	require.Equal(t, LatestSchemaVersion(), v)
+	require.True(t, hasIndex(db))
+
+	require.True(t, hasIndex(openTestDB(t)), "a fresh database has it")
+}

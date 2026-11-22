@@ -1,0 +1,13 @@
+-- One project's events, newest first (events.Recorder.ProjectEvents).
+--
+-- The project page reads its own recent activity, its plans' transitions and
+-- its interactions by project_slug. The events table indexed ts, kind,
+-- session_id and item_id only (migration 001), so that read scanned the whole
+-- log and sorted it: EXPLAIN QUERY PLAN said "SCAN events" and "USE TEMP
+-- B-TREE FOR ORDER BY". With this index it is "SEARCH events USING INDEX
+-- idx_events_project (project_slug=?)", through the console's filtered handle
+-- too.
+--
+-- An index only: no table or column changes, so the previous release runs on
+-- this schema unchanged, and IF NOT EXISTS makes a re-run harmless.
+CREATE INDEX IF NOT EXISTS idx_events_project ON events(project_slug, ts);

@@ -2,12 +2,16 @@ package console
 
 // The project-detail workspace's tab panels. Each fillXTab loads exactly one
 // panel into projectWorkspaceData and owns that tab's view models; the page
-// assembly lives in project_detail.go.
+// assembly lives in project_detail.go, and a page load calls the one fill its
+// active tab needs. The panels that read the event log read the project's own
+// events (events.Recorder.ProjectEvents), never the fleet's tail filtered here:
+// on a busy fleet a quiet project's activity is not in the newest few hundred.
 
 import (
 	"context"
 	"encoding/json"
 	"html/template"
+	"net/http"
 	"slices"
 	"sort"
 	"strings"
@@ -127,6 +131,14 @@ type planStepVM struct {
 	LeaseLeft   string // server-rendered remaining lease, the no-JS fallback
 	LeaseExp    string // RFC3339 expiry, for the client ticker
 	LeaseLapsed bool   // held by a session whose lease ran out: reclaimable
+	// Claimless is in progress with no holder at all (a claimless start:
+	// seam task start, tasks_update status=in_progress): claimable by any
+	// agent, and nobody's to release from the row (constraint
+	// claimtask-claimless-inprogress-and-lease-boundary).
+	Claimless bool
+	// Alert is the claim strip's word under a lapsed or claimless row, in
+	// the one task vocabulary (taskwords.go): claim lapsed or unclaimed.
+	Alert taskWord
 
 	Chain         []depChipVM // unfinished blockers, nearest first
 	Unblocks      []depChipVM // steps waiting on this one
@@ -155,19 +167,33 @@ type planStepCtx struct {
 	lockedBy map[string][]string
 }
 
-// projSessionVM is one row on the Sessions tab.
+// projSessionVM is one row on the Sessions tab. State is its word, the
+// Sessions screen's: live, idle (active, past the idle window, holding no live
+// claim), completed or expired.
 type projSessionVM struct {
 	ID       string
 	Name     string
 	Status   string
+	State    string
 	Source   string
 	Account  string // restricted account that started it ("" = owner)
 	Ambient  bool
-	Active   bool
+	Live     bool // core.Session.LiveAsOf at the read
 	Findings string
-	Holds    []string // labels of tasks the session currently claims
+	Holds    []heldTaskVM // the tasks the session holds a live claim on
 	Updated  time.Time
 }
+
+// heldTaskVM is a task a live session holds, as its row names it: by title,
+// linked to the task.
+type heldTaskVM struct {
+	ID    string
+	Title string
+}
+
+// projectSessionsShown caps the Sessions tab's rows; the header counts them
+// all and links to the Sessions screen filtered to the project.
+const projectSessionsShown = 60
 
 // projMemoryVM is one row on the Memories tab, carrying a rendered lineage cell
 // (provenance session, or a supersession pointer).
@@ -199,10 +225,42 @@ type projNoteVM struct {
 	MayContain []core.Stamp
 }
 
-// fillOverviewTab loads the Overview panel: memories-by-kind (project's active
-// memories), this project's injection trend (its own memories, matching the
-// board reach), and the project's recent activity.
-func (s *Service) fillOverviewTab(ctx context.Context, data *projectWorkspaceData, slug string, win store.RetrievalWindow) error {
+// fillOverviewTab loads the Overview panel: the metric bar's two judged rates,
+// memories-by-kind (project's active memories), this project's injection
+// trend (its own memories, matching the board reach), the Isolation card (its
+// lock, and the ?isolate= confirm when pending names one), and the project's
+// recent activity.
+func (s *Service) fillOverviewTab(r *http.Request, data *projectWorkspaceData, win store.RetrievalWindow, now time.Time, pending core.Isolation) error {
+	ctx := r.Context()
+	slug := data.Slug
+	if cov, cerr := store.GetSessionCoverageForProject(ctx, s.db(ctx), slug, win.Since); cerr == nil && cov.Total > 0 {
+		data.Metrics.HasCoverage = true
+		data.Metrics.Coverage = percent(cov.Covered, cov.Total)
+	}
+	prior, hasPrior := s.priorProjectVitals(ctx, slug, win, now)
+	data.Metrics.PriorLabel = priorLabel(win, hasPrior)
+	data.Metrics.ReachDelta = pointDelta(data.Metrics.ReachRate, prior.ReachRate, hasPrior && data.Metrics.HasReach, riseGood)
+	data.Metrics.ReachBand = floorBand(data.Metrics.ReachRate, reachTargetPct, data.Metrics.HasReach)
+	data.Metrics.CoverageDelta = pointDelta(data.Metrics.Coverage, prior.Coverage, hasPrior && data.Metrics.HasCoverage && prior.CovTotal > 0, riseGood)
+	data.Metrics.CoverageBand = floorBand(data.Metrics.Coverage, continuityTargetPct, data.Metrics.HasCoverage)
+
+	lock, err := s.lockViewFor(r, slug, data.Isolation)
+	if err != nil {
+		return err
+	}
+	data.Lock = lock
+	data.LockSetup = lock == nil && (lockSetupGOOS == "darwin" || lockSetupGOOS == "linux")
+	if lock.Locked() {
+		disableUnfenced(data.IsolationOptions)
+	}
+	if pending != "" {
+		confirm, err := s.isolationPendingConfirm(ctx, slug, pending)
+		if err != nil {
+			return err
+		}
+		data.IsolationConfirm = confirm
+	}
+
 	active, err := store.ActiveMemories(ctx, s.db(ctx), slug)
 	if err != nil {
 		return err
@@ -222,22 +280,20 @@ func (s *Service) fillOverviewTab(ctx context.Context, data *projectWorkspaceDat
 	data.Trend = trend
 
 	if s.cfg.Events != nil {
-		evs, err := s.eventLog(ctx).RecentExcluding(ctx, 120, s.ledgerExcludedKinds(ctx)...)
+		evs, err := s.eventLog(ctx).ProjectEvents(ctx, slug, nil, s.ledgerExcludedKinds(ctx), projectRecentRows)
 		if err != nil {
 			return err
 		}
 		for _, e := range evs {
-			if e.ProjectSlug != slug {
-				continue
-			}
 			data.Recent = append(data.Recent, toEventRow(e))
-			if len(data.Recent) >= 8 {
-				break
-			}
 		}
 	}
 	return nil
 }
+
+// projectRecentRows is how many of the project's events Overview's Recent
+// activity lists.
+const projectRecentRows = 8
 
 // fillTasksTab loads the Plans & tasks panel: each active plan's live card
 // (rollup, narrative note, recent-transition ledger, staleness) with its step
@@ -387,6 +443,13 @@ func (s *Service) planStep(ctx context.Context, t core.Task, pc planStepCtx) pla
 			step.LeaseLeft = stepLease(*t.LeaseExpiresAt, !step.LeaseLapsed, pc.now)
 			step.LeaseExp = t.LeaseExpiresAt.UTC().Format(time.RFC3339)
 		}
+		if step.LeaseLapsed {
+			step.Alert = wordFor(taskFacts{Status: string(core.TaskInProgress), Holder: true})
+		}
+	}
+	if t.ClaimedBy == "" && t.Status == core.TaskInProgress {
+		step.Claimless = true
+		step.Alert = wordFor(taskFacts{Status: string(core.TaskInProgress)})
 	}
 	if t.Status == core.TaskOpen {
 		step.LockedBlockers = pc.lockedBy[t.ID]
@@ -600,15 +663,16 @@ func betterPrimary(a, b core.Note) bool {
 	return plans.EarlierPrimary(a, b)
 }
 
-// planLedger reads the recent task transitions once and buckets the newest few
-// per plan. Events carry no plan slug, so the filter is Go-side against the
-// page's step set -- the same shape fillOverviewTab uses for RecentExcluding.
-// Best-effort: a feed error costs the ledger line, not the tab.
+// planLedger reads the project's recent task transitions once and buckets the
+// newest few per plan. Events carry no plan slug, so the plan filter is
+// Go-side against the page's step set; the project filter is the read's own
+// (ProjectEvents), so a quiet project's transitions are there however busy
+// the fleet is. Best-effort: a feed error costs the ledger line, not the tab.
 func (s *Service) planLedger(ctx context.Context, project string, steps map[string]core.Task, namer func(string) core.Session) map[string][]planLedgerVM {
 	if s.cfg.Events == nil {
 		return nil
 	}
-	evs, err := s.eventLog(ctx).ByKinds(ctx, []core.EventKind{core.EventTaskTransition}, "", "", planLedgerScan)
+	evs, err := s.eventLog(ctx).ProjectEvents(ctx, project, []core.EventKind{core.EventTaskTransition}, nil, planLedgerScan)
 	if err != nil {
 		s.logger.Warn("console: plan ledger", "project", project, "error", err)
 		return nil
@@ -620,7 +684,7 @@ func (s *Service) planLedger(ctx context.Context, project string, steps map[stri
 	// arrive newest first, so the first sighting of a step is its latest state.
 	seen := map[string]bool{}
 	for _, e := range evs {
-		if e.ProjectSlug != project || seen[e.ItemID] {
+		if seen[e.ItemID] {
 			continue
 		}
 		step, ok := steps[e.ItemID]
@@ -655,9 +719,9 @@ func transitionVerb(payload map[string]any) (verb, iconName, tone string) {
 	case payloadBool(payload, "created"):
 		return "created", "circle", "muted"
 	case payloadBool(payload, "reclaimed"):
-		return "reclaimed", "lock", "warn"
+		return "reclaimed", "terminal", "warn"
 	case payloadStr(payload, "claimed_by") != "":
-		return "claimed", "lock", "brand"
+		return "claimed", "terminal", "brand"
 	case payloadBool(payload, "released"):
 		return "released", "arrow-up-down", "muted"
 	case blockersRemovedOnly(payload):
@@ -726,33 +790,55 @@ func (s *Service) stalePlanSlugs(ctx context.Context, project string) map[string
 	return out
 }
 
-// fillSessionsTab loads the Sessions panel: the project's sessions newest first,
-// with each active session's held tasks resolved for an inline claim indicator.
+// fillSessionsTab loads the Sessions panel: the project's sessions counted by
+// state for the header, and the newest projectSessionsShown of them, newest
+// first, each live session with the tasks it holds a live claim on, by title.
 func (s *Service) fillSessionsTab(ctx context.Context, data *projectWorkspaceData, slug string) error {
-	sessions, err := store.ListSessionsForProject(ctx, s.db(ctx), slug, "", time.Time{}, 60)
+	now := time.Now().UTC()
+	tally, err := store.ProjectSessionTallyAt(ctx, s.db(ctx), slug, now, s.cfg.SessionIdleTTL)
 	if err != nil {
 		return err
 	}
-	now := time.Now().UTC()
+	data.SessionTally = tally
+	sessions, err := store.ListSessionsForProject(ctx, s.db(ctx), slug, "", time.Time{}, projectSessionsShown)
+	if err != nil {
+		return err
+	}
 	for _, sess := range sessions {
 		vm := projSessionVM{
-			ID: sess.ID, Name: sess.Name, Status: string(sess.Status),
+			ID: sess.ID, Name: sessionLabel(sess), Status: string(sess.Status),
 			Source: sess.Source, Account: sess.Account, Ambient: sess.Ambient,
-			Active:   sess.Status == core.SessionActive,
+			Live:     sess.LiveAsOf(now, s.cfg.SessionIdleTTL),
 			Findings: snippet(markdown.PlainText(sess.Findings), 140), Updated: sess.UpdatedAt,
 		}
-		if vm.Active {
-			if held, err := store.TasksClaimedBy(ctx, s.db(ctx), sess.ID); err == nil {
-				for _, t := range held {
-					if t.ClaimLive(now) {
-						vm.Holds = append(vm.Holds, taskLabel(t))
-					}
+		vm.State = sessionState(sess, vm.Live)
+		if sess.Status == core.SessionActive {
+			held, err := store.TasksClaimedBy(ctx, s.db(ctx), sess.ID)
+			if err != nil {
+				return err
+			}
+			for _, t := range held {
+				if t.ClaimLive(now) {
+					vm.Holds = append(vm.Holds, heldTaskVM{ID: t.ID, Title: t.Title})
 				}
 			}
 		}
 		data.Sessions = append(data.Sessions, vm)
 	}
 	return nil
+}
+
+// sessionState is a session's word on the Sessions tab, the Sessions screen's
+// buckets: live, idle, completed or expired.
+func sessionState(sess core.Session, live bool) string {
+	switch {
+	case live:
+		return "live"
+	case sess.Status == core.SessionActive:
+		return "idle"
+	default:
+		return string(sess.Status)
+	}
 }
 
 // fillMemoriesTab loads the Memories panel: the project's strict memories
@@ -835,20 +921,19 @@ func (s *Service) fillNotesTab(ctx context.Context, data *projectWorkspaceData, 
 	return nil
 }
 
-// fillInteractionsTab loads the Interactions panel: the transport feed filtered
-// to this project's events (interactionRow already carries the project slug), so
-// no new store query is needed.
+// fillInteractionsTab loads the Interactions panel: the project's own
+// transport events (ProjectEvents over interactionKinds), newest first.
 func (s *Service) fillInteractionsTab(ctx context.Context, data *projectWorkspaceData, slug string) error {
 	if s.cfg.Events == nil {
 		return nil
 	}
-	evs, err := s.eventLog(ctx).ByKinds(ctx, interactionKinds, "", "", interactionsPageLimit)
+	evs, err := s.eventLog(ctx).ProjectEvents(ctx, slug, interactionKinds, nil, interactionsPageLimit)
 	if err != nil {
 		return err
 	}
 	name := s.sessionNamer(ctx)
 	for _, e := range evs {
-		if e.ProjectSlug != slug || skipInteraction(e) {
+		if skipInteraction(e) {
 			continue
 		}
 		data.Interactions = append(data.Interactions, toInteractionRow(e, name))
@@ -866,13 +951,4 @@ func (s *Service) fillInteractionsTab(ctx context.Context, data *projectWorkspac
 		}
 	}
 	return nil
-}
-
-// taskLabel is a short human label for a claimed task: its plan-step marker when
-// it has a plan, else a truncated id.
-func taskLabel(t core.Task) string {
-	if t.PlanSlug != "" {
-		return t.PlanSlug + " step"
-	}
-	return shortID(t.ID)
 }

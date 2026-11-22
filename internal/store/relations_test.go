@@ -50,6 +50,45 @@ func TestListSessionsForProject(t *testing.T) {
 	require.ErrorContains(t, err, "ambiguous")
 }
 
+// The project page's Sessions tab header counts each state apart: an
+// expired session is not a completed one, and an active session past the
+// idle window with no live claim is idle, not live.
+func TestPvProjectSessionTally(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	now := time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC)
+	mk := func(id, project string, status core.SessionStatus, updated time.Time) {
+		require.NoError(t, CreateSession(ctx, db, core.Session{
+			ID: id, Name: "cc/" + id, ProjectSlug: project, Status: status,
+			CreatedAt: updated, UpdatedAt: updated,
+		}))
+	}
+	mk("live", "seam", core.SessionActive, now.Add(-time.Minute))
+	mk("idle", "seam", core.SessionActive, now.Add(-2*time.Hour))
+	mk("done1", "seam", core.SessionCompleted, now.Add(-3*time.Hour))
+	mk("done2", "seam", core.SessionCompleted, now.Add(-4*time.Hour))
+	mk("gone", "seam", core.SessionExpired, now.Add(-5*time.Hour))
+	mk("global", "", core.SessionActive, now) // the global scope: never counted
+	mk("other", "other", core.SessionExpired, now)
+
+	got, err := ProjectSessionTallyAt(ctx, db, "seam", now, 45*time.Minute)
+	require.NoError(t, err)
+	require.Equal(t, ProjectSessionTally{Total: 5, Live: 1, Idle: 1, Completed: 2, Expired: 1}, got)
+
+	// A quiet session that holds a live claim stays live (core.Session.LiveAsOf).
+	require.NoError(t, CreateTask(ctx, db, core.Task{ID: "t1", ProjectSlug: "seam", Title: "held",
+		Status: core.TaskOpen, CreatedAt: now, UpdatedAt: now}))
+	_, err = ClaimTask(ctx, db, "t1", "idle", 15*time.Minute, now)
+	require.NoError(t, err)
+	got, err = ProjectSessionTallyAt(ctx, db, "seam", now, 45*time.Minute)
+	require.NoError(t, err)
+	require.Equal(t, 2, got.Live)
+	require.Equal(t, 0, got.Idle)
+
+	_, err = ProjectSessionTallyAt(ctx, db, "", now, 0)
+	require.ErrorContains(t, err, "ambiguous")
+}
+
 func TestMemoriesForSession(t *testing.T) {
 	db := openTestDB(t)
 	ctx := context.Background()

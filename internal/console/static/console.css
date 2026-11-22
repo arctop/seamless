@@ -8087,6 +8087,16 @@ a.project-global-line:focus-visible { outline: none; box-shadow: var(--shadow-fo
 .btn[data-armed] { color: var(--danger-ink); background: var(--danger); border-color: var(--danger); }
 .confirm-note { display: inline-block; max-width: 100%; margin-left: 8px; font-size: var(--text-xs); color: var(--danger); vertical-align: middle; }
 
+/* UX 03: the project page. A claim strip words its step (claim lapsed,
+   unclaimed) and wraps at phone width; a session's held task reads as its
+   title; the Sessions tab ends with the count it shows and a way to all. */
+.step-alert[data-claim-strip] { flex-wrap: wrap; row-gap: 2px; }
+.step-alert[data-claim-strip] > span { font-weight: 500; }
+.step-alert[data-claim-strip] > a.link-act { margin-left: auto; color: inherit; }
+.sess .claim a { font-family: var(--font-sans); color: inherit; max-width: 36ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sess .claim a:hover { color: var(--brand-strong); text-decoration: underline; }
+.sess-more { margin: 10px 0 0; font-size: var(--text-xs); color: var(--muted); }
+
 /* UX 09: a session row is titled by what the session is doing (sessions.html):
    the task it holds, or its first prompt in quotes as the Diary shows one, in
    prose; its generated name is the second line. The ops pages' active-filter

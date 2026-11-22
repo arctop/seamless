@@ -58,6 +58,49 @@ func ListSessionsForProject(ctx context.Context, db *sql.DB, project string, sta
 	return out, rows.Err()
 }
 
+// ProjectSessionTally is one project's sessions by state, the project page's
+// Sessions tab header: Live and Idle split the active sessions by the
+// liveness rule (core.Session.LiveAsOf, here sessionLive), Completed and
+// Expired are the two closed statuses, and Total is every session of the
+// project, whatever its status.
+type ProjectSessionTally struct {
+	Total     int `json:"total"`
+	Live      int `json:"live"`
+	Idle      int `json:"idle"`
+	Completed int `json:"completed"`
+	Expired   int `json:"expired"`
+}
+
+// ProjectSessionTallyAt counts project's sessions by state at now, strict
+// per slug as ListSessionsForProject reads them, in one query. An idleTTL
+// <= 0 falls back to core.SessionIdleTTL. It rejects an empty project, as
+// ListSessionsForProject does: an empty project_slug marks the global scope's
+// own sessions.
+func ProjectSessionTallyAt(ctx context.Context, db *sql.DB, project string, now time.Time, idleTTL time.Duration) (ProjectSessionTally, error) {
+	if project == "" {
+		return ProjectSessionTally{}, errors.New("store.ProjectSessionTallyAt: empty project is ambiguous -- project_slug='' rows are the global scope's own sessions; pass an explicit slug")
+	}
+	if idleTTL <= 0 {
+		idleTTL = core.SessionIdleTTL
+	}
+	var t ProjectSessionTally
+	var active int
+	err := db.QueryRowContext(ctx, `
+		SELECT COUNT(*),
+		       COALESCE(SUM(CASE WHEN `+sessionLive+` THEN 1 ELSE 0 END), 0),
+		       COALESCE(SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END), 0),
+		       COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0),
+		       COALESCE(SUM(CASE WHEN status = 'expired' THEN 1 ELSE 0 END), 0)
+		FROM sessions WHERE project_slug = ?`,
+		core.FormatTime(now.UTC().Add(-idleTTL)), core.FormatTime(now.UTC()), project).
+		Scan(&t.Total, &t.Live, &active, &t.Completed, &t.Expired)
+	if err != nil {
+		return ProjectSessionTally{}, fmt.Errorf("store.ProjectSessionTallyAt: %w", err)
+	}
+	t.Idle = active - t.Live
+	return t, nil
+}
+
 // MemoriesForSession returns the memories a session produced -- the index rows
 // whose source_session matches the session -- newest-updated first.
 // Memory.SourceSession holds the session NAME for ambient stamps

@@ -74,36 +74,41 @@ func TestCameFrom_ProjectPageFilter(t *testing.T) {
 	ids := p10CameFromItems(t, f)
 	finLine := core.MayContainLine([]core.Stamp{{Project: "example-finance", Via: core.StampViaGrant, Ref: ids["grant"]}})
 
-	page := getHTMLBody(t, f.mux, "/console/projects/example-legal?tab=memories")
+	// One tab per load: each tab's page holds that tab's panel alone.
+	tabPage := func(query string) string {
+		t.Helper()
+		return getHTMLBody(t, f.mux, "/console/projects/example-legal?"+query)
+	}
 	for _, tab := range []string{"memories", "notes", "tasks"} {
-		panel := tabPanel(t, page, tab)
+		panel := tabPanel(t, tabPage("tab="+tab), tab)
 		require.Contains(t, panel, `id="camefrom-`+tab+`"`, tab)
 		require.Contains(t, panel, `data-camefrom="example-finance"`, tab)
 		require.Contains(t, panel, `data-camefrom="example-hr"`, tab)
 		require.NotContains(t, panel, `data-camefrom-active`, "no filter is on")
 	}
-	finChip := between(t, tabPanel(t, page, "tasks"), `data-camefrom="example-finance"`, `<a class="camefrom-chip`, "</a>")
+	tasksPanel := tabPanel(t, tabPage("tab=tasks"), "tasks")
+	finChip := between(t, tasksPanel, `data-camefrom="example-finance"`, `<a class="camefrom-chip`, "</a>")
 	require.Contains(t, finChip, `<span class="pill">1</span>`, "the orphaned stamp counts nowhere")
-	memories := tabPanel(t, page, "memories")
+	memories := tabPanel(t, tabPage("tab=memories"), "memories")
 	require.Contains(t, memories, "plain-legal", "unfiltered, every memory")
 	require.Contains(t, between(t, memories, "contract-terms", "<tr", "</tr>"), finLine, "a row shows its stamp")
 	require.NotContains(t, between(t, memories, "plain-legal", "<tr", "</tr>"), "data-may-contain")
-	require.Contains(t, between(t, tabPanel(t, page, "notes"), "vendor review", "<tr", "</tr>"), finLine)
-	require.Contains(t, tabPanel(t, page, "tasks"), "Ready queue", "unfiltered, the plans and the ready queue")
+	require.Contains(t, between(t, tabPanel(t, tabPage("tab=notes"), "notes"), "vendor review", "<tr", "</tr>"), finLine)
+	require.Contains(t, tasksPanel, "Ready queue", "unfiltered, the plans and the ready queue")
 
 	// Filtered: each tab lists the items that may contain content from
 	// example-finance, and counts them.
-	page = getHTMLBody(t, f.mux, "/console/projects/example-legal?tab=memories&from=example-finance")
+	page := tabPage("tab=memories&from=example-finance")
 	memories = tabPanel(t, page, "memories")
 	require.Contains(t, memories, ids["contract-terms"])
 	require.NotContains(t, memories, "plain-legal")
 	require.NotContains(t, memories, "retention-policy")
 	require.Contains(t, memories, `data-camefrom-active="example-finance"`)
 	require.Contains(t, between(t, memories, `data-camefrom="example-finance"`, `<a class="camefrom-chip`, "</a>"), `aria-current="true"`)
-	notes := tabPanel(t, page, "notes")
+	notes := tabPanel(t, tabPage("tab=notes&from=example-finance"), "notes")
 	require.Contains(t, notes, "vendor review")
 	require.NotContains(t, notes, "plain legal note")
-	tasks := tabPanel(t, page, "tasks")
+	tasks := tabPanel(t, tabPage("tab=tasks&from=example-finance"), "tasks")
 	require.Contains(t, tasks, "Tasks that may contain content from example-finance")
 	require.Contains(t, tasks, ids["sign the vendor contract"])
 	require.Contains(t, between(t, tasks, "sign the vendor contract", "<tr", "</tr>"), finLine)
@@ -114,25 +119,27 @@ func TestCameFrom_ProjectPageFilter(t *testing.T) {
 	bar := page[strings.Index(page, `id="tabs"`):]
 	bar = bar[:strings.Index(bar, "</div>")]
 	require.Contains(t, bar, `href="?tab=notes&amp;from=example-finance"`, "the tab links keep the filter")
+	require.Contains(t, bar, "data-seam-query", "a tab switch loads that link in place, so the filter holds")
 	require.Contains(t, between(t, bar, "Memories", "<a", "</a>"), `<span class="pill">1</span>`, "a narrowed tab counts what it lists")
-	require.Contains(t, page, "on.getAttribute('data-camefrom-active')", "a tab switch keeps the filter")
+	require.Contains(t, between(t, bar, "Notes", "<a", "</a>"), `<span class="pill">1</span>`, "on every tab")
+	require.Contains(t, between(t, bar, "Plans &amp; tasks", "<a", "</a>"), `<span class="pill">1</span>`)
 
 	// A link that names only the filter opens a tab the bar is on, Memories,
-	// not an Overview with no bar whose tab counts are already narrowed (P13,
+	// not a tab with no bar whose tab counts are already narrowed (P13,
 	// 2026-11-14); a tab named with it stays named.
-	page = getHTMLBody(t, f.mux, "/console/projects/example-legal?from=example-finance")
-	require.Contains(t, page, `<div class="tabpanel on" data-panel="memories">`, "the filter alone opens Memories")
-	require.NotContains(t, page, `<div class="tabpanel on" data-panel="overview">`)
+	page = tabPage("from=example-finance")
+	require.Contains(t, page, `<div class="tabpanel on" data-panel="memories"`, "the filter alone opens Memories")
+	require.NotContains(t, page, `<div class="tabpanel on" data-panel="tasks"`)
 	require.Contains(t, tabPanel(t, page, "memories"), `data-camefrom-active="example-finance"`)
-	page = getHTMLBody(t, f.mux, "/console/projects/example-legal?tab=overview&from=example-finance")
-	require.Contains(t, page, `<div class="tabpanel on" data-panel="overview">`, "an explicit tab stays")
+	page = tabPage("tab=overview&from=example-finance")
+	require.Contains(t, page, `<div class="tabpanel on" data-panel="overview"`, "an explicit tab stays")
+	require.Contains(t, page, `href="?tab=memories&amp;from=example-finance"`, "and its tab links keep the filter")
 
 	// A project no stamp names is a filter that matches nothing, named.
-	page = getHTMLBody(t, f.mux, "/console/projects/example-legal?from=example-nowhere")
-	require.Contains(t, tabPanel(t, page, "memories"), "No memories in example-legal may contain content from example-nowhere")
-	require.Contains(t, tabPanel(t, page, "notes"), "No notes in example-legal may contain content from example-nowhere")
-	require.Contains(t, tabPanel(t, page, "tasks"), "No tasks in example-legal may contain content from example-nowhere")
-	require.Contains(t, tabPanel(t, page, "memories"), `data-camefrom="example-nowhere"`)
+	require.Contains(t, tabPanel(t, tabPage("from=example-nowhere"), "memories"), "No memories in example-legal may contain content from example-nowhere")
+	require.Contains(t, tabPanel(t, tabPage("tab=notes&from=example-nowhere"), "notes"), "No notes in example-legal may contain content from example-nowhere")
+	require.Contains(t, tabPanel(t, tabPage("tab=tasks&from=example-nowhere"), "tasks"), "No tasks in example-legal may contain content from example-nowhere")
+	require.Contains(t, tabPanel(t, tabPage("from=example-nowhere"), "memories"), `data-camefrom="example-nowhere"`)
 
 	// Strict like ?tab=: present and uninterpretable is a 400.
 	for _, q := range []string{"from=", "from=example-finance&from=example-hr", "from=..%2Fnotes", "from=a%2Fb"} {
@@ -141,12 +148,14 @@ func TestCameFrom_ProjectPageFilter(t *testing.T) {
 	}
 
 	// A project none of whose items carries a stamp shows no filter and no
-	// stamp: its page is as it was.
+	// stamp on any tab the filter narrows: its page is as it was.
 	writeNote(t, f.mgr, "example-ops", "ops-plain", "ops plain note", "nothing held")
-	page = getHTMLBody(t, f.mux, "/console/projects/example-ops")
-	require.NotContains(t, page, "camefrom")
-	require.NotContains(t, page, "data-may-contain")
-	require.NotContains(t, page, "data-camefrom-active", "nor the tab script's filter half")
+	for _, tab := range []string{"memories", "notes", "tasks"} {
+		page = getHTMLBody(t, f.mux, "/console/projects/example-ops?tab="+tab)
+		require.NotContains(t, page, "camefrom", tab)
+		require.NotContains(t, page, "data-may-contain", tab)
+		require.NotContains(t, page, "data-camefrom-active", tab)
+	}
 }
 
 // A source that is a locked project this request does not read is named and

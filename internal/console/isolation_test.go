@@ -113,7 +113,7 @@ func TestProjectIsolation_TightenConfirmsThenApplies(t *testing.T) {
 
 	// Honest states: the page badges the fence and the change shows up in the
 	// event feed, and nothing else on the page shouts.
-	page = getHTMLBody(t, mux, "/console/projects/acme")
+	page = getHTMLBody(t, mux, "/console/projects/acme?tab=overview")
 	require.Contains(t, page, `class="kind accent iso-pill"`)
 	require.Contains(t, page, "isolation open -&gt; confidential")
 	require.NotContains(t, page, `id="isolation-confirm"`)
@@ -281,7 +281,7 @@ func TestIsolationControl_RendersEveryPromise(t *testing.T) {
 	db, mux := newConsole(t)
 	seedIsolationProject(t, db, "acme")
 
-	page := getHTMLBody(t, mux, "/console/projects/acme")
+	page := getHTMLBody(t, mux, "/console/projects/acme?tab=overview")
 	require.Contains(t, page, `action="/console/projects/acme/isolation"`)
 	for _, state := range core.Isolations {
 		require.Contains(t, page, `name="state" value="`+string(state)+`"`)

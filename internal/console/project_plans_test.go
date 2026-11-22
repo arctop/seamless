@@ -217,6 +217,10 @@ func TestProjectWorkspace_PlanCardIsLiveTriage(t *testing.T) {
 	require.Contains(t, body, `href="#`+registry+`" data-jump`, "a blocker on this page is a jump, not a navigation")
 	require.Contains(t, body, "unblocks 1", "the reverse edge")
 	require.Contains(t, body, "claimed", "the ledger verb")
+	ledger := body[strings.Index(body, `<div class="plan-ledger">`):]
+	ledger = ledger[:strings.Index(ledger, "</div>")]
+	require.Contains(t, ledger, "ico-terminal", "a claim in the ledger wears the holder's icon")
+	require.NotContains(t, ledger, "ico-lock", "a claim is never drawn as a lock")
 }
 
 // TestProjectWorkspace_LedgerIsOneEntryPerStep pins the ledger's grammar: a
@@ -294,14 +298,17 @@ func TestProjectWorkspace_LapsedClaimOffersIntervention(t *testing.T) {
 
 	body := getHTMLBody(t, mux, "/console/projects/seamless?tab=tasks")
 	require.Contains(t, body, "cc/ghost", "a lapsed claim still names who holds it")
-	require.Contains(t, body, "lease lapsed", "the intervention cue")
+	strip := body[strings.Index(body, `<div class="step-alert"`):]
+	strip = strip[:strings.Index(strip, "</div>")]
+	require.Contains(t, strip, `data-claim-strip="claim-lapsed"`, "the intervention cue")
+	require.Contains(t, strip, "<b>claim lapsed</b>", "worded in the task vocabulary")
 	require.Contains(t, body, `action="/console/tasks/`+id+`/release"`, "the inline release form")
 	require.Contains(t, body, `name="next" value="/console/projects/seamless?tab=tasks"`,
 		"releasing returns to this workspace, not the tasks library")
 	// The strip must sit outside the row: a form nested in a <summary> would
 	// toggle the row on every click.
 	require.NotContains(t, body, `<summary class="step-row">`+"\n"+`    <form`)
-	require.Regexp(t, `</details>\s*<div class="step-alert">`, body)
+	require.Regexp(t, `</details>\s*<div class="step-alert"`, body)
 }
 
 func TestProjectWorkspace_FoldsDoneRunsAndCompletedPlans(t *testing.T) {
