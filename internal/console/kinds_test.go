@@ -44,17 +44,27 @@ func TestLibKindChipsExplainThemselves(t *testing.T) {
 	require.Contains(t, peek, `<span class="kind" title="`+gloss+`">stage</span>`)
 }
 
-// The one list's kind chip reads its kind in the kind's color on the
-// row's own ground. The [data-kind="..."] rules paint the kind dots that
-// same color as a background, and they match the chip too (it carries
-// data-kind), so without its own background the chip was a solid blob
-// with its word in its own color: unreadable.
-func TestConsoleCSS_KindChipKeepsItsWordReadable(t *testing.T) {
+// The kind colors paint the kind dots only. A bare [data-kind="..."] rule
+// also matched the one list's kind chip (it carries data-kind for its
+// accent), filled it with the kind's color under a word in that same
+// color, and left a solid blob nobody could read; any later chip or row
+// that names its kind would go the same way. Every rule that colors by
+// kind is scoped to .kdot, and the chip keeps no background of its own.
+func TestConsoleCSS_KindColorsPaintOnlyTheDots(t *testing.T) {
 	css := string(consoleCSS)
-	require.Contains(t, css, `[data-kind="stage"]      { background: var(--k-stage); }`, "the dot rule this guards against is still there")
+	n := 0
+	for _, line := range strings.Split(css, "\n") {
+		j := strings.Index(line, "[data-kind=")
+		if j < 0 || !strings.Contains(line, "background: var(--k-") {
+			continue
+		}
+		n++
+		require.True(t, strings.HasPrefix(strings.TrimSpace(line), ".kdot[data-kind="), "a kind color rule matches more than the dots: %s", line)
+	}
+	require.Equal(t, len(core.MemoryKinds), n, "one dot rule per memory kind")
 	i := strings.Index(css, ".ri-chip.ri-kind {")
 	require.GreaterOrEqual(t, i, 0)
 	rule := css[i : i+strings.Index(css[i:], "}")]
-	require.Contains(t, rule, "color: var(--lib-item-accent);")
-	require.Contains(t, rule, "background: none;", "the chip clears the kind background its data-kind attribute picks up")
+	require.Contains(t, rule, "color: var(--lib-item-accent);", "the chip's word carries the kind's color")
+	require.NotContains(t, rule, "background", "the chip sits on the row's own ground")
 }

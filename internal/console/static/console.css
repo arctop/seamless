@@ -704,16 +704,18 @@ body:has(.main[aria-busy="true"]) .nav-progress { opacity: 1; animation: nav-pro
 .legend-bar > span { display: block; height: 100%; border-radius: var(--radius-pill); background: var(--muted); transition: width var(--dur-slow) var(--ease-out); }
 .legend-val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 
-/* Per-kind colors, applied to legend dots and bar fills via data-kind. */
-[data-kind="gotcha"]     { background: var(--k-gotcha); }
-[data-kind="constraint"] { background: var(--k-constraint); }
-[data-kind="convention"] { background: var(--k-convention); }
-[data-kind="reference"]  { background: var(--k-reference); }
-[data-kind="decision"]   { background: var(--k-decision); }
-[data-kind="runbook"]    { background: var(--k-runbook); }
-[data-kind="protocol"]   { background: var(--k-protocol); }
-[data-kind="stage"]      { background: var(--k-stage); }
-[data-kind="refuted"]    { background: var(--k-refuted); }
+/* Per-kind colors, painted on the kind dots only. Scoped to .kdot: a bare
+   [data-kind] rule also fills any chip or row that names its kind, and a
+   word in its kind's color on that same color cannot be read. */
+.kdot[data-kind="gotcha"]     { background: var(--k-gotcha); }
+.kdot[data-kind="constraint"] { background: var(--k-constraint); }
+.kdot[data-kind="convention"] { background: var(--k-convention); }
+.kdot[data-kind="reference"]  { background: var(--k-reference); }
+.kdot[data-kind="decision"]   { background: var(--k-decision); }
+.kdot[data-kind="runbook"]    { background: var(--k-runbook); }
+.kdot[data-kind="protocol"]   { background: var(--k-protocol); }
+.kdot[data-kind="stage"]      { background: var(--k-stage); }
+.kdot[data-kind="refuted"]    { background: var(--k-refuted); }
 
 /* ===========================================================================
    TABLES
@@ -7934,7 +7936,7 @@ body:has(.build-notice-card:not([hidden])) .main { padding-bottom: calc(112px + 
   display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border: 1px solid var(--border);
   border-radius: var(--radius-pill); color: var(--muted); font-family: var(--font-mono); line-height: 1.5;
 }
-.ri-chip.ri-kind { color: var(--lib-item-accent); background: none; } /* the [data-kind] rule paints dots that color; the chip's text is it */
+.ri-chip.ri-kind { color: var(--lib-item-accent); }
 .ri-chip.ri-kind::before { content: ""; width: 5px; height: 5px; border-radius: 2px; background: currentColor; }
 
 /* Nothing matches: say so, then the way out and the wider search. */
