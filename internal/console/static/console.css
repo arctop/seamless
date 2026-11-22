@@ -8310,3 +8310,19 @@ a.lib-active-filter.project-attn-chip:hover { text-decoration: none; box-shadow:
 }
 .search-pills a[data-search-kind]::before { margin-right: 6px; }
 .cmdk-group[data-search-kind]::before { display: inline-block; margin-right: 7px; vertical-align: 1px; }
+
+/* UX 04: the project tab's off-plan tasks. The plan card's frame and step
+   rows, in groups that say what is true of each row: a quiet header per
+   group, one rule between groups, and the empty line flush with the card. */
+.offplan-card .plan-head .ico { color: var(--muted); }
+.offplan-card .plan-head .nm { font-family: var(--font-sans); }
+.offplan-hd { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 7px 14px; background: var(--surface-2); border-bottom: 1px solid var(--border); font-size: var(--text-2xs); font-weight: 600; letter-spacing: var(--tracking-wide); text-transform: uppercase; color: var(--muted); }
+.offplan-hd .n { color: var(--faint); font-weight: 500; font-variant-numeric: tabular-nums; }
+.offplan-hd .offplan-note { margin-left: auto; color: var(--warn); letter-spacing: 0; text-transform: none; }
+.offplan-group > :last-child { border-bottom: 0; }
+.offplan-group:not(:last-child) { border-bottom: 1px solid var(--border); }
+.offplan-card > .empty { border: 0; border-radius: 0; padding: 18px 14px; background: transparent; }
+.offplan-card > .empty:not(:last-child) { border-bottom: 1px solid var(--border); }
+.offplan-closed > summary a { font-weight: 600; }
+/* A gate line says who and what: wider than a chain chip, never wider than the row. */
+.step .meta .edge[data-gate-who] { max-width: min(48ch, 100%); }

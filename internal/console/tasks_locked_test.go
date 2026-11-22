@@ -111,7 +111,8 @@ func TestTasks_NoLockedBlockersWithoutLocks(t *testing.T) {
 
 // The project workspace's Plans & tasks tab reads through the same handle:
 // a plan step a locked project blocks is blocked there too, named by its
-// locked project, and an off-plan task it blocks leaves the ready queue.
+// locked project, and an off-plan task it blocks is listed under Blocked,
+// never as ready.
 func TestProjectTasksTab_LockedBlockersNamed(t *testing.T) {
 	lc := newLockedConsole(t)
 	ctx := context.Background()
@@ -145,8 +146,12 @@ func TestProjectTasksTab_LockedBlockersNamed(t *testing.T) {
 	require.Contains(t, blocked, "a task in locked project "+lockedSlug+" blocks this one")
 	require.Contains(t, between(t, panel, free, `<details class="step`, "</summary>"), `<details class="step open ready"`)
 	require.Contains(t, panel, `<b class="ready-n">1 ready</b>`, "the plan's rollup counts only the free step")
-	require.NotContains(t, panel, "ops off-plan waits on ledger", "a blocked task is not claimable")
-	require.Contains(t, panel, "ops off-plan free")
+	offBlocked := between(t, panel, "ops off-plan waits on ledger", `<details class="step`, "</summary>")
+	require.Contains(t, offBlocked, `<details class="step blocked"`, "a blocked task is not claimable")
+	require.Contains(t, offBlocked, "a task in locked project "+lockedSlug+" blocks this one")
+	ready := panel[strings.Index(panel, `id="offplan-ready"`):strings.Index(panel, `id="offplan-blocked"`)]
+	require.NotContains(t, ready, "ops off-plan waits on ledger", "it is listed under Blocked, never as ready")
+	require.Contains(t, ready, "ops off-plan free")
 
 	// Unlocked, the browser reads the blocker itself: an ordinary chain chip.
 	cookie := lc.unlockByTerminal(t)

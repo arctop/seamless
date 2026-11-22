@@ -88,8 +88,10 @@ type projectWorkspaceData struct {
 	Plans         []planTimelineVM
 	DonePlans     []donePlanVM // finished plans, rollup lines only
 	DonePlansMore int          // finished plans past the fold's cap
-	Ready         []taskRow
-	Blocked       int // open tasks blocked by an unfinished dependency
+	// OffPlan is the project's work outside any plan, grouped by what is true
+	// of it (offPlanVM), and the tab's open tally.
+	OffPlan offPlanVM
+	Blocked int // open tasks blocked by an unfinished dependency
 
 	Sessions     []projSessionVM
 	SessionTally store.ProjectSessionTally // the project's sessions by state, the tab's header

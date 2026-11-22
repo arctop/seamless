@@ -140,7 +140,7 @@ func TestAccountChips_ProjectWorkspaceTabs(t *testing.T) {
 		tab, open, closer, labeled, owner string
 	}{
 		{"tasks", `<details class="step`, "</summary>", "account step", "owner step"},
-		{"tasks", "<tr id=", "</tr>", "account task", "owner task"},
+		{"tasks", `<details class="step`, "</summary>", "account task", "owner task"},
 		{"sessions", `<div id="`, `<span class="when">`, exampleAccount + ":cc/account01", "cc/owner001"},
 		{"memories", "<tr id=", "</tr>", "account-gotcha", "owner-gotcha"},
 		{"notes", "<tr id=", "</tr>", "Note account-note", "Note owner-note"},

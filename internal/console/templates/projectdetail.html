@@ -175,21 +175,29 @@
   </details>
   {{end}}
 
-  <div class="card">
-    <h2>Ready queue <span class="h2-meta">off-plan &middot; claimable now</span></h2>
-    {{if .Ready}}
-    <div class="table-wrap">
-    <table>
-      <thead><tr><th>Task</th><th>Status</th><th>Depends on</th><th>Created</th></tr></thead>
-      <tbody>
-        {{range .Ready}}
-        <tr id="{{.ID}}" class="row-link" data-href="/console/tasks/{{.ID}}"><td><span class="mono-id">{{shortID .ID}}</span>{{copyBtn .ID}} <a href="/console/tasks/{{.ID}}">{{.Title}}</a>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</td><td>{{taskChip .Word}}</td><td class="muted">{{if .Deps}}{{.Deps}} dep{{if ne .Deps 1}}s{{end}}{{else}}&mdash;{{end}}</td><td class="muted">{{agoTime .Created}}</td></tr>
-        {{end}}
-      </tbody>
-    </table>
+  {{/* Off-plan tasks: every task of the project outside a plan, once, in the
+       group that says what is true of it, each row the plan-step row. The
+       tally line counts what the tab lists, and so equals the tab's pill. */}}
+  {{with .OffPlan}}
+  <div class="plan-card offplan-card" id="offplan">
+    <div class="plan-head">
+      {{icon "list-checks"}}<span class="nm">Off-plan tasks</span>
+      <span class="prog" data-open-tally>{{.Total}} open: {{.InPlans}} in plans, {{.Open}} off-plan</span>
     </div>
-    {{else}}<div class="empty">Nothing claimable right now</div>{{end}}
-  </div>{{end}}
+    {{range .Groups}}
+    <div class="offplan-group" id="offplan-{{.Key}}" data-group="{{.Key}}">
+      <div class="offplan-hd" title="{{.Hint}}">{{.Label}} <span class="n">{{len .Rows}}</span>{{with .Note}}<span class="offplan-note">{{.}}</span>{{end}}</div>
+      {{range .Rows}}{{template "plan-step" .}}{{end}}
+    </div>
+    {{else}}<div class="empty">No open off-plan tasks</div>{{end}}
+    {{if .Closed}}
+    <details class="step-run offplan-closed" id="offplan-closed" data-group="closed">
+      <summary>{{len .Closed}} recently closed{{if gt .ClosedTotal (len .Closed)}} of {{.ClosedTotal}}{{end}} &middot; <a href="/console/tasks?project={{$proj}}&amp;closed=all">all closed</a></summary>
+      {{range .Closed}}{{template "plan-step" .}}{{end}}
+    </details>
+    {{end}}
+  </div>
+  {{end}}{{end}}
 </div>
 {{end}}
 
@@ -316,8 +324,9 @@
         <span class="mono">{{shortID .ID}}</span>{{copyBtn .ID}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}
         {{if .ClaimedBy}}<span class="claim" title="The session that holds the claim">{{icon "terminal"}}{{if .ClaimedByID}}<a href="/console/sessions/{{.ClaimedByID}}">{{.ClaimedBy}}</a>{{else}}{{.ClaimedBy}}{{end}}</span>{{end}}
         {{if .LeaseExp}}<span class="lease{{if .LeaseLapsed}} lease-lapsed{{end}}" data-lease-exp="{{.LeaseExp}}" title="{{if .LeaseLapsed}}The claim's lease ran out{{else}}The claim's lease: time left{{end}}">{{icon "timer"}}<span class="v">{{.LeaseLeft}}</span></span>{{end}}
+        {{range .Waits}}<span class="edge" data-gate-who="{{.Who}}" title="waits on {{.Who}}: {{.What}}">{{icon "flag"}}waits on {{.Who}}: {{.What}}</span>{{end}}
         {{range .Chain}}<a class="edge" href="{{if .OnPage}}#{{.ID}}{{else}}/console/tasks/{{.ID}}{{end}}"{{if .OnPage}} data-jump{{end}} title="blocked by {{.Title}} &middot; {{.Word.Text}}">{{icon "link"}}{{.Title}}</a>{{end}}{{range .LockedIn}}<span class="edge" data-locked-blocker="{{.}}" title="Unlock {{.}} in the console to see the task">{{icon "lock"}}a task in locked project {{.}} blocks this one</span>{{end}}
-        {{if .Unblocks}}<span class="edge ok" title="unblocks {{.UnblocksTitle}}">{{icon "arrow-right"}}unblocks {{len .Unblocks}}</span>{{end}}
+        {{if .Unblocks}}{{$verb := "unblocks"}}{{if .IsGate}}{{$verb = "holds"}}{{end}}<span class="edge ok" data-unblocks title="{{$verb}} {{.UnblocksTitle}}">{{icon "arrow-right"}}{{$verb}} {{len .Unblocks}}</span>{{end}}
       </span>
     </span>
     {{taskChip .Word}}
@@ -328,13 +337,16 @@
      worded in the one task vocabulary. A lapsed claim is released here, with
      no confirm, unlike the dossier's: the lease is already gone, so any agent
      can reclaim the step anyway -- there is no live holder to interrupt, only
-     a stale claim to clear. A claimless step names no holder to release, so
-     its strip opens the step's dossier (the task's peek) instead. */}}
+     a stale claim to clear. The release lands back on this tab at the row,
+     wherever its group puts it then (the anchor survives the redirect:
+     console-mutation-follow-contract). A claimless step names no holder to
+     release, so its strip opens the step's dossier (the task's peek)
+     instead. */}}
 {{if .LeaseLapsed}}
 <div class="step-alert" data-claim-strip="{{.Alert.Key}}">
   {{icon "triangle-alert"}}<b>{{.Alert.Text}}</b><span>{{.Alert.Hint}}</span>
   <form method="post" action="/console/tasks/{{.ID}}/release">
-    <input type="hidden" name="next" value="/console/projects/{{.Project}}?tab=tasks">
+    <input type="hidden" name="next" value="/console/projects/{{.Project}}?tab=tasks#{{.ID}}">
     <button class="link-act danger" type="submit" title="Takes the lapsed claim off the step">release claim</button>
   </form>
 </div>

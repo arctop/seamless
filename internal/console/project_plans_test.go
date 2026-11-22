@@ -303,8 +303,9 @@ func TestProjectWorkspace_LapsedClaimOffersIntervention(t *testing.T) {
 	require.Contains(t, strip, `data-claim-strip="claim-lapsed"`, "the intervention cue")
 	require.Contains(t, strip, "<b>claim lapsed</b>", "worded in the task vocabulary")
 	require.Contains(t, body, `action="/console/tasks/`+id+`/release"`, "the inline release form")
-	require.Contains(t, body, `name="next" value="/console/projects/seamless?tab=tasks"`,
-		"releasing returns to this workspace, not the tasks library")
+	release := between(t, body, `action="/console/tasks/`+id+`/release"`, "<form", "</form>")
+	require.Contains(t, release, `name="next" value="/console/projects/seamless?tab=tasks#`+id+`"`,
+		"releasing returns to this workspace at the row, not the tasks library")
 	// The strip must sit outside the row: a form nested in a <summary> would
 	// toggle the row on every click.
 	require.NotContains(t, body, `<summary class="step-row">`+"\n"+`    <form`)
@@ -443,7 +444,7 @@ func TestProjectTasksPanel_StaysInsideTheDocument(t *testing.T) {
 }
 
 // TestRwProjectTab_StepRowsWordsAndCopy covers the Plans & tasks tab: every
-// step row and ready-queue row copies its whole id, the plan head copies
+// step row and off-plan row copies its whole id, the plan head copies
 // plan:<slug>, each step reads its word, and the holder links to its
 // session with the lease in words.
 func TestRwProjectTab_StepRowsWordsAndCopy(t *testing.T) {
@@ -489,12 +490,14 @@ func TestRwProjectTab_StepRowsWordsAndCopy(t *testing.T) {
 	require.NotContains(t, step(f.gated), " ready", "a step behind a gate is not ready")
 	require.NotContains(t, body, `class="step open ready" id="`+f.gated+`"`)
 
-	queue := body[strings.Index(body, "Ready queue"):]
+	queue := body[strings.Index(body, `id="offplan-ready"`):]
 	row := queue[strings.Index(queue, `id="`+offPlan+`"`):]
-	row = row[:strings.Index(row, "</tr>")]
-	require.Contains(t, row, `data-copy="`+offPlan+`"`, "a ready-queue row copies its whole id")
+	row = row[:strings.Index(row, "</summary>")]
+	require.Contains(t, row, `<span class="mono">`+shortID(offPlan)+`</span><button type="button" class="copy-btn" data-copy="`+offPlan+`"`,
+		"an off-plan row copies its whole id, as a step row does")
 	require.Contains(t, row, `data-word="ready"`)
-	require.Contains(t, row, `data-clock="title"`)
+	require.Contains(t, queue, `id="dossier-`+offPlan+`" data-live-skip data-dossier="/console/tasks/`+offPlan+`"`,
+		"an off-plan row expands into the task's dossier")
 	panel := tabPanel(t, body, "tasks")
 	require.NotContains(t, panel, ">in_progress<")
 	require.NotContains(t, panel, ">open</span>", "no step or task prints its stored status")

@@ -94,7 +94,7 @@ func TestCameFrom_ProjectPageFilter(t *testing.T) {
 	require.Contains(t, between(t, memories, "contract-terms", "<tr", "</tr>"), finLine, "a row shows its stamp")
 	require.NotContains(t, between(t, memories, "plain-legal", "<tr", "</tr>"), "data-may-contain")
 	require.Contains(t, between(t, tabPanel(t, tabPage("tab=notes"), "notes"), "vendor review", "<tr", "</tr>"), finLine)
-	require.Contains(t, tasksPanel, "Ready queue", "unfiltered, the plans and the ready queue")
+	require.Contains(t, tasksPanel, "Off-plan tasks", "unfiltered, the plans and the off-plan tasks")
 
 	// Filtered: each tab lists the items that may contain content from
 	// example-finance, and counts them.
@@ -115,7 +115,7 @@ func TestCameFrom_ProjectPageFilter(t *testing.T) {
 	require.NotContains(t, tasks, "archive the old policy")
 	require.NotContains(t, tasks, "plain legal chore")
 	require.NotContains(t, tasks, ids["orphan"])
-	require.NotContains(t, tasks, "Ready queue", "the filter lists the tasks, not the plans")
+	require.NotContains(t, tasks, "Off-plan tasks", "the filter lists the tasks, not the plans")
 	bar := page[strings.Index(page, `id="tabs"`):]
 	bar = bar[:strings.Index(bar, "</div>")]
 	require.Contains(t, bar, `href="?tab=notes&amp;from=example-finance"`, "the tab links keep the filter")

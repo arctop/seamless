@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,14 +28,52 @@ import (
 // worth hiding;
 // donePlansCap bounds the completed-plans fold; the ledger scans
 // planLedgerScan recent transitions and keeps planLedgerRows per plan;
-// planChainDepth caps the blocker walk.
+// planChainDepth caps the blocker walk; the off-plan card's closed fold shows
+// the offPlanClosedShown most recently closed tasks and links to the rest.
 const (
-	doneRunFold    = 3
-	donePlansCap   = 20
-	planLedgerScan = 300
-	planLedgerRows = 3
-	planChainDepth = 3
+	doneRunFold        = 3
+	donePlansCap       = 20
+	planLedgerScan     = 300
+	planLedgerRows     = 3
+	planChainDepth     = 3
+	offPlanClosedShown = 10
 )
+
+// offPlanVM is the Plans & tasks tab's off-plan card: every task of the
+// project outside a plan, once, in the group that says what is true of it
+// (offPlanGroup), each row the plan-step row, then the most recently closed
+// behind a fold. InPlans and Open are the card's tally line, which holds the
+// tab's pill to the rows: the pill counts the project's open tasks, plan steps
+// included, and every one of them is a row on this tab.
+type offPlanVM struct {
+	Groups      []offPlanGroup // the open groups that hold a row, in reading order
+	Open        int            // open off-plan tasks: the rows of Groups
+	InPlans     int            // open steps of the project's active plans
+	Closed      []planStepVM   // the most recently closed, newest first
+	ClosedTotal int            // every closed off-plan task of the project
+}
+
+// Total is the open tasks the tab lists: its plans' open steps and its
+// off-plan rows.
+func (o offPlanVM) Total() int { return o.InPlans + o.Open }
+
+// offPlanGroup is one group of the off-plan card. Key is its anchor and
+// data-group (in-progress, ready, blocked, waiting, gates), Hint what it
+// holds, for its title, and Note what its count alone does not say.
+type offPlanGroup struct {
+	Key   string
+	Label string
+	Hint  string
+	Note  string
+	Rows  []planStepVM
+}
+
+// gateLineVM is one open gate a row waits on: its own, or a gate it depends
+// on, by who must act and what must happen.
+type gateLineVM struct {
+	Who  string
+	What string
+}
 
 // planTimelineVM is one plan's card on the Plans & tasks tab: the rollup
 // counts, the composition's narrative note (status chip + star), the last few
@@ -143,6 +182,11 @@ type planStepVM struct {
 	Chain         []depChipVM // unfinished blockers, nearest first
 	Unblocks      []depChipVM // steps waiting on this one
 	UnblocksTitle string      // those steps named, for the chip's tooltip
+	// IsGate marks a task of kind gate: nobody claims it, and the tasks
+	// waiting on it are what it holds. Waits are the open gates the row
+	// waits on, who and what (waitsOf).
+	IsGate bool
+	Waits  []gateLineVM
 	// LockedBlockers are the step's unfinished blockers in a locked project
 	// this request does not read: their project, once per
 	// blocker (markLockedBlockers' rule). nil while nothing is locked.
@@ -302,12 +346,15 @@ const projectRecentRows = 8
 
 // fillTasksTab loads the Plans & tasks panel: each active plan's live card
 // (rollup, narrative note, recent-transition ledger, staleness) with its step
-// timeline, the completed plans as rollup lines, and the off-plan ready queue.
+// timeline, the completed plans as rollup lines, and the off-plan card: every
+// task outside a plan, grouped by what is true of it (offPlanRows).
 //
 // Query budget: one rollup query, one ListTasksForPlan per ACTIVE plan (a
-// completed plan renders from its rollup alone), then exactly one query each
-// for the plan notes, the transition ledger and the pending settlements. No
-// per-step or per-plan lookup beyond the dependency walk's cache misses.
+// completed plan renders from its rollup alone), five for the off-plan tasks
+// (readOffPlan), then exactly one query each for the plan notes, the
+// transition ledger and the pending settlements, and one per off-plan gate
+// for what it holds. No per-step or per-plan lookup beyond the dependency
+// walk's cache misses.
 func (s *Service) fillTasksTab(ctx context.Context, data *projectWorkspaceData, slug string) error {
 	rollups, err := store.PlanRollupsForProject(ctx, s.db(ctx), slug)
 	if err != nil {
@@ -342,15 +389,28 @@ func (s *Service) fillTasksTab(ctx context.Context, data *projectWorkspaceData, 
 			cache[st.ID] = st
 		}
 	}
+	// The off-plan tasks still open are rows of this page too: a chain chip
+	// jumps to one, and a step it holds says so.
+	off, err := s.readOffPlan(ctx, slug)
+	if err != nil {
+		return err
+	}
+	for _, t := range off.open() {
+		cache[t.ID] = t
+	}
 	onPage := make(map[string]bool, len(cache))
 	for id := range cache {
 		onPage[id] = true
 	}
 	namer := s.sessionNamer(ctx)
-	// Ordering matters: both of these read the cache while it still holds only
-	// this page's plan steps -- the dependency walk below adds their blockers.
+	// Ordering matters: these read the cache while it still holds only this
+	// page's rows -- the dependency walk below adds their blockers.
 	unblocks := reverseEdges(cache)
 	ledger := s.planLedger(ctx, slug, cache, namer)
+	lockedBy, err := s.lockedBlockersOf(ctx, cache)
+	if err != nil {
+		return err
+	}
 
 	notes, err := s.planNoteMeta(ctx, slug)
 	if err != nil {
@@ -358,16 +418,8 @@ func (s *Service) fillTasksTab(ctx context.Context, data *projectWorkspaceData, 
 	}
 	stale := s.stalePlanSlugs(ctx, slug)
 
-	ready, err := store.ReadyTasks(ctx, s.db(ctx), slug)
-	if err != nil {
-		return err
-	}
-	lockedBy, err := s.lockedBlockersOf(ctx, cache, ready)
-	if err != nil {
-		return err
-	}
-
 	pc := planStepCtx{cache: cache, onPage: onPage, unblocks: unblocks, namer: namer, now: time.Now().UTC(), lockedBy: lockedBy}
+	inPlans := 0 // the plans' open steps: every one is a row on its card
 	for _, pl := range active {
 		tl := planTimelineVM{
 			Slug: pl.Slug, Total: pl.Total, Done: pl.Done, InFlight: pl.InFlight,
@@ -393,33 +445,208 @@ func (s *Service) fillTasksTab(ctx context.Context, data *projectWorkspaceData, 
 		}
 		tl.Groups = groupSteps(rows)
 		data.Plans = append(data.Plans, tl)
+		inPlans += pl.Total - pl.Done
 	}
 
-	// The ready queue is what an agent could claim now: a task a locked
-	// project blocks is not.
-	data.Ready = taskRows(slices.DeleteFunc(ready, func(t core.Task) bool { return len(lockedBy[t.ID]) > 0 }))
+	if data.OffPlan, err = s.offPlanRows(ctx, off, pc); err != nil {
+		return err
+	}
+	data.OffPlan.InPlans = inPlans
 	return nil
 }
 
 // lockedBlockersOf is markLockedBlockers' lookup for the Plans & tasks tab:
-// the blockers, by locked project, of the page's open plan steps and its
-// ready tasks that sit in a locked project this request does not read. It is
-// nil, and asks nothing, while nothing is locked.
-func (s *Service) lockedBlockersOf(ctx context.Context, steps map[string]core.Task, ready []core.Task) (map[string][]string, error) {
+// the blockers, by locked project, of the page's open rows (its plans' steps
+// and its off-plan tasks) that sit in a locked project this request does not
+// read. It is nil, and asks nothing, while nothing is locked.
+func (s *Service) lockedBlockersOf(ctx context.Context, rows map[string]core.Task) (map[string][]string, error) {
 	locked := lockedProjects(ctx)
 	if len(locked) == 0 {
 		return nil, nil
 	}
-	ids := make([]string, 0, len(steps)+len(ready))
-	for id, t := range steps {
+	ids := make([]string, 0, len(rows))
+	for id, t := range rows {
 		if t.Status == core.TaskOpen {
 			ids = append(ids, id)
 		}
 	}
-	for _, t := range ready {
-		ids = append(ids, t.ID)
-	}
 	return store.OpenBlockerProjects(ctx, s.writeDB(), ids, locked)
+}
+
+// offPlanTasks is a project's off-plan tasks as the tab reads them: the
+// queue's four open groups (the partition in store's tasks_gates.go: ready,
+// blocked, the steps that wait on people, and the gates, in progress or
+// not), the other tasks in progress, and the closed ones, newest closed
+// first.
+type offPlanTasks struct {
+	ready                   []core.Task
+	blocked, waiting, gates []store.BlockedTask
+	inProgress, closed      []core.Task
+}
+
+// readOffPlan reads a project's off-plan tasks through the request's handle,
+// so a locked project's tasks, and the edges to them, are absent from the
+// read. Every read leaves plan steps out: the queue's by its scope
+// (queueScope), ListTasks by its empty plan slug. ListTasks orders by
+// creation, so the tasks in progress are put oldest first, the queue's
+// order, and the closed by when they closed.
+func (s *Service) readOffPlan(ctx context.Context, slug string) (offPlanTasks, error) {
+	db := s.db(ctx)
+	var (
+		off offPlanTasks
+		err error
+	)
+	if off.ready, err = store.ReadyTasks(ctx, db, slug); err != nil {
+		return off, err
+	}
+	if off.blocked, err = store.BlockedTasks(ctx, db, slug); err != nil {
+		return off, err
+	}
+	if off.waiting, err = store.GatedTasks(ctx, db, slug); err != nil {
+		return off, err
+	}
+	if off.gates, err = store.GateTasks(ctx, db, slug); err != nil {
+		return off, err
+	}
+	all, err := store.ListTasks(ctx, db, slug, "")
+	if err != nil {
+		return off, err
+	}
+	for _, t := range all {
+		switch {
+		case t.Status.Closed():
+			off.closed = append(off.closed, t)
+		case t.Status == core.TaskInProgress && !t.IsGate():
+			// A gate someone marked in progress is among the gates, once.
+			off.inProgress = append(off.inProgress, t)
+		}
+	}
+	slices.SortFunc(off.inProgress, func(a, b core.Task) int {
+		if c := a.CreatedAt.Compare(b.CreatedAt); c != 0 {
+			return c
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
+	slices.SortFunc(off.closed, func(a, b core.Task) int {
+		if c := closedAt(b).Compare(closedAt(a)); c != 0 {
+			return c
+		}
+		return strings.Compare(b.ID, a.ID)
+	})
+	return off, nil
+}
+
+// open is every off-plan task still open or in progress, each once.
+func (o offPlanTasks) open() []core.Task {
+	out := slices.Clone(o.inProgress)
+	out = append(out, o.ready...)
+	for _, group := range [][]store.BlockedTask{o.blocked, o.waiting, o.gates} {
+		out = append(out, blockedTasksOf(group)...)
+	}
+	return out
+}
+
+// blockedTasksOf is the tasks of a queue group, without their blockers: the
+// row reads those from the page's dependency walk, as a plan step does.
+func blockedTasksOf(group []store.BlockedTask) []core.Task {
+	out := make([]core.Task, len(group))
+	for i, b := range group {
+		out[i] = b.Task
+	}
+	return out
+}
+
+// offPlanRows projects the off-plan tasks into the card's groups, each row
+// the plan-step row (planStep). The locked-blocker rule holds here as on the
+// plan cards: a ready task a locked project blocks reads as ready on the
+// request's handle, which holds neither the blocker nor the edge, so it is
+// listed under Blocked, named by that project, and never offered as ready.
+// A gate's row says what it holds: the unfinished tasks that depend on it,
+// read through the request's handle, wherever they are.
+func (s *Service) offPlanRows(ctx context.Context, off offPlanTasks, pc planStepCtx) (offPlanVM, error) {
+	rows := func(tasks []core.Task) []planStepVM {
+		out := make([]planStepVM, 0, len(tasks))
+		for _, t := range tasks {
+			out = append(out, s.planStep(ctx, t, pc))
+		}
+		return out
+	}
+	var ready, blocked []planStepVM
+	for _, row := range rows(off.ready) {
+		if len(row.LockedBlockers) > 0 {
+			blocked = append(blocked, row)
+			continue
+		}
+		ready = append(ready, row)
+	}
+	blocked = append(blocked, rows(blockedTasksOf(off.blocked))...)
+	slices.SortStableFunc(blocked, func(a, b planStepVM) int {
+		if c := a.Created.Compare(b.Created); c != 0 {
+			return c
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
+	gates := rows(blockedTasksOf(off.gates))
+	for i := range gates {
+		held, err := store.TasksBlockedBy(ctx, s.db(ctx), gates[i].ID)
+		if err != nil {
+			return offPlanVM{}, err
+		}
+		gates[i].Unblocks, gates[i].UnblocksTitle = nil, ""
+		titles := make([]string, 0, len(held))
+		for _, d := range held {
+			if d.Status.Closed() {
+				continue
+			}
+			gates[i].Unblocks = append(gates[i].Unblocks, depChip(d, pc.onPage[d.ID]))
+			titles = append(titles, d.Title)
+		}
+		gates[i].UnblocksTitle = strings.Join(titles, " · ")
+	}
+	inProgress := rows(off.inProgress)
+
+	var vm offPlanVM
+	for _, g := range []offPlanGroup{
+		{Key: "in-progress", Label: "In progress", Rows: inProgress, Note: notHeldNote(inProgress),
+			Hint: "Marked in progress. Only a live claim holds a task: each row says whether one does."},
+		{Key: "ready", Label: "Ready", Rows: ready,
+			Hint: "Nothing unfinished before it and no open gate: an agent can claim it now."},
+		{Key: "blocked", Label: "Blocked", Rows: blocked,
+			Hint: "Waits on unfinished work before it."},
+		{Key: "waiting", Label: "Waiting on people", Rows: rows(blockedTasksOf(off.waiting)),
+			Hint: "Its own gate is open, or a gate it depends on is: who must act, and what must happen."},
+		{Key: "gates", Label: "Gates", Rows: gates,
+			Hint: "What a person, or an event outside Seamless, must do before the tasks that depend on it go ahead. Nobody claims a gate."},
+	} {
+		if len(g.Rows) == 0 {
+			continue
+		}
+		vm.Open += len(g.Rows)
+		vm.Groups = append(vm.Groups, g)
+	}
+	vm.ClosedTotal = len(off.closed)
+	vm.Closed = rows(off.closed[:min(len(off.closed), offPlanClosedShown)])
+	return vm, nil
+}
+
+// notHeldNote says how many of the in-progress rows no live claim holds, by
+// their word: the group is what the tasks are marked, and only
+// core.Task.ClaimLive makes one held (constraint
+// claimtask-claimless-inprogress-and-lease-boundary).
+func notHeldNote(rows []planStepVM) string {
+	var parts []string
+	for _, key := range []string{wordLapsed, wordUnclaimed} {
+		n, text := 0, ""
+		for _, r := range rows {
+			if r.Word.Key == key {
+				n, text = n+1, r.Word.Text
+			}
+		}
+		if n > 0 {
+			parts = append(parts, strconv.Itoa(n)+" "+text)
+		}
+	}
+	return strings.Join(parts, " · ")
 }
 
 // planStep projects a plan-step task into a timeline row, resolving its claim
@@ -427,7 +654,7 @@ func (s *Service) lockedBlockersOf(ctx context.Context, steps map[string]core.Ta
 func (s *Service) planStep(ctx context.Context, t core.Task, pc planStepCtx) planStepVM {
 	step := planStepVM{
 		ID: t.ID, Title: t.Title, Project: t.ProjectSlug, Account: t.Account, Status: string(t.Status),
-		State: taskState(t.Status), Created: t.CreatedAt,
+		State: taskState(t.Status), Created: t.CreatedAt, IsGate: t.IsGate(),
 	}
 	if t.Status == core.TaskDone || t.Status == core.TaskDropped {
 		step.Closed = closedAt(t)
@@ -452,7 +679,9 @@ func (s *Service) planStep(ctx context.Context, t core.Task, pc planStepCtx) pla
 			step.Alert = wordFor(taskFacts{Status: string(core.TaskInProgress), Holder: true})
 		}
 	}
-	if t.ClaimedBy == "" && t.Status == core.TaskInProgress {
+	// A gate marked in progress is no claimless start: nobody claims a gate,
+	// so it reads as waiting on its people, with no claim strip.
+	if t.ClaimedBy == "" && t.Status == core.TaskInProgress && !t.IsGate() {
 		step.Claimless = true
 		step.Alert = wordFor(taskFacts{Status: string(core.TaskInProgress)})
 	}
@@ -476,6 +705,7 @@ func (s *Service) planStep(ctx context.Context, t core.Task, pc planStepCtx) pla
 	if step.State == "done" {
 		return step
 	}
+	step.Waits = waitsOf(t, pc.lookup)
 	if step.Unblocks = pc.unblocks[t.ID]; len(step.Unblocks) > 0 {
 		titles := make([]string, 0, len(step.Unblocks))
 		for _, u := range step.Unblocks {
@@ -484,6 +714,25 @@ func (s *Service) planStep(ctx context.Context, t core.Task, pc planStepCtx) pla
 		step.UnblocksTitle = strings.Join(titles, " · ")
 	}
 	return step
+}
+
+// waitsOf is who and what the open gates holding t wait on: its own gate
+// first, then each unfinished gate it depends on that lookup answers (the
+// gates factsOf words the row by, in its order). A gate in a locked project
+// the request does not read is never answered, so never named.
+func waitsOf(t core.Task, lookup func(string) (core.Task, bool)) []gateLineVM {
+	var out []gateLineVM
+	if t.Gate.Open() {
+		out = append(out, gateLineVM{Who: t.Gate.Who, What: t.Gate.What})
+	}
+	for _, id := range t.DependsOn {
+		b, ok := lookup(id)
+		if !ok || b.Status.Closed() || !b.IsGate() || !b.Gate.Open() {
+			continue
+		}
+		out = append(out, gateLineVM{Who: b.Gate.Who, What: b.Gate.What})
+	}
+	return out
 }
 
 // stepLease is a step row's lease cell: the time left while the claim is

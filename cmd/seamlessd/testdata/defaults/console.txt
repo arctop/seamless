@@ -2198,6 +2198,7 @@
         
         
         
+        
       </span>
     </span>
     <span class="kind pop" data-word="ready" title="Nothing unfinished before it: an agent can claim it now.">ready</span>
@@ -2251,6 +2252,7 @@
         
         
         
+        
       </span>
     </span>
     <span class="kind pop" data-word="ready" title="Nothing unfinished before it: an agent can claim it now.">ready</span>
@@ -2266,21 +2268,69 @@
 
   
 
-  <div class="card">
-    <h2>Ready queue <span class="h2-meta">off-plan &middot; claimable now</span></h2>
-    
-    <div class="table-wrap">
-    <table>
-      <thead><tr><th>Task</th><th>Status</th><th>Depends on</th><th>Created</th></tr></thead>
-      <tbody>
-        
-        <tr id="<id:10>" class="row-link" data-href="/console/tasks/<id:10>"><td><span class="mono-id"><id:10>~8</span><button type="button" class="copy-btn" data-copy="<id:10>" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button> <a href="/console/tasks/<id:10>">Example: promote the deploy</a></td><td><span class="kind pop" data-word="ready" title="Nothing unfinished before it: an agent can claim it now.">ready</span></td><td class="muted">1 dep</td><td class="muted"><time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></td></tr>
-        
-      </tbody>
-    </table>
+  
+  
+  <div class="plan-card offplan-card" id="offplan">
+    <div class="plan-head">
+      <svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg><span class="nm">Off-plan tasks</span>
+      <span class="prog" data-open-tally>3 open: 2 in plans, 1 off-plan</span>
     </div>
     
+    <div class="offplan-group" id="offplan-ready" data-group="ready">
+      <div class="offplan-hd" title="Nothing unfinished before it and no open gate: an agent can claim it now.">Ready <span class="n">1</span></div>
+      
+<details class="step open ready" id="<id:10>">
+  <summary class="step-row">
+    <span class="marker"><span class="dot"></span><span class="rail"></span></span>
+    <span class="body">
+      <span class="t">Example: promote the deploy</span>
+      <span class="meta">
+        <span class="mono"><id:10>~8</span><button type="button" class="copy-btn" data-copy="<id:10>" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
+        
+        
+        
+        
+        
+      </span>
+    </span>
+    <span class="kind pop" data-word="ready" title="Nothing unfinished before it: an agent can claim it now.">ready</span>
+  </summary>
+  <div class="step-dossier" id="dossier-<id:10>" data-live-skip data-dossier="/console/tasks/<id:10>"></div>
+</details>
+
+
+
+    </div>
+    
+    
+    <details class="step-run offplan-closed" id="offplan-closed" data-group="closed">
+      <summary>1 recently closed &middot; <a href="/console/tasks?project=example-open-alpha&amp;closed=all">all closed</a></summary>
+      
+<details class="step done" id="<id:9>">
+  <summary class="step-row">
+    <span class="marker"><span class="dot"></span><span class="rail"></span></span>
+    <span class="body">
+      <span class="t">Example: stage the deploy</span>
+      <span class="meta">
+        <span class="mono"><id:9>~8</span><button type="button" class="copy-btn" data-copy="<id:9>" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
+        
+        
+        
+        
+        
+      </span>
+    </span>
+    <span class="kind ok" data-word="done">done</span>
+  </summary>
+  <div class="step-dossier" id="dossier-<id:9>" data-live-skip data-dossier="/console/tasks/<id:9>"></div>
+</details>
+
+
+
+    </details>
+    
   </div>
+  
 </div>
 
 
@@ -2973,23 +3023,64 @@
 
   
 
-  <div class="card">
-    <h2>Ready queue <span class="h2-meta">off-plan &middot; claimable now</span></h2>
-    
-    <div class="table-wrap">
-    <table>
-      <thead><tr><th>Task</th><th>Status</th><th>Depends on</th><th>Created</th></tr></thead>
-      <tbody>
-        
-        <tr id="<id:23>" class="row-link" data-href="/console/tasks/<id:23>"><td><span class="mono-id"><id:23>~8</span><button type="button" class="copy-btn" data-copy="<id:23>" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button> <a href="/console/tasks/<id:23>">Example: close the confidential ledger</a></td><td><span class="kind pop" data-word="ready" title="Nothing unfinished before it: an agent can claim it now.">ready</span></td><td class="muted">&mdash;</td><td class="muted"><time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></td></tr>
-        
-        <tr id="<id:24>" class="row-link" data-href="/console/tasks/<id:24>"><td><span class="mono-id"><id:24>~8</span><button type="button" class="copy-btn" data-copy="<id:24>" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button> <a href="/console/tasks/<id:24>">Example: inbound confidential task</a></td><td><span class="kind pop" data-word="ready" title="Nothing unfinished before it: an agent can claim it now.">ready</span></td><td class="muted">&mdash;</td><td class="muted"><time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></td></tr>
-        
-      </tbody>
-    </table>
+  
+  
+  <div class="plan-card offplan-card" id="offplan">
+    <div class="plan-head">
+      <svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg><span class="nm">Off-plan tasks</span>
+      <span class="prog" data-open-tally>2 open: 0 in plans, 2 off-plan</span>
     </div>
     
+    <div class="offplan-group" id="offplan-ready" data-group="ready">
+      <div class="offplan-hd" title="Nothing unfinished before it and no open gate: an agent can claim it now.">Ready <span class="n">2</span></div>
+      
+<details class="step open ready" id="<id:23>">
+  <summary class="step-row">
+    <span class="marker"><span class="dot"></span><span class="rail"></span></span>
+    <span class="body">
+      <span class="t">Example: close the confidential ledger</span>
+      <span class="meta">
+        <span class="mono"><id:23>~8</span><button type="button" class="copy-btn" data-copy="<id:23>" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
+        
+        
+        
+        
+        
+      </span>
+    </span>
+    <span class="kind pop" data-word="ready" title="Nothing unfinished before it: an agent can claim it now.">ready</span>
+  </summary>
+  <div class="step-dossier" id="dossier-<id:23>" data-live-skip data-dossier="/console/tasks/<id:23>"></div>
+</details>
+
+
+
+<details class="step open ready" id="<id:24>">
+  <summary class="step-row">
+    <span class="marker"><span class="dot"></span><span class="rail"></span></span>
+    <span class="body">
+      <span class="t">Example: inbound confidential task</span>
+      <span class="meta">
+        <span class="mono"><id:24>~8</span><button type="button" class="copy-btn" data-copy="<id:24>" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
+        
+        
+        
+        
+        
+      </span>
+    </span>
+    <span class="kind pop" data-word="ready" title="Nothing unfinished before it: an agent can claim it now.">ready</span>
+  </summary>
+  <div class="step-dossier" id="dossier-<id:24>" data-live-skip data-dossier="/console/tasks/<id:24>"></div>
+</details>
+
+
+
+    </div>
+    
+    
   </div>
+  
 </div>
 
 
@@ -3084,10 +3175,17 @@
 
   
 
-  <div class="card">
-    <h2>Ready queue <span class="h2-meta">off-plan &middot; claimable now</span></h2>
-    <div class="empty">Nothing claimable right now</div>
+  
+  
+  <div class="plan-card offplan-card" id="offplan">
+    <div class="plan-head">
+      <svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg><span class="nm">Off-plan tasks</span>
+      <span class="prog" data-open-tally>0 open: 0 in plans, 0 off-plan</span>
+    </div>
+    <div class="empty">No open off-plan tasks</div>
+    
   </div>
+  
 </div>
 
 

@@ -2069,7 +2069,7 @@ Memories, and <code>?isolate=&lt;state&gt;</code> with no tab opens Overview.</p
 <tbody>
 <tr>
 <td>Plans &amp; tasks</td>
-<td>Per-plan step timelines with each step's <a href="#tasks">status words</a>, claiming session, lease countdown, and blocking dependency; plus the ready queue. Each row copies its task's whole id, and each plan's head copies <code>plan:&lt;slug&gt;</code>. A step in progress that no live claim holds carries a strip under its row: <strong>claim lapsed</strong> offers <em>release claim</em>, <strong>unclaimed</strong> (marked in progress with no claim at all) opens the task under its row.</td>
+<td>Per-plan step timelines with each step's <a href="#tasks">status words</a>, claiming session, lease countdown, and blocking dependency; then <strong>Off-plan tasks</strong>: every task of the project outside a plan, once, grouped <em>In progress</em> (holder and lease), <em>Ready</em>, <em>Blocked</em> (the first blocker named and linked), <em>Waiting on people</em> (who must act, and what must happen), <em>Gates</em> (what each one holds: the unfinished tasks that depend on it) and, folded, the ten most recently closed, whose <strong>all closed</strong> opens the Tasks screen on the project's closed tasks. Its line (&quot;8 open: 5 in plans, 3 off-plan&quot;) counts what the tab lists, the number on the tab's pill. Every row, a step or an off-plan task, expands into the task's dossier in place and copies its task's whole id, and each plan's head copies <code>plan:&lt;slug&gt;</code>. A task in progress that no live claim holds carries a strip under its row: <strong>claim lapsed</strong> offers <em>release claim</em>, which lands back on the row, <strong>unclaimed</strong> (marked in progress with no claim at all) opens the task under its row.</td>
 </tr>
 <tr>
 <td>Overview</td>
@@ -2347,7 +2347,7 @@ the project workspace and Plans:</p>
 <p>A task's holder and creator are named by their session and link to its page
 when the console can read it. The lease reads <code>lease live, 12m left</code> while the
 claim holds and <code>lapsed 3m ago</code> once it runs out.</p>
-<p>Each task row - a rail row, a plan step, a ready-queue row, a dependency -
+<p>Each task row - a rail row, a plan step, an off-plan row, a dependency -
 shows the last 8 characters of the task's id with a copy button beside it that
 copies the whole id, the form you hand an agent (<code>run &lt;id&gt;</code>). In a list the
 button stays quiet until you hover or focus the row; on a touch screen it is
@@ -2358,7 +2358,8 @@ time; without JavaScript the hover shows it in UTC.</p>
 haven't unlocked sits in the blocked rail, its blocker named only by project
 on a line of its own; the task's reader and peek list it under <strong>Depends on</strong>
 the same way. The project workspace's Plans &amp; tasks tab marks such steps
-blocked and leaves them out of the ready queue. Opening a plan or a session
+blocked, and lists such an off-plan task under Blocked, never as ready.
+Opening a plan or a session
 that lives in a locked project takes you to that project's unlock page, which
 says the item is there and links back once you unlock it.</p>
 <h2 id="locks">Locks</h2>

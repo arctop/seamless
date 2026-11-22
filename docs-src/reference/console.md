@@ -1021,7 +1021,7 @@ Memories, and `?isolate=<state>` with no tab opens Overview.
 
 | Tab | Shows |
 |---|---|
-| Plans & tasks | Per-plan step timelines with each step's [status words](#tasks), claiming session, lease countdown, and blocking dependency; plus the ready queue. Each row copies its task's whole id, and each plan's head copies `plan:<slug>`. A step in progress that no live claim holds carries a strip under its row: **claim lapsed** offers *release claim*, **unclaimed** (marked in progress with no claim at all) opens the task under its row. |
+| Plans & tasks | Per-plan step timelines with each step's [status words](#tasks), claiming session, lease countdown, and blocking dependency; then **Off-plan tasks**: every task of the project outside a plan, once, grouped *In progress* (holder and lease), *Ready*, *Blocked* (the first blocker named and linked), *Waiting on people* (who must act, and what must happen), *Gates* (what each one holds: the unfinished tasks that depend on it) and, folded, the ten most recently closed, whose **all closed** opens the Tasks screen on the project's closed tasks. Its line ("8 open: 5 in plans, 3 off-plan") counts what the tab lists, the number on the tab's pill. Every row, a step or an off-plan task, expands into the task's dossier in place and copies its task's whole id, and each plan's head copies `plan:<slug>`. A task in progress that no live claim holds carries a strip under its row: **claim lapsed** offers *release claim*, which lands back on the row, **unclaimed** (marked in progress with no claim at all) opens the task under its row. |
 | Overview | The project's metrics, memory kinds, injection trend, its Isolation card, and its own recent events. |
 | Sessions | The project's sessions counted by state (live, idle, completed, expired), the newest 60 of them, and a link to all of them on the Sessions screen. Each row is titled as the Sessions screen titles it (the task a live session holds, else its first prompt), with its name under it, and a live session names each task it holds by title, linked to the task. |
 | Memories | The project's memories with a lineage cell - provenance session, or a supersession pointer - plus the memories it *inherits* from a parent that a strict per-slug count excludes. |
@@ -1282,7 +1282,7 @@ A task's holder and creator are named by their session and link to its page
 when the console can read it. The lease reads `lease live, 12m left` while the
 claim holds and `lapsed 3m ago` once it runs out.
 
-Each task row - a rail row, a plan step, a ready-queue row, a dependency -
+Each task row - a rail row, a plan step, an off-plan row, a dependency -
 shows the last 8 characters of the task's id with a copy button beside it that
 copies the whole id, the form you hand an agent (`run <id>`). In a list the
 button stays quiet until you hover or focus the row; on a touch screen it is
@@ -1295,7 +1295,8 @@ Under a lock, a task blocked by a task in a locked project you
 haven't unlocked sits in the blocked rail, its blocker named only by project
 on a line of its own; the task's reader and peek list it under **Depends on**
 the same way. The project workspace's Plans & tasks tab marks such steps
-blocked and leaves them out of the ready queue. Opening a plan or a session
+blocked, and lists such an off-plan task under Blocked, never as ready.
+Opening a plan or a session
 that lives in a locked project takes you to that project's unlock page, which
 says the item is there and links back once you unlock it.
 
