@@ -3,6 +3,8 @@ package console
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -490,4 +492,404 @@ func TestHighlightSnippet(t *testing.T) {
 	t.Run("empty stays empty", func(t *testing.T) {
 		require.Equal(t, "", string(highlightSnippet("")))
 	})
+}
+
+// sxStar stars one row of table (tasks, memories_index, notes_index, ...).
+func sxStar(t *testing.T, db *sql.DB, table, id string) {
+	t.Helper()
+	_, err := db.ExecContext(context.Background(), `UPDATE `+table+` SET favorite = 1 WHERE id = ?`, id)
+	require.NoError(t, err)
+}
+
+// sxRetire supersedes a memory by successor ("" archives it).
+func sxRetire(t *testing.T, db *sql.DB, id, successor string) {
+	t.Helper()
+	var next any
+	if successor != "" {
+		next = successor
+	}
+	_, err := db.ExecContext(context.Background(), `UPDATE memories_index SET invalid_at = ?, superseded_by = ? WHERE id = ?`,
+		core.FormatTime(time.Now().UTC()), next, id)
+	require.NoError(t, err)
+}
+
+// sxGroup returns the group of kind, failing when it is absent.
+func sxGroup(t *testing.T, data searchData, kind string) searchGroup {
+	t.Helper()
+	for _, g := range data.Groups {
+		if g.Kind == kind {
+			return g
+		}
+	}
+	require.FailNow(t, "no group", "kind %s in %+v", kind, data.Groups)
+	return searchGroup{}
+}
+
+func sxHasGroup(data searchData, kind string) bool {
+	for _, g := range data.Groups {
+		if g.Kind == kind {
+			return true
+		}
+	}
+	return false
+}
+
+func sxIDs(g searchGroup) []string {
+	out := make([]string, len(g.Rows))
+	for i, r := range g.Rows {
+		out[i] = r.ID
+	}
+	return out
+}
+
+// A kind with more matches than the page shows says so: its count is a floor
+// ("20+"), its Show more opens the rest, and the header total carries the
+// same "+". The page used to pass its per-kind cap off as the count.
+func TestSxSearch_CutKindSaysPlusAndShowMoreRevealsTheRest(t *testing.T) {
+	db, mux := newConsole(t)
+	now := time.Now().UTC()
+	for i := range 25 {
+		seedSearchTaskAt(t, db, fmt.Sprintf("01SXTASK%02d", i), "seam", fmt.Sprintf("honest count task %02d", i), "", now.Add(-time.Duration(i)*time.Minute))
+	}
+
+	var data searchData
+	getJSON(t, mux, "/console/search?format=json&scope=tasks&q=honest", &data)
+	tasks := sxGroup(t, data, "tasks")
+	require.Equal(t, 20, tasks.Count)
+	require.Len(t, tasks.Rows, 20)
+	require.True(t, tasks.More, "25 matches behind a 20-row page is a cut kind")
+	require.True(t, data.Partial)
+	require.Equal(t, "/console/search?scope=tasks&w=all&sort=relevance&more=tasks&q=honest", tasks.MoreHref)
+
+	page := getHTMLBody(t, mux, "/console/search?scope=tasks&q=honest")
+	require.Contains(t, page, "<strong>20+</strong>matches")
+	require.Contains(t, page, "<b>20+</b> Tasks")
+	require.Contains(t, page, `<a class="search-more" href="/console/search?scope=tasks&amp;w=all&amp;sort=relevance&amp;more=tasks&amp;q=honest">Show more</a>`)
+
+	var more searchData
+	getJSON(t, mux, tasks.MoreHref+"&format=json", &more)
+	all := sxGroup(t, more, "tasks")
+	require.Equal(t, 25, all.Count, "Show more reveals the rest")
+	require.False(t, all.More)
+	require.Empty(t, all.MoreHref, "no Show more that would change nothing")
+	require.Equal(t, []string{"tasks"}, more.Expanded)
+	require.False(t, more.Partial)
+	page = getHTMLBody(t, mux, tasks.MoreHref)
+	require.Contains(t, page, "<b>25</b> Tasks")
+	require.NotContains(t, page, "Show more")
+}
+
+// Memories and notes are counted apart: a query that matches many memories no
+// longer squeezes the notes out of one shared cap, and each kind says 20+ for
+// itself.
+func TestSxSearch_KnowledgeKindsCountApart(t *testing.T) {
+	db, mux := newConsole(t)
+	now := time.Now().UTC()
+	for i := range 25 {
+		seedSearchMemoryAt(t, db, fmt.Sprintf("01SXMEM%02d", i), fmt.Sprintf("apart-memory-%02d", i),
+			"apart apart apart", "seam", "apart apart apart apart", now.Add(-time.Duration(i)*time.Minute))
+	}
+	for i := range 3 {
+		seedSearchNote(t, db, fmt.Sprintf("01SXNOTE%02d", i), fmt.Sprintf("apart-note-%02d", i), "A note", "apart",
+			"seam", "only once apart", now)
+	}
+
+	var data searchData
+	getJSON(t, mux, "/console/search?format=json&q=apart", &data)
+	mems := sxGroup(t, data, "memories")
+	require.Equal(t, 20, mems.Count)
+	require.True(t, mems.More)
+	notes := sxGroup(t, data, "notes")
+	require.Equal(t, 3, notes.Count, "the notes keep their own count")
+	require.False(t, notes.More)
+
+	var more searchData
+	getJSON(t, mux, mems.MoreHref+"&format=json", &more)
+	require.Equal(t, 25, sxGroup(t, more, "memories").Count)
+	require.Equal(t, 3, sxGroup(t, more, "notes").Count)
+}
+
+// Starred only runs inside the queries, before the cap: a starred hit ranked
+// 30th still appears under Starred only (it used to filter the first 20). And
+// without the filter a starred match takes its kind's slots first.
+func TestSxSearch_StarredHitAtRankThirtyAppearsUnderStarredOnly(t *testing.T) {
+	db, mux := newConsole(t)
+	now := time.Now().UTC()
+	for i := range 30 {
+		seedSearchTaskAt(t, db, fmt.Sprintf("01SXSTAR%02d", i), "seam", fmt.Sprintf("deep starred task %02d", i), "", now.Add(-time.Duration(i)*time.Minute))
+		seedSearchMemoryAt(t, db, fmt.Sprintf("01SXSMEM%02d", i), fmt.Sprintf("deep-starred-memory-%02d", i),
+			"deep starred", "seam", "deep starred", now.Add(-time.Duration(i)*time.Minute))
+	}
+	// The oldest of each: rank 30 under every order the page has.
+	sxStar(t, db, "tasks", "01SXSTAR29")
+	sxStar(t, db, "memories_index", "01SXSMEM29")
+
+	var plain searchData
+	getJSON(t, mux, "/console/search?format=json&q=deep+starred", &plain)
+	require.Equal(t, "01SXSTAR29", sxGroup(t, plain, "tasks").Rows[0].ID, "a starred match takes the first slot")
+	require.Equal(t, "01SXSMEM29", sxGroup(t, plain, "memories").Rows[0].ID)
+
+	var starred searchData
+	getJSON(t, mux, "/console/search?format=json&fav=1&q=deep+starred", &starred)
+	require.Equal(t, []string{"01SXSTAR29"}, sxIDs(sxGroup(t, starred, "tasks")))
+	require.Equal(t, []string{"01SXSMEM29"}, sxIDs(sxGroup(t, starred, "memories")))
+	require.Equal(t, 2, starred.Total)
+	require.False(t, starred.Partial)
+}
+
+// A one-character query has its own state: it says to type more, never
+// "Nothing matches".
+func TestSxSearch_OneCharacterQueryHasItsOwnState(t *testing.T) {
+	db, mux := newConsole(t)
+	seedSearchTask(t, db, "01TSK", "seam", "a chroma task", "")
+
+	page := getHTMLBody(t, mux, "/console/search?q=c")
+	require.Contains(t, page, "Type at least 2 characters to search.")
+	require.NotContains(t, page, "Nothing matches")
+	require.NotContains(t, page, "mv2-count", "no match count for a query that never ran")
+
+	var data searchData
+	getJSON(t, mux, "/console/search?format=json&q=c", &data)
+	require.True(t, data.TooShort)
+	require.Empty(t, data.Groups)
+
+	var start searchData
+	getJSON(t, mux, "/console/search?format=json", &start)
+	require.False(t, start.TooShort, "an empty query is the start page, not a short one")
+}
+
+// A superseded memory is found by its exact name, badged with what replaced
+// it; an archived one by its id. Text finds a retired memory only with Include
+// archived.
+func TestSxSearch_RetiredMemoryFoundByExactNameWithItsBadge(t *testing.T) {
+	db, mux := newConsole(t)
+	seedSearchMemory(t, db, "01SXOLD", "boot-order", "the old boot order", "seam", "start the daemon after the index")
+	seedSearchMemory(t, db, "01SXNEW", "boot-order-v2", "the new boot order", "seam", "start the index after the daemon")
+	sxRetire(t, db, "01SXOLD", "01SXNEW")
+	seedSearchMemory(t, db, "01SXGONE", "dropped-flag", "a flag nobody sets", "seam", "the zeppelin flag")
+	sxRetire(t, db, "01SXGONE", "")
+
+	var data searchData
+	getJSON(t, mux, "/console/search?format=json&q=boot-order", &data)
+	retired := sxGroup(t, data, searchRetiredKind)
+	require.Equal(t, "memories", retired.Scope)
+	require.Equal(t, []string{"01SXOLD"}, sxIDs(retired))
+	row := retired.Rows[0]
+	require.Equal(t, "superseded", row.Retired)
+	require.Equal(t, &searchRef{ID: "01SXNEW", Name: "boot-order-v2", Href: "/console/memories/01SXNEW"}, row.SupersededBy)
+	require.Equal(t, store.IdentifierMatchExactIdentifier, row.MatchKind)
+	require.Equal(t, "/console/memories/01SXOLD", row.Href)
+	require.Contains(t, sxIDs(sxGroup(t, data, "memories")), "01SXNEW", "the successor still answers as live knowledge")
+
+	page := getHTMLBody(t, mux, "/console/search?q=boot-order")
+	card := between(t, page, "boot-order", `<article class="search-result`, "</article>")
+	require.Contains(t, card, `data-retired="superseded"`)
+	require.Contains(t, card, `<span class="badge warn search-retired">superseded</span>`)
+	require.Contains(t, card, `by <a href="/console/memories/01SXNEW" data-peek>boot-order-v2</a>`)
+
+	var byID searchData
+	getJSON(t, mux, "/console/search?format=json&q=01sxgone", &byID)
+	require.Equal(t, "archived", sxGroup(t, byID, searchRetiredKind).Rows[0].Retired, "an exact id finds it too")
+	require.Nil(t, sxGroup(t, byID, searchRetiredKind).Rows[0].SupersededBy)
+
+	// By text: only with Include archived.
+	var text, archived searchData
+	getJSON(t, mux, "/console/search?format=json&q=zeppelin", &text)
+	require.Empty(t, text.Groups)
+	getJSON(t, mux, "/console/search?format=json&archived=1&q=zeppelin", &archived)
+	require.True(t, archived.Archived)
+	require.Equal(t, []string{"01SXGONE"}, sxIDs(sxGroup(t, archived, searchRetiredKind)))
+	require.Contains(t, string(sxGroup(t, archived, searchRetiredKind).Rows[0].SnippetHTML), "<mark>zeppelin</mark>")
+
+	// Scoped to notes, no memory of any kind answers.
+	var notes searchData
+	getJSON(t, mux, "/console/search?format=json&scope=notes&archived=1&q=boot-order", &notes)
+	require.False(t, sxHasGroup(notes, searchRetiredKind))
+}
+
+// The project fence holds for retired memories: a locked project's superseded
+// memory is absent by exact name and by text, while an open project's is
+// found the same way.
+func TestSxSearch_LockedProjectRetiredMemoryStaysAbsent(t *testing.T) {
+	lc := newLockedConsole(t)
+	open := writeMemory(t, lc.mgr, core.KindGotcha, openSlug, "ops-retired", "the old ops note "+openMarker)
+	sxRetire(t, lc.db, open.ID, "")
+	sxRetire(t, lc.db, lc.memID, "")
+
+	answer := func(target string) searchData {
+		code, body := lc.get(t, target, "")
+		require.Equal(t, http.StatusOK, code, target)
+		var data searchData
+		require.NoError(t, json.Unmarshal([]byte(body), &data), target)
+		return data
+	}
+	for _, target := range []string{
+		"/console/search?format=json&q=ledger-close",
+		"/console/search?format=json&q=" + lc.memID,
+		"/console/search?format=json&archived=1&q=" + lockedSecret,
+		"/console/search?format=json&archived=1&q=ledger",
+	} {
+		data := answer(target)
+		require.False(t, sxHasGroup(data, searchRetiredKind), target)
+		require.Empty(t, data.Groups, target)
+	}
+	_, page := lc.get(t, "/console/search?archived=1&q=ledger", "")
+	require.NotContains(t, page, "/console/memories/"+lc.memID)
+	require.NotContains(t, page, "the close runs")
+
+	require.Equal(t, []string{open.ID}, sxIDs(sxGroup(t, answer("/console/search?format=json&q=ops-retired"), searchRetiredKind)),
+		"the open project's retired memory is found")
+	require.Equal(t, []string{open.ID}, sxIDs(sxGroup(t, answer("/console/search?format=json&archived=1&q="+openMarker), searchRetiredKind)))
+}
+
+// An empty page lists each active restriction as a chip that removes it, and
+// each one changes the result; with two or more, one link clears them all. A
+// page with no restriction offers no link at all.
+func TestSxSearch_EmptyStateChipsEachChangeTheResult(t *testing.T) {
+	db, mux := newConsole(t)
+	now := time.Now().UTC()
+	// Each kept out by exactly one restriction of scope=notes&w=24h&fav=1:
+	seedSearchTaskAt(t, db, "01SXKIND", "seam", "quokka by kind", "", now) // a task, starred, recent
+	sxStar(t, db, "tasks", "01SXKIND")
+	seedSearchNote(t, db, "01SXOLDN", "quokka-old", "Quokka old", "d", "seam", "quokka", now.Add(-72*time.Hour)) // old
+	sxStar(t, db, "notes_index", "01SXOLDN")
+	seedSearchNote(t, db, "01SXPLAIN", "quokka-plain", "Quokka plain", "d", "seam", "quokka", now) // not starred
+
+	const base = "/console/search?scope=notes&w=24h&sort=relevance&fav=1&q=quokka"
+	var data searchData
+	getJSON(t, mux, base+"&format=json", &data)
+	require.Empty(t, data.Groups)
+
+	page := getHTMLBody(t, mux, base)
+	require.Contains(t, page, "Nothing matches &ldquo;quokka&rdquo; with these filters.")
+	require.NotContains(t, page, "Search all time")
+	chips := map[string]string{
+		"Notes":                        "/console/search?scope=all&w=24h&sort=relevance&fav=1&q=quokka",
+		"Updated in the past 24 hours": "/console/search?scope=notes&w=all&sort=relevance&fav=1&q=quokka",
+		"Starred only":                 "/console/search?scope=notes&w=24h&sort=relevance&q=quokka",
+	}
+	for label, href := range chips {
+		escaped := strings.ReplaceAll(href, "&", "&amp;")
+		require.Contains(t, page, `<a class="search-chip" href="`+escaped+`" aria-label="Remove the filter: `+label+`"`, label)
+		var after searchData
+		getJSON(t, mux, href+"&format=json", &after)
+		require.NotEmpty(t, after.Groups, "removing %q changes the result", label)
+	}
+	require.Contains(t, page, `<a class="search-chip-clear" href="/console/search?scope=all&amp;w=all&amp;sort=relevance&amp;q=quokka">Clear all filters</a>`)
+	var cleared searchData
+	getJSON(t, mux, "/console/search?scope=all&w=all&sort=relevance&q=quokka&format=json", &cleared)
+	require.Equal(t, 3, cleared.Total)
+
+	// One restriction: its chip, no clear-all.
+	page = getHTMLBody(t, mux, "/console/search?scope=sessions&q=quokka")
+	require.Contains(t, page, "with this filter.")
+	require.Contains(t, page, `aria-label="Remove the filter: Sessions"`)
+	require.NotContains(t, page, "Clear all filters")
+
+	// No restriction, nothing found: no link that would change nothing.
+	page = getHTMLBody(t, mux, "/console/search?q=wombat")
+	require.Contains(t, page, "Nothing matches &ldquo;wombat&rdquo;.")
+	require.NotContains(t, page, "search-chip")
+	require.NotContains(t, page, "Include archived</a></div>")
+
+	// What only an archived memory matches: the page offers to include them.
+	seedSearchMemory(t, db, "01SXWOMBAT", "wombat-notes", "old wombat notes", "seam", "wombat")
+	sxRetire(t, db, "01SXWOMBAT", "")
+	page = getHTMLBody(t, mux, "/console/search?q=wombat")
+	require.Contains(t, page, `1 archived or superseded memory matches. <a href="/console/search?scope=all&amp;w=all&amp;sort=relevance&amp;archived=1&amp;q=wombat">Include archived</a>`)
+	getJSON(t, mux, "/console/search?scope=all&w=all&sort=relevance&archived=1&q=wombat&format=json", &data)
+	require.Equal(t, 1, data.Total)
+}
+
+// Show more is part of the URL, so it survives the live refresh (which
+// refetches the URL) and every control that keeps the search: the type,
+// window, starred and archived links and the sort form. A new query starts
+// with it closed.
+func TestSxSearch_ShowMoreSurvivesTheControls(t *testing.T) {
+	db, mux := newConsole(t)
+	for i := range 3 {
+		seedSearchTask(t, db, fmt.Sprintf("01SXKEEP%02d", i), "seam", "kept open task", "")
+	}
+	page := getHTMLBody(t, mux, "/console/search?scope=all&w=all&sort=relevance&more=tasks,sessions&q=kept")
+	for _, href := range []string{
+		"/console/search?scope=tasks&amp;w=all&amp;sort=relevance&amp;more=tasks%2Csessions&amp;q=kept",              // a type pill
+		"/console/search?scope=all&amp;w=7d&amp;sort=relevance&amp;more=tasks%2Csessions&amp;q=kept",                 // a window pill
+		"/console/search?scope=all&amp;w=all&amp;sort=relevance&amp;fav=1&amp;more=tasks%2Csessions&amp;q=kept",      // Starred only
+		"/console/search?scope=all&amp;w=all&amp;sort=relevance&amp;archived=1&amp;more=tasks%2Csessions&amp;q=kept", // Include archived
+	} {
+		require.Contains(t, page, `href="`+href+`"`)
+	}
+	sortForm := between(t, page, `<label for="search-sort">`, `<form class="search-sort"`, "</form>")
+	require.Contains(t, sortForm, `<input type="hidden" name="more" value="tasks,sessions">`)
+	queryForm := between(t, page, `<button class="search-submit"`, `<form class="search search-query"`, "</form>")
+	require.NotContains(t, queryForm, `name="more"`)
+
+	var data searchData
+	getJSON(t, mux, "/console/search?format=json&more=sessions,tasks&q=kept", &data)
+	require.Equal(t, []string{"tasks", "sessions"}, data.Expanded, "one state, one order")
+}
+
+func TestSxSearch_BadMoreAndArchivedAreRejected(t *testing.T) {
+	_, mux := newConsoleFeatures(t, config.Features{})
+	for _, tc := range []struct{ path, want string }{
+		{"/console/search?q=x1&more=bogus", "invalid more"},
+		{"/console/search?q=x1&more=", "invalid more"},
+		{"/console/search?q=x1&more=tasks,tasks", "named twice"},
+		{"/console/search?q=x1&more=tasks,", "invalid more"},
+		{"/console/search?q=x1&more=trials", "invalid more"}, // research is off
+		{"/console/search?q=x1&archived=yes", "invalid archived"},
+		{"/console/search?q=x1&archived=", "invalid archived"},
+		{"/console/search?q=x1&more=tasks&more=notes", "exactly once"},
+	} {
+		rr := getSearch(t, mux, tc.path)
+		require.Equal(t, http.StatusBadRequest, rr.Code, tc.path)
+		require.Contains(t, rr.Body.String(), tc.want, tc.path)
+	}
+	require.Equal(t, http.StatusOK, getSearch(t, mux, "/console/search?q=x1&more=retired,memories&archived=1").Code)
+}
+
+// The palette's preview is cut at five and says so: the group carries more
+// and the page that shows the rest -- Search narrowed to the kind, archived
+// memories included for theirs.
+func TestSxSearch_PaletteGroupsSayWhenCut(t *testing.T) {
+	db, mux := newConsole(t)
+	for i := range 7 {
+		seedSearchTask(t, db, fmt.Sprintf("01SXPAL%02d", i), "seam", "palette preview task", "")
+	}
+	seedSearchTask(t, db, "01SXPALS", "seam", "palette preview starred", "")
+	sxStar(t, db, "tasks", "01SXPALS")
+
+	var data searchData
+	getJSON(t, mux, "/console/search?format=json&fast=1&q=palette+preview", &data)
+	tasks := sxGroup(t, data, "tasks")
+	require.Equal(t, 5, tasks.Count)
+	require.True(t, tasks.More)
+	require.Equal(t, "tasks", tasks.Scope)
+	require.Equal(t, "/console/search?scope=tasks&w=all&sort=relevance&q=palette%20preview", tasks.MoreHref)
+	require.Equal(t, "01SXPALS", tasks.Rows[0].ID, "the starred match leads the preview")
+	require.True(t, tasks.Rows[0].Favorite)
+
+	// The JSON keys the palette reads.
+	raw := getPeek(t, mux, "/console/search?format=json&fast=1&q=palette+preview").Body.String()
+	for _, key := range []string{`"more": true`, `"moreHref": `, `"scope": "tasks"`, `"favorite": true`} {
+		require.Contains(t, raw, key)
+	}
+}
+
+// search.js mirrors the group contract above: it shows a cut count as "5+",
+// ends a cut group with "More in Search" to its moreHref, files the retired
+// memories under their scope, and marks starred and retired rows.
+func TestSxSearchJS_MirrorsCutGroups(t *testing.T) {
+	js := string(searchJS)
+	for _, want := range []string{
+		"g.count + (g.more ? '+' : '')",
+		"if (g.more && g.moreHref) items.push({ title: 'More in Search'",
+		"scopes.indexOf(g.scope || g.kind)",
+		"if (r.favorite) bits.push('starred');",
+		"if (r.retired) bits.push(r.supersededBy ? r.retired + ' by ' + r.supersededBy.name : r.retired);",
+		"(r.more ? ' cmdk-more' : '')",
+	} {
+		require.Contains(t, js, want)
+	}
+	require.NotContains(t, js, "scopes.indexOf(g.kind) === -1", "every group check goes through its scope")
 }

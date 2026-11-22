@@ -12,7 +12,17 @@ package console
 // retrieve.Search (fused, snippeted); tasks, plans, trials, projects, and
 // sessions have no FTS mirror and match by LIKE (store.Search*). Events are
 // excluded because the telemetry stream has its own Interactions surface and
-// would flood results.
+// would flood results. Superseded and archived memories, which every other
+// search leaves out, come from their own console-only lookup
+// (store.SearchRetiredMemories): by exact name or id always, by text with
+// "Include archived".
+//
+// Counts are honest. Each kind is fetched one past what it shows, so a cut
+// kind says "20+" and offers Show more (?more=<kind>) instead of passing the
+// cap off as its total; the starred rule and the window run inside every
+// query, before its cap, so "Starred only" cannot lose a starred match ranked
+// past the cut, and under every view a starred match takes a slot before an
+// unstarred one.
 
 import (
 	"context"
@@ -83,11 +93,19 @@ const searchQueryMax = 200
 const searchQueryMin = 2
 
 // Result depth per group: the page shows a full page of hits, the palette shows
-// a preview it can render in a dropdown.
+// a preview it can render in a dropdown, and a kind whose Show more is open
+// (?more=) shows up to searchMoreLimit. Each is fetched one past itself, which
+// is how a group knows it was cut.
 const (
 	searchPageLimit = 20
 	searchFastLimit = 5
+	searchMoreLimit = 200
 )
+
+// searchRetiredKind is the group of superseded and archived memories: part of
+// the memories scope, not a scope of its own, but a group with its own count
+// and its own Show more.
+const searchRetiredKind = "retired"
 
 // searchRow is one result, already resolved to the URL it links to. Href is
 // always an in-console path; Peek marks the rows the detail pane can load as a
@@ -122,29 +140,65 @@ type searchRow struct {
 	// hit's for a memory or a note, the index's for a task or a session.
 	MayContain []core.Stamp `json:"mayContain,omitempty"`
 	Peek       bool         `json:"peek"`
+	// Retired is a superseded or archived memory's status ("superseded",
+	// "archived"); "" for everything live.
+	Retired string `json:"retired,omitempty"`
+	// SupersededBy is the memory that replaced a superseded one, when this
+	// request may read it.
+	SupersededBy *searchRef `json:"supersededBy,omitempty"`
+}
+
+// searchRef is a link to another item.
+type searchRef struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Href string `json:"href"`
 }
 
 // searchGroup is one entity kind's results.
 type searchGroup struct {
-	Kind  string      `json:"kind"`
-	Label string      `json:"label"`
-	Count int         `json:"count"`
-	Rows  []searchRow `json:"rows"`
+	Kind  string `json:"kind"`
+	Label string `json:"label"`
+	// Scope is the search scope the group belongs to: its own kind, except
+	// the retired memories, which are memories.
+	Scope string `json:"scope"`
+	// Count is the number of Rows. With More set it is a floor, never the
+	// total: the page shows "20+".
+	Count int `json:"count"`
+	// More reports that the kind has more matches than it shows.
+	More bool `json:"more,omitempty"`
+	// MoreHref is the console page that shows more of the kind: for the
+	// palette, Search narrowed to it; on the page, this page with the kind's
+	// Show more open. "" when no page would show more.
+	MoreHref string      `json:"moreHref,omitempty"`
+	Rows     []searchRow `json:"rows"`
+	// Capped says, on the page, that the kind's Show more is open and still
+	// cut: how many it shows and that a narrower search shows the rest.
+	Capped string `json:"-"`
 }
 
 // searchData is the page/JSON payload.
 type searchData struct {
-	Query       string        `json:"query"`
-	Scope       string        `json:"scope"`
-	Sort        string        `json:"sort"`
-	Window      string        `json:"window"`
-	WindowLabel string        `json:"windowLabel"`
-	Fast        bool          `json:"fast"`
-	Fav         bool          `json:"favoritesOnly"`
-	Groups      []searchGroup `json:"groups"`
-	Total       int           `json:"total"`
-	Rows        []searchRow   `json:"-"` // unified, globally sorted page projection
-	Since       time.Time     `json:"-"`
+	Query       string `json:"query"`
+	Scope       string `json:"scope"`
+	Sort        string `json:"sort"`
+	Window      string `json:"window"`
+	WindowLabel string `json:"windowLabel"`
+	Fast        bool   `json:"fast"`
+	Fav         bool   `json:"favoritesOnly"`
+	// Archived is the "Include archived" toggle (?archived=1): superseded and
+	// archived memories found by text, not only by exact name.
+	Archived bool `json:"includeArchived"`
+	// Expanded are the kinds whose Show more is open (?more=), in group order.
+	Expanded []string      `json:"expanded,omitempty"`
+	Groups   []searchGroup `json:"groups"`
+	Total    int           `json:"total"`
+	// Partial reports that some group was cut: Total is then a floor.
+	Partial bool `json:"partial,omitempty"`
+	// TooShort reports a query below searchQueryMin: nothing was searched.
+	TooShort bool        `json:"tooShort,omitempty"`
+	Rows     []searchRow `json:"-"` // unified, globally sorted page projection
+	Since    time.Time   `json:"-"`
 	// TrialsScope reports whether the research feature exposes the trials
 	// scope: while it is off, not even ?scope=all may reach past it.
 	TrialsScope bool `json:"-"`
@@ -157,6 +211,81 @@ type searchData struct {
 	Scopes    []searchScope        `json:"-"`
 	Windows   []searchWindowOption `json:"-"`
 	Sorts     []searchSortOption   `json:"-"`
+	// The page's toggles: each href is this page with the toggle flipped.
+	StarredHref     string `json:"-"`
+	ArchivedHref    string `json:"-"`
+	ArchivedOffered bool   `json:"-"` // memories are in scope, so the toggle changes something
+	MoreParam       string `json:"-"` // Expanded as the ?more= value
+	// The empty state: each active restriction as a chip that removes it,
+	// one link that removes them all (with two or more), and, when archived
+	// memories match what nothing live does, a line that includes them.
+	Chips       []searchChip `json:"-"`
+	ClearHref   string       `json:"-"`
+	RetiredHint string       `json:"-"`
+}
+
+// searchChip is one active restriction on an empty page: what it is, and the
+// page without it.
+type searchChip struct {
+	Label string
+	Href  string
+}
+
+// searchLink is the state a search URL carries. href writes it in one fixed
+// order -- scope, w, sort, the toggles, more, then q -- so every control on
+// the page builds the same URL for the same state.
+type searchLink struct {
+	q, scope, window, sort string
+	fav, archived          bool
+	more                   []string
+}
+
+func (l searchLink) href() string {
+	var b strings.Builder
+	b.WriteString("/console/search?scope=" + searchEscape(l.scope))
+	b.WriteString("&w=" + searchEscape(l.window))
+	b.WriteString("&sort=" + searchEscape(l.sort))
+	if l.fav {
+		b.WriteString("&fav=1")
+	}
+	if l.archived {
+		b.WriteString("&archived=1")
+	}
+	if len(l.more) > 0 {
+		b.WriteString("&more=" + searchEscape(strings.Join(l.more, ",")))
+	}
+	b.WriteString("&q=" + searchEscape(l.q))
+	return b.String()
+}
+
+// searchEscape escapes a query value with a space as %20, the way the page's
+// links always wrote it (QueryEscape's "+" renders as &#43; in an attribute).
+// A literal "+" is already %2B by then.
+func searchEscape(s string) string {
+	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
+}
+
+// link is the state this page carries.
+func (d searchData) link() searchLink {
+	return searchLink{q: d.Query, scope: d.Scope, window: d.Window, sort: d.Sort,
+		fav: d.Fav, archived: d.Archived, more: d.Expanded}
+}
+
+// limitFor is a group's cap: searchMoreLimit once its Show more is open,
+// base otherwise.
+func (d searchData) limitFor(kind string, base int) int {
+	if slices.Contains(d.Expanded, kind) {
+		return searchMoreLimit
+	}
+	return base
+}
+
+// starred is the starred rule every query of this search runs under.
+func (d searchData) starred() store.SearchStarred {
+	if d.Fav {
+		return store.StarredOnly
+	}
+	return store.StarredFirst
 }
 
 // highlightSnippet renders an FTS snippet as safe HTML with the matched terms
@@ -186,7 +315,58 @@ func (d searchData) wants(kind string) bool {
 	return d.Scope == kind
 }
 
-var searchParamNames = []string{"q", "scope", "w", "sort", "fast", "fav", "format"}
+var searchParamNames = []string{"q", "scope", "w", "sort", "fast", "fav", "archived", "more", "format"}
+
+// searchGroupKinds are the kinds a ?more= may name: every accepted scope but
+// "all", with the retired memories beside memories, in group order.
+func searchGroupKinds(accepted []string) []string {
+	var out []string
+	for _, k := range accepted {
+		if k == "all" {
+			continue
+		}
+		out = append(out, k)
+		if k == "memories" {
+			out = append(out, searchRetiredKind)
+		}
+	}
+	return out
+}
+
+// searchMoreParam parses ?more=, the kinds whose Show more is open: a
+// comma-separated list of group kinds. Absent is none; an empty, unknown, or
+// repeated kind is refused like every other control. The answer is in group
+// order, so one state has one URL.
+func searchMoreParam(values url.Values, kinds []string) ([]string, error) {
+	vals, ok := values["more"]
+	if !ok {
+		return nil, nil
+	}
+	var out []string
+	for _, k := range strings.Split(vals[0], ",") {
+		if !slices.Contains(kinds, k) {
+			return nil, fmt.Errorf("invalid more %q: valid values are %s, comma-separated", vals[0], strings.Join(kinds, ", "))
+		}
+		if slices.Contains(out, k) {
+			return nil, fmt.Errorf("invalid more %q: %s is named twice", vals[0], k)
+		}
+		out = append(out, k)
+	}
+	slices.SortFunc(out, func(a, b string) int { return slices.Index(kinds, a) - slices.Index(kinds, b) })
+	return out, nil
+}
+
+// searchFlagParam reads a toggle that is "1" or absent.
+func searchFlagParam(values url.Values, key string) (bool, error) {
+	vals, ok := values[key]
+	if !ok {
+		return false, nil
+	}
+	if vals[0] != "1" {
+		return false, fmt.Errorf("invalid %s %q: valid values are 1 (or omit)", key, vals[0])
+	}
+	return true, nil
+}
 
 // validateSearchParams rejects misspelled and ambiguous query parameters. The
 // search controls are bookmarkable API inputs: silently ignoring ?srot=project
@@ -257,37 +437,52 @@ func (s *Service) searchPage(w http.ResponseWriter, r *http.Request) {
 		s.badRequest(w, r, err.Error())
 		return
 	}
-	fastParam := values.Get("fast")
-	if _, present := values["fast"]; present && fastParam != "1" {
-		s.badRequest(w, r, fmt.Sprintf("invalid fast %q: valid values are 1 (or omit)", fastParam))
+	fast, err := searchFlagParam(values, "fast")
+	if err != nil {
+		s.badRequest(w, r, err.Error())
 		return
 	}
-	fast := fastParam == "1"
-	favParam := values.Get("fav")
-	if _, present := values["fav"]; present && favParam != "1" {
-		s.badRequest(w, r, fmt.Sprintf("invalid fav %q: valid values are 1 (or omit)", favParam))
+	fav, err := searchFlagParam(values, "fav")
+	if err != nil {
+		s.badRequest(w, r, err.Error())
 		return
 	}
-	fav := favParam == "1"
+	archived, err := searchFlagParam(values, "archived")
+	if err != nil {
+		s.badRequest(w, r, err.Error())
+		return
+	}
+	expanded, err := searchMoreParam(values, searchGroupKinds(accepted))
+	if err != nil {
+		s.badRequest(w, r, err.Error())
+		return
+	}
 	window := resolveSearchWindow(windowKey, time.Now().UTC())
 
 	data := searchData{
 		Query: q, Scope: scope, Sort: sortKey,
 		Window: window.Key, WindowLabel: window.Label, Since: window.Since,
-		Fast: fast, Fav: fav, Scopes: searchScopeOptions(scope, offered),
+		Fast: fast, Fav: fav, Archived: archived, Expanded: expanded,
 		TrialsScope: slices.Contains(accepted, "trials"),
 		Offered:     offered, ScopeNoun: searchScopeNoun(offered),
-		Windows: searchWindowOptions(window.Key), Sorts: searchSortOptions(sortKey),
+		Sorts: searchSortOptions(sortKey),
 	}
+	data.decorate()
 	// A scope above the level still searches (hidden, not locked), under the
 	// banner that names its screen.
 	pd := pageData{Title: "Search", Active: "search", Data: data}
 	if sc, ok := scopeScreen(scope); ok {
 		pd.LevelBanner = levelBannerFor(sc.ID, lvl)
 	}
+	if q == "" {
+		s.render(w, r, "search", pd)
+		return
+	}
 	if len([]rune(q)) < searchQueryMin {
-		// Too short to match anything: render the empty state rather than a
-		// query that would promise results it cannot find.
+		// Too short to match anything: say so, rather than run a query that
+		// would promise results it cannot find, or report "nothing matches".
+		data.TooShort = true
+		pd.Data = data
 		s.render(w, r, "search", pd)
 		return
 	}
@@ -304,52 +499,171 @@ func (s *Service) searchPage(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	if data.Fav {
-		groups = filterFavoriteGroups(groups)
-	}
 	data.Groups = groups
-	for _, g := range groups {
+	for i := range data.Groups {
+		g := &data.Groups[i]
 		data.Total += g.Count
+		data.Partial = data.Partial || g.More
+		g.MoreHref = data.moreHref(*g)
+		if g.More && g.MoreHref == "" && !data.Fast {
+			g.Capped = fmt.Sprintf("%s: showing the first %d. Narrow the search to see the rest.", g.Label, g.Count)
+		}
 		data.Rows = append(data.Rows, g.Rows...)
 	}
 	sortSearchRows(data.Rows, data.Sort)
+	if len(data.Rows) == 0 && !data.Fast && !wantsJSON(r) {
+		if err := s.searchEmptyState(ctx, &data); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+	}
 	pd.Data = data
 	s.render(w, r, "search", pd)
 }
 
+// decorate fills in the page's control hrefs from its state.
+func (d *searchData) decorate() {
+	d.Scopes = searchScopeOptions(d.Scope, d.Offered)
+	for i := range d.Scopes {
+		l := d.link()
+		l.scope = d.Scopes[i].Key
+		d.Scopes[i].Href = l.href()
+	}
+	d.Windows = searchWindowOptions(d.Window)
+	for i := range d.Windows {
+		l := d.link()
+		l.window = d.Windows[i].Key
+		d.Windows[i].Href = l.href()
+	}
+	l := d.link()
+	l.fav = !d.Fav
+	d.StarredHref = l.href()
+	l = d.link()
+	l.archived = !d.Archived
+	d.ArchivedHref = l.href()
+	d.ArchivedOffered = d.wants("memories")
+	d.MoreParam = strings.Join(d.Expanded, ",")
+}
+
+// moreHref is where a cut group's "more" goes: for the palette (fast), Search
+// narrowed to the group's scope -- archived memories included, for theirs --
+// and on the page, this page with the group's Show more opened too. "" when
+// the group was not cut, or its Show more is already open: no link that
+// changes nothing.
+func (d searchData) moreHref(g searchGroup) string {
+	if !g.More {
+		return ""
+	}
+	if d.Fast {
+		return searchLink{q: d.Query, scope: g.Scope, window: d.Window, sort: d.Sort,
+			fav: d.Fav, archived: d.Archived || g.Kind == searchRetiredKind}.href()
+	}
+	if slices.Contains(d.Expanded, g.Kind) {
+		return ""
+	}
+	l := d.link()
+	kinds := searchGroupKinds(searchScopes)
+	l.more = append(slices.Clone(d.Expanded), g.Kind)
+	slices.SortFunc(l.more, func(a, b string) int { return slices.Index(kinds, a) - slices.Index(kinds, b) })
+	return l.href()
+}
+
+// searchEmptyState explains a page with no results: each active restriction
+// (the scope, the window, Starred only) as a chip that removes it, one link
+// that removes them all, and -- when archived memories match where nothing
+// live does -- a line that includes them. Every link changes the search.
+func (s *Service) searchEmptyState(ctx context.Context, d *searchData) error {
+	all := d.link()
+	all.scope, all.window, all.fav = "all", "all", false
+	if d.Scope != "all" {
+		l := d.link()
+		l.scope = "all"
+		d.Chips = append(d.Chips, searchChip{Label: searchScopeLabel(d.Scope), Href: l.href()})
+	}
+	if d.Window != "all" {
+		l := d.link()
+		l.window = "all"
+		d.Chips = append(d.Chips, searchChip{Label: "Updated in the " + d.WindowLabel, Href: l.href()})
+	}
+	if d.Fav {
+		l := d.link()
+		l.fav = false
+		d.Chips = append(d.Chips, searchChip{Label: "Starred only", Href: l.href()})
+	}
+	if len(d.Chips) > 1 {
+		d.ClearHref = all.href()
+	}
+	if d.Archived || !d.wants("memories") {
+		return nil
+	}
+	searchCtx, _ := s.searchReach(ctx)
+	limit := d.limitFor(searchRetiredKind, searchPageLimit)
+	retired, err := store.SearchRetiredMemories(searchCtx, s.db(ctx), d.Query,
+		store.SearchFilter{Since: d.Since, Starred: d.starred()}, false, limit+1)
+	if err != nil {
+		return err
+	}
+	switch n := len(retired); {
+	case n > limit:
+		d.RetiredHint = fmt.Sprintf("%d+ archived or superseded memories match.", limit)
+	case n > 1:
+		d.RetiredHint = fmt.Sprintf("%d archived or superseded memories match.", n)
+	case n == 1:
+		d.RetiredHint = "1 archived or superseded memory matches."
+	}
+	return nil
+}
+
+// searchReach is the context the knowledge reads run under, and the projects
+// their answers must still drop. The fused search reads the main handle and
+// filters it by the request's View, which hides every locked project. A
+// browser's console unlock opens some (it is a console cookie, never part of
+// the View), so for that browser the reads run with no View, and their hits
+// are filtered by exactly what this request's handle hides.
+func (s *Service) searchReach(ctx context.Context) (context.Context, []string) {
+	if rc := reachOf(ctx); rc != nil && len(rc.unlocked) > 0 && s.cfg.Views != nil {
+		return access.WithView(ctx, access.View{}), s.cfg.Views.Hidden(rc.open)
+	}
+	return ctx, nil
+}
+
 // searchGroups runs each in-scope entity query and returns the non-empty groups
-// in display order.
+// in display order. Each kind is fetched one past its cap, and cut there.
 func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) ([]searchGroup, error) {
 	var groups []searchGroup
-	add := func(kind, label string, rows []searchRow) {
-		if len(rows) > 0 {
-			groups = append(groups, searchGroup{Kind: kind, Label: label, Count: len(rows), Rows: rows})
+	add := func(kind, label, scope string, rows []searchRow, shown int) {
+		if len(rows) == 0 {
+			return
 		}
+		g := searchGroup{Kind: kind, Label: label, Scope: scope}
+		if len(rows) > shown {
+			rows, g.More = rows[:shown], true
+		}
+		g.Rows, g.Count = rows, len(rows)
+		groups = append(groups, g)
 	}
+	filter := store.SearchFilter{Since: data.Since, Starred: data.starred()}
+	searchCtx, hidden := s.searchReach(ctx)
 
-	// Memories + notes: one fused retrieval covering both, split into groups
-	// after the fact so a single ranking decides what surfaces.
+	// Memories + notes: one retrieval, each kind ranked and capped on its own
+	// so neither crowds the other out of its count.
+	var notes []searchRow
+	noteLimit := data.limitFor("notes", limit)
 	if s.cfg.Retrieve != nil && (data.wants("memories") || data.wants("notes")) {
 		scope := "all"
 		if data.Scope == "memories" || data.Scope == "notes" {
 			scope = data.Scope
 		}
-		// The fused search reads the main handle and filters it by the
-		// request's View, which hides every locked project. A browser's
-		// console unlock opens some (it is a console cookie, never part of the
-		// View), so for that browser the search runs with no View, and its
-		// hits are filtered here by exactly what this request's handle hides.
-		searchCtx, hidden := ctx, []string(nil)
-		if rc := reachOf(ctx); rc != nil && len(rc.unlocked) > 0 && s.cfg.Views != nil {
-			searchCtx, hidden = access.WithView(ctx, access.View{}), s.cfg.Views.Hidden(rc.open)
-		}
+		memLimit := data.limitFor("memories", limit)
 		hits, err := s.cfg.Retrieve.Search(searchCtx, retrieve.SearchInput{
-			Query: data.Query, Scope: scope, Limit: limit, Semantic: !data.Fast, Since: data.Since,
+			Query: data.Query, Scope: scope, Semantic: !data.Fast, Since: data.Since,
+			PerKind: map[string]int{core.ItemKindMemory: memLimit + 1, core.ItemKindNote: noteLimit + 1},
+			Starred: data.starred(),
 		})
 		if err != nil {
 			return nil, err
 		}
-		var mems, notes []searchRow
+		var mems []searchRow
 		for _, h := range hits {
 			if slices.Contains(hidden, h.Project) {
 				continue
@@ -361,12 +675,29 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 				mems = append(mems, row)
 			}
 		}
-		add("memories", "Memories", mems)
-		add("notes", "Notes", notes)
+		add("memories", "Memories", "memories", mems, memLimit)
 	}
 
+	// Superseded and archived memories: by exact name or id on every search,
+	// by text too with Include archived. The request's handle leaves out what
+	// it may not read.
+	if data.wants("memories") {
+		retiredLimit := data.limitFor(searchRetiredKind, limit)
+		retired, err := store.SearchRetiredMemories(searchCtx, s.db(ctx), data.Query, filter, !data.Archived, retiredLimit+1)
+		if err != nil {
+			return nil, err
+		}
+		rows, err := s.retiredRows(ctx, retired)
+		if err != nil {
+			return nil, err
+		}
+		add(searchRetiredKind, "Archived & superseded", "memories", rows, retiredLimit)
+	}
+	add("notes", "Notes", "notes", notes, noteLimit)
+
 	if data.wants("tasks") {
-		tasks, err := store.SearchTasksSince(ctx, s.db(ctx), data.Query, data.Since, limit)
+		taskLimit := data.limitFor("tasks", limit)
+		tasks, err := store.SearchTasksFiltered(ctx, s.db(ctx), data.Query, filter, taskLimit+1)
 		if err != nil {
 			return nil, err
 		}
@@ -390,11 +721,12 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 			}
 			rows = append(rows, row)
 		}
-		add("tasks", "Tasks", rows)
+		add("tasks", "Tasks", "tasks", rows, taskLimit)
 	}
 
 	if data.wants("plans") {
-		plans, err := store.SearchPlansSince(ctx, s.db(ctx), data.Query, data.Since, limit)
+		planLimit := data.limitFor("plans", limit)
+		plans, err := store.SearchPlansFiltered(ctx, s.db(ctx), data.Query, filter, planLimit+1)
 		if err != nil {
 			return nil, err
 		}
@@ -409,13 +741,14 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 			row.MatchKind = store.NaturalIdentifierMatch(data.Query, p.Slug)
 			rows = append(rows, row)
 		}
-		add("plans", "Plans", rows)
+		add("plans", "Plans", "plans", rows, planLimit)
 	}
 
 	// Trials belong to the research feature: while it is off the scope is not
 	// even in the accepted enum, and ?scope=all must not reach past it either.
 	if data.TrialsScope && data.wants("trials") {
-		trials, err := store.SearchTrialsSince(ctx, s.db(ctx), data.Query, data.Since, limit)
+		trialLimit := data.limitFor("trials", limit)
+		trials, err := store.SearchTrialsFiltered(ctx, s.db(ctx), data.Query, filter, trialLimit+1)
 		if err != nil {
 			return nil, err
 		}
@@ -437,11 +770,12 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 			}
 			rows = append(rows, row)
 		}
-		add("trials", "Trials", rows)
+		add("trials", "Trials", "trials", rows, trialLimit)
 	}
 
 	if data.wants("projects") {
-		projects, err := store.SearchProjectsSince(ctx, s.db(ctx), data.Query, data.Since, limit)
+		projectLimit := data.limitFor("projects", limit)
+		projects, err := store.SearchProjectsFiltered(ctx, s.db(ctx), data.Query, filter, projectLimit+1)
 		if err != nil {
 			return nil, err
 		}
@@ -456,11 +790,12 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 			row.MatchKind = store.NaturalIdentifierMatch(data.Query, p.Slug)
 			rows = append(rows, row)
 		}
-		add("projects", "Projects", rows)
+		add("projects", "Projects", "projects", rows, projectLimit)
 	}
 
 	if data.wants("sessions") {
-		sessions, err := store.SearchSessionsSince(ctx, s.db(ctx), data.Query, data.Since, limit)
+		sessionLimit := data.limitFor("sessions", limit)
+		sessions, err := store.SearchSessionsFiltered(ctx, s.db(ctx), data.Query, filter, sessionLimit+1)
 		if err != nil {
 			return nil, err
 		}
@@ -484,11 +819,60 @@ func (s *Service) searchGroups(ctx context.Context, data searchData, limit int) 
 			}
 			rows = append(rows, row)
 		}
-		add("sessions", "Sessions", rows)
+		add("sessions", "Sessions", "sessions", rows, sessionLimit)
 	}
 
 	promoteIdentifierGroups(groups)
 	return groups, nil
+}
+
+// retiredRows projects retired memories into result rows, each with its
+// status and, for a superseded one, the memory that replaced it when this
+// request may read it.
+func (s *Service) retiredRows(ctx context.Context, hits []store.RetiredMemoryHit) ([]searchRow, error) {
+	if len(hits) == 0 {
+		return nil, nil
+	}
+	ids := make([]string, len(hits))
+	var successors []string
+	for i, h := range hits {
+		ids[i] = h.Memory.ID
+		if h.Memory.SupersededBy != "" {
+			successors = append(successors, h.Memory.SupersededBy)
+		}
+	}
+	next, err := store.MemoriesByIDs(ctx, s.db(ctx), successors)
+	if err != nil {
+		return nil, err
+	}
+	stamps := s.stampsByID(ctx, core.ItemKindMemory, ids)
+	rows := make([]searchRow, 0, len(hits))
+	for _, h := range hits {
+		m := h.Memory
+		row := searchRow{
+			Kind: "memory", ID: m.ID, Title: m.Name, Identifier: m.Name, Project: m.Project,
+			Age: ago(m.Updated), Href: "/console/memories/" + m.ID, Description: m.Description,
+			Updated: m.Updated, Favorite: m.Favorite, Account: m.Account, Peek: true,
+			MatchKind:  h.Match,
+			MayContain: core.StampsShown(stamps[m.ID], m.Project),
+			Retired:    "archived",
+		}
+		if m.SupersededBy != "" {
+			row.Retired = "superseded"
+			if succ, ok := next[m.SupersededBy]; ok {
+				row.SupersededBy = &searchRef{ID: succ.ID, Name: succ.Name, Href: "/console/memories/" + succ.ID}
+			}
+		}
+		if h.Match == store.IdentifierMatchExactID || h.Match == store.IdentifierMatchIDPrefix {
+			row.MatchedID = m.ID
+		}
+		if h.Snippet != "" {
+			row.SnippetHTML = highlightSnippet(h.Snippet)
+		}
+		row.Lexical = h.Snippet != "" || h.Match != ""
+		rows = append(rows, row)
+	}
+	return rows, nil
 }
 
 // hitRow projects a retrieval hit into a result row: the snippet when the
@@ -550,26 +934,6 @@ func similarityTone(score int) string {
 	}
 }
 
-// filterFavoriteGroups keeps only starred rows (the ?fav=1 control), dropping
-// groups the filter empties. It runs after the candidate queries, so it narrows
-// what surfaced rather than reaching deeper -- same contract as the page limit.
-func filterFavoriteGroups(groups []searchGroup) []searchGroup {
-	out := groups[:0]
-	for _, g := range groups {
-		kept := make([]searchRow, 0, len(g.Rows))
-		for _, row := range g.Rows {
-			if row.Favorite {
-				kept = append(kept, row)
-			}
-		}
-		if len(kept) > 0 {
-			out = append(out, searchGroup{Kind: g.Kind, Label: g.Label, Count: len(kept), Rows: kept})
-		}
-	}
-	promoteIdentifierGroups(out)
-	return out
-}
-
 // sortSearchRows orders the unified page projection. Relevance preserves the
 // grouped retrieval order -- knowledge is fused-ranked, the structured stores
 // provide their own deterministic defaults -- except that starred rows float
@@ -628,6 +992,7 @@ type searchWindowOption struct {
 	Key    string
 	Label  string
 	Active bool
+	Href   string // this page in that window (searchData.decorate)
 }
 
 func resolveSearchWindow(key string, now time.Time) searchWindow {
@@ -677,6 +1042,7 @@ type searchScope struct {
 	Key    string
 	Label  string
 	Active bool
+	Href   string // this page in that scope (searchData.decorate)
 }
 
 // searchScopeOptions builds the ordered selector entries from the scopes the

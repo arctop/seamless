@@ -8,6 +8,11 @@
      same route the Search page uses, with fast=1 so a query per keystroke never
      triggers a remote embedding call (see console/search.go).
 
+   The server's groups follow the page's rules: each kind is fetched one past
+   what it shows, starred matches take their slots first, and a cut kind says
+   so (group.more) with the page that shows the rest (group.moreHref). The
+   palette shows the count as "5+" and ends the group with "More in Search".
+
    Inert when #cmdk is absent (the login page has no palette). */
 (function () {
   var overlay = document.getElementById('cmdk');
@@ -42,6 +47,11 @@
     var nav = document.querySelector('nav.nav[data-scopes]');
     if (!nav) return null;
     return (nav.getAttribute('data-scopes') || '').split(' ').filter(Boolean);
+  }
+  // A group belongs to its scope: the archived and superseded memories are
+  // memories (group.scope); an older answer without it names its kind.
+  function shown(g, scopes) {
+    return !scopes || scopes.indexOf(g.scope || g.kind) !== -1;
   }
   function scopeHint() {
     var scopes = visibleScopes();
@@ -198,15 +208,21 @@
     if (remote && remote.groups && remote.groups.length) {
       var scopes = visibleScopes();
       remote.groups.forEach(function (g) {
-        if (scopes && scopes.indexOf(g.kind) === -1) return;
-        group(g.label, g.count, (g.rows || []).slice(0, PER_GROUP).map(function (r) {
+        if (!shown(g, scopes)) return;
+        var items = (g.rows || []).slice(0, PER_GROUP).map(function (r) {
           var bits = [];
+          if (r.favorite) bits.push('starred');
+          if (r.retired) bits.push(r.supersededBy ? r.retired + ' by ' + r.supersededBy.name : r.retired);
           if (r.identifier && r.identifier !== r.title) bits.push(r.identifier);
           if (r.matchedId) bits.push(r.matchedId);
           bits.push(r.project || 'global');
           bits.push(r.age);
           return { title: r.title, desc: r.description || '', snippetHtml: r.snippetHtml, meta: bits.join(' · '), href: r.href };
-        }), 'remote');
+        });
+        // A cut kind: its count is a floor, and its last row opens the page
+        // that shows the rest.
+        if (g.more && g.moreHref) items.push({ title: 'More in Search', meta: g.label, href: g.moreHref, more: true });
+        group(g.label, g.count + (g.more ? '+' : ''), items, 'remote');
       });
     }
     if (status) note(status.cls, status.text);
@@ -229,7 +245,7 @@
 
     items.forEach(function (r) {
       var li = document.createElement('li');
-      li.className = 'cmdk-opt' + (source === 'local' ? ' cmdk-local' : '');
+      li.className = 'cmdk-opt' + (source === 'local' ? ' cmdk-local' : '') + (r.more ? ' cmdk-more' : '');
       li.id = 'cmdk-opt-' + rows.length;
       li.setAttribute('role', 'option');
       li.setAttribute('aria-selected', 'false');
@@ -301,7 +317,7 @@
       panel.classList.remove('loading');
       var local = localGroups(q);
       var scopes = visibleScopes();
-      var none = !(data.groups || []).some(function (g) { return !scopes || scopes.indexOf(g.kind) !== -1; });
+      var none = !(data.groups || []).some(function (g) { return shown(g, scopes); });
       render(local, data, none ? { cls: 'cmdk-empty', text: local.length ? 'No knowledge or work matches "' + q + '".' : 'No results for "' + q + '".' } : null);
     }).catch(function (err) {
       if (err && err.name === 'AbortError') return;

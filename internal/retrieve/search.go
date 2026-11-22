@@ -2,10 +2,13 @@ package retrieve
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sort"
 	"time"
 
 	"github.com/arctop/seamless/internal/access"
+	"github.com/arctop/seamless/internal/llm"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -28,6 +31,20 @@ type SearchInput struct {
 	Limit    int       // default 20
 	Semantic bool      // false = FTS-only (the palette's fast path)
 	Since    time.Time // zero = all time; otherwise updated at/after this instant
+	// PerKind, when set, caps each knowledge kind on its own instead of Limit
+	// capping one fused ranking of both: PerKind[core.ItemKindMemory] and
+	// PerKind[core.ItemKindNote] (a kind absent or <= 0 takes Limit). Each kind
+	// is then ranked by its own candidate legs, at a depth of at least its cap,
+	// so one kind's matches never crowd the other's out and a count below the
+	// cap is the whole count: a caller asking one more than it shows learns,
+	// per kind, whether there are more. The hits come grouped, memories first.
+	PerKind map[string]int
+	// Starred is how starred items rank (store.StarredFirst, StarredOnly). Both
+	// are decided before any cap: the starred items of a kind are ranked on
+	// their own, ahead of the rest (StarredFirst) or alone (StarredOnly), so a
+	// cap can never cut a starred match in favor of an unstarred one. It needs
+	// PerKind; the shared-Limit ranking keeps its own order.
+	Starred store.SearchStarred
 }
 
 // Search finds memories and notes for a human searching the console. It shares
@@ -59,17 +76,39 @@ type SearchInput struct {
 // observer reads "20 results" as 20 matches. Similarity is set on every hit the
 // semantic leg found, so the caller can show where relevance falls off.
 func (s *Service) Search(ctx context.Context, in SearchInput) ([]Hit, error) {
-	kinds := scopeKinds(in.Scope)
 	limit := in.Limit
 	if limit <= 0 {
 		limit = 20
 	}
+	if in.PerKind != nil {
+		return s.searchPerKind(ctx, in, limit)
+	}
+	if in.Starred != store.StarredAny {
+		return nil, errors.New("retrieve.Search: Starred needs PerKind")
+	}
 
-	identifierHits, err := store.SearchKnowledgeIdentifiersSince(ctx, s.db, in.Query, kinds, in.Projects, in.Since, searchSourceDepth)
+	acc, err := s.searchCandidates(ctx, in, scopeKinds(in.Scope), searchSourceDepth)
 	if err != nil {
 		return nil, err
 	}
-	acc, err := s.candidates(ctx, in.Query, kinds, in.Projects, "", in.Since, searchSourceDepth, in.Semantic, "retrieve.Search")
+	out, err := s.takeHits(ctx, rankSearch(acc), acc, limit)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.attachStamps(ctx, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// searchCandidates runs the identifier lane and both candidate legs over kinds
+// at depth, and fuses them into one accumulator.
+func (s *Service) searchCandidates(ctx context.Context, in SearchInput, kinds []string, depth int) (map[string]*fusedItem, error) {
+	identifierHits, err := store.SearchKnowledgeIdentifiersSince(ctx, s.db, in.Query, kinds, in.Projects, in.Since, depth)
+	if err != nil {
+		return nil, err
+	}
+	acc, err := s.candidates(ctx, in.Query, kinds, in.Projects, "", in.Since, depth, in.Semantic, "retrieve.Search")
 	if err != nil {
 		return nil, err
 	}
@@ -84,8 +123,13 @@ func (s *Service) Search(ctx context.Context, in SearchInput) ([]Hit, error) {
 			f.identifierOrder = i
 		}
 	}
-	ordered := rankSearch(acc)
+	return acc, nil
+}
 
+// takeHits walks ordered (rankSearch's order) and keeps up to limit hits: a
+// semantic-only hit below the floor drops, and so does one the caller may not
+// read.
+func (s *Service) takeHits(ctx context.Context, ordered []string, acc map[string]*fusedItem, limit int) ([]Hit, error) {
 	hyd, err := s.hydrate(ctx, ordered, acc)
 	if err != nil {
 		return nil, err
@@ -123,10 +167,213 @@ func (s *Service) Search(ctx context.Context, in SearchInput) ([]Hit, error) {
 		}
 		out = append(out, h)
 	}
+	return out, nil
+}
+
+// searchPerKind is Search with PerKind set: each knowledge kind in scope is
+// ranked and capped on its own (see SearchInput.PerKind and Starred).
+//
+// The legs run at a depth of at least the kind's cap. That is what makes a
+// short count whole: a kind with fewer matches than its cap has all of them
+// inside every leg's depth -- all its lexical matches, and all its semantic
+// neighbors above the floor, since the cosine leg is ordered by similarity --
+// so the caller can tell "12" from "12 and the depth ran out". Without the
+// semantic leg the order is the identifier lane then the FTS rank, which a
+// depth of exactly the cap already decides.
+func (s *Service) searchPerKind(ctx context.Context, in SearchInput, limit int) ([]Hit, error) {
+	run := s
+	if s.embedder != nil && in.Semantic {
+		// One embedding per search, however many kinds and lanes ask for it.
+		cp := *s
+		cp.embedder = &onceEmbedder{inner: s.embedder}
+		run = &cp
+	}
+	var out []Hit
+	for _, kind := range scopeKinds(in.Scope) {
+		kindLimit := limit
+		if n := in.PerKind[kind]; n > 0 {
+			kindLimit = n
+		}
+		var hits []Hit
+		var starred map[string]bool
+		if in.Starred != store.StarredAny {
+			var err error
+			if hits, starred, err = run.searchStarred(ctx, in, kind, kindLimit); err != nil {
+				return nil, err
+			}
+		}
+		if in.Starred != store.StarredOnly && len(hits) < kindLimit {
+			depth := kindLimit
+			if in.Semantic {
+				depth = max(searchSourceDepth, kindLimit)
+			}
+			acc, err := run.searchCandidates(ctx, in, []string{kind}, depth)
+			if err != nil {
+				return nil, err
+			}
+			// The starred lane already placed every starred item of this kind.
+			for id := range starred {
+				delete(acc, id)
+			}
+			rest, err := run.takeHits(ctx, rankSearch(acc), acc, kindLimit-len(hits))
+			if err != nil {
+				return nil, err
+			}
+			hits = append(hits, rest...)
+		}
+		out = append(out, hits...)
+	}
 	if err := s.attachStamps(ctx, out); err != nil {
 		return nil, err
 	}
 	return out, nil
+}
+
+// searchStarred ranks one kind's starred items alone: the same identifier
+// lane, lexical and semantic legs, and reciprocal-rank fusion as the full
+// search, over the starred set only, which is small enough to score whole --
+// so no depth can cut a starred match. It returns the hits (up to limit) and
+// every starred id of the kind, for the unstarred lane to leave out.
+func (s *Service) searchStarred(ctx context.Context, in SearchInput, kind string, limit int) ([]Hit, map[string]bool, error) {
+	items, err := store.StarredKnowledge(ctx, s.db, kind, in.Projects, in.Since)
+	if err != nil || len(items) == 0 {
+		return nil, nil, err
+	}
+	starred := make(map[string]bool, len(items))
+	ids := make([]string, len(items))
+	for i, it := range items {
+		starred[it.ID], ids[i] = true, it.ID
+	}
+	acc := make(map[string]*fusedItem)
+	entry := func(id string) *fusedItem {
+		f := acc[id]
+		if f == nil {
+			f = &fusedItem{kind: kind}
+			acc[id] = f
+		}
+		return f
+	}
+
+	// The identifier lane, in SearchKnowledgeIdentifiersSince's order:
+	// strongest match first, then newest.
+	type identified struct {
+		item  store.StarredItem
+		match store.IdentifierMatchKind
+	}
+	var named []identified
+	for _, it := range items {
+		m := store.IDIdentifierMatch(in.Query, it.ID)
+		if m == "" {
+			m = store.NaturalIdentifierMatch(in.Query, it.Identifier)
+		}
+		if m != "" {
+			named = append(named, identified{it, m})
+		}
+	}
+	sort.SliceStable(named, func(i, j int) bool {
+		pi, pj := store.IdentifierMatchPriority(named[i].match), store.IdentifierMatchPriority(named[j].match)
+		if pi != pj {
+			return pi < pj
+		}
+		if !named[i].item.Updated.Equal(named[j].item.Updated) {
+			return named[i].item.Updated.After(named[j].item.Updated)
+		}
+		return named[i].item.ID < named[j].item.ID
+	})
+	for i, n := range named {
+		f := entry(n.item.ID)
+		f.identifierMatch, f.identifierOrder = n.match, i
+	}
+
+	lexical, err := store.FTSSearchSnippetsWithin(ctx, s.db, in.Query, ids)
+	if err != nil {
+		return nil, nil, err
+	}
+	for rank, h := range lexical {
+		f := entry(h.ItemID)
+		f.score += 1.0 / float64(rrfK+rank+1)
+		f.fts = true
+		if f.snippet == "" {
+			f.snippet = h.Snippet
+		}
+	}
+
+	if in.Semantic && s.embedder != nil {
+		qvec, err := s.searchVector(ctx, in.Query)
+		if err != nil {
+			return nil, nil, err
+		}
+		if qvec != nil {
+			vecs, err := store.EmbeddingsFor(ctx, s.db, s.embedder.Model(), ids)
+			if err != nil {
+				return nil, nil, err
+			}
+			type scored struct {
+				id  string
+				cos float64
+			}
+			near := make([]scored, 0, len(vecs))
+			for _, id := range ids {
+				if v, ok := vecs[id]; ok && len(v) == len(qvec) {
+					near = append(near, scored{id, store.Cosine(qvec, v)})
+				}
+			}
+			sort.Slice(near, func(i, j int) bool {
+				if near[i].cos != near[j].cos {
+					return near[i].cos > near[j].cos
+				}
+				return near[i].id < near[j].id
+			})
+			for rank, n := range near {
+				f := entry(n.id)
+				f.score += 1.0 / float64(rrfK+rank+1)
+				f.semantic, f.cosine = true, n.cos
+			}
+		}
+	}
+
+	hits, err := s.takeHits(ctx, rankSearch(acc), acc, limit)
+	return hits, starred, err
+}
+
+// searchVector embeds the query for the starred lane under candidates'
+// degradation contract: a local configuration error surfaces, any other
+// failure means a lexical-only lane (nil vector). Under searchPerKind the
+// embedder is a onceEmbedder, so this asks the provider at most once per
+// search, together with the unstarred lane's own call.
+func (s *Service) searchVector(ctx context.Context, query string) ([]float32, error) {
+	qvec, err := s.embedder.Embed(ctx, query)
+	switch {
+	case errors.Is(err, llm.ErrConfig):
+		return nil, fmt.Errorf("retrieve.Search: %w", err)
+	case err != nil:
+		s.logger.Warn("retrieve.Search: embed failed, FTS only", "error", err)
+		return nil, nil
+	default:
+		return qvec, nil
+	}
+}
+
+// onceEmbedder remembers one query's embedding (or its failure), so the
+// several lanes of one search cost one provider round-trip. It lives for one
+// Search call, on one goroutine.
+type onceEmbedder struct {
+	inner llm.Embedder
+	text  string
+	vec   []float32
+	err   error
+	done  bool
+}
+
+func (e *onceEmbedder) Model() string { return e.inner.Model() }
+
+func (e *onceEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
+	if e.done && text == e.text {
+		return e.vec, e.err
+	}
+	e.text, e.done = text, true
+	e.vec, e.err = e.inner.Embed(ctx, text)
+	return e.vec, e.err
 }
 
 // rankSearch promotes stable-identifier matches ahead of the ordinary RRF

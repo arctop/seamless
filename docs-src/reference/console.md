@@ -299,7 +299,10 @@ shows), and **Actions** (switch theme, collapse the sidebar, the shortcut sheet,
 change the experience level). Typing matches sections and actions instantly;
 from two characters on it also searches memories, notes, tasks, plans, trials,
 projects, and sessions through the same route as [Search](#search), showing the
-groups the level offers.
+groups the level offers. Each group shows up to five, starred matches first and
+marked starred; a group with more shows its count as **5+** and ends with
+**More in Search**, which opens Search narrowed to that kind. An exact name of
+a superseded or archived memory finds it here too, with its status.
 
 ### Keyboard
 
@@ -599,6 +602,33 @@ One query across every entity the console can link to. Memories and notes come
 through the same fused FTS + semantic retrieval that [recall](/concepts/recall/)
 uses, with snippets; tasks, plans, trials, projects, and sessions have no FTS
 mirror and match by `LIKE`.
+
+Counts are honest. Each kind shows up to 20 results and is fetched one
+further, so a kind with more says so: its count reads **20+** and its **Show
+more** opens up to 200 of that kind (`?more=tasks`, comma-separated for
+several). Show more is part of the address, so it survives the live refresh
+and the Type, Updated, Starred, Archived, and Sort controls; a new query
+starts with it closed. A kind still cut at 200 says how many it shows and asks
+for a narrower search. The header's total carries the same **+** when any kind
+was cut. Memories and notes are counted apart, so many matching memories never
+squeeze the notes out.
+
+**Starred only** (`?fav=1`) runs inside each query, before the cut, so a starred
+match ranked past the first 20 still appears. Without it, a kind's starred
+matches take its first slots, then the best of the rest.
+
+Superseded and archived memories, which every other search leaves out, have
+their own lookup here. An exact memory name or ID always finds one, under
+**Archived & superseded**, badged **superseded** (with a link to the memory
+that replaced it) or **archived**. **Include archived** (`?archived=1`, offered
+while memories are in scope) finds them by text as well. A locked project's
+retired memories stay out, like the rest of its content.
+
+A one-character query says to type at least two characters. A query that finds
+nothing lists each restriction in force - the type, the Updated window,
+Starred only - as a chip that removes it, with **Clear all filters** when there
+are two or more; when archived or superseded memories match where nothing live
+does, it says how many and offers **Include archived**.
 
 Stable references get their own lookup lane. An exact memory name or note slug
 ranks ahead of token-overlap matches and is shown beside the result's display

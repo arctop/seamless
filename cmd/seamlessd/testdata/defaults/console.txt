@@ -6143,7 +6143,6 @@ window.SEAM_NO_LIVE_REFRESH = true;
     
     
 
-
 <header class="mv2-bar">
   <h1><svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>Search</h1><details class="page-about"><summary aria-label="About this page" title="About this page"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary><p class="page-about-pop" role="note">Everything the console can link to, in one query.</p></details>
   <span class="mv2-count" aria-label="11 results">
@@ -6188,13 +6187,21 @@ window.SEAM_NO_LIVE_REFRESH = true;
     </div>
   </div>
   
+  <div class="search-control">
+    <span class="search-control-label">Archived</span>
+    <div class="search-pills" role="list" aria-label="Include archived" data-seam-query>
+      <a class="" href="/console/search?scope=all&amp;w=all&amp;sort=relevance&amp;archived=1&amp;q=example%20deploy" title="Superseded and archived memories, found by text as well as by exact name"><svg class="ico ico-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg> Include archived</a>
+    </div>
+  </div>
+  
+  
 </section>
 
 <div class="list-detail-split search-split">
   <div class="list-pane">
 
     <div class="search-results-head">
-      <div class="search-breakdown" aria-label="Result counts by type">
+      <div class="search-breakdown" aria-label="Result counts by type" data-seam-query>
         <span data-search-kind="memories"><b>6</b> Memories</span><span data-search-kind="notes"><b>3</b> Notes</span><span data-search-kind="sessions"><b>2</b> Sessions</span>
       </div>
       <span class="search-order-note">Best matches first</span>

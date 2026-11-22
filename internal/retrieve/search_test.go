@@ -2,6 +2,7 @@ package retrieve
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -432,4 +433,186 @@ func TestSearch_IdentifierLaneFindsFullAndPrefixIDs(t *testing.T) {
 	hits, err = svc.Search(context.Background(), SearchInput{Query: "01ARZ3N", Scope: "notes", Limit: 20})
 	require.NoError(t, err)
 	require.Empty(t, hits, "short ID prefixes must not fan out")
+}
+
+// countingEmbedder counts its calls and returns a fixed vector.
+type countingEmbedder struct {
+	vec   []float32
+	calls *int
+}
+
+func (e countingEmbedder) Model() string { return "test-embed" }
+
+func (e countingEmbedder) Embed(context.Context, string) ([]float32, error) {
+	*e.calls++
+	return e.vec, nil
+}
+
+// insSearchNote is a note with its fts row, for the per-kind tests.
+func insSearchNote(t *testing.T, db *sql.DB, id, slug, text, project string) {
+	t.Helper()
+	insNote(t, db, id, slug, text, project, "[]", time.Now())
+	_, err := db.ExecContext(context.Background(), `
+		INSERT INTO fts (item_id, kind, project, title, name, description, body)
+		VALUES (?, 'note', ?, ?, '', ?, ?)`, id, project, text, text, text)
+	require.NoError(t, err)
+}
+
+func starSearchItem(t *testing.T, db *sql.DB, table, id string) {
+	t.Helper()
+	_, err := db.ExecContext(context.Background(), `UPDATE `+table+` SET favorite = 1 WHERE id = ?`, id)
+	require.NoError(t, err)
+}
+
+func hitIDs(hits []Hit) []string {
+	out := make([]string, len(hits))
+	for i, h := range hits {
+		out[i] = h.ID
+	}
+	return out
+}
+
+func countKind(hits []Hit, kind string) int {
+	n := 0
+	for _, h := range hits {
+		if h.Kind == kind {
+			n++
+		}
+	}
+	return n
+}
+
+// PerKind ranks and caps each knowledge kind on its own: many matching
+// memories cannot squeeze the notes out, and each kind fills its own cap. The
+// hits come grouped, memories first.
+func TestSearch_PerKindCapsEachKindApart(t *testing.T) {
+	db := setupDB(t)
+	ctx := context.Background()
+	for i := range 30 {
+		insMem(t, db, fmt.Sprintf("01PKM%02d", i), "gotcha", fmt.Sprintf("kind-apart-%02d", i), "kind apart kind apart kind apart", "seam")
+	}
+	for i := range 3 {
+		insSearchNote(t, db, fmt.Sprintf("01PKN%02d", i), fmt.Sprintf("kind-note-%02d", i), "one kind apart", "seam")
+	}
+	svc := New(db, nil, budgets(), nil)
+
+	shared, err := svc.Search(ctx, SearchInput{Query: "kind apart", Limit: 21})
+	require.NoError(t, err)
+	require.Len(t, shared, 21, "the shared Limit is unchanged without PerKind")
+
+	hits, err := svc.Search(ctx, SearchInput{Query: "kind apart", PerKind: map[string]int{"memory": 21, "note": 21}})
+	require.NoError(t, err)
+	require.Equal(t, 21, countKind(hits, "memory"))
+	require.Equal(t, 3, countKind(hits, "note"), "every note, whatever the memories took")
+	require.Equal(t, "memory", hits[0].Kind)
+	require.Equal(t, "note", hits[len(hits)-1].Kind)
+
+	hits, err = svc.Search(ctx, SearchInput{Query: "kind apart", PerKind: map[string]int{"memory": 200, "note": 21}})
+	require.NoError(t, err)
+	require.Equal(t, 30, countKind(hits, "memory"), "a cap past the old depth still finds every match")
+}
+
+// StarredOnly ranks the starred set on its own, so a starred match past the
+// candidate depth is found; StarredFirst puts it ahead of every unstarred
+// match. Neither moves a semantic-only starred item past the floor.
+func TestSearch_StarredLaneReachesPastTheDepth(t *testing.T) {
+	db := setupDB(t)
+	ctx := context.Background()
+	for i := range 80 {
+		insMem(t, db, fmt.Sprintf("01STD%02d", i), "gotcha", fmt.Sprintf("deep-%02d", i), "deep lane deep lane", "seam")
+	}
+	// The weakest lexical match: one term once, after 80 stronger ones.
+	insMem(t, db, "01STZ", "gotcha", "zz-starred", "lane", "seam")
+	starSearchItem(t, db, "memories_index", "01STZ")
+	// Starred, semantic-only and far: below the floor.
+	insMem(t, db, "01STFAR", "gotcha", "far-starred", "nothing in common", "seam")
+	starSearchItem(t, db, "memories_index", "01STFAR")
+	require.NoError(t, store.UpsertEmbedding(ctx, db, "01STFAR", "memory", "test-embed", []float32{0.1, 0.99, 0}))
+	// Starred, semantic-only and near: above it.
+	insMem(t, db, "01STNEAR", "gotcha", "near-starred", "nothing in common either", "seam")
+	starSearchItem(t, db, "memories_index", "01STNEAR")
+	require.NoError(t, store.UpsertEmbedding(ctx, db, "01STNEAR", "memory", "test-embed", []float32{0.9, 0.1, 0}))
+
+	lexical := New(db, nil, budgets(), nil)
+	plain, err := lexical.Search(ctx, SearchInput{Query: "deep lane", PerKind: map[string]int{"memory": 21}})
+	require.NoError(t, err)
+	require.NotContains(t, hitIDs(plain), "01STZ", "without the starred rule the depth cuts it")
+
+	only, err := lexical.Search(ctx, SearchInput{Query: "deep lane", PerKind: map[string]int{"memory": 21}, Starred: store.StarredOnly})
+	require.NoError(t, err)
+	require.Equal(t, []string{"01STZ"}, hitIDs(only))
+	require.True(t, only[0].Favorite)
+	require.NotEmpty(t, only[0].Snippet, "the starred lane quotes its match like the rest")
+
+	first, err := lexical.Search(ctx, SearchInput{Query: "deep lane", PerKind: map[string]int{"memory": 21}, Starred: store.StarredFirst})
+	require.NoError(t, err)
+	require.Len(t, first, 21)
+	require.Equal(t, "01STZ", first[0].ID)
+	require.Equal(t, 1, strings.Count(strings.Join(hitIDs(first), " "), "01STZ"), "a starred item is never listed twice")
+
+	semantic := New(db, fixedEmbedder{vec: []float32{1, 0, 0}}, budgets(), nil)
+	semantic.SetSearchConfig(config.Search{SemanticFloor: 0.3})
+	only, err = semantic.Search(ctx, SearchInput{Query: "deep lane", Semantic: true, PerKind: map[string]int{"memory": 21}, Starred: store.StarredOnly})
+	require.NoError(t, err)
+	ids := hitIDs(only)
+	require.Contains(t, ids, "01STZ")
+	require.Contains(t, ids, "01STNEAR", "a near starred neighbor clears the floor")
+	require.NotContains(t, ids, "01STFAR", "the floor holds in the starred lane too")
+	for _, h := range only {
+		if h.ID == "01STNEAR" {
+			require.InDelta(t, 0.99, h.Similarity, 0.01)
+		}
+	}
+}
+
+// One embedding per search, however many kinds and lanes rank it.
+func TestSearch_PerKindEmbedsOnce(t *testing.T) {
+	db := setupDB(t)
+	ctx := context.Background()
+	insMem(t, db, "01EMB", "gotcha", "embed-once", "embed once", "seam")
+	starSearchItem(t, db, "memories_index", "01EMB")
+	insSearchNote(t, db, "01EMN", "embed-note", "embed once", "seam")
+	starSearchItem(t, db, "notes_index", "01EMN")
+
+	calls := 0
+	svc := New(db, countingEmbedder{vec: []float32{1, 0, 0}, calls: &calls}, budgets(), nil)
+	_, err := svc.Search(ctx, SearchInput{Query: "embed once", Semantic: true,
+		PerKind: map[string]int{"memory": 21, "note": 21}, Starred: store.StarredFirst})
+	require.NoError(t, err)
+	require.Equal(t, 1, calls)
+
+	calls = 0
+	_, err = svc.Search(ctx, SearchInput{Query: "embed once", Semantic: false,
+		PerKind: map[string]int{"memory": 21, "note": 21}, Starred: store.StarredFirst})
+	require.NoError(t, err)
+	require.Zero(t, calls, "the palette's fast path never embeds")
+}
+
+// The starred lane keeps the degradation contract: with Starred only there is
+// no other lane to run it, so the lane itself surfaces a local config error
+// and degrades to lexical on a provider failure.
+func TestSearch_StarredOnlyKeepsTheEmbedderContract(t *testing.T) {
+	db := setupDB(t)
+	ctx := context.Background()
+	insMem(t, db, "01SEC", "gotcha", "contract-starred", "chroma health check", "seam")
+	starSearchItem(t, db, "memories_index", "01SEC")
+	in := SearchInput{Query: "chroma health check", Semantic: true, PerKind: map[string]int{"memory": 5}, Starred: store.StarredOnly}
+
+	badReq := fmt.Errorf("llm.OpenAI.Embed: %w: new request: parse %q: missing protocol scheme", llm.ErrConfig, "://x")
+	_, err := New(db, erroringEmbedder{err: badReq}, budgets(), slog.New(slog.DiscardHandler)).Search(ctx, in)
+	require.ErrorIs(t, err, llm.ErrConfig)
+
+	down := fmt.Errorf("llm.OpenAI.Embed: %w: dial tcp: connection refused", llm.ErrUnavailable)
+	hits, err := New(db, erroringEmbedder{err: down}, budgets(), slog.New(slog.DiscardHandler)).Search(ctx, in)
+	require.NoError(t, err)
+	require.Equal(t, []string{"01SEC"}, hitIDs(hits))
+	require.Equal(t, "fts", hits[0].Source)
+}
+
+// The starred rule needs per-kind ranking; asking for it on the shared-Limit
+// ranking is refused rather than ignored.
+func TestSearch_StarredNeedsPerKind(t *testing.T) {
+	svc := New(setupDB(t), nil, budgets(), nil)
+	_, err := svc.Search(context.Background(), SearchInput{Query: "anything", Starred: store.StarredOnly})
+	require.ErrorContains(t, err, "Starred needs PerKind")
 }

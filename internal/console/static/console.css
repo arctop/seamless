@@ -7928,6 +7928,32 @@ body:has(.build-notice-card:not([hidden])) .main { padding-bottom: calc(112px + 
   .mishap-mem-scope { display: none; }
 }
 
+/* UX 19: search */
+/* A cut kind's count reads "20+", with its Show more inside the breakdown chip;
+   a kind still cut after Show more says so under the results. */
+.search-breakdown .search-more { margin-left: 2px; color: var(--brand); font-weight: 650; text-decoration: underline; text-underline-offset: 2px; }
+.search-breakdown .search-more:hover { color: var(--brand-strong); }
+.search-capped { margin: 10px 4px 0; color: var(--muted); font-size: var(--text-xs); }
+/* A superseded or archived memory: badged, and quieter than live knowledge. */
+.search-result[data-retired] .search-result-titleline a { color: var(--muted); }
+.search-result-meta .search-retired { font-size: var(--text-2xs); }
+.search-successor { display: inline-flex; align-items: baseline; gap: 4px; color: var(--muted); }
+.search-successor a { color: var(--brand); font-family: var(--font-mono); overflow-wrap: anywhere; }
+/* The empty state: each active restriction as a chip that removes it, and the
+   line that includes archived memories. */
+.search-chips { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; font-style: normal; }
+.search-chip {
+  display: inline-flex; align-items: center; gap: 5px; padding: 4px 6px 4px 10px;
+  border: 1px solid color-mix(in oklab, var(--brand) 30%, transparent); border-radius: var(--radius-pill);
+  color: var(--brand); background: var(--brand-soft); font-size: var(--text-xs); font-weight: 650;
+}
+.search-chip .ico { width: 13px; height: 13px; }
+.search-chip:hover { color: var(--brand-strong); border-color: var(--brand); }
+.search-empty .search-chip-clear { color: var(--muted); font-size: var(--text-xs); }
+.search-empty-retired { color: var(--muted); font-size: var(--text-sm); font-style: normal; }
+/* The palette's "More in Search" row closes a cut group. */
+.cmdk-opt.cmdk-more .t { color: var(--brand); }
+
 /* UX 02: task rows */
 /* A task row's copy button stays quiet until its row is hovered or focused
    (a rail row, a step's summary, a plan's step list), and is always there on

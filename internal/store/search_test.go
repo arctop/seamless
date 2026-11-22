@@ -3,12 +3,15 @@ package store
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/arctop/seamless/internal/access"
+	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 )
 
@@ -370,4 +373,191 @@ func TestSearchPlans_ExactSlugRanksBeforeTitleMatchAndLimit(t *testing.T) {
 	require.Len(t, got, 1)
 	require.Equal(t, "target-plan", got[0].Slug,
 		"an exact stable slug must survive a limit ahead of a newer title-only match")
+}
+
+// The console's starred rule runs in the query, before LIMIT: StarredOnly
+// keeps a starred row the plain order ranks last, and StarredFirst gives it the
+// first slot, whatever the window and order would have cut.
+func TestSearchFiltered_StarredRuleRunsBeforeLimit(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	at := func(minutes int) string { return core.FormatTime(now.Add(-time.Duration(minutes) * time.Minute)) }
+	for i := range 5 {
+		insertSearchTask(t, db, fmt.Sprintf("01STAR%d", i), "seam", "starred rule task", "", at(i))
+	}
+	_, err := db.ExecContext(ctx, `UPDATE tasks SET favorite = 1 WHERE id = '01STAR4'`)
+	require.NoError(t, err)
+
+	plain, err := SearchTasksFiltered(ctx, db, "starred rule", SearchFilter{}, 2)
+	require.NoError(t, err)
+	require.Equal(t, []string{"01STAR0", "01STAR1"}, []string{plain[0].ID, plain[1].ID})
+
+	only, err := SearchTasksFiltered(ctx, db, "starred rule", SearchFilter{Starred: StarredOnly}, 2)
+	require.NoError(t, err)
+	require.Len(t, only, 1)
+	require.Equal(t, "01STAR4", only[0].ID)
+
+	first, err := SearchTasksFiltered(ctx, db, "starred rule", SearchFilter{Starred: StarredFirst}, 2)
+	require.NoError(t, err)
+	require.Equal(t, []string{"01STAR4", "01STAR0"}, []string{first[0].ID, first[1].ID})
+
+	none, err := SearchTasksFiltered(ctx, db, "starred rule", SearchFilter{Since: now.Add(-2 * time.Minute), Starred: StarredOnly}, 2)
+	require.NoError(t, err)
+	require.Empty(t, none, "the window still applies to a starred row")
+
+	// Plans merge their sources first, then take the rule.
+	insertSearchNote(t, db, "01PN1", "Rule plan", "rule-plan-a", "seam", `["plan:rule-plan-a"]`, at(0))
+	insertSearchNote(t, db, "01PN2", "Rule plan starred", "rule-plan-b", "seam", `["plan:rule-plan-b"]`, at(9))
+	_, err = db.ExecContext(ctx, `UPDATE notes_index SET favorite = 1 WHERE id = '01PN2'`)
+	require.NoError(t, err)
+	plans, err := SearchPlansFiltered(ctx, db, "rule plan", SearchFilter{Starred: StarredFirst}, 1)
+	require.NoError(t, err)
+	require.Equal(t, "rule-plan-b", plans[0].Slug)
+	plans, err = SearchPlansFiltered(ctx, db, "rule plan", SearchFilter{Starred: StarredOnly}, 5)
+	require.NoError(t, err)
+	require.Len(t, plans, 1)
+
+	// The other kinds take the same rule.
+	for _, stmt := range []string{
+		`INSERT INTO sessions (id, name, project_slug, status, findings, created_at, updated_at) VALUES ('01SS1', 'cc/rule', 'seam', 'active', 'starred rule', '` + at(0) + `', '` + at(0) + `')`,
+		`INSERT INTO projects (id, slug, name, created_at, updated_at) VALUES ('01PR1', 'rule-project', 'Rule', '` + at(0) + `', '` + at(0) + `')`,
+	} {
+		_, err := db.ExecContext(ctx, stmt)
+		require.NoError(t, err)
+	}
+	sessions, err := SearchSessionsFiltered(ctx, db, "starred rule", SearchFilter{Starred: StarredOnly}, 5)
+	require.NoError(t, err)
+	require.Empty(t, sessions)
+	projects, err := SearchProjectsFiltered(ctx, db, "rule-project", SearchFilter{Starred: StarredOnly}, 5)
+	require.NoError(t, err)
+	require.Empty(t, projects)
+	trials, err := SearchTrialsFiltered(ctx, db, "rule", SearchFilter{Starred: StarredOnly}, 5)
+	require.NoError(t, err)
+	require.Empty(t, trials)
+}
+
+// Retired memories have their own console-only lookup. On every search it
+// finds one only by exact id or whole name; with text it also finds them by
+// body. A live memory never answers here, and the window and starred rule hold.
+func TestSearchRetiredMemories_ExactAndText(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	recent, old := core.FormatTime(now.Add(-time.Hour)), core.FormatTime(now.Add(-72*time.Hour))
+	insertMemory(t, db, "01RTSUP", "gotcha", "boot-order", "old order", "seam", "the zeppelin order", recent, recent)
+	_, err := db.ExecContext(ctx, `UPDATE memories_index SET superseded_by = '01RTLIVE' WHERE id = '01RTSUP'`)
+	require.NoError(t, err)
+	insertMemory(t, db, "01RTLIVE", "gotcha", "boot-order-v2", "live order", "seam", "the zeppelin order", recent, "")
+	insertMemory(t, db, "01RTOLD", "gotcha", "boot-order-older", "older", "seam", "the zeppelin order", old, old)
+
+	exact, err := SearchRetiredMemories(ctx, db, "BOOT-ORDER", SearchFilter{}, true, 20)
+	require.NoError(t, err)
+	require.Len(t, exact, 1, "the whole name, any case; not a name that only contains it")
+	require.Equal(t, "01RTSUP", exact[0].Memory.ID)
+	require.Equal(t, IdentifierMatchExactIdentifier, exact[0].Match)
+	require.Equal(t, "01RTLIVE", exact[0].Memory.SupersededBy)
+
+	byID, err := SearchRetiredMemories(ctx, db, "01rtold", SearchFilter{}, true, 20)
+	require.NoError(t, err)
+	require.Len(t, byID, 1)
+	require.Equal(t, IdentifierMatchExactID, byID[0].Match)
+
+	none, err := SearchRetiredMemories(ctx, db, "zeppelin", SearchFilter{}, true, 20)
+	require.NoError(t, err)
+	require.Empty(t, none, "no text match without Include archived")
+
+	text, err := SearchRetiredMemories(ctx, db, "zeppelin", SearchFilter{}, false, 20)
+	require.NoError(t, err)
+	ids := []string{}
+	for _, h := range text {
+		ids = append(ids, h.Memory.ID)
+		require.Contains(t, h.Snippet, SnippetStartMark+"zeppelin"+SnippetEndMark)
+	}
+	require.ElementsMatch(t, []string{"01RTSUP", "01RTOLD"}, ids, "never the live one")
+
+	named, err := SearchRetiredMemories(ctx, db, "boot-order", SearchFilter{}, false, 20)
+	require.NoError(t, err)
+	require.Len(t, named, 2, "with text on, part of a name counts too")
+	require.Equal(t, "01RTSUP", named[0].Memory.ID, "the exact name first")
+
+	windowed, err := SearchRetiredMemories(ctx, db, "zeppelin", SearchFilter{Since: now.Add(-24 * time.Hour)}, false, 20)
+	require.NoError(t, err)
+	require.Len(t, windowed, 1)
+	require.Equal(t, "01RTSUP", windowed[0].Memory.ID)
+
+	_, err = db.ExecContext(ctx, `UPDATE memories_index SET favorite = 1 WHERE id = '01RTOLD'`)
+	require.NoError(t, err)
+	starred, err := SearchRetiredMemories(ctx, db, "zeppelin", SearchFilter{Starred: StarredOnly}, false, 20)
+	require.NoError(t, err)
+	require.Len(t, starred, 1)
+	require.Equal(t, "01RTOLD", starred[0].Memory.ID)
+	first, err := SearchRetiredMemories(ctx, db, "zeppelin", SearchFilter{Starred: StarredFirst}, false, 1)
+	require.NoError(t, err)
+	require.Equal(t, "01RTOLD", first[0].Memory.ID)
+}
+
+// The identifier lane applies the caller's peer_auth reach before its LIMIT,
+// like the fts leg: a locked project's exact match neither answers nor takes
+// the depth.
+func TestSearchKnowledgeIdentifiers_ReachBeforeLimit(t *testing.T) {
+	db := openTestDB(t)
+	now := time.Now().UTC()
+	insertMemory(t, db, "01LOCKED", "gotcha", "reach-name-locked", "d", "example-locked", "body", core.FormatTime(now), "")
+	insertMemory(t, db, "01OPEN", "gotcha", "reach-name-open", "d", "example-open", "body", core.FormatTime(now.Add(-time.Hour)), "")
+	p, err := access.New(config.PeerAuth{Enabled: true, Owner: "owner", ForceLocked: []string{"example-locked"}},
+		func(name string) (access.Account, error) { return access.Account{UID: 501, Name: name}, nil })
+	require.NoError(t, err)
+	ctx := access.WithView(context.Background(), p.OwnerView())
+
+	hits, err := SearchKnowledgeIdentifiersSince(ctx, db, "reach-name", []string{"memory"}, nil, time.Time{}, 1)
+	require.NoError(t, err)
+	require.Len(t, hits, 1)
+	require.Equal(t, "01OPEN", hits[0].ItemID)
+
+	hits, err = SearchKnowledgeIdentifiersSince(context.Background(), db, "reach-name", []string{"memory"}, nil, time.Time{}, 5)
+	require.NoError(t, err)
+	require.Len(t, hits, 2, "with no View, both")
+}
+
+// The starred lane's reads: the starred set of one kind (active, in the
+// window, in reach), a match restricted to it, and its vectors.
+func TestStarredLaneReads(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	insertMemory(t, db, "01SLA", "gotcha", "lane-a", "d", "seam", "starred lane text", core.FormatTime(now), "")
+	insertMemory(t, db, "01SLB", "gotcha", "lane-b", "d", "seam", "starred lane text", core.FormatTime(now), core.FormatTime(now))
+	insertMemory(t, db, "01SLC", "gotcha", "lane-c", "d", "seam", "starred lane text", core.FormatTime(now), "")
+	insertSearchNote(t, db, "01SLN", "Lane note", "lane-note", "seam", `[]`, core.FormatTime(now))
+	_, err := db.ExecContext(ctx, `UPDATE memories_index SET favorite = 1 WHERE id IN ('01SLA', '01SLB')`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `UPDATE notes_index SET favorite = 1 WHERE id = '01SLN'`)
+	require.NoError(t, err)
+
+	mems, err := StarredKnowledge(ctx, db, core.ItemKindMemory, nil, time.Time{})
+	require.NoError(t, err)
+	require.Len(t, mems, 1, "the archived starred memory is not live")
+	require.Equal(t, StarredItem{ID: "01SLA", Kind: "memory", Identifier: "lane-a", Project: "seam", Updated: mems[0].Updated}, mems[0])
+	notes, err := StarredKnowledge(ctx, db, core.ItemKindNote, []string{"seam"}, now.Add(-time.Hour))
+	require.NoError(t, err)
+	require.Len(t, notes, 1)
+	require.Equal(t, "lane-note", notes[0].Identifier)
+	_, err = StarredKnowledge(ctx, db, "task", nil, time.Time{})
+	require.Error(t, err)
+
+	hits, err := FTSSearchSnippetsWithin(ctx, db, "starred lane", []string{"01SLA", "01SLN"})
+	require.NoError(t, err)
+	require.Len(t, hits, 1, "only the given ids, and only those that match")
+	require.Equal(t, "01SLA", hits[0].ItemID)
+	require.Contains(t, hits[0].Snippet, SnippetStartMark)
+	hits, err = FTSSearchSnippetsWithin(ctx, db, "x", []string{"01SLA"})
+	require.NoError(t, err)
+	require.Empty(t, hits)
+
+	require.NoError(t, UpsertEmbedding(ctx, db, "01SLA", "memory", "m1", []float32{1, 0}))
+	require.NoError(t, UpsertEmbedding(ctx, db, "01SLC", "memory", "m2", []float32{0, 1}))
+	vecs, err := EmbeddingsFor(ctx, db, "m1", []string{"01SLA", "01SLC", "01NONE"})
+	require.NoError(t, err)
+	require.Equal(t, map[string][]float32{"01SLA": {1, 0}}, vecs, "one model's vectors, for the given ids")
 }

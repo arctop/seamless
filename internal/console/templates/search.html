@@ -1,10 +1,9 @@
 {{define "content"}}
 {{with .Data}}
-{{$query := .Query}}{{$scope := .Scope}}{{$window := .Window}}{{$sort := .Sort}}{{$fav := .Fav}}
 <header class="mv2-bar">
   <h1>{{icon "search"}}Search</h1>{{about "Everything the console can link to, in one query."}}
-  {{if .Query}}<span class="mv2-count" aria-label="{{.Total}} results">
-    <strong>{{.Total}}</strong>match{{if ne .Total 1}}es{{end}}<small>for &ldquo;{{.Query}}&rdquo; &middot; {{.WindowLabel}}</small>
+  {{if and .Query (not .TooShort)}}<span class="mv2-count" aria-label="{{.Total}}{{if .Partial}} or more{{end}} results">
+    <strong>{{.Total}}{{if .Partial}}+{{end}}</strong>match{{if or .Partial (ne .Total 1)}}es{{end}}<small>for &ldquo;{{.Query}}&rdquo; &middot; {{.WindowLabel}}</small>
   </span>{{end}}
   <button type="button" class="mv2-filter-toggle" data-filters-toggle aria-expanded="false" aria-controls="mv2-controls">{{icon "sliders"}}<span>Filters</span></button>
   <span class="mv2-spacer"></span>
@@ -18,7 +17,7 @@
   <input type="hidden" name="scope" value="{{.Scope}}">
   <input type="hidden" name="w" value="{{.Window}}">
   <input type="hidden" name="sort" value="{{.Sort}}">
-  {{if .Fav}}<input type="hidden" name="fav" value="1">{{end}}
+  {{if .Fav}}<input type="hidden" name="fav" value="1">{{end}}{{if .Archived}}<input type="hidden" name="archived" value="1">{{end}}{{/* no more: a new query starts with every Show more closed */}}
   <button class="search-submit" type="submit">Search</button>
 </form>
 
@@ -27,7 +26,7 @@
     <span class="search-control-label">Type</span>
     <div class="search-pills" role="list" aria-label="Result type" data-seam-query>
       {{range .Scopes}}
-      <a class="{{if .Active}}active{{end}}" href="/console/search?scope={{.Key}}&amp;w={{$window}}&amp;sort={{$sort}}{{if $fav}}&amp;fav=1{{end}}&amp;q={{$query}}"{{if .Active}} aria-current="page"{{end}}>{{.Label}}</a>
+      <a class="{{if .Active}}active{{end}}" href="{{.Href}}"{{if .Active}} aria-current="page"{{end}}>{{.Label}}</a>
       {{end}}
     </div>
   </div>
@@ -36,7 +35,7 @@
     <span class="search-control-label">Updated</span>
     <div class="search-pills search-time-pills" role="list" aria-label="Time window" data-seam-query>
       {{range .Windows}}
-      <a class="{{if .Active}}active{{end}}" href="/console/search?scope={{$scope}}&amp;w={{.Key}}&amp;sort={{$sort}}{{if $fav}}&amp;fav=1{{end}}&amp;q={{$query}}"{{if .Active}} aria-current="page"{{end}}>{{.Label}}</a>
+      <a class="{{if .Active}}active{{end}}" href="{{.Href}}"{{if .Active}} aria-current="page"{{end}}>{{.Label}}</a>
       {{end}}
     </div>
   </div>
@@ -44,15 +43,25 @@
   <div class="search-control">
     <span class="search-control-label">Starred</span>
     <div class="search-pills" role="list" aria-label="Starred only" data-seam-query>
-      <a class="{{if .Fav}}active{{end}}" href="/console/search?scope={{$scope}}&amp;w={{$window}}&amp;sort={{$sort}}{{if not $fav}}&amp;fav=1{{end}}&amp;q={{$query}}"{{if .Fav}} aria-current="page"{{end}}>{{icon "star"}} Starred only</a>
+      <a class="{{if .Fav}}active{{end}}" href="{{.StarredHref}}"{{if .Fav}} aria-current="page"{{end}}>{{icon "star"}} Starred only</a>
     </div>
   </div>
+  {{if .ArchivedOffered}}
+  <div class="search-control">
+    <span class="search-control-label">Archived</span>
+    <div class="search-pills" role="list" aria-label="Include archived" data-seam-query>
+      <a class="{{if .Archived}}active{{end}}" href="{{.ArchivedHref}}"{{if .Archived}} aria-current="page"{{end}} title="Superseded and archived memories, found by text as well as by exact name">{{icon "archive"}} Include archived</a>
+    </div>
+  </div>
+  {{end}}
   {{if $.Level.AtLeast "standard"}}
   <form class="search-sort" method="get" action="/console/search" data-seam-query data-seam-auto-submit>
     <input type="hidden" name="q" value="{{.Query}}">
     <input type="hidden" name="scope" value="{{.Scope}}">
     <input type="hidden" name="w" value="{{.Window}}">
     {{if .Fav}}<input type="hidden" name="fav" value="1">{{end}}
+    {{if .Archived}}<input type="hidden" name="archived" value="1">{{end}}
+    {{with .MoreParam}}<input type="hidden" name="more" value="{{.}}">{{end}}
     <label for="search-sort">Sort</label>
     <select id="search-sort" name="sort">
       {{range .Sorts}}<option value="{{.Key}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}
@@ -66,21 +75,22 @@
   <div class="list-pane">
 {{if .Rows}}
     <div class="search-results-head">
-      <div class="search-breakdown" aria-label="Result counts by type">
-        {{range .Groups}}<span data-search-kind="{{.Kind}}"><b>{{.Count}}</b> {{.Label}}</span>{{end}}
+      <div class="search-breakdown" aria-label="Result counts by type" data-seam-query>
+        {{range .Groups}}<span data-search-kind="{{.Kind}}"><b>{{.Count}}{{if .More}}+{{end}}</b> {{.Label}}{{with .MoreHref}} <a class="search-more" href="{{.}}">Show more</a>{{end}}</span>{{end}}
       </div>
       <span class="search-order-note">{{if eq .Sort "relevance"}}Best matches first{{else}}Sorted by {{.Sort}}{{end}}</span>
     </div>
     <section class="search-results" aria-label="Search results">
       {{range .Rows}}
-      <article class="search-result row-link" data-search-kind="{{.Kind}}" data-href="{{.Href}}"{{if .Peek}} data-peek{{end}}>
+      <article class="search-result row-link" data-search-kind="{{.Kind}}" data-href="{{.Href}}"{{if .Peek}} data-peek{{end}}{{with .Retired}} data-retired="{{.}}"{{end}}>
         <div class="search-result-body">
           <div class="search-result-titleline">
             {{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}<strong><a href="{{.Href}}"{{if .Peek}} data-peek{{end}}>{{.Title}}</a></strong>{{copyBtn .Title}}
           </div>
           {{if .SnippetHTML}}<div class="search-result-desc">{{.SnippetHTML}}</div>{{else if .Description}}<div class="search-result-desc">{{.Description}}</div>{{end}}
           <div class="search-result-meta">
-            <span class="search-kind">{{.Kind}}</span>
+            <span class="search-kind">{{.Kind}}</span>{{with .Retired}}
+            <span class="badge{{if eq . "superseded"}} warn{{end}} search-retired">{{.}}</span>{{end}}{{with .SupersededBy}}<span class="search-successor">by <a href="{{.Href}}" data-peek>{{.Name}}</a></span>{{end}}
             {{if and .Identifier (ne .Identifier .Title)}}<span class="search-identifier">{{.Identifier}}</span>{{end}}
             {{if .MatchedID}}<span class="search-identifier search-matched-id">{{.MatchedID}}</span>{{end}}
             <span class="search-project">{{icon "folder-tree"}}{{if .Project}}{{.Project}}{{else}}global{{end}}</span>
@@ -108,13 +118,21 @@
         </div>
       </article>
       {{end}}
-    </section>
-{{else}}
-{{if .Query}}
-    <div class="empty dotgrid search-empty"><span class="empty-ico">{{icon "search"}}</span><div>Nothing matches &ldquo;{{.Query}}&rdquo; in {{.WindowLabel}}.</div><a href="/console/search?scope={{.Scope}}&amp;w=all&amp;sort={{.Sort}}&amp;q={{.Query}}" data-seam-query>Search all time</a></div>
+    </section>{{range .Groups}}{{with .Capped}}
+    <p class="search-capped">{{.}}</p>{{end}}{{end}}
+{{else if .TooShort}}
+    <div class="empty dotgrid search-empty"><span class="empty-ico">{{icon "search"}}</span><div>Type at least 2 characters to search.</div></div>
+{{else if .Query}}
+    <div class="empty dotgrid search-empty"><span class="empty-ico">{{icon "search"}}</span>
+      <div>Nothing matches &ldquo;{{.Query}}&rdquo;{{if .Chips}} with {{if gt (len .Chips) 1}}these filters{{else}}this filter{{end}}{{end}}.</div>
+      {{if .Chips}}<div class="search-chips" aria-label="Active filters" data-seam-query>
+        {{range .Chips}}<a class="search-chip" href="{{.Href}}" aria-label="Remove the filter: {{.Label}}" title="Remove this filter">{{.Label}}{{icon "x"}}</a>{{end}}
+        {{with .ClearHref}}<a class="search-chip-clear" href="{{.}}">Clear all filters</a>{{end}}
+      </div>{{end}}
+      {{with .RetiredHint}}<div class="search-empty-retired" data-seam-query>{{.}} <a href="{{$.Data.ArchivedHref}}">Include archived</a></div>{{end}}
+    </div>
 {{else}}
     <div class="empty dotgrid search-empty"><span class="empty-ico">{{icon "search"}}</span><div>Search {{.ScopeNoun}} &mdash; or press <kbd>Ctrl</kbd>+<kbd>K</kbd> or <kbd>Cmd</kbd>+<kbd>K</kbd> anywhere in the console.</div></div>
-{{end}}
 {{end}}
   </div><!-- .list-pane -->
   <section id="detail-pane" class="detail-pane" hidden aria-live="polite" aria-label="Result detail">
