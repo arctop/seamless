@@ -15,6 +15,33 @@ bumps) filtered out. Each heading links the release's downloads and checksums.
 Install with one command ([quickstart](/quickstart/)), or update an existing
 install in place with `seamlessd update`.
 
+## v0.10.6 {#v0-10-6}
+
+Released 2026-11-22 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.10.6)
+
+### Features
+
+- feat(mishaps): a mishap report names its type, and the console and seam mishaps list them by type
+- feat(console, seam): a task's earlier bodies on its page and in its peek, and seam task append
+- feat(diary): the Diary's pass in a real browser: wrapping labels, a centered ring, 2x2 tiles on a phone, and words for the day's character
+- feat(diary): with the Diary on, a Claude Code session's usage ledger is kept current while it runs, read after a prompt is answered at most once every three minutes
+- feat(tasks): a task keeps the bodies tasks_update replaces, and body_append adds a line without replacing it
+- feat(console): the Diary, an optional screen with a page for each day of work: what was worked on and what it took
+- feat(diary): the Diary's day model turns a local day into ranked threads of work, with its usage, kept items, moments and headline
+- feat(demoseed): demoseed -diary seeds three weeks of believable history for the Diary
+- feat(console): chart primitives for the Diary: ring, day rhythm, ranked bars, token mix, month grid, presence strip, stat tile
+- feat(sessions): a usage ledger keeps each session's model tokens by quarter-hour, model and thread, and a session ended before SessionEnd now gets its token totals
+
+### Fixes
+
+- fix(console): the g-chord hint is centered and the rail's name tag sits beside its item again, and both clear the update notice
+- fix(console): pages link the stylesheet and scripts by version, and a tab open across an upgrade offers a reload
+- fix(tasks): a gate's examples name a reviewer, not a founder
+- fix(hooks): a conversation on another machine records its skipped model sniff once, not on every prompt and turn
+- fix(console): a page in the back/forward cache lets its event stream go, and a peek keeps the clicked item in place
+- fix(hooks): read Claude Code's UserPromptSubmit prompt from "prompt", so prompt-time recall and notices reach Claude Code sessions
+- fix(sessions): session token totals now include the subagents a Claude Code session launched, so they rise; seam usage backfill fills the usage ledger from transcripts still on this computer
+
 ## v0.10.5 {#v0-10-5}
 
 Released 2026-11-21 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.10.5)
