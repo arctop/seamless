@@ -342,7 +342,7 @@ func TestSsHeads_OneLineAtEverySection(t *testing.T) {
 		{"gardener", true, true, "Who may act on its proposals, and which apply by themselves."},
 		{"briefing", true, true, "What every new agent session starts with."},
 		{"workspaces", true, false, "See which project each repository resolves to"},
-		{"engine", true, false, "How recall finds knowledge, how the briefing ranks it, and where it all lives."},
+		{"engine", true, false, "How recall finds knowledge, and how briefings rank it."},
 	} {
 		sec, _ := settingsSectionByID(tc.id)
 		page := getPeek(t, mux, "/console/settings?s="+tc.id).Body.String()
@@ -365,11 +365,12 @@ func TestSsHeads_OneLineAtEverySection(t *testing.T) {
 	}
 
 	// Knowledge engine sets nothing since the gardener's switches left for
-	// Settings > Gardener (UX 37); its read-only storage group carries a lock
-	// where its values are shown.
+	// Settings > Gardener (UX 37); its read-only Storage card carries a lock
+	// by its name.
 	engine := ssSection(t, getPeek(t, mux, "/console/settings?s=engine").Body.String(), "knowledge-engine")
 	require.NotContains(t, engine, `src-chip`)
-	require.Contains(t, engine, `<h3 id="engine-storage-title"><span class="settings-readonly" role="img" aria-label="Read only" title="Read only">`+string(icon("lock"))+`</span>Storage &amp; policy</h3>`)
+	require.Contains(t, engine, `<span class="eng-storage-ico" role="img" aria-label="Read only">`+string(icon("lock"))+`</span>
+          <h3 id="eng-storage-title">Storage</h3>`)
 	require.NotContains(t, engine, `class="gardener-source"><strong>`, "the per-switch source lines gave way to the chip")
 }
 
@@ -515,11 +516,11 @@ func TestSsStyles_RowsHeadsAndNoDeadRules(t *testing.T) {
 	css := string(consoleCSS)
 	require.Contains(t, css, "/* UX 34: Settings' sub-nav states and one-line heads.")
 	for _, rule := range []string{".settings-subnav-state {", ".settings-subnav-label {", ".settings-subnav-rule {",
-		".settings-section-head > .src-chip {", ".engine-group-head > .src-chip {"} {
+		".settings-section-head > .src-chip {"} {
 		require.Contains(t, css, rule)
 	}
 	for _, gone := range []string{".settings-zone-kicker", ".settings-access", ".settings-precedence", ".settings-subnav-copy",
-		".features-workbench-head", ".briefing-workbench-head"} {
+		".features-workbench-head", ".briefing-workbench-head", ".engine-group-head"} {
 		require.NotContains(t, css, gone)
 	}
 	for _, name := range append([]string{"templates/settings.html"}, settingsPartials...) {

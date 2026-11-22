@@ -45,7 +45,20 @@ type briefingPreview struct {
 	Tokens  int `json:"tokens"`
 	Budget  int `json:"budget"`
 	HardCap int `json:"hardCap"`
+	// Presets prices each preset for the same project, when the request asked
+	// (presets=1): the page asks when it opens and when the project changes,
+	// never on a knob edit, so an edit costs one assembly.
+	Presets []presetEstimate `json:"presets,omitempty"`
 }
+
+// presetEstimate is a preset's token estimate for the previewed project.
+type presetEstimate struct {
+	Key    string `json:"key"`
+	Tokens int    `json:"tokens"`
+}
+
+// TokensLabel is the estimate digit-grouped for reading ("1,240").
+func (e presetEstimate) TokensLabel() string { return groupDigits(e.Tokens) }
 
 // OverBudget reports a briefing past its packing budget. Only the pinned
 // sections (constraints, pinned stages, starred rows) can put it there: they
@@ -95,7 +108,8 @@ func groupDigits(n int) string {
 // and validation, so a preview never accepts knobs a save would refuse; GET
 // previews the saved, effective knobs. The project comes from the "project"
 // field (POST) or query parameter (GET) and must name a registered, live
-// project. One assembly per request. The panel gets an HTML fragment; JSON
+// project. One assembly per request, and one more per preset when presets=1
+// asks for their estimates. The panel gets an HTML fragment; JSON
 // callers get the payload.
 func (s *Service) settingsBriefingPreview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -107,6 +121,7 @@ func (s *Service) settingsBriefingPreview(w http.ResponseWriter, r *http.Request
 	var knobs config.Briefing
 	knobsFrom := previewKnobsSaved
 	projectValues, projectPresent := r.URL.Query()["project"]
+	presetsValues, presetsPresent := r.URL.Query()["presets"]
 	if r.Method == http.MethodPost {
 		b, err := briefingFromForm(r)
 		if err != nil {
@@ -115,6 +130,7 @@ func (s *Service) settingsBriefingPreview(w http.ResponseWriter, r *http.Request
 		}
 		knobs, knobsFrom = b, previewKnobsForm
 		projectValues, projectPresent = r.PostForm["project"]
+		presetsValues, presetsPresent = r.PostForm["presets"]
 	} else {
 		b, _, err := store.BriefingConfig(ctx, s.db(ctx), s.cfg.BriefingCfg)
 		if err != nil {
@@ -122,6 +138,10 @@ func (s *Service) settingsBriefingPreview(w http.ResponseWriter, r *http.Request
 			return
 		}
 		knobs = b
+	}
+	if presetsPresent && (len(presetsValues) != 1 || presetsValues[0] != "1") {
+		s.previewError(w, r, http.StatusBadRequest, "presets must be omitted, or given once as 1")
+		return
 	}
 	// A locked project's briefing is what an agent session gets once the owner
 	// approves it, and the preview assembles it as an agent would: under the
@@ -154,6 +174,16 @@ func (s *Service) settingsBriefingPreview(w http.ResponseWriter, r *http.Request
 	p := briefingPreview{
 		Project: project, Knobs: knobsFrom, Text: text,
 		Tokens: retrieve.EstimateTokens(text), Budget: budget, HardCap: hardCap,
+	}
+	if presetsPresent {
+		for _, preset := range config.BriefingPresets() {
+			pt, err := s.cfg.Retrieve.PreviewBriefing(ctx, project, preset.Briefing)
+			if err != nil {
+				s.serverError(w, r, err)
+				return
+			}
+			p.Presets = append(p.Presets, presetEstimate{Key: preset.Key, Tokens: retrieve.EstimateTokens(pt)})
+		}
 	}
 	if wantsJSON(r) {
 		writeJSON(w, http.StatusOK, p)

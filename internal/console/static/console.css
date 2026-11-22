@@ -140,9 +140,15 @@
   color-scheme: light dark;
 }
 
+/* A theme chosen in the console wins over the system's for the browser's own
+   controls too (a select's text, scrollbars): with "light dark" alone they
+   follow the system, so a dark system drew white text in a light select. */
+[data-theme="light"] { color-scheme: light; }
+
 /* Dark theme -- the night observatory: ink-violet void, lit hairlines, light
    brightened for the dark. Only tokens are reassigned here. */
 [data-theme="dark"] {
+  color-scheme: dark;
   --void:          #04050a;
   --paper:         #07080e;
   --surface:       rgba(13, 16, 24, 0.86);
@@ -3136,21 +3142,10 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
 .settings-zone-head h2 { margin: 1px 0 0; font-family: var(--font-display); font-size: var(--text-xl); line-height: 1.15; letter-spacing: var(--tracking-tight); }
 .settings-zone-head p { margin: 3px 0 0; color: var(--muted); font-size: var(--text-sm); }
 
-.runtime-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; }
-.runtime-card {
-  position: relative; overflow: hidden; min-width: 0; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-lg);
-  background: var(--surface); box-shadow: var(--shadow-sm);
-}
-.runtime-card::after { content: ""; position: absolute; inset: auto -42px -66px auto; width: 130px; height: 130px; border: 19px solid color-mix(in oklab, var(--brand) 6%, transparent); border-radius: 50%; pointer-events: none; }
-.storage-card { grid-column: span 5; }
-.budgets-card { grid-column: span 7; }
-.runtime-card-head { position: relative; z-index: 1; display: flex; align-items: center; gap: 10px; margin-bottom: 17px; }
-.runtime-card-head > div { display: flex; flex-direction: column; min-width: 0; }
-.runtime-card-head > div > span, .briefing-title > div > span, .registry-panel-head > div > span {
+.registry-panel-head > div > span {
   color: var(--faint); font-size: var(--text-2xs); font-weight: 700; letter-spacing: var(--tracking-wide); text-transform: uppercase;
 }
-.runtime-card-head h3, .briefing-title h3, .registry-panel-head h3 { margin: 0; font-family: var(--font-display); font-size: var(--text-md); line-height: 1.25; }
-.runtime-card-head .badge { margin-left: auto; }
+.registry-panel-head h3 { margin: 0; font-family: var(--font-display); font-size: var(--text-md); line-height: 1.25; }
 .runtime-icon {
   display: inline-flex; align-items: center; justify-content: center; width: 35px; height: 35px; flex: none;
   border-radius: var(--radius-md); color: var(--muted); background: var(--surface-2);
@@ -3158,58 +3153,6 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
 .runtime-icon.brand { color: var(--brand); background: var(--brand-soft); }
 .runtime-icon.pop { color: var(--pop-strong); background: var(--pop-soft); }
 .runtime-icon.ok { color: var(--ok); background: var(--ok-soft); }
-.storage-path {
-  position: relative; z-index: 1; display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 10px 11px;
-  border: 1px dashed color-mix(in oklab, var(--brand) 38%, var(--border)); border-radius: var(--radius-md);
-  background: color-mix(in oklab, var(--brand) 5%, var(--surface-2));
-}
-.storage-path .mono { min-width: 0; overflow-wrap: anywhere; color: var(--ink-2); font-size: var(--text-xs); }
-.storage-path .copy-btn { margin-left: auto; flex: none; }
-.storage-card > p { position: relative; z-index: 1; margin: 11px 0 0; color: var(--faint); font-size: var(--text-xs); }
-.budget-grid { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
-.budget-stat { min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2); }
-.budget-stat strong { color: var(--ink); font-family: var(--font-display); font-size: var(--text-2xl); line-height: 1; font-variant-numeric: tabular-nums; }
-.budget-stat > span { margin-left: 4px; color: var(--faint); font-size: var(--text-2xs); }
-.budget-stat small { display: block; margin-top: 7px; color: var(--muted); font-size: var(--text-2xs); font-weight: 650; letter-spacing: var(--tracking-wide); text-transform: uppercase; }
-.budget-stat.brand { box-shadow: inset 0 2px 0 color-mix(in oklab, var(--brand) 75%, transparent); }
-.budget-stat.ok { box-shadow: inset 0 2px 0 color-mix(in oklab, var(--ok) 75%, transparent); }
-.budget-stat.pop { box-shadow: inset 0 2px 0 color-mix(in oklab, var(--pop) 75%, transparent); }
-.budget-stat.warn { box-shadow: inset 0 2px 0 color-mix(in oklab, var(--warn) 75%, transparent); }
-
-/* Semantic index & storage (Settings zone 02) */
-.embedder-card { grid-column: span 4; display: flex; flex-direction: column; gap: 12px; }
-.embedder-card .runtime-card-head { margin-bottom: 0; }
-.vectors-card { grid-column: span 8; }
-.sqlite-card { grid-column: 1 / -1; }
-.sqlite-card > p { position: relative; z-index: 1; margin: 11px 0 0; color: var(--faint); font-size: var(--text-xs); }
-.embedder-facts { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 9px; }
-.embedder-facts > div { min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2); }
-.embedder-facts > div > span { display: block; color: var(--faint); font-size: var(--text-2xs); font-weight: 650; letter-spacing: var(--tracking-wide); text-transform: uppercase; }
-.embedder-facts strong { display: block; margin-top: 4px; overflow-wrap: anywhere; color: var(--ink-2); font-size: var(--text-xs); }
-.embedder-facts small { display: block; margin-top: 3px; color: var(--faint); font-size: var(--text-2xs); }
-.sqlite-card .embedder-facts { margin-top: 12px; }
-.embedder-reason, .embedder-restart {
-  position: relative; z-index: 1; display: flex; gap: 8px; margin: 0; padding: 10px 12px;
-  border: 1px solid color-mix(in oklab, var(--warn) 35%, var(--border)); border-radius: var(--radius-md);
-  background: color-mix(in oklab, var(--warn) 8%, var(--surface-2)); color: var(--muted); font-size: var(--text-xs);
-}
-.embedder-reason .ico, .embedder-restart .ico { width: 15px; height: 15px; flex: none; margin-top: 1px; color: var(--warn); }
-.embedder-reason.is-error { border-color: color-mix(in oklab, var(--danger) 40%, var(--border)); background: color-mix(in oklab, var(--danger) 8%, var(--surface-2)); }
-.embedder-reason.is-error .ico { color: var(--danger); }
-.embedder-reason .mono { overflow-wrap: anywhere; }
-.embedder-toggle-form { position: relative; z-index: 1; margin-top: auto; }
-.embedding-models-table { position: relative; z-index: 1; width: 100%; margin-top: 12px; border-collapse: collapse; font-size: var(--text-xs); }
-.embedding-models-table th {
-  padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--faint);
-  text-align: left; font-size: var(--text-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
-}
-.embedding-models-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--muted); vertical-align: middle; font-variant-numeric: tabular-nums; }
-.embedding-models-table tr:last-child td { border-bottom: none; }
-.embedding-models-table td:first-child { color: var(--ink-2); }
-.embedder-empty { position: relative; z-index: 1; margin: 12px 0 0; color: var(--faint); font-size: var(--text-xs); }
-.reembed-row { position: relative; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
-.reembed-row small { color: var(--faint); font-size: var(--text-2xs); }
-.reembed-row .badge .live-dot { margin-right: 5px; }
 
 /* The friendly page a gated route answers with: an explanation and the way
    back, never an error. */
@@ -3226,80 +3169,8 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
 .feature-off-blurb { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.5; }
 .feature-off-kept { margin: 0; color: var(--ink-2); font-size: var(--text-xs); line-height: 1.5; }
 
-.briefing-workbench {
-  overflow: clip; border: 1px solid color-mix(in oklab, var(--brand) 28%, var(--border)); border-radius: var(--radius-lg);
-  background: var(--surface); box-shadow: var(--shadow-md);
-}
-.briefing-title { display: flex; align-items: center; gap: 10px; }
-.config-flow { display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; flex: none; }
-.config-flow > .ico { width: 13px; height: 13px; color: var(--faint); }
-.config-node { padding: 5px 8px; border: 1px solid var(--border); border-radius: var(--radius-pill); color: var(--faint); background: var(--surface); font-size: var(--text-2xs); font-weight: 650; white-space: nowrap; }
-.config-node.active { color: var(--brand); border-color: color-mix(in oklab, var(--brand) 34%, var(--border)); background: var(--brand-soft); }
-.config-node.destination { color: var(--ok); border-color: color-mix(in oklab, var(--ok) 30%, var(--border)); background: var(--ok-soft); }
-.briefing-workbench form[data-briefing-form] { padding: 14px; }
-.briefing-groups { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; }
-.brief-group {
-  --group-accent: var(--brand); position: relative; min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-md);
-  background: color-mix(in oklab, var(--group-accent) 3%, var(--surface)); box-shadow: inset 0 2px 0 color-mix(in oklab, var(--group-accent) 70%, transparent);
-}
-.brief-group.memory-group { grid-column: span 5; }
-.brief-group.activity-group { --group-accent: var(--ok); grid-column: span 7; }
-.brief-group.planning-group { --group-accent: var(--pop); grid-column: span 5; }
-.brief-group.family-group { --group-accent: var(--k-decision); grid-column: span 7; }
-.brief-group.utility-group {
-  grid-column: 1 / -1; display: grid;
-  grid-template-columns: minmax(230px, .65fr) minmax(480px, 1.35fr);
-  grid-template-areas: "heading heading" "copy fields" "scopes scopes"; gap: 10px 24px; align-items: start;
-}
-.utility-group > header { grid-area: heading; }
-.brief-group.utility-group > p { grid-area: copy; min-height: 0; max-width: 48ch; margin: 0; }
-.utility-group > .brief-fields { grid-area: fields; }
-.utility-scopes { display: flex; flex-direction: column; grid-area: scopes; gap: 9px; margin-top: 5px; padding-top: 13px; border-top: 1px solid var(--border); }
-.utility-scopes h5 { margin: 0; color: var(--ink); font-family: var(--font-display); font-size: var(--text-sm); line-height: 1.2; }
-.utility-scopes > p { max-width: 680px; margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; }
-.utility-scopes-table { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
-.brief-group.ceiling-group { --group-accent: var(--warn); grid-column: 1 / -1; }
-.brief-group > header { display: flex; align-items: center; gap: 9px; }
-.brief-group-icon { display: inline-flex; align-items: center; justify-content: center; width: 29px; height: 29px; border-radius: var(--radius-sm); color: var(--group-accent); background: color-mix(in oklab, var(--group-accent) 12%, var(--surface)); }
-.brief-group-icon .ico { width: 15px; height: 15px; }
-.brief-group > header > div { display: flex; flex-direction: column; }
-.brief-group > header span:not(.brief-group-icon) { color: var(--group-accent); font-size: var(--text-2xs); font-weight: 700; letter-spacing: var(--tracking-wide); text-transform: uppercase; }
-.brief-group h4 { margin: 0; font-family: var(--font-display); font-size: var(--text-md); line-height: 1.2; }
-.brief-group > p { min-height: 34px; margin: 8px 0 13px; color: var(--faint); font-size: var(--text-xs); line-height: 1.4; }
-.brief-fields { display: grid; gap: 12px; }
-.brief-fields.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.brief-fields.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.brief-field { display: flex; flex-direction: column; min-width: 0; gap: 5px; color: var(--ink-2); font-size: var(--text-xs); font-weight: 650; }
-.brief-field > small { color: var(--faint); font-size: var(--text-2xs); font-weight: 450; line-height: 1.35; }
-.brief-number { display: grid; grid-template-columns: minmax(56px, 1fr) auto; min-width: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
-.brief-number:focus-within { border-color: var(--group-accent); box-shadow: 0 0 0 3px color-mix(in oklab, var(--group-accent) 15%, transparent); }
-.brief-number input {
-  width: 100%; min-width: 0; padding: 8px 9px; border: 0; outline: 0; background: transparent; color: var(--ink);
-  font: 600 var(--text-sm)/1 var(--font-mono); font-variant-numeric: tabular-nums;
-}
-.brief-number select {
-  width: 100%; min-width: 0; padding: 7px 30px 7px 9px; border: 0; outline: 0; border-radius: inherit;
-  background-color: transparent; color: var(--ink); font: 600 var(--text-xs)/1.25 var(--font-sans); cursor: pointer;
-}
-.brief-number select option { background: var(--surface); color: var(--ink); }
-.brief-number i { display: flex; align-items: center; padding: 0 8px; border-left: 1px solid var(--border); color: var(--faint); background: var(--surface-2); font-size: var(--text-2xs); font-style: normal; white-space: nowrap; }
-.family-fields { grid-template-columns: minmax(130px, .75fr) minmax(250px, 1.65fr); align-items: start; }
-.brief-toggles { display: grid; gap: 7px; }
-.brief-toggle { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); cursor: pointer; }
-.brief-toggle:hover { border-color: color-mix(in oklab, var(--group-accent) 38%, var(--border)); }
-.brief-toggle > input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .brief-switch { position: relative; width: 32px; height: 18px; border-radius: var(--radius-pill); background: var(--surface-3); transition: background var(--dur-fast) var(--ease-out); }
 .brief-switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface); box-shadow: var(--shadow-sm); transition: transform var(--dur-fast) var(--ease-out); }
-.brief-toggle > input:checked + .brief-switch { background: var(--group-accent); }
-.brief-toggle > input:checked + .brief-switch::after { transform: translateX(14px); }
-.brief-toggle > input:focus-visible + .brief-switch { outline: 3px solid color-mix(in oklab, var(--group-accent) 22%, transparent); outline-offset: 2px; }
-.brief-toggle > span:last-child { display: flex; flex-direction: column; min-width: 0; }
-.brief-toggle strong { color: var(--ink-2); font-size: var(--text-xs); }
-.brief-toggle small { color: var(--faint); font-size: var(--text-2xs); line-height: 1.35; }
-.ceiling-layout { display: grid; grid-template-columns: minmax(190px, 260px) minmax(0, 1fr); align-items: stretch; gap: 14px; margin-top: 12px; }
-.brief-guardrail { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px dashed color-mix(in oklab, var(--warn) 40%, var(--border)); border-radius: var(--radius-sm); color: var(--muted); background: color-mix(in oklab, var(--warn) 7%, var(--surface)); font-size: var(--text-xs); }
-.brief-guardrail > .ico { flex: none; color: var(--warn); }
-.brief-guardrail strong { color: var(--ink-2); }
 .brief-actions {
   position: sticky; bottom: 12px; z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: 16px;
   margin-top: 12px; padding: 11px 12px; border: 1px solid var(--border); border-radius: var(--radius-md);
@@ -3310,32 +3181,6 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
 .is-dirty .brief-actions { border-color: color-mix(in oklab, var(--pop) 35%, var(--border)); }
 .is-dirty .brief-state { color: var(--pop-strong); font-weight: 650; }
 .is-dirty .state-dot { background: var(--pop); box-shadow: 0 0 0 4px var(--pop-soft); }
-
-.utility-activation-table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); }
-.utility-activation-table th {
-  padding: 8px 14px; border-bottom: 1px solid var(--border); color: var(--faint);
-  text-align: left; font-size: var(--text-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
-}
-.utility-activation-table td { padding: 9px 14px; border-bottom: 1px solid var(--border); color: var(--muted); vertical-align: middle; }
-.utility-activation-table tr:last-child td { border-bottom: none; }
-.utility-activation-table td:first-child { color: var(--ink-2); font-family: var(--font-mono); }
-.utility-activation-table small { color: var(--faint); }
-.utility-gate { white-space: nowrap; font-variant-numeric: tabular-nums; }
-.utility-gate i { font-style: normal; color: var(--faint); }
-.utility-gate.met { color: var(--ok); }
-.utility-gate.met i { color: color-mix(in oklab, var(--ok) 55%, var(--faint)); }
-.utility-remaining { display: block; margin-top: 2px; }
-.utility-mode-note {
-  display: flex; align-items: center; gap: 8px; margin: 0; padding: 8px 11px;
-  border: 1px dashed color-mix(in oklab, var(--warn) 40%, var(--border)); border-radius: var(--radius-sm);
-  color: var(--muted); background: color-mix(in oklab, var(--warn) 7%, var(--surface)); font-size: var(--text-xs);
-}
-.utility-mode-note > .ico { flex: none; width: 14px; height: 14px; color: var(--warn); }
-.utility-mode-note strong { color: var(--ink-2); }
-.utility-status-active { color: var(--ok); border-color: color-mix(in oklab, var(--ok) 40%, var(--border)); background: var(--ok-soft); }
-.utility-status-armed { color: var(--pop-strong); border-color: color-mix(in oklab, var(--pop) 40%, var(--border)); background: var(--pop-soft); }
-.utility-status-forced-off { color: var(--warn); border-color: color-mix(in oklab, var(--warn) 40%, var(--border)); background: color-mix(in oklab, var(--warn) 9%, var(--surface)); }
-.utility-force-group { display: inline-flex; flex-wrap: wrap; gap: 6px; }
 
 .registry-zone-head > .btn { justify-self: end; }
 .registry-overview { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin: -2px 0 12px 60px; }
@@ -3465,15 +3310,9 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
 @media (max-width: 1120px) {
   .settings-jump-key { display: none; }
   .settings-jumpbar { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-  .config-flow { justify-content: flex-start; }
-  .brief-group.memory-group, .brief-group.activity-group,
-  .brief-group.planning-group, .brief-group.family-group { grid-column: 1 / -1; }
 }
 
 @media (max-width: 900px) {
-  .storage-card, .budgets-card, .embedder-card, .vectors-card { grid-column: 1 / -1; }
-  .brief-group.utility-group { grid-template-columns: 1fr; grid-template-areas: "heading" "copy" "fields" "scopes"; gap: 8px; }
-  .brief-group.utility-group > p { max-width: none; margin-bottom: 5px; }
   .workspace-columns { display: none; }
   .workspace-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .workspace-cell-label { display: block; margin-bottom: 8px; }
@@ -3487,9 +3326,6 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
   .settings-zone-head { grid-template-columns: 42px minmax(0, 1fr); align-items: start; }
   .settings-zone-index { width: 36px; height: 36px; }
   .settings-zone-head > :last-child { grid-column: 2; justify-self: start; }
-  .budget-grid { grid-template-columns: 1fr; }
-  .brief-fields.three { grid-template-columns: 1fr; }
-  .family-fields, .ceiling-layout { grid-template-columns: 1fr; }
   .brief-actions { position: static; align-items: flex-start; flex-direction: column; }
   .brief-actions .btn-row { width: 100%; }
   .brief-actions .btn { flex: 1; }
@@ -3509,9 +3345,6 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
   .settings-zone-head { grid-template-columns: 1fr; }
   .settings-zone-index { display: none; }
   .settings-zone-head > :last-child, .registry-zone-head > .btn { grid-column: 1; }
-  .runtime-card, .brief-group { padding: 14px; }
-  .briefing-workbench form[data-briefing-form] { padding: 9px; }
-  .brief-fields.two { grid-template-columns: 1fr; }
   .brief-actions .btn-row { align-items: stretch; flex-direction: column-reverse; }
   .registry-overview { gap: 5px; }
   .registry-panel-head { align-items: flex-start; }
@@ -4292,7 +4125,7 @@ button.star.on .ico { fill: currentColor; }
    witnessed "unlocked <date>" note (it stays the operational "armed <ago>"
    note while off). A static line in the ok tone -- no motion, the date
    verbatim. */
-.utility-activation-table small.mom-unlocked { color: var(--ok); font-variant-numeric: tabular-nums; }
+.ur-row .mom-unlocked { color: var(--ok); font-variant-numeric: tabular-nums; }
 
 /* The Plans header's quiet momentum line (rendered only while the feature is
    on): a muted verbatim count, no pill, no motion. */
@@ -6102,12 +5935,6 @@ html:not(.js) [data-form-discard] { display: none; }
   .js .brief-actions.settings-savebar { position: sticky; bottom: 8px; gap: 8px; padding: 9px 10px; }
   .js .settings-savebar .btn-row { flex-direction: row; }
 }
-.engine-group { margin: 0 0 26px; scroll-margin-top: 20px; }
-.engine-group-head {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 4px 14px; margin: 0 0 12px;
-}
-.engine-group-head h3 { margin: 0; font-family: var(--font-display); font-size: var(--text-lg); font-weight: 650; }
-.engine-group-head p { grid-column: 1; margin: 0; color: var(--muted); font-size: var(--text-xs); max-width: 72ch; }
 .setup-facts { display: grid; gap: 8px; margin: 0; }
 .setup-facts > div {
   display: grid; grid-template-columns: minmax(120px, 180px) minmax(0, 1fr); align-items: center; gap: 12px;
@@ -6130,7 +5957,7 @@ html:not(.js) [data-form-discard] { display: none; }
     flex: none; align-items: center; gap: 6px; padding: 6px 11px; border: 1px solid var(--border);
     border-radius: var(--radius-pill); background: color-mix(in oklab, var(--ink) 4%, var(--surface-solid));
   }
-  .settings-section-head, .engine-group-head { grid-template-columns: minmax(0, 1fr); }
+  .settings-section-head { grid-template-columns: minmax(0, 1fr); }
   .setup-facts > div { grid-template-columns: minmax(0, 1fr); gap: 4px; }
 }
 
@@ -6229,10 +6056,10 @@ html:not(.js) [data-form-discard] { display: none; }
   .level-welcome-head { flex-direction: column; }
 }
 
-/* ---- Briefing presets and the Customize disclosure (console levels) ----------
-   Three one-choice recipes lead the section; the full grouped form lives in a
-   disclosure (open by default at Advanced). A preset only fills the form -- the
-   save bar does the saving -- and editing any knob re-marks the match. */
+/* ---- Briefing presets (console levels) ---------------------------------------
+   Three one-choice recipes lead the section, Fine-tune below them (UX 38). A
+   preset only fills the form -- the save bar does the saving -- and editing
+   any knob re-marks the match. */
 .brief-presets { margin: 0 0 14px; padding: 0; border: 0; min-width: 0; }
 .brief-presets legend { margin-bottom: 8px; padding: 0; color: var(--faint); font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.13em; text-transform: uppercase; }
 .brief-preset-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
@@ -6250,26 +6077,16 @@ html:not(.js) [data-form-discard] { display: none; }
   box-shadow: 0 0 0 1px color-mix(in oklab, var(--brand) 25%, transparent);
 }
 .brief-preset:has(input:focus-visible) { box-shadow: var(--shadow-focus); }
-.brief-preset-name { font-family: var(--font-display); font-size: var(--text-base); font-weight: 650; color: var(--ink); }
+.brief-preset-name { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-family: var(--font-display); font-size: var(--text-base); font-weight: 650; color: var(--ink); }
 .brief-preset-intent { color: var(--ink-2); font-size: var(--text-xs); line-height: 1.45; }
-.brief-preset-summary { margin-top: 2px; color: var(--faint); font-family: var(--font-mono); font-size: 10.5px; line-height: 1.5; }
+.brief-preset-summary { margin-top: auto; padding-top: 2px; color: var(--faint); font-family: var(--font-mono); font-size: 10.5px; line-height: 1.5; }
 .brief-preset-custom {
   display: flex; align-items: center; gap: 8px; margin: 10px 0 0; padding: 8px 11px; border-radius: var(--radius-sm);
   border: 1px dashed color-mix(in oklab, var(--pop) 40%, var(--border)); color: var(--muted); font-size: var(--text-xs);
 }
 .brief-preset-custom[hidden] { display: none; }
 .brief-preset-custom .ico { width: 14px; height: 14px; color: var(--pop); }
-.brief-customize { margin: 0 0 4px; border: 1px solid var(--border); border-radius: var(--radius-md); }
-.brief-customize > summary {
-  display: flex; align-items: center; gap: 8px; padding: 10px 13px; cursor: pointer; list-style: none;
-  color: var(--ink-2); font-size: var(--text-sm); font-weight: 600;
-}
-.brief-customize > summary::-webkit-details-marker { display: none; }
-.brief-customize > summary .ico { width: 15px; height: 15px; color: var(--muted); }
-.brief-customize > summary small { color: var(--faint); font-weight: 500; font-size: var(--text-xs); }
-.brief-customize[open] > summary { border-bottom: 1px solid var(--border); }
-.brief-customize > .briefing-groups { padding: 12px; }
-@media (max-width: 900px) {
+@container briefing (max-width: 520px) {
   .brief-preset-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
@@ -6277,65 +6094,6 @@ html:not(.js) [data-form-discard] { display: none; }
    Below Standard a session has no review-signal scorecard; its findings take
    the whole row instead of leaving the scorecard's column empty. */
 .session-review-grid:not(:has(.session-scorecard)) { grid-template-columns: minmax(0, 1fr); }
-
-/* ---- Briefing preview (console levels T12) ----------------------------------
-   The briefing a new session would start with, under the form's current values,
-   between the presets and Customize. Where the section is wide enough it moves
-   beside the form and stays in view while the knobs scroll: container-sized, so
-   a collapsed sidebar counts, and a browser without container queries keeps the
-   stacked layout. Without script the panel has nothing to show, so it hides. */
-.briefing-workbench { container: briefing / inline-size; }
-html:not(.js) .brief-preview { display: none; }
-.brief-preview {
-  display: flex; flex-direction: column; gap: 10px; min-width: 0; margin: 0 0 14px; padding: 13px 14px 12px;
-  border: 1px solid color-mix(in oklab, var(--brand) 22%, var(--border)); border-radius: var(--radius-md);
-  background: color-mix(in oklab, var(--brand) 4%, var(--surface));
-}
-.brief-preview-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 10px 14px; flex-wrap: wrap; }
-.brief-preview-kicker {
-  display: inline-flex; align-items: center; gap: 6px; color: var(--brand); font-family: var(--font-mono);
-  font-size: 10.5px; letter-spacing: 0.13em; text-transform: uppercase;
-}
-.brief-preview-kicker .ico { width: 13px; height: 13px; }
-.brief-preview-head h4 { margin: 3px 0 0; font-family: var(--font-display); font-size: var(--text-md); line-height: 1.2; color: var(--ink); }
-.brief-preview-project { display: inline-flex; align-items: center; gap: 7px; min-width: 0; color: var(--muted); font-size: var(--text-xs); }
-.brief-preview-project select { max-width: 220px; min-width: 0; }
-.brief-preview-body { display: flex; flex-direction: column; gap: 10px; min-width: 0; transition: opacity var(--dur-fast) var(--ease-out); }
-.brief-preview-body[aria-busy="true"] { opacity: 0.6; }
-.brief-preview-wait, .brief-preview-empty, .brief-preview-note { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
-.brief-preview-note { color: var(--faint); font-size: var(--text-2xs); }
-.brief-preview-meter { display: grid; gap: 6px; }
-.brief-preview-meter > p { margin: 0; color: var(--ink-2); font-size: var(--text-xs); }
-.brief-preview-meter strong { color: var(--ink); font-family: var(--font-mono); font-size: var(--text-sm); }
-.brief-preview-cap { color: var(--faint); }
-.brief-preview-bar { display: block; height: 6px; overflow: hidden; border-radius: var(--radius-pill); background: color-mix(in oklab, var(--ink) 9%, transparent); }
-.brief-preview-bar > i { display: block; height: 100%; border-radius: inherit; background: var(--brand); transition: width var(--dur-med) var(--ease-out); }
-.brief-preview-meter.is-over .brief-preview-bar > i { background: var(--pop); }
-.brief-preview-meter.is-capped .brief-preview-bar > i { background: var(--danger); }
-.brief-preview-meter > p.brief-preview-flag { margin: 0; color: var(--pop-strong); font-size: var(--text-2xs); line-height: 1.4; }
-.brief-preview-meter.is-capped > p.brief-preview-flag { color: var(--danger); }
-.brief-preview-text {
-  max-height: 340px; margin: 0; padding: 11px 12px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm);
-  background: var(--surface); color: var(--ink-2); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.55;
-  white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 2;
-}
-.brief-preview-error { margin: 0; }
-@container briefing (min-width: 1040px) {
-  .briefing-workbench form[data-briefing-form] {
-    display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, 0.72fr);
-    grid-template-areas: "presets preview" "customize preview" "savebar savebar"; column-gap: 18px; align-items: start;
-  }
-  form[data-briefing-form] > .brief-presets { grid-area: presets; }
-  form[data-briefing-form] > .brief-customize { grid-area: customize; }
-  form[data-briefing-form] > .settings-savebar { grid-area: savebar; }
-  form[data-briefing-form] > .brief-preview { grid-area: preview; position: sticky; top: 14px; margin: 0; }
-  /* Beside the preview the form column is laptop-narrow: stack its groups the
-     way the narrower viewports already do. */
-  .brief-customize .brief-group { grid-column: 1 / -1; }
-  .brief-customize .brief-group.utility-group { grid-template-columns: minmax(0, 1fr); grid-template-areas: "heading" "copy" "fields" "scopes"; gap: 8px; }
-  .brief-customize .brief-group.utility-group > p { max-width: none; margin-bottom: 5px; }
-  .brief-preview-text { max-height: calc(100vh - 300px); min-height: 180px; }
-}
 
 /* ---- Settings > Updates ------------------------------------------------------
    The pieces the Settings sections still share from before UX 36 (which drew
@@ -9267,9 +9025,6 @@ tbody tr.row-link[data-panel-current] td:first-child { box-shadow: inset 2px 0 0
 .settings-section-head h2 { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
 .settings-section-head h2 .hint { vertical-align: 0; }
 .settings-section-head > .src-chip { justify-self: end; margin-top: 2px; }
-.engine-group-head > .src-chip { grid-column: 2; grid-row: 1 / span 2; align-self: start; justify-self: end; }
-.engine-group-head h3 .settings-readonly { display: inline-flex; margin-right: 7px; color: var(--faint); vertical-align: -1px; }
-.engine-group-head h3 .settings-readonly .ico { width: 14px; height: 14px; }
 .updates-actions form:has(> .src-chip) { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 @media (max-width: 1100px) {
   .settings-layout { grid-template-columns: 200px minmax(0, 1fr); }
@@ -9282,7 +9037,6 @@ tbody tr.row-link[data-panel-current] td:first-child { box-shadow: inset 2px 0 0
   .settings-subnav-label { font-size: var(--text-xs); white-space: nowrap; overflow-wrap: normal; }
   .settings-subnav-rule { display: none; }
   .settings-section-head > .src-chip { justify-self: start; }
-  .engine-group-head > .src-chip { grid-column: 1; grid-row: auto; justify-self: start; }
 }
 
 
@@ -9869,4 +9623,181 @@ tbody tr.row-link[data-panel-current] td:first-child { box-shadow: inset 2px 0 0
 }
 @media (max-width: 520px) {
   .workspace-find { flex-basis: 100%; max-width: none; }
+}
+
+/* UX 38: Settings > Briefing beside its preview, and Knowledge engine as
+   three cards. Tokens only. */
+
+/* Briefing (templates/settings_briefing.html). The section is the container
+   its layout asks: at 780 px and wider the form and the preview sit side by
+   side, the preview sticky while the knobs scroll; narrower, the preview
+   follows the form. Without script the preview has nothing to show, so it
+   hides and the form takes the row. */
+.brief-section { container: briefing / inline-size; }
+.briefing-workbench { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 16px; }
+.brief-form { display: flex; flex-direction: column; gap: 14px; min-width: 0; margin: 0; }
+.brief-form > .brief-presets { margin: 0; }
+.brief-form > .brief-actions { margin-top: 0; }
+.brief-form > .brief-actions .btn-row { flex: none; }
+html:not(.js) .brief-preview { display: none; }
+@container briefing (min-width: 780px) {
+  .js .briefing-workbench { grid-template-columns: minmax(0, 1fr) minmax(290px, 0.55fr); gap: 20px; }
+  .brief-preview { position: sticky; top: 14px; }
+  .brief-preview-text { max-height: calc(100vh - 220px); }
+}
+
+/* A preset priced for the preview's project: its estimate replaces the
+   numbers that set it apart. */
+.brief-preset-summary.is-estimate { color: var(--muted); }
+
+/* Fine-tune: the knobs in compact groups, each an icon and a name, each
+   knob a label with its hint and a number whose unit slot says what a 0
+   means (brand-toned while it does). */
+.brief-customize {
+  min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--surface); box-shadow: inset 0 1px 0 var(--sheen), var(--shadow-sm);
+}
+.brief-customize > summary {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 12px;
+  padding: 12px 16px; cursor: pointer; list-style: none; color: var(--ink); font-size: var(--text-sm);
+}
+.brief-customize > summary::-webkit-details-marker { display: none; }
+.brief-customize > summary strong { font-weight: 650; }
+.brief-customize > summary span { color: var(--faint); font-size: var(--text-xs); }
+.brief-customize > summary:focus-visible { outline: none; border-radius: var(--radius-lg); box-shadow: var(--shadow-focus); }
+.brief-customize[open] > summary { border-bottom: 1px solid var(--border); }
+.brief-knobs { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 228px), 1fr)); gap: 0 22px; padding: 4px 16px 10px; }
+.brief-set { min-width: 0; padding: 10px 0 2px; }
+.brief-set-h {
+  display: flex; align-items: center; gap: 7px; margin: 0 0 4px; color: var(--muted);
+  font-size: var(--text-2xs); font-weight: 700; letter-spacing: var(--tracking-wide); text-transform: uppercase;
+}
+.brief-set-h .ico { flex: none; width: 13px; height: 13px; }
+.brief-knob {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px;
+  min-height: 38px; padding: 5px 0; border-top: 1px solid var(--border);
+}
+.brief-knob-label { flex: 1 1 96px; min-width: 0; color: var(--ink-2); font-size: var(--text-sm); line-height: 1.35; }
+.brief-knob-label .hint { vertical-align: -6px; }
+.brief-knob .set-unit { flex: none; font-size: var(--text-xs); }
+.brief-knob .set-unit input {
+  width: 3.4em; padding: 4px 6px; font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield; appearance: textfield;
+}
+.brief-knob .set-unit input::-webkit-inner-spin-button, .brief-knob .set-unit input::-webkit-outer-spin-button { margin: 0; -webkit-appearance: none; }
+.brief-knob .set-unit > span { min-width: 4.6em; padding: 4px 7px; white-space: nowrap; transition: color var(--dur-fast) var(--ease-out); }
+.brief-knob .set-unit.is-zero > span { color: var(--brand); }
+.brief-knob .set-seg { flex: none; }
+
+/* The preview: one card, its head naming the project (and "unsaved values"
+   while the form differs from what is saved), the token meter, then the
+   briefing itself. */
+.brief-preview { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.brief-preview-card {
+  min-width: 0; overflow: hidden; border: 1px solid color-mix(in oklab, var(--brand) 22%, var(--border));
+  border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-sm);
+}
+.brief-preview-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.brief-preview-head > .ico { flex: none; width: 15px; height: 15px; color: var(--brand); }
+.brief-preview-head h3 { margin: 0; color: var(--ink); font-size: var(--text-sm); font-weight: 650; }
+.brief-preview-head select { min-width: 0; max-width: 100%; }
+.brief-preview-dirty { display: none; margin-left: auto; }
+.briefing-workbench:has(.brief-form.is-dirty) .brief-preview-dirty { display: inline-flex; }
+.brief-preview-body { display: flex; flex-direction: column; min-width: 0; transition: opacity var(--dur-fast) var(--ease-out); }
+.brief-preview-body[aria-busy="true"] { opacity: 0.6; }
+.brief-preview-wait, .brief-preview-empty { margin: 0; padding: 12px 14px; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
+.brief-preview-note { margin: 0 4px; color: var(--faint); font-size: var(--text-2xs); line-height: 1.45; }
+.brief-preview-meter { display: grid; gap: 6px; padding: 11px 14px 10px; }
+.brief-preview-meter > p:first-child {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 10px;
+  margin: 0; color: var(--ink-2); font-size: var(--text-xs);
+}
+.brief-preview-meter strong { color: var(--ink); font-family: var(--font-mono); font-size: var(--text-sm); }
+.brief-preview-cap { color: var(--faint); }
+.brief-preview-bar { display: block; height: 6px; overflow: hidden; border-radius: var(--radius-pill); background: color-mix(in oklab, var(--ink) 9%, transparent); }
+.brief-preview-bar > i { display: block; height: 100%; border-radius: inherit; background: var(--brand); transition: width var(--dur-med) var(--ease-out); }
+.brief-preview-meter.is-over .brief-preview-bar > i { background: var(--pop); }
+.brief-preview-meter.is-capped .brief-preview-bar > i { background: var(--danger); }
+.brief-preview-meter > p.brief-preview-flag { margin: 0; color: var(--pop-strong); font-size: var(--text-2xs); line-height: 1.4; }
+.brief-preview-meter.is-capped > p.brief-preview-flag { color: var(--danger); }
+.brief-preview-text {
+  max-height: 460px; margin: 0; padding: 12px 14px 16px; overflow: auto; border-top: 1px solid var(--border);
+  background: var(--surface-2); color: var(--ink-2); font-family: var(--font-mono); font-size: 11.5px; line-height: 1.6;
+  white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 2;
+}
+.brief-preview-text:focus-visible { outline: none; box-shadow: inset var(--shadow-focus); }
+.brief-preview-error { margin: 12px 14px; }
+
+/* Knowledge engine (templates/settings_engine.html): Recall, Ranking by use
+   and Storage, each a card of the kit's setting rows divided by rules. */
+.eng-card { display: grid; margin: 0 0 14px; padding: 0; }
+.eng-card > * + *, .ur-fold > .set-row { border-top: 1px solid var(--border); }
+.eng-card > .set-row, .ur-fold > .set-row { border-right: 0; border-bottom: 0; border-left: 0; border-radius: 0; background: none; padding: 12px 18px; }
+.eng-card > .set-row:first-child { border-top: 0; }
+.eng-card .set-row-label .hint { vertical-align: -6px; }
+.eng-card .set-row-control form { display: inline-flex; margin: 0; }
+.eng-card .set-row-control .btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+.eng-recall .set-row-sub .mono, .eng-model { overflow-wrap: anywhere; }
+.eng-recall .set-row-sub .mono { color: var(--ink-2); }
+.eng-model { font-size: var(--text-sm); font-weight: 600; }
+.eng-restart { display: flex; align-items: flex-start; gap: 5px; color: var(--warn); }
+.eng-restart .ico { flex: none; width: 13px; height: 13px; margin-top: 2px; }
+.eng-vectors .badge .live-dot { margin-right: 5px; }
+.eng-models { flex: 1 1 100%; min-width: 0; }
+.eng-models > summary { width: fit-content; color: var(--muted); font-size: var(--text-xs); cursor: pointer; }
+.eng-models > summary:focus-visible { outline: none; border-radius: var(--radius-xs); box-shadow: var(--shadow-focus); }
+.eng-models-scroll { margin-top: 8px; overflow-x: auto; }
+.eng-models table { width: 100%; border-collapse: collapse; font-size: var(--text-xs); }
+.eng-models th {
+  padding: 6px 10px; border-bottom: 1px solid var(--border); color: var(--faint); text-align: left;
+  font-size: var(--text-2xs); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.eng-models td { padding: 6px 10px; border-bottom: 1px solid var(--border); color: var(--muted); font-variant-numeric: tabular-nums; }
+.eng-models tr:last-child td { border-bottom: 0; }
+.eng-models td:first-child { color: var(--ink-2); }
+
+/* A card's head: its name, a hint, and its chips on the right. */
+.eng-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 12px 18px 10px; }
+.eng-card-head h3 { margin: 0; color: var(--ink); font-size: var(--text-sm); font-weight: 650; }
+.eng-card-head .hint { vertical-align: 0; }
+.eng-chips { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.eng-note { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 18px; background: color-mix(in oklab, var(--warn) 6%, transparent); color: var(--muted); font-size: var(--text-xs); line-height: 1.5; }
+.eng-note > .ico { flex: none; width: 14px; height: 14px; margin-top: 1px; color: var(--warn); }
+.eng-note strong { color: var(--ink-2); }
+.eng-empty { margin: 0; padding: 12px 18px; color: var(--faint); font-size: var(--text-xs); }
+
+/* Ranking by use: a row per project that ranks, is ready to, or is forced,
+   with a meter of its three readiness gates (full at the threshold, green
+   once met) and its Auto / On / Off; the projects still building fold under
+   one row. A row's Save is for a browser without script. */
+.ur-row .set-row-label > a { font-size: var(--text-sm); }
+.ur-meter { display: inline-flex; flex: none; align-items: flex-end; gap: 3px; height: 18px; }
+.ur-meter > i { display: block; width: 5px; min-height: 3px; border-radius: 2px; background: color-mix(in oklab, var(--ink) 18%, transparent); }
+.ur-meter > i.is-met { background: var(--ok); }
+.js .ur-save { display: none; }
+.ur-fold > summary {
+  display: flex; align-items: center; gap: 8px; padding: 12px 18px; cursor: pointer; list-style: none;
+  color: var(--muted); font-size: var(--text-sm);
+}
+.ur-fold > summary::-webkit-details-marker { display: none; }
+.ur-fold > summary > .ico { flex: none; width: 14px; height: 14px; transition: transform var(--dur-fast) var(--ease-out); }
+.ur-fold[open] > summary > .ico { transform: rotate(90deg); }
+.ur-fold > summary:focus-visible { outline: none; box-shadow: inset var(--shadow-focus); }
+.ur-fold-count { min-width: 0; }
+.ur-fold-show, .ur-fold-hide { margin-left: auto; color: var(--brand); font-size: var(--text-xs); font-weight: 600; white-space: nowrap; }
+.ur-fold-hide, .ur-fold[open] .ur-fold-show { display: none; }
+.ur-fold[open] .ur-fold-hide { display: inline; }
+
+/* Storage: what the daemon read at start, as chips; the path chip copies. */
+.eng-storage-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 13px 18px; }
+.eng-storage-ico { display: inline-flex; color: var(--faint); }
+.eng-storage-ico .ico { width: 14px; height: 14px; }
+.eng-storage-row h3 { margin: 0 4px 0 0; color: var(--ink); font-size: var(--text-sm); font-weight: 650; }
+.eng-chip { max-width: 100%; min-width: 0; gap: 5px; white-space: normal; text-align: left; }
+.eng-chip .copy-btn { flex: none; }
+.eng-chip .mono { min-width: 0; overflow-wrap: anywhere; }
+.eng-storage-row .hint { vertical-align: 0; }
+@media (max-width: 720px) {
+  .eng-card > .set-row, .ur-fold > .set-row, .eng-card-head, .eng-note, .eng-empty, .ur-fold > summary, .eng-storage-row { padding-right: 14px; padding-left: 14px; }
+  .brief-knobs { padding-right: 14px; padding-left: 14px; }
 }

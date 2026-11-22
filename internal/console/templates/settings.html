@@ -260,26 +260,56 @@ window.SEAM_NO_LIVE_REFRESH = true; // preserve unsaved form state on this contr
     });
     form.dispatchEvent(new Event('input', { bubbles: true }));
   });
+  // A knob's unit slot says what a 0 means ("any age", "off") while the value
+  // is 0, and its unit otherwise: the server draws it, and this follows every
+  // edit, a preset pick and Discard. An empty field saves as 0, so it reads
+  // as one.
+  function syncKnobUnits() {
+    document.querySelectorAll('[data-briefing-form] [data-knob-unit]').forEach(function (box) {
+      var input = box.querySelector('input');
+      var out = box.querySelector('input + span');
+      if (!input || !out) return;
+      var zero = Number(input.value) === 0;
+      box.classList.toggle('is-zero', zero);
+      out.textContent = box.getAttribute(zero ? 'data-zero' : 'data-unit');
+    });
+  }
   document.addEventListener('input', function (event) {
-    if (event.target.closest && event.target.closest('[data-briefing-form]')) syncPresets();
+    if (event.target.closest && event.target.closest('[data-briefing-form]')) { syncPresets(); syncKnobUnits(); }
   });
   document.addEventListener('change', function (event) {
     if (event.target.closest && event.target.closest('[data-briefing-form]') && event.target.name !== 'briefing-preset') syncPresets();
   });
   document.addEventListener('seam:content-updated', syncPresets);
+  document.addEventListener('seam:content-updated', syncKnobUnits);
   // Briefing preview: the form's CURRENT values -- saved or not -- and the
   // chosen project, assembled by the server and swapped into the panel body.
   // A preview is a read: nothing is saved, and no agent receives it. Edits are
   // debounced, and a newer request always wins over a slower older one.
+  // When the page opens and when the project changes, the preview also prices
+  // each preset for that project (presets=1), and the cards show the
+  // estimates in place of the numbers that set them apart.
   var previewTimer = null;
   var previewSeq = 0;
-  function refreshPreview() {
+  function showEstimates(body) {
+    var list = body.querySelector('[data-preset-estimates]');
+    if (!list) return;
+    list.querySelectorAll('[data-preset]').forEach(function (item) {
+      document.querySelectorAll('[data-preset-estimate]').forEach(function (slot) {
+        if (slot.getAttribute('data-preset-estimate') !== item.getAttribute('data-preset')) return;
+        slot.textContent = item.textContent;
+        slot.classList.add('is-estimate');
+      });
+    });
+  }
+  function refreshPreview(withPresets) {
     var form = document.querySelector('[data-briefing-form]');
     var select = document.querySelector('[data-brief-preview-project]');
     var body = document.querySelector('[data-brief-preview-body]');
     if (!form || !select || !body || !window.FormData || !window.URLSearchParams) return;
     var params = new URLSearchParams(new FormData(form));
     params.set('project', select.value);
+    if (withPresets === true) params.set('presets', '1');
     var seq = ++previewSeq;
     body.setAttribute('aria-busy', 'true');
     fetch('/console/settings/briefing/preview', {
@@ -295,6 +325,7 @@ window.SEAM_NO_LIVE_REFRESH = true; // preserve unsaved form state on this contr
       if (seq !== previewSeq) return;
       body.innerHTML = html;
       body.removeAttribute('aria-busy');
+      showEstimates(body);
     }).catch(function () {
       if (seq !== previewSeq) return;
       body.removeAttribute('aria-busy');
@@ -311,7 +342,7 @@ window.SEAM_NO_LIVE_REFRESH = true; // preserve unsaved form state on this contr
     if (event.target.closest && event.target.closest('[data-briefing-form]') && !event.target.closest('[data-brief-preview]')) schedulePreview();
   });
   document.addEventListener('change', function (event) {
-    if (event.target.closest && event.target.closest('[data-brief-preview-project]')) refreshPreview();
+    if (event.target.closest && event.target.closest('[data-brief-preview-project]')) refreshPreview(true);
   });
   // A re-embed pass under way: the Stored vectors card follows it in place,
   // every two seconds while the tab is in sight, until the pass is done.
@@ -346,7 +377,7 @@ window.SEAM_NO_LIVE_REFRESH = true; // preserve unsaved form state on this contr
     enhanceDirtyForm('[data-briefing-form]', 'brief-state', 'Unsaved changes — save to use them for new sessions.');
     enhanceDirtyForm('[data-backups-form]', 'backups-state', 'Unsaved changes — save to use them from the next backup.');
     enhanceFamilies();
-    refreshPreview();
+    refreshPreview(true);
   }
   enhanceSettings();
   document.addEventListener('seam:content-updated', enhanceSettings);
@@ -409,22 +440,18 @@ window.SEAM_NO_LIVE_REFRESH = true; // preserve unsaved form state on this contr
 <script src="{{static "backups.js"}}"></script>
 {{end}}
 
-{{/* What to do when embeddings are off for want of a provider: one sentence
-     for Your setup and the Knowledge engine's embedder card. The daemon's own
-     error stays in its log. */}}
-{{define "embed-off-fix"}}Search and recall use keywords only. Add an OpenAI key (or point Ollama at a local model) in the config file, then restart.{{end}}
-
 {{/* The briefing preview's fragments (briefing_preview.go), fetched into the
      panel's body. */}}
 {{define "briefing-preview"}}
 <div class="brief-preview-meter{{if .OverBudget}} is-over{{end}}{{if .Capped}} is-capped{{end}}">
-  <p><strong>{{.TokensLabel}}</strong> of {{.BudgetLabel}} tokens<span class="brief-preview-cap"> &middot; hard cap {{.HardCapLabel}}</span></p>
+  <p><span><strong>{{.TokensLabel}}</strong> of {{.BudgetLabel}} tokens</span><span class="brief-preview-cap">hard cap {{.HardCapLabel}}</span></p>
   <span class="brief-preview-bar" aria-hidden="true"><i style="width:{{.FillPct}}%"></i></span>
   {{if .Capped}}<p class="brief-preview-flag">Cut at the hard cap: agents in {{.Project}} would get this briefing truncated.</p>
   {{else if .OverBudget}}<p class="brief-preview-flag">Over the budget: constraints, pinned stages, and starred rows are never dropped for it.</p>{{end}}
 </div>
 {{if .Text}}<pre class="brief-preview-text" tabindex="0" aria-label="Briefing for {{.Project}}">{{.Text}}</pre>
 {{else}}<p class="brief-preview-empty">Nothing to brief: nothing is in scope for {{.Project}} yet, so a new session there starts without a briefing.</p>{{end}}
+{{with .Presets}}<ul class="brief-preview-presets" hidden data-preset-estimates>{{range .}}<li data-preset="{{.Key}}">~{{.TokensLabel}} tokens</li>{{end}}</ul>{{end}}
 {{end}}
 
 {{define "briefing-preview-error"}}

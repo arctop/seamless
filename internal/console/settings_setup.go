@@ -128,8 +128,7 @@ func (s *Service) setupData(ctx context.Context) setupPanel {
 }
 
 // embedOffFix is how semantic recall comes on where no provider is set up:
-// the words templates/settings.html's "embed-off-fix" says in Knowledge
-// engine, here as a hint's text.
+// the hint on Your setup's Semantic recall row and on Knowledge engine's.
 const embedOffFix = "Search and recall use keywords only. Add an OpenAI key (or point Ollama at a local model) in the config file, then restart."
 
 // setupRecall is Your setup's Semantic recall row: its chip, the model in

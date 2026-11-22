@@ -85,10 +85,10 @@ func TestSettingsPage(t *testing.T) {
 	require.Contains(t, page, `<h2>Briefing<span class="hint">`, "one head: the title and its hint")
 	require.NotContains(t, page, "Briefing injection", "no second header")
 	require.Contains(t, page, `id="briefing-recipe"`)
-	require.Contains(t, page, `class="brief-group memory-group"`)
-	require.Contains(t, page, `class="brief-group family-group"`)
-	require.Contains(t, page, `class="brief-group utility-group"`)
-	require.Contains(t, page, `id="utility-mode"`)
+	for _, group := range []string{"memory", "recent", "plans", "family", "ranking", "ceiling"} {
+		require.Contains(t, page, `<section class="brief-set" data-brief-group="`+group+`"`)
+	}
+	require.Contains(t, page, `<span class="set-seg" id="utility-mode" role="radiogroup"`)
 	require.Contains(t, page, `name="constraint_max_full"`)
 	require.Contains(t, page, `name="convention_max_full"`)
 	require.Contains(t, page, `data-briefing-form`)
@@ -367,14 +367,16 @@ func TestSettingsUtilityForce(t *testing.T) {
 	require.False(t, row.AgeOK)
 	require.Empty(t, row.Remaining, "a forced scope owes no readiness hint")
 
-	// The HTML table renders each gate against its threshold.
+	// The forced project is listed, its meter read out against the
+	// thresholds, its segment on On.
 	req := httptest.NewRequest(http.MethodGet, "/console/settings?s=engine", nil)
 	req.Header.Set("Authorization", "Bearer "+testKey)
 	page := do(mux, req)
 	require.Equal(t, http.StatusOK, page.Code)
-	require.Contains(t, page.Body.String(), "Utility activation by scope")
-	require.Contains(t, page.Body.String(), fmt.Sprintf("<i>/%d</i> events", store.UtilityReadyMinEvents))
-	require.Contains(t, page.Body.String(), fmt.Sprintf("<i>/%d</i> memories", store.UtilityReadyMinMemories))
+	require.Contains(t, page.Body.String(), fmt.Sprintf(`aria-label="0 of %d uses, 0 of %d memories used, 0 of %d days of history"`,
+		store.UtilityReadyMinEvents, store.UtilityReadyMinMemories, store.UtilityReadyMinAgeDays))
+	require.Contains(t, page.Body.String(), "forced on · no use yet")
+	require.Contains(t, page.Body.String(), `<input type="radio" name="force" value="on" checked>`)
 
 	// Clearing the force reverts to the latch (unset here -> building).
 	rr = postForm(mux, "/console/settings/utility", url.Values{
@@ -553,7 +555,7 @@ func TestSettingsEmbeddingsDisabledStates(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/console/settings?s=engine", nil)
 	req.Header.Set("Authorization", "Bearer "+testKey)
 	page := do(mux, req).Body.String()
-	require.Contains(t, page, "Embeddings off")
+	require.Contains(t, page, `<span class="badge compact warn">keywords only</span>`)
 	require.Contains(t, page, "Switched off from this console")
 }
 
@@ -634,7 +636,8 @@ func TestSettingsEmbeddingsFallbackReason(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/console/settings?s=engine", nil)
 	req.Header.Set("Authorization", "Bearer "+testKey)
 	page := do(mux, req).Body.String()
-	require.Contains(t, page, "Embeddings off")
+	require.Contains(t, page, `<span class="badge compact warn">keywords only</span>`)
+	require.Contains(t, page, "No embedding provider is set up.")
 	require.Contains(t, page, "Search and recall use keywords only. Add an OpenAI key (or point Ollama at a local model) in the config file, then restart.")
 	require.NotContains(t, page, "api_key is empty", "the daemon's error stays in its log")
 	require.NotContains(t, page, "llm.NewEmbedder")
@@ -815,9 +818,9 @@ func TestSettingsSections_SaveBarAndLegacyAnchors(t *testing.T) {
 	require.Contains(t, css, "@media (max-width: 720px)")
 }
 
-// Briefing presets: one choice for Standard, every knob a disclosure away. The
-// server marks the preset the effective values equal (else Custom), and the
-// Customize form is open by default only at Advanced.
+// Briefing presets: one choice for Standard, every knob in Fine-tune below.
+// The server marks the preset the effective values equal (else Custom), and
+// Fine-tune is open at every level, since its groups are short.
 func TestBriefingSection_PresetsAndCustomize(t *testing.T) {
 	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
@@ -843,8 +846,9 @@ func TestBriefingSection_PresetsAndCustomize(t *testing.T) {
 		require.Contains(t, page, `value="`+key+`" form="briefing-preset-picker"`)
 	}
 	require.Contains(t, page, `<p class="brief-preset-custom" data-preset-custom hidden>`)
-	require.Contains(t, page, `<details class="brief-customize">`, "closed at Standard")
-	require.Contains(t, page, "Protected context stays protected.")
+	require.Contains(t, page, `<details class="brief-customize" open>`, "open at Standard")
+	require.Contains(t, page, "Constraints and active-plan rollups are never filtered out", "the guardrail is the hard cap's hint")
+	require.Contains(t, page, `<span class="brief-preset-name">Balanced<span class="badge compact accent">in use</span></span>`)
 	require.Contains(t, page, "2 full constraints · 12 memory lines · 2 recent findings", "Lean's numbers are generated")
 	require.Contains(t, page, "6 full constraints · memory lines up to the budget · 5 recent findings · family memories")
 	for _, field := range []string{"constraint_max_full", "convention_max_full", "memory_max_age_days", "memory_max_items",

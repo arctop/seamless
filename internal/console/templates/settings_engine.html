@@ -1,203 +1,146 @@
-{{/* Settings > Knowledge engine: recall, ranking and storage. Parsed with the
-     settings page (render.go), whose dispatch calls it with the page's
-     data, so $ reads as it does there ($.Level, $.Features, $.Data). */}}
+{{/* Settings > Knowledge engine: recall, ranking by use and storage, a card
+     each (settings_engine.go builds their rows). Parsed with the settings
+     page (render.go), whose dispatch calls it with the page's data, so $
+     reads as it does there ($.Level, $.Features, $.Data). */}}
 {{define "settings-engine"}}{{with .Data}}
-    <section class="settings-zone settings-section" id="knowledge-engine">
+    <section class="settings-zone settings-section eng-section" id="knowledge-engine">
       <header class="settings-section-head">
         <div>
-          <h2>Knowledge engine{{hintFor "Knowledge engine" "Values with a lock are read only: they change through the config file or environment, then a restart."}}</h2>
-          <p>How recall finds knowledge, how the briefing ranks it, and where it all lives.</p>
+          <h2>Knowledge engine{{hintFor "Knowledge engine" "How recall and search find knowledge, how a briefing ranks memories, and where it all lives. The embeddings switch and a model change apply at the next daemon restart; ranking applies from the next session start."}}</h2>
+          <p>How recall finds knowledge, and how briefings rank it.</p>
         </div>
       </header>
 
-      <section class="engine-group" id="semantic-index" aria-labelledby="engine-recall-title">
-        <header class="engine-group-head">
-          <h3 id="engine-recall-title">Recall</h3>
-          <p>Embeddings power the semantic half of recall and search; lexical search keeps working without them. The switch and a model change apply at the next daemon restart.</p>
-        </header>
-        <div class="runtime-grid semantic-grid">
-          {{with .Embeddings}}
-          <article class="runtime-card embedder-card">
-            <header class="runtime-card-head">
-              <span class="runtime-icon {{if .Enabled}}ok{{else if .Misconfigured}}pop{{else}}brand{{end}}">{{icon "activity"}}</span>
-              <div><span>Embedder</span><h3>{{if .Enabled}}Embeddings on{{else}}Embeddings off{{end}}</h3></div>
-              {{if .Enabled}}<span class="badge ok">active</span>{{else if .Misconfigured}}<span class="badge danger">misconfigured</span>{{else}}<span class="badge">disabled</span>{{end}}
-            </header>
-            <div class="embedder-facts">
-              <div><span>Provider</span><strong class="mono">{{if .Provider}}{{.Provider}}{{else}}&mdash;{{end}}</strong></div>
-              <div><span>Embedding model</span><strong class="mono">{{if .Model}}{{.Model}}{{else}}&mdash;{{end}}</strong></div>
-            </div>
-            {{if not .Enabled}}
-            <p class="embedder-reason{{if .Misconfigured}} is-error{{end}}">
-              {{icon "triangle-alert"}}
-              {{if .OverriddenOff}}Switched off from this console; agents fall back to lexical-only recall.{{else if .Misconfigured}}The LLM configuration is broken and needs a fix in the config file: <span class="mono">{{.Reason}}</span>{{else}}{{template "embed-off-fix"}}{{end}}
-            </p>
-            {{end}}
-            {{if .RestartNeeded}}
-            <p class="embedder-restart">{{icon "timer"}} The stored switch differs from the running state &mdash; restart the daemon to apply it.</p>
-            {{end}}
+      {{/* Recall: semantic recall's state (the reason in the sub line, the fix
+           in the hint), then the stored vectors, which a re-embed pass under
+           way redraws in place (data-vectors-card: the page's script). */}}
+      {{with .Embeddings}}{{$recall := .Recall}}
+      <div class="card eng-card" id="semantic-index" role="group" aria-labelledby="eng-recall-label">
+        <div class="set-row eng-recall">
+          <div class="set-row-label"><strong id="eng-recall-label">Semantic recall</strong>{{hintFor "semantic recall" $recall.Hint}}
+            <span class="set-row-sub">{{$recall.Sub}}{{with $recall.Detail}} <span class="mono">{{.}}</span>{{end}}</span>
+            {{if .RestartNeeded}}<span class="set-row-sub eng-restart">{{icon "timer"}}The stored switch differs from the running state: restart the daemon to apply it.</span>{{end}}
+          </div>
+          <div class="set-row-control">
+            <span class="badge compact {{$recall.Tone}}">{{$recall.Word}}</span>
             {{/* Switch off is offered only while there is something to switch
                  off: embeddings running, or a cleared switch still waiting for
-                 the restart. Off for want of a key, the card says what to do
+                 the restart. Off for want of a key, the hint says what to do
                  instead. */}}
             {{if .ModeOff}}
-            <form method="post" action="/console/settings/embeddings/mode" class="embedder-toggle-form">
+            <form method="post" action="/console/settings/embeddings/mode">
               <input type="hidden" name="mode" value="auto">
               <button class="btn small primary" type="submit">Enable embeddings</button>
             </form>
             {{else if or .Enabled .OverriddenOff}}
-            <form method="post" action="/console/settings/embeddings/mode" class="embedder-toggle-form">
+            <form method="post" action="/console/settings/embeddings/mode">
               <input type="hidden" name="mode" value="off">
               <button class="btn small" type="submit" data-confirm="Switch embeddings off? Recall and search degrade to lexical-only after the next restart." data-confirm-label="Switch it off">Switch off</button>
             </form>
             {{end}}
-          </article>
-
-          <article class="runtime-card vectors-card" data-vectors-card{{if .Reembed.Running}} data-reembed-running{{end}}>
-            <header class="runtime-card-head">
-              <span class="runtime-icon brand">{{icon "database"}}</span>
-              <div><span>Stored vectors</span><h3>Embedding corpus</h3></div>
-            </header>
-            <div class="budget-grid">
-              <div class="budget-stat brand"><strong>{{.Total}}</strong><span>vectors</span><small>stored</small></div>
-              <div class="budget-stat {{if .Missing}}warn{{else}}ok{{end}}"><strong>{{.Missing}}</strong><span>items</span><small>not embedded</small></div>
-              <div class="budget-stat {{if .Stale}}warn{{else}}ok{{end}}"><strong>{{.Stale}}</strong><span>vectors</span><small>stale model</small></div>
-            </div>
-            {{if .Models}}
-            <table class="embedding-models-table">
-              <thead><tr><th>Model</th><th>Dims</th><th>Memories</th><th>Notes</th><th>Last written</th></tr></thead>
-              <tbody>
-                {{range .Models}}
-                <tr>
-                  <td><span class="mono">{{.Model}}</span>{{if .Stale}} <span class="badge warn" title="Not the active model; invisible to semantic search until re-embedded">stale</span>{{end}}</td>
-                  <td>{{.Dims}}</td>
-                  <td>{{.Memories}}</td>
-                  <td>{{.Notes}}</td>
-                  <td>{{if .Updated.IsZero}}&mdash;{{else}}{{ago .Updated}}{{end}}</td>
-                </tr>
-                {{end}}
-              </tbody>
-            </table>
-            {{else}}
-            <p class="embedder-empty">No vectors stored yet.{{if .Enabled}} They are written as memories and notes are indexed.{{end}}</p>
-            {{end}}
-            <div class="reembed-row">
-              {{if .Reembed.Running}}
-              <span class="badge pop" role="status"><span class="live-dot"></span> re-embedding {{.Reembed.Done}}/{{.Reembed.Total}}{{if .Reembed.Failed}} ({{.Reembed.Failed}} failed){{end}}</span>
-              <small>The count follows the pass while this page is open.</small>
-              {{else}}
-              <form method="post" action="/console/settings/embeddings/reembed">
-                <button class="btn small" type="submit"{{if not .Enabled}} disabled title="Embeddings are disabled"{{end}} data-confirm="Re-embed every memory and note with the active model? This calls the embedding provider once per item." data-confirm-label="Re-embed all">{{icon "loader"}} Re-embed everything</button>
-              </form>
-              {{if not .Reembed.StartedAt.IsZero}}<small>Last pass {{ago .Reembed.FinishedAt}}: {{.Reembed.Done}}/{{.Reembed.Total}} items{{if .Reembed.Failed}}, {{.Reembed.Failed}} failed{{end}}.</small>{{end}}
-              <small>Use after changing the embedding model &mdash; vectors from different models cannot be compared.</small>
-              {{end}}
-            </div>
-          </article>
-          {{end}}
+          </div>
         </div>
-      </section>
 
-      <section class="engine-group" id="utility-activation" aria-labelledby="engine-ranking-title">
-        <header class="engine-group-head">
-          <h3 id="engine-ranking-title">Ranking</h3>
-          <p>Where each scope stands on utility-blended ordering. The weight and the activation mode are briefing knobs, set in Briefing.</p>
-        </header>
-      {{if .UtilityRows}}
-      <div class="utility-scopes">
-        <h5 id="utility-activation-title">Utility activation by scope</h5>
-        <p>In auto mode a scope&rsquo;s briefing switches to utility-blended ordering once its demand history matures: first demand &ge;{{index .UtilityReady 2}}d old, &ge;{{index .UtilityReady 0}} demand events and &ge;{{index .UtilityReady 1}} memories touched in 30d. The gardener latches it on its next pass; force overrides both ways.</p>
-        {{if ne .Briefing.UtilityMode "auto"}}<p class="utility-mode-note">{{icon "triangle-alert"}} Activation is currently <strong>{{.Briefing.UtilityMode}}</strong> everywhere, so the per-scope state below is dormant &mdash; it takes over when the mode returns to auto.</p>{{end}}
-        <div class="utility-scopes-table">
-          <table class="utility-activation-table">
-            <thead><tr><th>Scope</th><th>Status</th><th>Demand (30d)</th><th>History</th><th>Override</th></tr></thead>
-            <tbody>
-              {{$ready := .UtilityReady}}
-              {{range $i, $row := .UtilityRows}}
-              <tr>
-                <td>{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}<strong>Global context</strong>{{end}}</td>
-                <td><span class="badge utility-status-{{.Status}}">{{.Status}}{{if .Forced}} (forced){{end}}</span>{{if .ReadyAt}}{{if $.Features.Momentum}} <small class="mom-unlocked">{{timeAs .ReadyAt (print "unlocked " (day .ReadyAt))}}</small>{{else}} <small>armed {{agoTime .ReadyAt}}</small>{{end}}{{end}}</td>
-                <td>
-                  <span class="utility-gate{{if .EventsOK}} met{{end}}">{{.RecentEvents}}<i>/{{index $ready 0}}</i> events</span> &middot;
-                  <span class="utility-gate{{if .MemoriesOK}} met{{end}}">{{.RecentMemories}}<i>/{{index $ready 1}}</i> memories</span>
-                </td>
-                <td>
-                  {{if .AgeDays}}<span class="utility-gate{{if .AgeOK}} met{{end}}">{{.AgeDays}}<i>/{{index $ready 2}}</i>d of demand</span>{{else}}<span class="utility-gate">no demand yet</span>{{end}}
-                  {{if .Remaining}}<small class="utility-remaining">{{.Remaining}}</small>{{end}}
-                </td>
-                <td>
-                  <span class="utility-force-group">
-                    {{if ne .Forced "on"}}<button class="btn small" type="submit" form="utility-force-{{$i}}" name="force" value="on">Force on</button>{{end}}
-                    {{if ne .Forced "off"}}<button class="btn small" type="submit" form="utility-force-{{$i}}" name="force" value="off">Force off</button>{{end}}
-                    {{if .Forced}}<button class="btn small" type="submit" form="utility-force-{{$i}}" name="force" value="auto">Auto</button>{{end}}
-                  </span>
-                </td>
-              </tr>
-              {{end}}
-            </tbody>
-          </table>
+        <div class="set-row eng-vectors" data-vectors-card{{if .Reembed.Running}} data-reembed-running{{end}}>
+          <div class="set-row-label">{{if .Model}}<strong class="mono eng-model">{{.Model}}</strong>{{else}}<strong>Stored vectors</strong>{{end}}{{hintFor "stored vectors" "Each memory and note is stored with a vector from the model that embedded it, and vectors from different models cannot be compared. Re-embed after changing the model: it calls the provider once per item."}}
+            <span class="set-row-sub">{{.VectorsLine}}</span>
+            {{if .Reembed.Running}}<span class="set-row-sub">The count follows the pass while this page is open.</span>
+            {{else if not .Reembed.StartedAt.IsZero}}<span class="set-row-sub">Last pass {{ago .Reembed.FinishedAt}}: {{.Reembed.Done}}/{{.Reembed.Total}} items{{if .Reembed.Failed}}, {{.Reembed.Failed}} failed{{end}}.</span>{{end}}
+          </div>
+          <div class="set-row-control">
+            {{if .Reembed.Running}}
+            <span class="badge pop" role="status"><span class="live-dot"></span> re-embedding {{.Reembed.Done}}/{{.Reembed.Total}}{{if .Reembed.Failed}} ({{.Reembed.Failed}} failed){{end}}</span>
+            {{else}}
+            <form method="post" action="/console/settings/embeddings/reembed">
+              <button class="btn small" type="submit"{{if not .Enabled}} disabled{{end}} data-confirm="Re-embed every memory and note with the active model? This calls the embedding provider once per item." data-confirm-label="Re-embed all">{{icon "loader"}} Re-embed all</button>
+            </form>
+            {{end}}
+          </div>
+          {{if .ModelsFolded}}
+          <details class="eng-models">
+            <summary>By model</summary>
+            <div class="eng-models-scroll">
+              <table>
+                <thead><tr><th>Model</th><th>Dims</th><th>Memories</th><th>Notes</th><th>Last written</th></tr></thead>
+                <tbody>
+                  {{range .Models}}
+                  <tr>
+                    <td><span class="mono">{{.Model}}</span>{{if .Stale}} <span class="badge compact warn">stale</span>{{end}}</td>
+                    <td>{{.Dims}}</td>
+                    <td>{{.Memories}}</td>
+                    <td>{{.Notes}}</td>
+                    <td>{{if .Updated.IsZero}}&mdash;{{else}}{{agoTime .Updated}}{{end}}</td>
+                  </tr>
+                  {{end}}
+                </tbody>
+              </table>
+            </div>
+          </details>
+          {{end}}
         </div>
       </div>
       {{end}}
-        {{if not .UtilityRows}}<p class="embedder-empty">No scopes have demand history yet.</p>{{end}}
-        {{range $i, $row := .UtilityRows}}<form id="utility-force-{{$i}}" method="post" action="/console/settings/utility"><input type="hidden" name="project" value="{{$row.Project}}"></form>{{end}}
-      </section>
 
-      <section class="engine-group" id="runtime-profile" aria-labelledby="engine-storage-title">
-        <header class="engine-group-head">
-          <h3 id="engine-storage-title"><span class="settings-readonly" role="img" aria-label="Read only" title="Read only">{{icon "lock"}}</span>Storage &amp; policy</h3>
-          <p>Values loaded by the daemon. Change these through the config file or environment, then restart.</p>
-        </header>
-        <div class="runtime-grid">
-          <article class="runtime-card storage-card">
-            <header class="runtime-card-head">
-              <span class="runtime-icon brand">{{icon "database"}}</span>
-              <div><span>Storage</span><h3>Local data home</h3></div>
-              <span class="badge brand">source of truth</span>
-            </header>
-            <div class="storage-path">
-              <span class="mono">{{.DataDir}}</span>{{copyBtn .DataDir}}
-            </div>
-            <p>Durable files and the rebuildable local index share this root.</p>
-          </article>
-
-          <article class="runtime-card budgets-card">
-            <header class="runtime-card-head">
-              <span class="runtime-icon pop">{{icon "gauge"}}</span>
-              <div><span>Guardrails</span><h3>Context budgets</h3></div>
-            </header>
-            <div class="budget-grid">
-              <div class="budget-stat brand">
-                <strong>{{.Budgets.MaxBriefingTokens}}</strong><span>tokens</span>
-                <small>max briefing</small>
-              </div>
-              <div class="budget-stat ok">
-                <strong>{{.Budgets.RecallBudgetTokens}}</strong><span>tokens</span>
-                <small>recall response</small>
-              </div>
-              <div class="budget-stat pop">
-                <strong>{{if .Budgets.ToolEventMaxChars}}{{.Budgets.ToolEventMaxChars}}{{else}}&infin;{{end}}</strong><span>{{if .Budgets.ToolEventMaxChars}}chars{{else}}no cap{{end}}</span>
-                <small>tool event body</small>
-              </div>
-            </div>
-          </article>
-
-          <article class="runtime-card sqlite-card">
-            {{with .Database}}
-            <header class="runtime-card-head">
-              <span class="runtime-icon pop">{{icon "server"}}</span>
-              <div><span>SQLite</span><h3>Local database</h3></div>
-              <span class="badge brand">rebuildable index</span>
-            </header>
-            <div class="storage-path"><span class="mono">{{.Path}}</span>{{copyBtn .Path}}</div>
-            <div class="embedder-facts">
-              <div><span>Size on disk</span><strong>{{.SizeHuman}}</strong>{{if .WalBytes}}<small>includes WAL</small>{{end}}</div>
-              <div><span>Schema version</span><strong>{{.SchemaVersion}}</strong></div>
-            </div>
-            <p>Sessions, tasks, events, and the vector index live here; durable knowledge stays in markdown files and this database can be rebuilt from them.</p>
-            {{end}}
-          </article>
+      {{/* Ranking by use: only the projects that rank, are ready to, or are
+           forced; the rest fold under one row. Each row's Auto / On / Off
+           saves at once, with Undo (data-autosave, shell.js): a form of its
+           own, whose id is the row's, so the follow-up finds it again. */}}
+      {{with .Ranking}}
+      <div class="card eng-card eng-ranking" id="utility-activation" role="group" aria-labelledby="eng-ranking-title">
+        <div class="eng-card-head">
+          <h3 id="eng-ranking-title">Ranking by use</h3>{{hintFor "ranking by use" .Hint}}
+          <span class="eng-chips">
+            <span class="badge compact {{if .Ranking}}ok{{else}}quiet{{end}}">{{.Ranking}} ranking</span>
+            {{if .Ready}}<span class="badge compact accent">{{.Ready}} ready</span>{{end}}
+            {{if .Forced}}<span class="badge compact accent">{{.Forced}} forced</span>{{end}}
+            <span class="badge compact quiet">{{len .Building}} building</span>
+          </span>
         </div>
-      </section>
+        {{if eq .Mode "on"}}<p class="eng-note">{{icon "info"}}<span><strong>Turns on</strong> is Everywhere in <a href="/console/settings?s=briefing">Briefing</a>, so every project ranks by use now. These choices take over when it is back to Per project.</span></p>
+        {{else if eq .Mode "off"}}<p class="eng-note">{{icon "info"}}<span><strong>Turns on</strong> is Never in <a href="/console/settings?s=briefing">Briefing</a>, so no project ranks by use. These choices take over when it is back to Per project.</span></p>{{end}}
+        {{range .Rows}}{{template "ur-row" .}}{{end}}
+        {{if not .Rows}}<p class="eng-empty">No project ranks by use yet.</p>{{end}}
+        {{if .Building}}
+        <details class="ur-fold">
+          <summary>{{icon "chevron-right"}}<span class="ur-fold-count">{{len .Building}} {{.BuildingNoun}} still building their history</span><span class="ur-fold-show">Show them</span><span class="ur-fold-hide">Hide them</span></summary>
+          {{range .Building}}{{template "ur-row" .}}{{end}}
+        </details>
+        {{end}}
+      </div>
+      {{end}}
+
+      {{/* Storage: what the daemon read at start, as chips. */}}
+      <div class="card eng-card eng-storage" id="runtime-profile" role="group" aria-labelledby="eng-storage-title">
+        <div class="eng-storage-row">
+          <span class="eng-storage-ico" role="img" aria-label="Read only">{{icon "lock"}}</span>
+          <h3 id="eng-storage-title">Storage</h3>
+          <span class="badge compact quiet eng-chip"><span>data</span><span class="mono">{{.DataDir}}</span>{{copyBtn .DataDir}}</span>
+          {{with .Database}}<span class="badge compact quiet eng-chip">database{{with .SizeHuman}} {{.}}{{end}}{{if .SchemaVersion}} &middot; schema {{.SchemaVersion}}{{end}}</span>{{end}}
+          <span class="badge compact quiet eng-chip">briefing {{digits .Budgets.MaxBriefingTokens}} tokens</span>
+          <span class="badge compact quiet eng-chip">recall {{digits .Budgets.RecallBudgetTokens}} tokens</span>
+          {{hintFor "storage" .StorageHint}}
+        </div>
+      </div>
     </section>
 {{end}}{{end}}
+
+{{/* One project's row in Ranking by use (utilityRankingRow): its name, why it
+     stands where it does, a meter of its three readiness gates, and its
+     Auto / On / Off, which saves at once. */}}
+{{define "ur-row"}}
+        <form method="post" action="/console/settings/utility" class="set-row ur-row" id="{{.Anchor}}" data-autosave>
+          <input type="hidden" name="project" value="{{.Project}}">
+          <div class="set-row-label">{{if .Project}}<a class="mono" href="/console/projects/{{.Project}}">{{.Project}}</a>{{else}}<strong>{{.Label}}</strong>{{end}}
+            <span class="set-row-sub">{{.Why}}{{with .ReadyAt}} &middot; {{if $.Momentum}}<span class="mom-unlocked">{{timeAs . (print "unlocked " (day .))}}</span>{{else}}since {{agoTime .}}{{end}}{{end}}</span>
+          </div>
+          <div class="set-row-control">
+            <span class="ur-meter" role="img" aria-label="{{.MeterLabel}}">{{range .Meter}}<i{{if .Met}} class="is-met"{{end}} style="height: {{.Pct}}%"></i>{{end}}</span>
+            <span class="set-seg" role="radiogroup" aria-label="Ranking by use in {{.Label}}">{{$c := .Choice}}
+              <label><input type="radio" name="force" value="auto"{{if eq $c "auto"}} checked{{end}}><span>Auto</span></label>
+              <label><input type="radio" name="force" value="on"{{if eq $c "on"}} checked{{end}}><span>On</span></label>
+              <label><input type="radio" name="force" value="off"{{if eq $c "off"}} checked{{end}}><span>Off</span></label>
+            </span>
+            <button class="btn small ur-save" type="submit">Save</button>
+          </div>
+        </form>
+{{end}}

@@ -330,6 +330,7 @@ var funcs = template.FuncMap{
 	"phaseRows":     phaseRows,
 	"icon":          icon,
 	"compactNum":    compactNum,
+	"digits":        groupDigits,
 	"kindLegend":    kindLegend,
 	"kindBars":      kindBars,
 	"kindBar":       kindBar,

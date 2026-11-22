@@ -420,11 +420,11 @@ func TestLedgerMilestones_FollowTheMomentumFeature(t *testing.T) {
 		"off = byte-identical Overview")
 }
 
-// The unlocked-date line on the Settings utility-activation table is a
+// The unlocked-date note on a Knowledge engine ranking row is a
 // momentum surface: on, a scope's stored activation timestamp reads as the
-// witnessed "unlocked <date>" note; off keeps today's operational
-// "armed <ago>" note -- the same timestamp, no celebration vocabulary, and a
-// page byte-for-byte free of the momentum markup.
+// witnessed "unlocked <date>" note; off keeps the operational "since <ago>"
+// note -- the same timestamp, no celebration vocabulary, and a page
+// byte-for-byte free of the momentum markup.
 func TestSettingsUtilityUnlocked_FollowsTheMomentumFeature(t *testing.T) {
 	db, mux, _ := newGatedConsole(t)
 	ctx := context.Background()
@@ -437,7 +437,7 @@ func TestSettingsUtilityUnlocked_FollowsTheMomentumFeature(t *testing.T) {
 	page := getPeek(t, mux, "/console/settings?s=engine").Body.String()
 	require.NotContains(t, page, "mom-unlocked", "off leaves no trace of the unlock notice")
 	require.NotContains(t, page, "unlocked 2026-07-12")
-	require.Contains(t, page, ">armed ", "the operational armed note is core metadata and stays")
+	require.Contains(t, page, "since <time ", "the operational note is core metadata and stays")
 
 	require.NoError(t, store.SetFeaturesConfig(ctx, db, config.Features{Momentum: true}))
 	page = getPeek(t, mux, "/console/settings?s=engine").Body.String()
@@ -445,7 +445,7 @@ func TestSettingsUtilityUnlocked_FollowsTheMomentumFeature(t *testing.T) {
 	require.Contains(t, page, "unlocked 2026-07-12",
 		"the stored activation date is witnessed on the surface, verbatim")
 	require.Contains(t, page, `title="2026-07-12 09:30 UTC"`, "the full timestamp stays in the tooltip")
-	require.NotContains(t, page, ">armed ",
+	require.NotContains(t, page, "since <time ",
 		"the note upgrades rather than duplicates -- one timestamp, one line")
 }
 

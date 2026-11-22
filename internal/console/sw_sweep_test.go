@@ -88,7 +88,10 @@ func TestSwSettingsSaysProjectAndOverview(t *testing.T) {
 	}
 
 	briefing := getHTMLBody(t, mux, "/console/settings?s=briefing")
-	require.Contains(t, briefing, "Let related projects contribute lower-priority context to the current project.")
+	briefing = briefing[strings.Index(briefing, `id="briefing-recipe"`):]
+	briefing = briefing[:strings.Index(briefing, "<script>")]
+	require.Contains(t, briefing, "Recent findings from the project&#39;s family, ranked below its own.")
+	require.NotContains(t, briefing, "scope")
 }
 
 // Item 12: a lock's badge says its state in its tone, a live hold asks before

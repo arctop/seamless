@@ -189,7 +189,7 @@ var registry = []Feature{
 			"the maturity-stage pills on the project board and detail header",
 			"the plan-shipped settle and monthly shipped count on Plans",
 			"the milestone rows in the activity ledger",
-			"the unlocked dates on the Settings utility-activation table",
+			"the unlocked dates on Knowledge engine's ranking rows in Settings",
 		},
 		Default: false,
 		get:     func(c config.Features) bool { return c.Momentum },

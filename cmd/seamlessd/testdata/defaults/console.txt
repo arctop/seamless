@@ -6264,26 +6264,56 @@ window.SEAM_NO_LIVE_REFRESH = true;
     });
     form.dispatchEvent(new Event('input', { bubbles: true }));
   });
+  
+  
+  
+  
+  function syncKnobUnits() {
+    document.querySelectorAll('[data-briefing-form] [data-knob-unit]').forEach(function (box) {
+      var input = box.querySelector('input');
+      var out = box.querySelector('input + span');
+      if (!input || !out) return;
+      var zero = Number(input.value) === 0;
+      box.classList.toggle('is-zero', zero);
+      out.textContent = box.getAttribute(zero ? 'data-zero' : 'data-unit');
+    });
+  }
   document.addEventListener('input', function (event) {
-    if (event.target.closest && event.target.closest('[data-briefing-form]')) syncPresets();
+    if (event.target.closest && event.target.closest('[data-briefing-form]')) { syncPresets(); syncKnobUnits(); }
   });
   document.addEventListener('change', function (event) {
     if (event.target.closest && event.target.closest('[data-briefing-form]') && event.target.name !== 'briefing-preset') syncPresets();
   });
   document.addEventListener('seam:content-updated', syncPresets);
+  document.addEventListener('seam:content-updated', syncKnobUnits);
+  
+  
+  
   
   
   
   
   var previewTimer = null;
   var previewSeq = 0;
-  function refreshPreview() {
+  function showEstimates(body) {
+    var list = body.querySelector('[data-preset-estimates]');
+    if (!list) return;
+    list.querySelectorAll('[data-preset]').forEach(function (item) {
+      document.querySelectorAll('[data-preset-estimate]').forEach(function (slot) {
+        if (slot.getAttribute('data-preset-estimate') !== item.getAttribute('data-preset')) return;
+        slot.textContent = item.textContent;
+        slot.classList.add('is-estimate');
+      });
+    });
+  }
+  function refreshPreview(withPresets) {
     var form = document.querySelector('[data-briefing-form]');
     var select = document.querySelector('[data-brief-preview-project]');
     var body = document.querySelector('[data-brief-preview-body]');
     if (!form || !select || !body || !window.FormData || !window.URLSearchParams) return;
     var params = new URLSearchParams(new FormData(form));
     params.set('project', select.value);
+    if (withPresets === true) params.set('presets', '1');
     var seq = ++previewSeq;
     body.setAttribute('aria-busy', 'true');
     fetch('/console/settings/briefing/preview', {
@@ -6299,6 +6329,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
       if (seq !== previewSeq) return;
       body.innerHTML = html;
       body.removeAttribute('aria-busy');
+      showEstimates(body);
     }).catch(function () {
       if (seq !== previewSeq) return;
       body.removeAttribute('aria-busy');
@@ -6315,7 +6346,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
     if (event.target.closest && event.target.closest('[data-briefing-form]') && !event.target.closest('[data-brief-preview]')) schedulePreview();
   });
   document.addEventListener('change', function (event) {
-    if (event.target.closest && event.target.closest('[data-brief-preview-project]')) refreshPreview();
+    if (event.target.closest && event.target.closest('[data-brief-preview-project]')) refreshPreview(true);
   });
   
   
@@ -6350,7 +6381,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
     enhanceDirtyForm('[data-briefing-form]', 'brief-state', 'Unsaved changes — save to use them for new sessions.');
     enhanceDirtyForm('[data-backups-form]', 'backups-state', 'Unsaved changes — save to use them from the next backup.');
     enhanceFamilies();
-    refreshPreview();
+    refreshPreview(true);
   }
   enhanceSettings();
   document.addEventListener('seam:content-updated', enhanceSettings);

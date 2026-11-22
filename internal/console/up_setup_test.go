@@ -1,7 +1,6 @@
 package console
 
 import (
-	"bytes"
 	"net/http"
 	"path/filepath"
 	"regexp"
@@ -105,10 +104,7 @@ func TestUpSetup_EmptyRows(t *testing.T) {
 
 // The hint's fix is the engine's own sentence, word for word.
 func TestUpSetup_RecallFixIsTheEnginesSentence(t *testing.T) {
-	svc, _ := upSetupConsole(t)
-	var b bytes.Buffer
-	require.NoError(t, svc.pages["settings"].ExecuteTemplate(&b, "embed-off-fix", nil))
-	require.Equal(t, b.String(), embedOffFix)
+	require.Equal(t, embedOffFix, embeddingsPanel{}.Recall().Hint)
 
 	for _, tc := range []struct {
 		e    EmbeddingRuntime

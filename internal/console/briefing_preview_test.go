@@ -223,16 +223,17 @@ func TestSettingsBriefing_PreviewPanel(t *testing.T) {
 	page := getPeek(t, mux, "/console/settings?s=briefing").Body.String()
 	// Markup, not bare attribute names: the page's script names the same
 	// selectors whether or not the elements exist.
-	require.Contains(t, page, `<section class="brief-preview" data-brief-preview`)
+	require.Contains(t, page, `<aside class="brief-preview" data-brief-preview`)
 	require.Contains(t, page, "No projects yet.")
-	require.NotContains(t, page, `<select name="project"`)
+	require.NotContains(t, page, `name="project" form="briefing-preview-picker"`)
 
 	seedPreviewProject(t, db)
 	_, err := store.EnsureProject(context.Background(), db, "homelab", "Homelab")
 	require.NoError(t, err)
 	page = getPeek(t, mux, "/console/settings?s=briefing").Body.String()
 	require.Contains(t, page, `<form id="briefing-preview-picker" hidden></form>`)
-	require.Contains(t, page, `<select name="project" form="briefing-preview-picker" data-brief-preview-project`)
+	require.Contains(t, page, `<select id="brief-preview-project" name="project" form="briefing-preview-picker" data-brief-preview-project>`)
+	require.Contains(t, page, `<label for="brief-preview-project">A new session in</label>`)
 	require.Contains(t, page, `<option value="homelab" selected>`, "no session yet: the first project")
 
 	now := time.Now().UTC()
@@ -245,7 +246,7 @@ func TestSettingsBriefing_PreviewPanel(t *testing.T) {
 	require.NotContains(t, page, `<option value="homelab" selected>`)
 
 	other := getPeek(t, mux, "/console/settings?s=features").Body.String()
-	require.NotContains(t, other, `<section class="brief-preview"`, "only the Briefing section carries it")
+	require.NotContains(t, other, `<aside class="brief-preview"`, "only the Briefing section carries it")
 }
 
 // The meter says where a briefing stands against its numbers: under budget is

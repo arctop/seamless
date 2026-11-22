@@ -64,8 +64,8 @@ func TestSwEmbedderCardOffersOnlyWhatCanChange(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			page := swEmbedPage(t, tc.rt, tc.modeOff)
-			card := page[strings.Index(page, `<article class="runtime-card embedder-card">`):]
-			card = card[:strings.Index(card, "</article>")]
+			card := page[strings.Index(page, `<div class="set-row eng-recall">`):]
+			card = card[:strings.Index(card, `<div class="set-row eng-vectors"`)]
 			require.Equal(t, tc.switchOff, strings.Contains(card, swSwitchOff), "Switch off")
 			require.Equal(t, tc.enable, strings.Contains(card, ">Enable embeddings</button>"), "Enable")
 			require.Equal(t, tc.switchOff || tc.enable, strings.Contains(card, `action="/console/settings/embeddings/mode"`),
@@ -128,7 +128,7 @@ func TestSwReembedProgressFollowsThePass(t *testing.T) {
 	_, err = mgr.StartReembed(ctx)
 	require.NoError(t, err)
 	page := getHTMLBody(t, mux, "/console/settings?s=engine")
-	require.Contains(t, page, `<article class="runtime-card vectors-card" data-vectors-card data-reembed-running>`)
+	require.Contains(t, page, `<div class="set-row eng-vectors" data-vectors-card data-reembed-running>`)
 	require.Contains(t, page, "re-embedding 0/1")
 	require.Contains(t, page, "The count follows the pass while this page is open.")
 	require.NotContains(t, page, "Refresh the page")
@@ -144,7 +144,7 @@ func TestSwReembedProgressFollowsThePass(t *testing.T) {
 	}
 	require.False(t, mgr.ReembedStatus().Running)
 	page = getHTMLBody(t, mux, "/console/settings?s=engine")
-	require.Contains(t, page, `<article class="runtime-card vectors-card" data-vectors-card>`)
+	require.Contains(t, page, `<div class="set-row eng-vectors" data-vectors-card>`)
 	require.Contains(t, page, `data-confirm="Re-embed every memory and note with the active model? This calls the embedding provider once per item." data-confirm-label="Re-embed all"`)
 	require.Contains(t, page, ": 1/1 items.")
 }

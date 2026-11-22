@@ -266,7 +266,7 @@ func BriefingPresets() []BriefingPreset {
 	return []BriefingPreset{
 		{
 			Key: "lean", Label: "Lean",
-			Intent: "A short briefing: the rules that bind, the freshest memories, and little else.",
+			Intent: "The rules that bind, and the freshest memories.",
 			Briefing: Briefing{
 				ConstraintMaxFull: 2, ConventionMaxFull: 2,
 				MemoryMaxItems: 12, MemoryMaxAgeDays: 60,
@@ -278,12 +278,12 @@ func BriefingPresets() []BriefingPreset {
 		},
 		{
 			Key: "balanced", Label: "Balanced",
-			Intent:   "The defaults: enough context to start well without crowding the session.",
+			Intent:   "The defaults: enough to start well without crowding.",
 			Briefing: Defaults().Briefing,
 		},
 		{
 			Key: "rich", Label: "Rich",
-			Intent: "More of everything: more rules in full, more recent work, and the family's memories too.",
+			Intent: "More rules in full, more recent work, and the family.",
 			Briefing: Briefing{
 				ConstraintMaxFull: 6, ConventionMaxFull: 6,
 				MemoryMaxItems: 0, MemoryMaxAgeDays: 0,

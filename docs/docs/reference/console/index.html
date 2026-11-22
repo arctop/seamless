@@ -468,7 +468,7 @@ nothing, and their rows say so.</p>
 | Save briefing settings | <code>POST /console/settings/briefing</code> | Writes the briefing knobs as a runtime <strong>override row</strong> in the DB. It never writes the config file. |
 | Reset briefing settings | <code>POST /console/settings/briefing/reset</code> | Clears the override row, reverting to the file/env configuration. |
 | Preview a briefing | <code>POST /console/settings/briefing/preview</code> | A read, not a write: it POSTs only to carry the Briefing form's unsaved values, which it checks with the save's own validation, and answers with the briefing a new session in the chosen project would start with. Writes no settings row and records no event. A locked project is not previewed. |
-| Force utility ranking for a scope | <code>POST /console/settings/utility</code> | Sets or clears the owner's per-scope force: <code>on</code> and <code>off</code> win over the gardener's readiness latch, <code>auto</code> defers to it again. |
+| Force utility ranking for a scope | <code>POST /console/settings/utility</code> | Knowledge engine's <strong>Auto / On / Off</strong> on a project's row, which saves at once with Undo: sets or clears the owner's per-scope force. <code>on</code> and <code>off</code> win over the gardener's readiness latch, <code>auto</code> defers to it again. The answer returns to the row. |
 | Switch embeddings off or back on | <code>POST /console/settings/embeddings/mode</code> | Stores or clears the embedder off switch. It is read at serve start, so the change applies from the next restart - the page says so. |
 | Re-embed everything | <code>POST /console/settings/embeddings/reembed</code> | Starts a background pass that re-embeds every memory and note with the active model. It changes vectors, never content. |
 | Choose the console level | <code>POST /console/settings/level</code> | Stores the <a href="#choose-how-much-you-see">experience level</a> as a row that wins over file and env. Presentation only: nothing an agent receives changes. |
@@ -3175,9 +3175,9 @@ answered recall, its first supersession, its first shipped plan, and its
 birthdays -- each minted once ever and rendered under an award glyph with
 the exact claim (&quot;100 memories written in seamless&quot;). Milestones accumulate
 in the ledger only; there is no trophy screen.</li>
-<li><strong>Witnessed unlocks</strong> on Settings: the utility-activation table's armed
-note upgrades to the date each stage unlocked, so a latch that used to flip
-silently is witnessed.</li>
+<li><strong>Witnessed unlocks</strong> on Settings: a ranking project's &quot;since&quot; note in
+Knowledge engine upgrades to the date it unlocked, so a latch that used to
+flip silently is witnessed.</li>
 </ul>
 <p>Motion keeps one register: every animation plays once -- on a live arrival or
 on first render -- and nothing loops except the existing pulse idioms. A moment
@@ -3537,16 +3537,21 @@ engine (<code>?s=engine#settings-gardener</code>) opens this section. <strong>Yo
 shows both as chips, with a link to this section.</p>
 <h3 id="briefing">Briefing</h3>
 <p><code>/console/settings?s=briefing</code></p>
-<p>What every new agent session starts with. Three <strong>presets</strong> lead the section -
-<strong>Lean</strong> (a short briefing: the binding rules, the freshest memories, little
-else), <strong>Balanced</strong> (exactly the defaults), and <strong>Rich</strong> (more rules in full,
-more recent work, and family memories) - each card showing the numbers that set
-it apart. Picking one fills the form; nothing is saved until you save. Below
-them, <strong>Customize</strong> holds every knob, grouped by what it shapes - the memory
-index, recent work, the planning horizon, the project family, utility ranking,
-and the safety ceiling - with each knob's &quot;0 means&quot; note under it. Customize is
-open by default at Advanced. The section marks the preset your saved values
-equal, or <strong>Custom</strong> when they match none, and re-marks it as you edit.</p>
+<p>What every new agent session starts with. Where the section is wide enough
+(a desktop window), the form is on the left and the preview beside it, in view
+while you scroll the knobs; narrower, the preview follows the form.</p>
+<p>Three <strong>presets</strong> lead the form under <strong>Start from</strong> - <strong>Lean</strong> (the binding
+rules and the freshest memories), <strong>Balanced</strong> (exactly the defaults), and
+<strong>Rich</strong> (more rules in full, more recent work, and the family) - each card
+showing the numbers that set it apart until the preview prices it for its
+project (&quot;~780 tokens&quot;). <strong>in use</strong> marks the preset your saved values equal.
+Picking one fills the form; nothing is saved until you save. Below them,
+<strong>Fine-tune</strong> holds every knob in compact groups - Memories, Recent work, Plans
+and stages, Project family, Ranking, and Ceiling. Each knob is a label, an (i)
+hint that says what it does, and its value with its unit; at 0 the unit says
+what 0 means instead (&quot;any age&quot;, &quot;off&quot;, &quot;budget&quot;, &quot;always&quot;, &quot;all in full&quot;), and
+follows as you type. The form marks the preset its values equal, or <strong>Custom</strong>
+when they match none, and re-marks it as you edit.</p>
 <p>Saving writes a runtime override row in the DB. It layers over the file/env
 values and wins until reset, and it applies from the next session start - no
 daemon restart. It never touches your config file, so <code>seamless.yaml</code> stays the
@@ -3555,13 +3560,16 @@ briefing knob and no preset moves it. The form validates: a non-numeric knob or 
 value that fails <code>Briefing.Validate()</code> comes back as an error flash, not a
 silently-dropped save.</p>
 <p>The <strong>preview</strong> shows the <code>&lt;seam-briefing&gt;</code> a new session in one project would
-start with, under the values the form holds right now, saved or not. It sits
-between the presets and Customize, or beside the form when the section is wide
-enough. Pick a preset or change a knob and it follows within a moment. It
+start with, under the values the form holds right now, saved or not (<strong>unsaved
+values</strong> says when they differ from what is saved). Pick a preset or change a
+knob and it follows within a moment. It
 also shows the token estimate against <code>budgets.max_briefing_tokens</code> and the hard
 cap, and flags a briefing that runs over the budget (only constraints, pinned
 stages, and starred rows can put it there) or would be cut at the cap. The project picker
 lists the registered projects and opens on the one your agents worked in last.
+When the page opens and when you pick another project, the preview also prices
+each preset for that project: <code>presets=1</code> on the request adds one assembly per
+preset and a <code>presets</code> list (<code>key</code>, <code>tokens</code>) to the JSON answer.
 A preview is a read: it saves nothing, records no event, and no agent receives
 it, so it never counts toward retrieval stats or utility. Values the save would
 refuse, it refuses with the same message. For scripts,
@@ -3569,10 +3577,11 @@ refuse, it refuses with the same message. For scripts,
 saved values. <code>POST</code> to the same path, with the form's fields plus <code>project</code>,
 previews unsaved ones. It is the one POST in the console that writes nothing,
 which is why it is not in the table of write routes above.</p>
-<p>The <strong>utility ranking</strong> group holds <code>utility_weight</code> (utility's share of the
-briefing sort key; 0 restores pure recency) and <code>utility_mode</code> (<code>auto</code> arms each
-project as its demand history matures, <code>on</code> everywhere now, <code>off</code> never). Where
-each scope stands against the readiness gates is in Knowledge engine. See
+<p>The <strong>Ranking</strong> group holds <strong>Use weight</strong> (<code>utility_weight</code>: utility's share
+of the briefing sort key; 0 restores pure recency) and <strong>Turns on</strong>
+(<code>utility_mode</code>: <strong>Per project</strong> arms each project as its demand history
+matures, <strong>Everywhere</strong> is every project now, <strong>Never</strong> is none). Where each
+project stands against the readiness gates is in Knowledge engine. See
 <a href="../../concepts/sessions/#the-budget-and-what-survives-it">Sessions &amp; briefings</a> for
 how the blended order behaves once active.</p>
 <h3 id="workspaces">Workspaces</h3>
@@ -3595,31 +3604,39 @@ At Advanced each route also names the machine it lives on, and repo paths that
 resolve to no project are listed under <strong>Repo routes with no project</strong>.</p>
 <h3 id="knowledge-engine">Knowledge engine</h3>
 <p><code>/console/settings?s=engine</code></p>
-<p>The machinery, in three groups. The gardener's switches and cadence have a
-section of their own, <a href="#settings-gardener">Gardener</a>.</p>
-<p><strong>Recall</strong> - the embedder card shows the active provider and model, and when
-embeddings are off, why, with distinct copy for the owner off switch, the no-key
-lexical fallback (Your setup's sentence: add a key, then restart; the daemon's
-own error stays in its log), and a config error (with the error). The off/auto
-switch is a settings row read once at serve start, so the page flags a pending
-restart whenever the stored switch disagrees with the running process, and
-<strong>Switch off</strong> is offered only while there is something to switch off: embeddings
-running, or a cleared switch still waiting for that restart. Beside it, the
-stored-vector counts: totals, the not-yet-embedded backlog, and a per-model
-table that badges models the running embedder no longer writes as stale -
-<strong>re-embed everything</strong> rewrites the corpus with the active model in the
-background, and the card follows the pass in place while the page is open.</p>
-<p><strong>Ranking</strong> - the <strong>utility activation by scope</strong> table lists every scope with
-each readiness gate against its threshold (demand events, memories touched,
-history age - met gates turn green) and, for scopes still building, spells out
-exactly what remains before auto arms (&quot;needs 7 more events, 3d more history&quot;).
-A per-scope <strong>force</strong> overrides the latch in either direction; when the global
-mode is <code>on</code> or <code>off</code>, the table says the per-scope state is dormant until auto
-returns.</p>
-<p><strong>Storage &amp; policy</strong> - read-only, with a lock by its heading: the data folder,
-the context budgets, and the database (path, size on disk including the WAL,
-schema version). Change these through the config file or environment, then
-restart.</p>
+<p>How recall finds knowledge and how briefings rank it, in three cards. The
+gardener's switches and cadence have a section of their own,
+<a href="#settings-gardener">Gardener</a>.</p>
+<p><strong>Recall</strong> - two rows. <strong>Semantic recall</strong> carries a state chip (<strong>semantic</strong>,
+<strong>keywords only</strong>, or <strong>misconfigured</strong>), the reason in its sub line, and the
+fix in its hint: switched off from this console; no embedding provider set up
+(the hint is Your setup's sentence: add a key, then restart; the daemon's own
+error stays in its log); or a config mistake, with the provider's error. The
+off/auto switch is a settings row read once at serve start, so the row flags a
+pending restart whenever the stored switch disagrees with the running process,
+and <strong>Switch off</strong> is offered only while there is something to switch off:
+embeddings running, or a cleared switch still waiting for that restart. The
+second row is the stored vectors, named by the model: their counts in one line
+(vectors, items not yet embedded, vectors on an old model), and <strong>By model</strong>,
+folded, while there is more than one model or a stale one. <strong>Re-embed all</strong>
+rewrites the corpus with the active model in the background, after a confirm
+in the page, and the row follows the pass in place while the page is open.</p>
+<p><strong>Ranking by use</strong> - chips count the projects that rank by use now, any that
+rank from the gardener's next pass, the forced ones, and the ones still
+building. Only the projects that rank, are ready to, or are forced get a row:
+its uses, memories used and days of history, a small meter of those three
+gates against their thresholds (green once met), and <strong>Auto / On / Off</strong>, which
+saves at once, with Undo, and returns to the row. A forced project stays listed
+until it is set back to Auto. The rest fold under one row (&quot;42 projects still
+building their history&quot;), each with what it still needs (&quot;needs 7 more events,
+3d more history&quot;) and the same segment. The hint gives the thresholds. When
+<strong>Turns on</strong> in Briefing is Everywhere or Never, the card says it decides for
+every project, and these choices wait until it is back to Per project.</p>
+<p><strong>Storage</strong> - read-only, with a lock by its name: chips for the data folder
+(with Copy), the database (size on disk including the WAL, and schema
+version), and the briefing and recall budgets. Its hint says they are set in
+the config file or environment and read at start, and gives the database's
+path and the tool-event cap.</p>
 <p>See <a href="../../reference/configuration/">Configuration</a> for what each knob does, and
 <a href="../../concepts/sessions/">Sessions &amp; briefings</a> for what they tune.</p>
 <h2 id="event-detail">Event detail</h2>
