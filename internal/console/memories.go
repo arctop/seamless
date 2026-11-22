@@ -2,8 +2,10 @@ package console
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"html/template"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -601,12 +603,276 @@ func (s *Service) memoryArchive(w http.ResponseWriter, r *http.Request) {
 // memory's own page would open it again, and any other page is not where the
 // owner archived from.
 func archiveBack(next string) *url.URL {
+	return libBack(next, memoriesListPath)
+}
+
+// libBack is next when its path is exactly path (a same-origin URL with no
+// host, scheme or user), its query kept minus the one-shot flash; else path
+// alone. Every library write returns through it, so a form can name its way
+// back with the library state and never leave the page it belongs to.
+func libBack(next, path string) *url.URL {
 	u, err := url.Parse(next)
-	if err != nil || u.Path != memoriesListPath || u.Host != "" || u.Scheme != "" || u.User != nil {
-		return &url.URL{Path: memoriesListPath}
+	if err != nil || u.Path != path || u.Host != "" || u.Scheme != "" || u.User != nil {
+		return &url.URL{Path: path}
 	}
 	v := u.Query()
 	v.Del("notice")
 	v.Del("error")
-	return &url.URL{Path: memoriesListPath, RawQuery: v.Encode()}
+	return &url.URL{Path: path, RawQuery: v.Encode()}
+}
+
+// libRefusal is a library write refused for a reason the owner can act on:
+// the browser goes back to the page with msg as its error, a JSON caller gets
+// a 409 with msg and extra. Returned from inside a files-layer mutation, it
+// aborts the mutation before anything is written.
+type libRefusal struct {
+	msg   string
+	extra map[string]any
+}
+
+func (e *libRefusal) Error() string { return e.msg }
+
+// libRefuse answers a libRefusal; back is the page the browser returns to.
+func libRefuse(w http.ResponseWriter, r *http.Request, back *url.URL, e *libRefusal) {
+	if wantsJSON(r) {
+		out := map[string]any{"error": e.msg}
+		for k, v := range e.extra {
+			out[k] = v
+		}
+		writeJSON(w, http.StatusConflict, out)
+		return
+	}
+	q := back.Query()
+	q.Del("notice")
+	q.Set("error", e.msg)
+	back.RawQuery = q.Encode()
+	http.Redirect(w, r, back.RequestURI(), http.StatusSeeOther)
+}
+
+// withholdUnreadSuccessor drops the supersession line from d's body when this
+// request cannot read what replaced the memory (d.ReplacedByID unresolved):
+// the line names that memory's project, name and id, so a replacement in a
+// project locked to this request would otherwise show through the body.
+// memory_read withholds it the same way (lifecycle.WithoutTombstone). The
+// file keeps the line; only this reader's copy loses it.
+func (s *Service) withholdUnreadSuccessor(ctx context.Context, d *memoryDetail, m core.Memory) {
+	if m.SupersededBy == "" || d.ReplacedByID != "" || !d.BodyLoaded {
+		return
+	}
+	body := lifecycle.WithoutTombstone(d.BodyText, m.SupersededBy)
+	if body == d.BodyText {
+		return
+	}
+	d.BodyText = body
+	d.Body = s.renderBody(ctx, body, m.Project)
+	d.BodyIsEcho = bodyEchoesDescription(body, m.Description)
+}
+
+// restoreView is the inactive banner's restore control: Offered when Restore
+// is drawn, else Live (the active memory that replaced this one, when this
+// request reads it) or Blocked (why not, a sentence), with ToHeld when the
+// Held screen is where it is settled. Zero for an active memory.
+type restoreView struct {
+	Offered bool
+	Live    *memoryRef
+	Blocked string
+	ToHeld  bool
+}
+
+// restoreViewOf decides the restore control for m, reading through the
+// request's handle only: a replacement in a project locked to this request is
+// absent here, so Restore stays offered, and the POST, which checks on the
+// write handle as every write does, refuses it without naming it.
+func (s *Service) restoreViewOf(ctx context.Context, m core.Memory) restoreView {
+	if m.Active() || s.cfg.Files == nil {
+		return restoreView{}
+	}
+	if m.SupersededBy != "" {
+		live, found, err := lifecycle.LiveSuccessor(ctx, memoryLookup(s.db(ctx)), m)
+		if err != nil {
+			s.logger.Warn("console: memory restore chain", "id", m.ID, "error", err)
+			return restoreView{Blocked: "Its supersession chain cannot be followed to its end, so it cannot be restored here."}
+		}
+		if found {
+			return restoreView{Live: &memoryRef{ID: live.ID, Name: live.Name, Kind: string(live.Kind), Project: live.Project}}
+		}
+	}
+	if why := s.heldBlock(ctx, m.ID, m.FilePath, true); why != "" {
+		return restoreView{Blocked: why, ToHeld: true}
+	}
+	return restoreView{Offered: true}
+}
+
+// memoryLookup resolves memory ids on db, for lifecycle's chain walks.
+func memoryLookup(db *sql.DB) lifecycle.MemoryLookup {
+	return func(ctx context.Context, id string) (core.Memory, bool, error) {
+		return store.MemoryByID(ctx, db, id)
+	}
+}
+
+// What the Held screen keeps a restore or a delete from doing here
+// (heldBlock).
+const (
+	heldDrifted = "Its file changed outside Seamless and is quarantined: accept it on Held first."
+	heldFlagged = "The review flagged it: mark it safe on Held before you restore it."
+	heldPending = "An agent's change to it waits on Held: release or discard that first."
+)
+
+// heldBlock says why the Held screen keeps the item with this id and file
+// from being restored (restore) or deleted here, "" when nothing does.
+//
+// With write screening on, a file in drift quarantine changed outside
+// Seamless and has not been accepted: a delete would lose its only copy and
+// drop the quarantine record (files.Manager.Remove), lifting the quarantine
+// only the owner's Accept lifts, and a restore would bring unaccepted content
+// back to every agent. A memory the review flagged is likewise restored only
+// after Mark safe; deleting a flagged note only removes it. And while the
+// held queue is served (screening on, or restricted accounts' proposals), a
+// write to the item waiting there would turn stale, leaving only Discard, so
+// it is settled first. A record that cannot be read blocks: Held is where to
+// look.
+func (s *Service) heldBlock(ctx context.Context, itemID, path string, restore bool) string {
+	mode := s.heldModeFor(s.effectiveFeatures(ctx))
+	if mode == heldOff {
+		return ""
+	}
+	if mode == heldScreening {
+		rec, ok, err := store.CorpusRecordByPath(ctx, s.db(ctx), path)
+		if err != nil {
+			s.logger.Warn("console: held check corpus record", "path", path, "error", err)
+			return heldDrifted
+		}
+		if ok && rec.Drifted() {
+			return heldDrifted
+		}
+		if ok && restore && rec.ReviewStatus == store.ReviewFlagged {
+			return heldFlagged
+		}
+	}
+	pending, err := store.HeldWrites(ctx, s.db(ctx), store.HeldStatusHeld, 0)
+	if err != nil {
+		s.logger.Warn("console: held check pending writes", "id", itemID, "error", err)
+		return heldPending
+	}
+	for _, h := range pending {
+		if h.ItemID == itemID {
+			return heldPending
+		}
+	}
+	return ""
+}
+
+// memoryRestore brings an archived or superseded memory back into the active
+// set through lifecycle.Restore, under the file's lock, then returns to the
+// memory's own page with the library state the form names in next. Nothing
+// is written when a memory that replaced it is still active (the answer names
+// it when this request reads it), or while the Held screen holds it
+// (heldBlock). An active memory is left as it is. It records memory.written
+// with restored and by=console, as the gardener's undo does.
+func (s *Service) memoryRestore(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if s.cfg.Files == nil {
+		s.serverError(w, r, errNoFiles)
+		return
+	}
+	id := r.PathValue("id")
+	back := libBack(r.PostFormValue("next"), memoriesListPath+"/"+id)
+	idx, ok, err := store.MemoryByID(ctx, s.db(ctx), id)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if !ok {
+		s.notFound(w, r, "No memory with id "+id+".")
+		return
+	}
+	var restored core.Memory
+	from := ""
+	err = s.cfg.Files.Mutate(ctx, idx.FilePath, func(ctx context.Context) error {
+		mem, rerr := s.cfg.Files.Store().ReadMemory(idx.FilePath)
+		if rerr != nil {
+			return rerr
+		}
+		if mem.ID != idx.ID {
+			return errMemoryMoved
+		}
+		if mem.Active() {
+			return nil // restored while this request waited
+		}
+		if why := s.heldBlock(ctx, mem.ID, mem.FilePath, true); why != "" {
+			return &libRefusal{msg: why}
+		}
+		// The chain is read on the write handle: a replacement in a project
+		// locked to this request still refuses; it is only not named.
+		u, rerr := lifecycle.Restore(ctx, s.cfg.Files, memoryLookup(s.writeDB()), mem, time.Now().UTC())
+		if rerr != nil {
+			return rerr
+		}
+		from = "archive"
+		if mem.SupersededBy != "" {
+			from = "supersede"
+		}
+		restored = u
+		return nil
+	})
+	var refusal *libRefusal
+	var successor *lifecycle.SuccessorError
+	switch {
+	case errors.As(err, &successor):
+		libRefuse(w, r, back, s.successorRefusal(ctx, successor.Successor))
+		return
+	case errors.As(err, &refusal):
+		libRefuse(w, r, back, refusal)
+		return
+	case errors.Is(err, errMemoryMoved), errors.Is(err, fs.ErrNotExist):
+		s.notFound(w, r, "No memory with id "+id+".")
+		return
+	case err != nil:
+		s.serverError(w, r, err)
+		return
+	}
+	if restored.ID == "" {
+		// Already active: nothing to do, so a second press is harmless.
+		if wantsJSON(r) {
+			writeJSON(w, http.StatusOK, map[string]any{"id": idx.ID, "name": idx.Name, "status": "active"})
+			return
+		}
+		http.Redirect(w, r, back.RequestURI(), http.StatusSeeOther)
+		return
+	}
+	if s.cfg.Events != nil {
+		if _, err := s.eventLog(ctx).Record(ctx, core.Event{
+			Kind: core.EventMemoryWritten, ProjectSlug: restored.Project, ItemID: restored.ID,
+			Payload: map[string]any{"name": restored.Name, "restored": from, "by": "console"},
+		}); err != nil {
+			s.logger.Warn("console: record restore event", "error", err)
+		}
+	}
+	if wantsJSON(r) {
+		writeJSON(w, http.StatusOK, map[string]any{"id": restored.ID, "name": restored.Name, "status": "active", "restored": from})
+		return
+	}
+	http.Redirect(w, r, withNotice(back, "Restored "+restored.Name+": it reaches agents again."), http.StatusSeeOther)
+}
+
+// errMemoryMoved: the file an index row named now holds another memory.
+var errMemoryMoved = errors.New("console: that file holds another memory now")
+
+// successorRefusal is a restore refused because live replaced the memory and
+// is still active. It names live, with its link, only when this request reads
+// it: a replacement in a locked project refuses without a name.
+func (s *Service) successorRefusal(ctx context.Context, live core.Memory) *libRefusal {
+	seen, ok, err := store.MemoryByID(ctx, s.db(ctx), live.ID)
+	if err != nil {
+		s.logger.Warn("console: restore successor", "id", live.ID, "error", err)
+	}
+	if err != nil || !ok {
+		return &libRefusal{msg: "Not restored: a memory that replaced it is still active."}
+	}
+	return &libRefusal{
+		msg: "Not restored: " + seen.Name + " replaced it and is still active.",
+		extra: map[string]any{"successor": map[string]any{
+			"id": seen.ID, "name": seen.Name, "project": seen.Project, "url": memoriesListPath + "/" + seen.ID,
+		}},
+	}
 }

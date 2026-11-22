@@ -271,7 +271,17 @@ nothing, and their rows say so.</p>
 <tr>
 <td>Archive a memory</td>
 <td><code>POST /console/memories/{id}/archive</code></td>
-<td>Routes through <code>lifecycle.Archive</code>: the memory is stamped invalid and leaves every index, its file stays on disk with a tombstone. Returns to the Memories list <code>next=</code> names, its filters kept; any other <code>next</code> returns to the plain list.</td>
+<td>Routes through <code>lifecycle.Archive</code>: the memory is stamped invalid and leaves briefings, recall and every index. Its file stays on disk with a line saying when it was archived, its history stays readable here, and <strong>Restore a memory</strong> brings it back. Returns to the Memories list <code>next=</code> names, its filters kept; any other <code>next</code> returns to the plain list.</td>
+</tr>
+<tr>
+<td>Restore a memory</td>
+<td><code>POST /console/memories/{id}/restore</code></td>
+<td>Routes through <code>lifecycle.Restore</code>, under the file's lock: an archived memory, or a superseded one that nothing active replaced, comes back into briefings, recall and the indexes, and the line its retirement added to the body comes off. Refused (409), with nothing written, while a memory that replaced it is still active (the answer names that memory when you can read it), and while <a href="#held">Held</a> holds it: with write screening on, its file is quarantined or the review flagged it, and, whenever the held queue is served, an agent's change to it waits there. An active memory is left as it is. Records <code>memory.written</code> with <code>restored</code>. Returns to the memory's own page <code>next=</code> names, its filters kept.</td>
+</tr>
+<tr>
+<td>Delete a note</td>
+<td><code>POST /console/notes/{id}/delete</code></td>
+<td>What <code>notes_delete</code> does, under the file's lock: the note's file and its index rows go for good, and <code>note.written</code> records it with <code>deleted</code>. A plan's narrative (the note a <code>plan:&lt;slug&gt;</code> composition leads with) also needs <code>narrative=&lt;slug&gt;</code> for each plan it narrates, the box beside <strong>Delete</strong>; without it the delete is refused (409), since a form posts on its first press without script. Refused too while <a href="#held">Held</a> holds the note: its file is quarantined, or an agent's change to it waits there. Returns to the Notes list <code>next=</code> names, its filters kept.</td>
 </tr>
 <tr>
 <td>Force-release a task claim</td>
@@ -696,7 +706,8 @@ may make: <code>seam</code> on a client computer reads the console's JSON throug
 and the Touch ID helper there approves through it with its own signature.</p>
 <p>Read the shape of that list. There is no &quot;create memory&quot;, no &quot;edit note&quot;, no
 &quot;delete memory&quot;, no &quot;add task&quot;, no &quot;start session&quot;. The direct writes to knowledge
-state are <strong>archive a memory</strong>, <strong>approve a captured plan</strong>, the <strong>star</strong>
+state are <strong>archive</strong> and <strong>restore a memory</strong>, <strong>delete a note</strong>, <strong>approve a
+captured plan</strong>, the <strong>star</strong>
 flag, and - with write screening on - <strong>releasing a held write</strong>, which lands
 exactly what an agent wrote, never text of the console's own; the rest either
 manage gardener proposals - which are themselves
@@ -2173,8 +2184,8 @@ for the same text on <a href="#search">Search</a>.</p>
 <p>The whole state is in the URL - <code>?sort=</code>, <code>?group=project</code>, <code>?kind=</code>,
 <code>?project=</code> (a slug, or <code>global</code>), <code>?fav=1</code>, <code>?surfaced=never</code> and <code>?q=</code> - and
 it survives what you do on the page: opening another memory, changing the sort
-(the memory you are reading stays open), starring, and archiving (you land on
-the same filtered list). A value the screen cannot read is a 400 naming the
+(the memory you are reading stays open), starring, archiving (you land on
+the same filtered list) and restoring (you stay on the memory). A value the screen cannot read is a 400 naming the
 values it takes.</p>
 <p>What reaches an agent's context is <strong>surfaced</strong> here, the word the Overview
 and the knowledge sky use: a rail row reads &quot;surfaced 43×&quot; or &quot;never
@@ -2191,7 +2202,12 @@ demand breakdown behind it, the <code>vscode://</code> link straight to the file
 supersession neighbors in <strong>both</strong> directions: what replaced it, and what it
 replaced. The actions here are
 <strong>star</strong> - the flag that pins it into briefings and boosts recall - and
-<strong>archive</strong>.</p>
+<strong>archive</strong>, which asks in the page first and says what happens: the memory
+leaves briefings and recall, its history stays readable, and it can be
+restored. An archived or superseded memory says so in a banner at the top of
+the reader, and the banner carries <strong>Restore</strong> - unless a memory that replaced
+it is still active, which the banner links instead, or <a href="#held">Held</a> holds it,
+which the banner says.</p>
 <p>Opening <code>/console/memories</code> auto-opens the first match (in the tree, the most
 recently updated one); a memory's own URL opens the same screen with it
 selected. Clicking rail items swaps the reader in place (real URLs, browser
@@ -2211,6 +2227,10 @@ editor link. A <code>plan:&lt;slug&gt;</code> tag is a link to <a href="#plans">
 status: a captured plan's own, otherwise in progress, ready or done from its
 steps. The tags software adds - <code>created-by:*</code>, <code>plan-status:*</code>, <code>cc-plan</code> and
 <code>agent-cache</code> - fold behind a <strong>+N</strong> chip.</p>
+<p>The reader's actions are the <strong>star</strong> and <strong>Delete</strong>, in the same places as on
+Memories. Delete asks in the page first and removes the note for good. A note
+that is a plan's narrative says so, and also needs the box beside Delete
+ticked; while <a href="#held">Held</a> holds the note, the reader says why instead.</p>
 <h2 id="tasks">Tasks</h2>
 <p><code>/console/tasks</code>, <code>/console/tasks/{id}</code></p>
 <p>The same library shape, with the rail grouped into four buckets: <strong>ready</strong> (no

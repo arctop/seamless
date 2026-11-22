@@ -97,14 +97,22 @@
 
 {{define "note-reader"}}
 <article class="reader-sheet">
+  {{- with .Delete.Blocked}}
+  <aside class="reader-status-banner muted" role="note">
+    {{icon "info"}}
+    <div><strong>Held keeps this note.</strong> {{.}} <a href="/console/held">Open Held</a></div>
+  </aside>
+  {{- end}}
   <header class="reader-head">
     <div class="reader-eyebrow">
       <span class="kind">note</span>
       {{agentPill "" .Model}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{with .MayContain}} <span class="kind faint" data-may-contain title="Provenance stamp: the agent that wrote this held content from these confidential or sealed projects. It names projects and approvals, never content.">{{mayContain .}}</span>{{end}}
       {{if .Project}}<a class="chip-parent" href="/console/projects/{{.Project}}">{{icon "git-branch"}}{{.Project}}</a>{{else}}<span class="chip-parent">{{icon "git-branch"}}inbox</span>{{end}}
       {{template "note-tags" .Tagged}}
+      {{- /* The same actions in the same places as the memory reader. */}}
       <span class="reader-actions">
         <a class="ract" href="{{.EditURL}}" title="Open {{.AbsPath}}">{{icon "pencil"}}Edit in editor</a>
+        {{if .Delete.Offered}}{{template "note-delete" .}}{{end}}
       </span>
     </div>
     <h2 class="reader-title">{{.Title}}{{copyBtn .Title}}
@@ -133,3 +141,12 @@
      as a link with the plan's status, the tags written for people, and the
      ones software stamps folded behind "+N". */}}
 {{define "note-tags"}}{{range .Plans}}<a class="lib-plan-chip" href="{{.Href}}"{{with .Title}} title="{{.}}"{{end}}>{{icon "map"}}<span class="mono">plan:{{.Slug}}</span>{{if .Status}} <span class="badge {{.Tone}}">{{.Status}}</span>{{end}}</a>{{end}}{{range .Tags}}<span class="badge">{{.}}</span>{{end}}{{with .Machine}}<details class="lib-tag-fold"><summary class="badge" title="Tags agents and hooks add for software">+{{len .}}</summary>{{range .}}<span class="badge faint">{{.}}</span>{{end}}</details>{{end}}{{end}}
+
+{{/* A note's Delete (noteDelete): asked in the page first. A plan's narrative
+     says so in the question and needs its box ticked as well, since without
+     script the form posts on the first press. */}}
+{{define "note-delete"}}<form method="post" action="/console/notes/{{.ID}}/delete">
+          <input type="hidden" name="next" value="/console/notes{{.QS}}">
+          {{range .Delete.Narrative}}<label class="ract-check" title="This note is plan:{{.}}'s narrative: agents that pick up the plan read it first. Tick to delete it anyway."><input type="checkbox" name="narrative" value="{{.}}" required>Delete the narrative of plan:{{.}}</label>{{end}}
+          <button class="ract danger" type="submit" data-confirm="Delete {{.Title}} for good? Its file and index rows go, and nothing brings it back.{{range .Delete.Narrative}} This is plan:{{.}}'s narrative.{{end}}" data-confirm-label="Delete it">{{icon "trash-2"}}Delete</button>
+        </form>{{end}}

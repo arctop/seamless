@@ -2,12 +2,97 @@ package lifecycle
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/arctop/seamless/internal/core"
 )
+
+// ErrLiveSuccessor is returned when restoring a superseded memory while a
+// memory that replaced it is still active: both would then answer in every
+// briefing and recall, two versions of one claim. The error is a
+// *SuccessorError naming that memory.
+var ErrLiveSuccessor = errors.New("a memory that replaced it is still active")
+
+// SuccessorError is a refused restore's ErrLiveSuccessor, carrying the active
+// memory at the end of the supersession chain so the caller can point at it.
+type SuccessorError struct{ Successor core.Memory }
+
+func (e *SuccessorError) Error() string {
+	return fmt.Sprintf("%s replaced it and is still active", MemoryRef(e.Successor.Project, e.Successor.Name))
+}
+
+// Unwrap makes errors.Is(err, ErrLiveSuccessor) hold.
+func (e *SuccessorError) Unwrap() error { return ErrLiveSuccessor }
+
+// MemoryLookup resolves a memory id to its index row; found=false means no
+// such memory. LiveSuccessor and Restore follow superseded_by edges with it.
+type MemoryLookup func(ctx context.Context, id string) (m core.Memory, found bool, err error)
+
+// maxSupersessionChain bounds LiveSuccessor's walk. Real chains are a handful
+// of links; a longer one is a corrupt corpus, not history.
+const maxSupersessionChain = 64
+
+// LiveSuccessor follows m's superseded_by edges and returns the active memory
+// the chain ends at: what replaced m, or what replaced that, and so on.
+// found=false when m is not superseded, or when its chain ends at an archived
+// memory or at one that no longer exists (memory_delete leaves the edge
+// dangling). A chain that loops or runs past maxSupersessionChain is an
+// error: an edge that cannot be followed to its end proves nothing about
+// whether a replacement is live, so a guard built on it must refuse.
+func LiveSuccessor(ctx context.Context, lookup MemoryLookup, m core.Memory) (core.Memory, bool, error) {
+	seen := map[string]bool{m.ID: true}
+	for id, hops := m.SupersededBy, 0; id != ""; hops++ {
+		if hops == maxSupersessionChain {
+			return core.Memory{}, false, fmt.Errorf("lifecycle.LiveSuccessor: %s: the supersession chain runs past %d memories", m.Name, maxSupersessionChain)
+		}
+		if seen[id] {
+			return core.Memory{}, false, fmt.Errorf("lifecycle.LiveSuccessor: %s: the supersession chain loops at %s", m.Name, id)
+		}
+		seen[id] = true
+		next, found, err := lookup(ctx, id)
+		if err != nil {
+			return core.Memory{}, false, fmt.Errorf("lifecycle.LiveSuccessor: %s: %w", m.Name, err)
+		}
+		if !found {
+			return core.Memory{}, false, nil
+		}
+		if next.Active() {
+			return next, true, nil
+		}
+		id = next.SupersededBy
+	}
+	return core.Memory{}, false, nil
+}
+
+// Restore brings an inactive memory back into the active set, whichever way it
+// left: an archived memory through Unarchive, a superseded one through
+// Unsupersede. A superseded memory is restored only while nothing along its
+// supersession chain is active (LiveSuccessor through lookup); otherwise the
+// error is a *SuccessorError and nothing is written. An active memory is
+// refused with ErrNotArchived. old must carry its full Body, read under its
+// file's lock (files.Manager.Mutate), as every caller of the two it
+// dispatches to must.
+//
+// The chain is read from the index, outside the successors' own locks: a
+// successor restored in the same instant can race the check, and the result
+// is then two active memories the owner sees side by side, never a lost
+// write.
+func Restore(ctx context.Context, w MemoryWriter, lookup MemoryLookup, old core.Memory, now time.Time) (core.Memory, error) {
+	if old.InvalidAt == nil || old.SupersededBy == "" {
+		return Unarchive(ctx, w, old, now)
+	}
+	live, found, err := LiveSuccessor(ctx, lookup, old)
+	if err != nil {
+		return core.Memory{}, fmt.Errorf("lifecycle.Restore: %w", err)
+	}
+	if found {
+		return core.Memory{}, fmt.Errorf("lifecycle.Restore: %s: %w", old.Name, &SuccessorError{Successor: live})
+	}
+	return Unsupersede(ctx, w, old, now)
+}
 
 // Unarchive is the inverse of Archive: it clears invalid_at, strips the archive
 // tombstone the archive appended, and rewrites the file (which re-indexes the

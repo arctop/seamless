@@ -132,7 +132,16 @@
   {{if ne .Status "active"}}
   <aside class="reader-status-banner {{if eq .Status "superseded"}}warn{{else}}muted{{end}}" role="note">
     {{icon "archive"}}
-    <div><strong>This memory is {{.Status}}.</strong>{{if .ReplacedByID}} It is historical; continue with <a href="/console/memories/{{.ReplacedByID}}{{.QS}}">{{.ReplacedBy}}</a>.{{else}} It no longer enters agent context.{{end}}</div>
+    <div><strong>This memory is {{.Status}}.</strong>
+      {{- with .Restore.Live}} It is historical; continue with <a href="/console/memories/{{.ID}}{{$.QS}}">{{.Name}}</a>, the active memory that replaced it. It can be restored once that one is no longer active.
+      {{- else}}{{if .ReplacedByID}} <a href="/console/memories/{{.ReplacedByID}}{{.QS}}">{{.ReplacedBy}}</a> replaced it and is no longer active either.{{end}} It no longer reaches agents: briefings and recall leave it out, and its history stays readable here.{{end}}
+      {{- with .Restore.Blocked}} <span class="reader-status-held">{{.}}{{if $.Restore.ToHeld}} <a href="/console/held">Open Held</a>{{end}}</span>{{end}}</div>
+    {{if .Restore.Offered}}
+    <form class="reader-status-act" method="post" action="/console/memories/{{.ID}}/restore">
+      <input type="hidden" name="next" value="/console/memories/{{.ID}}{{.QS}}">
+      <button class="ract" type="submit" title="Bring it back into briefings and recall">{{icon "undo-2"}}Restore</button>
+    </form>
+    {{end}}
   </aside>
   {{end}}
   <header class="reader-head">
@@ -146,9 +155,9 @@
       <span class="reader-actions">
         <a class="ract" href="{{.EditURL}}" title="Open {{.AbsPath}}">{{icon "pencil"}}Edit in editor</a>
         {{if .CanArchive}}
-        <form method="post" action="/console/memories/{{.ID}}/archive" onsubmit="return confirm('Archive {{.Name}}? It leaves every index; the file stays on disk with a tombstone.');">
+        <form method="post" action="/console/memories/{{.ID}}/archive">
           <input type="hidden" name="next" value="/console/memories{{.QS}}">
-          <button class="ract danger" type="submit">{{icon "archive"}}Archive</button>
+          <button class="ract danger" type="submit" data-confirm="Archive {{.Name}}? It leaves briefings and recall; its history stays readable here, and you can restore it." data-confirm-label="Archive it">{{icon "archive"}}Archive</button>
         </form>
         {{end}}
       </span>

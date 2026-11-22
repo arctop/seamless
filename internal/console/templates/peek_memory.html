@@ -50,8 +50,12 @@
   <div class="peek-actions">
     <a class="link-act" href="{{.EditURL}}" title="{{.AbsPath}}">edit in editor</a>
     {{if .CanArchive}}
-    <form method="post" action="/console/memories/{{.ID}}/archive" onsubmit="return confirm('Archive {{.Name}}?');">
-      <button class="link-act danger" type="submit">archive</button>
+    <form method="post" action="/console/memories/{{.ID}}/archive">
+      <button class="link-act danger" type="submit" data-confirm="Archive {{.Name}}? It leaves briefings and recall; its history stays readable here, and you can restore it." data-confirm-label="archive it">archive</button>
+    </form>
+    {{else if .Restore.Offered}}
+    <form method="post" action="/console/memories/{{.ID}}/restore">
+      <button class="link-act" type="submit" title="Bring it back into briefings and recall">restore</button>
     </form>
     {{end}}
   </div>

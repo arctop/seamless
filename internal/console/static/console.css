@@ -8087,6 +8087,23 @@ a.project-global-line:focus-visible { outline: none; box-shadow: var(--shadow-fo
 .btn[data-armed] { color: var(--danger-ink); background: var(--danger); border-color: var(--danger); }
 .confirm-note { display: inline-block; max-width: 100%; margin-left: 8px; font-size: var(--text-xs); color: var(--danger); vertical-align: middle; }
 
+/* UX 18: library restore and delete. The inactive banner ends with Restore; a
+   reader or peek action armed by the in-page confirm wears the danger tone, as
+   .btn does; a plan narrative's confirmation box sits beside Delete. */
+.reader-status-banner > div { flex: 1 1 auto; min-width: 0; }
+.reader-status-held { display: block; margin-top: 4px; }
+.reader-status-act { margin: 0; flex: none; align-self: center; }
+.reader-actions form { flex-wrap: wrap; gap: 6px; }
+.reader-actions .confirm-note, .peek-actions .confirm-note { margin-left: 0; }
+.ract[data-armed], .ract.danger[data-armed]:hover { color: var(--danger-ink); background: var(--danger); border-color: var(--danger); }
+.link-act[data-armed], .link-act.danger[data-armed]:hover { color: var(--danger); text-decoration: underline; }
+.ract-check { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; font-size: var(--text-xs); font-weight: 600; color: var(--danger); cursor: pointer; }
+.ract-check input { margin: 0; accent-color: var(--danger); }
+@media (max-width: 720px) {
+  .reader-status-banner { flex-wrap: wrap; }
+  .reader-status-act { align-self: flex-start; margin-left: 24px; }
+}
+
 /* UX 15: Now and Interactions in plain words. A Now title wraps to two lines
    instead of cutting at one, and keeps its whole text in its title attribute
    when two lines still cut it. An agent card is headed by what it holds, with

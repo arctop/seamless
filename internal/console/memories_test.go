@@ -100,7 +100,7 @@ func TestMemoriesPage_GroupsAndArchive(t *testing.T) {
 	page := getPeek(t, mux, "/console/memories/"+m1.ID)
 	require.Equal(t, http.StatusOK, page.Code)
 	require.Contains(t, page.Body.String(), "This memory is archived.")
-	require.Contains(t, page.Body.String(), "It no longer enters agent context.")
+	require.Contains(t, page.Body.String(), "It no longer reaches agents: briefings and recall leave it out, and its history stays readable here.")
 }
 
 func TestMemoriesPage_DefaultSortIsRecentWithinKind(t *testing.T) {

@@ -19414,7 +19414,9 @@ nothing, and their rows say so.
 
 | Action | Route | Effect |
 |---|---|---|
-| Archive a memory | `POST /console/memories/{id}/archive` | Routes through `lifecycle.Archive`: the memory is stamped invalid and leaves every index, its file stays on disk with a tombstone. Returns to the Memories list `next=` names, its filters kept; any other `next` returns to the plain list. |
+| Archive a memory | `POST /console/memories/{id}/archive` | Routes through `lifecycle.Archive`: the memory is stamped invalid and leaves briefings, recall and every index. Its file stays on disk with a line saying when it was archived, its history stays readable here, and **Restore a memory** brings it back. Returns to the Memories list `next=` names, its filters kept; any other `next` returns to the plain list. |
+| Restore a memory | `POST /console/memories/{id}/restore` | Routes through `lifecycle.Restore`, under the file's lock: an archived memory, or a superseded one that nothing active replaced, comes back into briefings, recall and the indexes, and the line its retirement added to the body comes off. Refused (409), with nothing written, while a memory that replaced it is still active (the answer names that memory when you can read it), and while [Held](#held) holds it: with write screening on, its file is quarantined or the review flagged it, and, whenever the held queue is served, an agent's change to it waits there. An active memory is left as it is. Records `memory.written` with `restored`. Returns to the memory's own page `next=` names, its filters kept. |
+| Delete a note | `POST /console/notes/{id}/delete` | What `notes_delete` does, under the file's lock: the note's file and its index rows go for good, and `note.written` records it with `deleted`. A plan's narrative (the note a `plan:<slug>` composition leads with) also needs `narrative=<slug>` for each plan it narrates, the box beside **Delete**; without it the delete is refused (409), since a form posts on its first press without script. Refused too while [Held](#held) holds the note: its file is quarantined, or an agent's change to it waits there. Returns to the Notes list `next=` names, its filters kept. |
 | Force-release a task claim | `POST /console/tasks/{id}/release` | The owner override, **Release claim** on a task in progress, which asks in the page first: takes the task's claim from whoever holds it, live or lapsed, and tells the holder, or reopens a task marked in progress with no claim at all, so any agent may claim it. A task no longer in progress has nothing to release: the page says so (a JSON caller gets 409). Not reachable from the agent MCP tools. |
 | Mark a task done, drop it, or reopen it | `POST /console/tasks/{id}/status` | **Mark done**, **Drop** (which asks in the page first) or **Reopen** on a task: `to=done`, `dropped` or `open`, through the update `tasks_update status=` makes, so a closed task unblocks the tasks that depend on it, and the last step of a plan closed as done settles the plan as an agent's close does. Records `task.transition` with `by: console`. Refused, naming the holder, while a live claim holds the task: release the claim first. Reopen is for a done or dropped task (one in progress reopens through **Release claim**); a move to the status the task has writes nothing. |
 | Mark a gate as handled | `POST /console/tasks/{id}/gate/clear` | **Mark as handled** on a task whose own gate is open, with an optional one-line `note=`: clears the gate as `tasks_update gate_clear` does, recording the owner as who cleared it and the note. A step's gate clears, and the step goes ahead once nothing else blocks it; a gate closes as done, which unblocks the tasks waiting on it. Records `task.transition` with `gate: cleared` and `by: console`. Refused while a live claim holds the task, from an agent's process on the peer_auth socket, and from a paired device. |
@@ -19521,7 +19523,8 @@ and the Touch ID helper there approves through it with its own signature.
 
 Read the shape of that list. There is no "create memory", no "edit note", no
 "delete memory", no "add task", no "start session". The direct writes to knowledge
-state are **archive a memory**, **approve a captured plan**, the **star**
+state are **archive** and **restore a memory**, **delete a note**, **approve a
+captured plan**, the **star**
 flag, and - with write screening on - **releasing a held write**, which lands
 exactly what an agent wrote, never text of the console's own; the rest either
 manage gardener proposals - which are themselves
@@ -20612,8 +20615,8 @@ for the same text on [Search](#search).
 The whole state is in the URL - `?sort=`, `?group=project`, `?kind=`,
 `?project=` (a slug, or `global`), `?fav=1`, `?surfaced=never` and `?q=` - and
 it survives what you do on the page: opening another memory, changing the sort
-(the memory you are reading stays open), starring, and archiving (you land on
-the same filtered list). A value the screen cannot read is a 400 naming the
+(the memory you are reading stays open), starring, archiving (you land on
+the same filtered list) and restoring (you stay on the memory). A value the screen cannot read is a 400 naming the
 values it takes.
 
 What reaches an agent's context is **surfaced** here, the word the Overview
@@ -20632,7 +20635,12 @@ demand breakdown behind it, the `vscode://` link straight to the file, and its
 supersession neighbors in **both** directions: what replaced it, and what it
 replaced. The actions here are
 **star** - the flag that pins it into briefings and boosts recall - and
-**archive**.
+**archive**, which asks in the page first and says what happens: the memory
+leaves briefings and recall, its history stays readable, and it can be
+restored. An archived or superseded memory says so in a banner at the top of
+the reader, and the banner carries **Restore** - unless a memory that replaced
+it is still active, which the banner links instead, or [Held](#held) holds it,
+which the banner says.
 
 Opening `/console/memories` auto-opens the first match (in the tree, the most
 recently updated one); a memory's own URL opens the same screen with it
@@ -20656,6 +20664,11 @@ editor link. A `plan:<slug>` tag is a link to [the plan](#plans) with its
 status: a captured plan's own, otherwise in progress, ready or done from its
 steps. The tags software adds - `created-by:*`, `plan-status:*`, `cc-plan` and
 `agent-cache` - fold behind a **+N** chip.
+
+The reader's actions are the **star** and **Delete**, in the same places as on
+Memories. Delete asks in the page first and removes the note for good. A note
+that is a plan's narrative says so, and also needs the box beside Delete
+ticked; while [Held](#held) holds the note, the reader says why instead.
 
 ## Tasks
 

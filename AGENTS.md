@@ -140,16 +140,24 @@ the pointer is where to look, not a substitute for reading it.
   (`core.Memory.Active()` is `InvalidAt == nil`; SQL filters `WHERE invalid_at
   IS NULL`). Never infer live-ness from an empty `superseded_by` -- an archived
   memory has `invalid_at` set and `superseded_by` empty, and is equally gone.
-- `lifecycle.Supersede`/`Archive` are the only writers of
-  `invalid_at`/`superseded_by` in non-test code; MCP, gardener, and console all
-  route through them. Do not stamp those fields by hand.
+- `lifecycle.Supersede`/`Archive`, and `Restore`/`Unarchive`/`Unsupersede` on
+  the way back, are the only writers of `invalid_at`/`superseded_by` in
+  non-test code; MCP, gardener, and console all route through them. Do not
+  stamp those fields by hand.
 - `valid_from` is never touched by supersession: `[valid_from, invalid_at)` is
   the memory's bi-temporal record.
 - Stamped exactly once, guarded on the way in: already-invalid `old` ->
   `ErrAlreadyInvalid`, `old.ID == replacement.ID` -> `ErrSelfSupersede`,
   invalid/empty replacement -> `ErrInvalidReplacement`. Acyclicity falls out of
-  those guards (every edge points invalid -> active, and nothing clears
-  `invalid_at`); there is no cycle traversal to lean on.
+  those guards (an edge starts only at a memory going invalid and points at an
+  active one); there is no cycle traversal to lean on.
+- The way back is `lifecycle.Restore` (the console's Restore; the gardener's
+  undo calls `Unarchive`/`Unsupersede` itself). It clears `invalid_at` only on a
+  memory left with no edge: an archived memory has none, and `Unsupersede` drops
+  the edge with it. So a memory with an outgoing edge is always invalid, and the
+  guards above still rule out a cycle. `Restore` brings a superseded memory back
+  only while nothing along its chain is active (`ErrLiveSuccessor`); otherwise
+  two versions of one claim would answer at once.
 - Pass the FULL body. Both functions append a tombstone to `old.Body` and
   rewrite the whole file, so handing them an index row -- which carries no body
   -- truncates the memory to just the tombstone. Re-read the file first.
@@ -1950,8 +1958,8 @@ files; use them.
 
 The observability console is `html/template` + vanilla JS + SSE, served by
 `internal/console` -- no node, npm, React, or build step. It is read-mostly: the
-writes are the owner's overrides and curation actions, among them -- archive a
-memory, approve a plan, force-release a task's claim, mark a task done, drop
+writes are the owner's overrides and curation actions, among them -- archive or
+restore a memory, delete a note, approve a plan, force-release a task's claim, mark a task done, drop
 or reopen it, mark a task's gate as handled,
 ask/split/apply/dismiss/retarget a gardener proposal, run a gardener pass now, save or reset the
 briefing settings, switch update checks and automatic updates (or hand both

@@ -85,6 +85,9 @@ type memoryDetail struct {
 	Level      level        `json:"-"`
 	EditURL    template.URL `json:"-"`
 	CanArchive bool         `json:"-"`
+	// Restore is the inactive banner's restore control (restoreViewOf,
+	// memories.go). Presentation only.
+	Restore restoreView `json:"-"`
 }
 
 // memoryDetailData projects an index row into the full detail payload: body
@@ -156,6 +159,7 @@ func (s *Service) memoryDetailData(ctx context.Context, m core.Memory) (memoryDe
 			d.ReplacedBy, d.ReplacedByID = by.Name, by.ID
 		}
 	}
+	s.withholdUnreadSuccessor(ctx, &d, m)
 	superseded, err := store.MemoriesSuperseding(ctx, s.db(ctx), m.ID)
 	if err != nil {
 		return memoryDetail{}, err
@@ -165,6 +169,7 @@ func (s *Service) memoryDetailData(ctx context.Context, m core.Memory) (memoryDe
 			ID: sm.ID, Name: sm.Name, Kind: string(sm.Kind), Project: sm.Project,
 		})
 	}
+	d.Restore = s.restoreViewOf(ctx, m)
 	return d, nil
 }
 
@@ -234,6 +239,9 @@ type noteDetail struct {
 	FilePath    string        `json:"filePath"`
 	AbsPath     string        `json:"absPath"`
 	EditURL     template.URL  `json:"-"`
+	// Delete is the reader's delete control (deleteViewOf, notes.go).
+	// Presentation only.
+	Delete noteDeletion `json:"-"`
 }
 
 // noteDetailData projects an index row into the full detail payload, reading
@@ -259,6 +267,7 @@ func (s *Service) noteDetailData(ctx context.Context, n core.Note) noteDetail {
 	} else {
 		d.MayContain = s.itemStamps(ctx, core.ItemKindNote, n.ID, n.Project)
 	}
+	d.Delete = s.deleteViewOf(ctx, n)
 	return d
 }
 

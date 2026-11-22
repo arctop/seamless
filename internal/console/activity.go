@@ -144,6 +144,9 @@ func eventSummary(e core.Event) string {
 	case core.EventSessionEnded:
 		return "session ended"
 	case core.EventMemoryWritten:
+		if payloadStr(p, "restored") != "" {
+			return "restored memory " + payloadStr(p, "name")
+		}
 		return "wrote memory " + payloadStr(p, "name")
 	case core.EventMemoryRead:
 		return "read memory " + payloadStr(p, "name")
@@ -219,6 +222,9 @@ func eventSummary(e core.Event) string {
 		}
 		return "repo moved; project adopted"
 	case core.EventNoteWritten:
+		if deleted, _ := p["deleted"].(bool); deleted {
+			return "deleted note " + payloadStr(p, "slug")
+		}
 		return "wrote note " + payloadStr(p, "title")
 	case core.EventNoteRead:
 		// A read names its note by slug rather than the title the write side

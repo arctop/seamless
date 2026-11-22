@@ -2,7 +2,9 @@ package console
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"slices"
@@ -690,4 +692,163 @@ func (s *Service) planStatusOf(ctx context.Context, p *notePlan) {
 	case planPhaseInProgress:
 		p.Tone = "accent"
 	}
+}
+
+// notesListPath is the Notes screen's list URL.
+const notesListPath = "/console/notes"
+
+// noteDeletion is the reader's delete control: Offered when Delete is drawn,
+// else Blocked (why not, a sentence the Held screen settles). Narrative names
+// the plans this note is the narrative of (narrativesOf): their confirmation
+// is a box to tick, since a form posts on the first press without script.
+type noteDeletion struct {
+	Offered   bool
+	Narrative []string
+	Blocked   string
+}
+
+// deleteViewOf decides the delete control for n, through the request's
+// handle. A narrative that cannot be resolved counts as one, so the reader
+// asks for the confirmation rather than skip it.
+func (s *Service) deleteViewOf(ctx context.Context, n core.Note) noteDeletion {
+	if s.cfg.Files == nil {
+		return noteDeletion{}
+	}
+	if why := s.heldBlock(ctx, n.ID, n.FilePath, false); why != "" {
+		return noteDeletion{Blocked: why}
+	}
+	narr, err := s.narrativesOf(ctx, n)
+	if err != nil {
+		s.logger.Warn("console: note narrative", "id", n.ID, "error", err)
+	}
+	return noteDeletion{Offered: true, Narrative: narr}
+}
+
+// narrativesOf lists the plans n is the narrative of: each plan:<slug> tag
+// whose composition's primary note is n (plans.Composition, the note the
+// Plans screen and agents inheriting the plan read first). Read through the
+// request's handle, which can only widen the list: a primary hidden in a
+// locked project would have won over n. On a failed read the slug counts,
+// alongside the error.
+func (s *Service) narrativesOf(ctx context.Context, n core.Note) ([]string, error) {
+	var out []string
+	var errs []error
+	for _, t := range n.Tags {
+		slug := plans.SlugFromTags([]string{t})
+		if slug == "" || slices.Contains(out, slug) {
+			continue
+		}
+		primary, _, ok, err := plans.Composition(ctx, s.db(ctx), slug)
+		if err != nil {
+			errs = append(errs, err)
+			out = append(out, slug)
+			continue
+		}
+		if ok && primary.ID == n.ID {
+			out = append(out, slug)
+		}
+	}
+	return out, errors.Join(errs...)
+}
+
+// noteDelete deletes a note for good, as notes_delete does: files.Manager.Remove
+// drops the file and its index rows, here under the file's lock so the read
+// that decides the delete cannot race an agent's append, and note.written
+// records it with deleted and by=console. The browser returns to the Notes
+// list the form names in next, its state kept.
+//
+// Refused, with nothing removed: a plan's narrative without its explicit
+// confirmation, narrative=<slug> for every plan it narrates (the in-page
+// confirm cannot guard it, since the form posts on the first press without
+// script), and a note the Held screen holds (heldBlock). A refusal returns to
+// the note's own page.
+func (s *Service) noteDelete(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if s.cfg.Files == nil {
+		s.serverError(w, r, errNoFiles)
+		return
+	}
+	id := r.PathValue("id")
+	next := r.PostFormValue("next")
+	back := libBack(next, notesListPath)
+	idx, ok, err := store.NoteByID(ctx, s.db(ctx), id)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if !ok {
+		s.notFound(w, r, "No note with id "+id+".")
+		return
+	}
+	confirmed := r.PostForm["narrative"]
+	err = s.cfg.Files.Mutate(ctx, idx.FilePath, func(ctx context.Context) error {
+		note, rerr := s.cfg.Files.Store().ReadNote(idx.FilePath)
+		if rerr != nil {
+			return rerr
+		}
+		if note.ID != idx.ID {
+			return errNoteMoved
+		}
+		if why := s.heldBlock(ctx, note.ID, note.FilePath, false); why != "" {
+			return &libRefusal{msg: why}
+		}
+		narr, nerr := s.narrativesOf(ctx, note)
+		if nerr != nil {
+			return nerr
+		}
+		var unconfirmed []string
+		for _, slug := range narr {
+			if !slices.Contains(confirmed, slug) {
+				unconfirmed = append(unconfirmed, slug)
+			}
+		}
+		if len(unconfirmed) > 0 {
+			return &libRefusal{
+				msg:   narrativeRefusal(unconfirmed),
+				extra: map[string]any{"narrativeOf": unconfirmed},
+			}
+		}
+		return s.cfg.Files.Remove(ctx, idx.FilePath)
+	})
+	var refusal *libRefusal
+	switch {
+	case errors.As(err, &refusal):
+		self := libBack(next, notesListPath)
+		self.Path = notesListPath + "/" + idx.ID
+		libRefuse(w, r, self, refusal)
+		return
+	case errors.Is(err, errNoteMoved), errors.Is(err, fs.ErrNotExist):
+		s.notFound(w, r, "No note with id "+id+".")
+		return
+	case err != nil:
+		s.serverError(w, r, err)
+		return
+	}
+	// idx.Project: the project the note sat in, as notes_delete records it.
+	if s.cfg.Events != nil {
+		if _, err := s.eventLog(ctx).Record(ctx, core.Event{
+			Kind: core.EventNoteWritten, ProjectSlug: idx.Project, ItemID: idx.ID,
+			Payload: map[string]any{"slug": idx.Slug, "deleted": true, "by": "console"},
+		}); err != nil {
+			s.logger.Warn("console: record note delete event", "error", err)
+		}
+	}
+	if wantsJSON(r) {
+		writeJSON(w, http.StatusOK, map[string]any{"status": "deleted", "id": idx.ID})
+		return
+	}
+	http.Redirect(w, r, withNotice(back, "Deleted "+idx.Title+"."), http.StatusSeeOther)
+}
+
+// errNoteMoved: the file an index row named now holds another note.
+var errNoteMoved = errors.New("console: that file holds another note now")
+
+// narrativeRefusal says which plans' narrative a delete was not confirmed for.
+func narrativeRefusal(slugs []string) string {
+	named := make([]string, len(slugs))
+	for i, s := range slugs {
+		named[i] = "plan:" + s
+	}
+	return "Not deleted: this is " + strings.Join(named, " and ") + "'s narrative, which agents that pick up the plan read first. " +
+		"Tick the box beside Delete to confirm it."
 }

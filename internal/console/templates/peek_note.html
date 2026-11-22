@@ -23,5 +23,12 @@
 
   <div class="peek-actions">
     <a class="link-act" href="{{.EditURL}}" title="{{.AbsPath}}">edit in editor</a>
+    {{if .Delete.Offered}}
+    <form method="post" action="/console/notes/{{.ID}}/delete">
+      {{range .Delete.Narrative}}<label class="ract-check" title="This note is plan:{{.}}'s narrative: agents that pick up the plan read it first. Tick to delete it anyway."><input type="checkbox" name="narrative" value="{{.}}" required>the narrative of plan:{{.}}</label> {{end}}
+      <button class="link-act danger" type="submit" data-confirm="Delete {{.Title}} for good? Its file and index rows go, and nothing brings it back.{{range .Delete.Narrative}} This is plan:{{.}}'s narrative.{{end}}" data-confirm-label="delete it">delete</button>
+    </form>
+    {{else}}{{with .Delete.Blocked}}<span class="muted" title="{{.}}">held: <a href="/console/held">open Held</a></span>{{end}}
+    {{end}}
   </div>
 {{end}}
