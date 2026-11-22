@@ -194,6 +194,17 @@ type searchGroup struct {
 	Capped string `json:"-"`
 }
 
+// Noun is the group's label as its count reads in the page's breakdown: the
+// singular for exactly one ("1 Session"), the label otherwise ("2 Sessions",
+// "5+ Sessions"). The retired memories' label is no plural, so it stays. The
+// palette heads a group with Label, a category, whatever its count.
+func (g searchGroup) Noun() string {
+	if g.Count == 1 && !g.More && !g.Retired && g.Accent != "" {
+		return titleWord(g.Accent)
+	}
+	return g.Label
+}
+
 // searchData is the page/JSON payload.
 type searchData struct {
 	Query       string `json:"query"`

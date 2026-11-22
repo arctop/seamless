@@ -47,7 +47,7 @@
   <button class="btn" type="submit">Deny</button>
 </form>
 {{else}}
-<div class="access-decide" data-access-id="{{.Request.ID}}" data-deny-confirm="Deny this request? {{if eq .Request.Kind "move"}}The agent stays where it is, and {{.Request.Project}} stays closed to it.{{else}}{{.Request.Project}} stays {{if eq .Request.Kind "grant"}}closed to{{else}}locked for{{end}} that session.{{end}}">
+<div class="access-decide" data-access-id="{{.Request.ID}}">
 {{if .For}}
 <form id="access-form" class="access-form" data-digest="{{.Request.Digest}}" data-duration="{{.For}}"{{if .Access}} data-access="{{.Access}}"{{end}} data-options="{{printf "%s" .PasskeyOptions}}">
   <p class="access-duration">{{if .ForGood}}How long: <strong>{{.ForWords}}</strong>{{else}}For how long: <strong>{{.ForWords}}</strong>{{end}}{{if .Accesses}} &middot; Access: <strong>{{if eq .Access "read-write"}}read and write{{else}}read-only{{end}}</strong>{{end}}{{if not .ForGood}} &middot; <a href="/console/access/{{.Request.ID}}" data-seam-query>{{if .Accesses}}choose again{{else}}choose another duration{{end}}</a>{{end}}</p>
@@ -60,7 +60,7 @@
   {{else}}
   <p class="held-sub">No passkey is enrolled here, so approve it in your own terminal: <code>seam approve {{.Request.Short}}</code></p>
   {{end}}
-  <button class="btn" id="access-deny" type="button">Deny</button>
+  {{template "access-deny-button" .}}
 </form>
 {{else}}
 <form id="access-choose" class="access-form" method="get" action="/console/access/{{.Request.ID}}" data-seam-query>
@@ -82,9 +82,16 @@
   {{else}}
   <p class="held-sub">No passkey is enrolled here, so approve it in your own terminal: <code>seam approve {{.Request.Short}}</code></p>
   {{end}}
-  <button class="btn" id="access-deny" type="button">Deny</button>
+  {{template "access-deny-button" .}}
 </form>
 {{end}}
+{{/* Deny's own form, outside the two above (a form cannot hold one): the
+     button points at it with form=. The page's script sends it once the
+     button is pressed twice (data-confirm, shell.js); without script it
+     posts and follows the redirect back here. */}}
+<form id="access-deny-form" method="post" action="/console/access/{{.Request.ID}}/deny">
+  <input type="hidden" name="next" value="/console/access/{{.Request.ID}}">
+</form>
 </div>{{end}}
 {{if or .Advisory .PasskeyReady}}<p class="held-sub">Or, in your own terminal: <code>seam approve {{.Request.Short}}</code></p>{{end}}
 <p class="held-sub" id="access-status" role="status" aria-live="polite"></p>
@@ -94,6 +101,8 @@
 {{end}}
 {{end}}
 {{end}}
+
+{{define "access-deny-button"}}<button class="btn" id="access-deny" type="submit" form="access-deny-form" data-confirm="Deny this request? {{if eq .Request.Kind "move"}}The agent stays where it is, and {{.Request.Project}} stays closed to it.{{else}}{{.Request.Project}} stays {{if eq .Request.Kind "grant"}}closed to{{else}}locked for{{end}} that session.{{end}}" data-confirm-label="Deny it">Deny</button>{{end}}
 
 {{define "scripts"}}
 <script>
@@ -193,11 +202,12 @@ window.SEAM_NO_LIVE_REFRESH = true; // an approval in progress must not be clobb
             (err && err.message ? err.message : 'Something went wrong. Nothing was approved.'));
       });
     });
-    var deny = document.getElementById('access-deny');
-    if (wireOnce(deny)) deny.addEventListener('click', function () {
-      var root = document.querySelector('[data-access-id]');
-      var id = root.getAttribute('data-access-id');
-      if (!confirm(root.getAttribute('data-deny-confirm') || 'Deny this request?')) return;
+    // Deny asks in the page first (the button's data-confirm, armed by
+    // shell.js, which holds the first press back): this submit is the second.
+    var deny = document.getElementById('access-deny-form');
+    if (wireOnce(deny)) deny.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var id = document.querySelector('[data-access-id]').getAttribute('data-access-id');
       post('/console/access/' + id + '/deny', {}).then(function () { refresh(); })
         .catch(function (err) { say(err.message); });
     });

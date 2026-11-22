@@ -916,42 +916,42 @@
     <div class="ov2-ledger">
       
       <a id="<id:38>" class="ov2-evt" data-sev="inject" href="/console/events/<id:38>">
-        <time title="<time> UTC"><age></time>
+        <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time>
         <span class="kindchip" title="retrieval.injected"><svg class="ico ico-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg>Context injected</span>
         <p>context injected</p>
         <span class="ov2-evt-scope">global</span>
       </a>
       
       <a id="<id:39>" class="ov2-evt" data-sev="system" href="/console/events/<id:39>">
-        <time title="<time> UTC"><age></time>
+        <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time>
         <span class="kindchip" title="session.ended"><svg class="ico ico-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>Session ended</span>
         <p>session ended <span class="mono-id"><id:44>~8</span></p>
         <span class="ov2-evt-scope">example-confidential</span>
       </a>
       
       <a id="<id:40>" class="ov2-evt" data-sev="system" href="/console/events/<id:40>">
-        <time title="<time> UTC"><age></time>
+        <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time>
         <span class="kindchip" title="session.ended"><svg class="ico ico-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>Session ended</span>
         <p>session ended <span class="mono-id"><id:45>~8</span></p>
         <span class="ov2-evt-scope">example-open-beta</span>
       </a>
       
       <a id="<id:41>" class="ov2-evt" data-sev="system" href="/console/events/<id:41>">
-        <time title="<time> UTC"><age></time>
+        <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time>
         <span class="kindchip" title="session.ended"><svg class="ico ico-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>Session ended</span>
         <p>session ended <span class="mono-id"><id:25>~8</span></p>
         <span class="ov2-evt-scope">example-sealed</span>
       </a>
       
       <a id="<id:42>" class="ov2-evt" data-sev="system" href="/console/events/<id:42>">
-        <time title="<time> UTC"><age></time>
+        <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time>
         <span class="kindchip" title="session.ended"><svg class="ico ico-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>Session ended</span>
         <p>session ended <span class="mono-id"><id:20>~8</span></p>
         <span class="ov2-evt-scope">example-confidential</span>
       </a>
       
       <a id="<id:43>" class="ov2-evt" data-sev="system" href="/console/events/<id:43>">
-        <time title="<time> UTC"><age></time>
+        <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time>
         <span class="kindchip" title="session.ended"><svg class="ico ico-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>Session ended</span>
         <p>session ended <span class="mono-id"><id:27>~8</span></p>
         <span class="ov2-evt-scope">example-open-alpha</span>
@@ -4303,7 +4303,7 @@
         </div>
       </div>
       <span class="proj"><a href="/console/projects/example-open-alpha" data-peek><svg class="ico ico-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>example-open-alpha</a></span>
-      <span class="when" title="<time> UTC"><age></span>
+      <span class="when"><time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
     </div>
     
   </div>
@@ -4326,7 +4326,7 @@
         </div>
       </div>
       <span class="proj"><a href="/console/projects/example-confidential" data-peek><svg class="ico ico-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>example-confidential</a></span>
-      <span class="when" title="<time> UTC"><age></span>
+      <span class="when"><time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
     </div>
     
     <div id="<id:45>" class="sess-row row-link" data-href="/console/sessions/<id:45>" data-peek>
@@ -4338,7 +4338,7 @@
         </div>
       </div>
       <span class="proj"><a href="/console/projects/example-open-beta" data-peek><svg class="ico ico-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>example-open-beta</a></span>
-      <span class="when" title="<time> UTC"><age></span>
+      <span class="when"><time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
     </div>
     
     <div id="<id:25>" class="sess-row row-link" data-href="/console/sessions/<id:25>" data-peek>
@@ -4350,7 +4350,7 @@
         </div>
       </div>
       <span class="proj"><a href="/console/projects/example-sealed" data-peek><svg class="ico ico-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>example-sealed</a></span>
-      <span class="when" title="<time> UTC"><age></span>
+      <span class="when"><time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
     </div>
     
     <div id="<id:20>" class="sess-row row-link" data-href="/console/sessions/<id:20>" data-peek>
@@ -4362,7 +4362,7 @@
         </div>
       </div>
       <span class="proj"><a href="/console/projects/example-confidential" data-peek><svg class="ico ico-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>example-confidential</a></span>
-      <span class="when" title="<time> UTC"><age></span>
+      <span class="when"><time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
     </div>
     
     <div id="<id:27>" class="sess-row row-link" data-href="/console/sessions/<id:27>" data-peek>
@@ -4374,7 +4374,7 @@
         </div>
       </div>
       <span class="proj"><a href="/console/projects/example-open-alpha" data-peek><svg class="ico ico-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>example-open-alpha</a></span>
-      <span class="when" title="<time> UTC"><age></span>
+      <span class="when"><time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
     </div>
     
   </div>
@@ -6327,7 +6327,36 @@ window.SEAM_NO_LIVE_REFRESH = true;
   document.addEventListener('change', function (event) {
     if (event.target.closest && event.target.closest('[data-brief-preview-project]')) refreshPreview();
   });
+  
+  
+  
+  
+  
+  
+  var reembedTimer = null;
+  function followReembed() {
+    if (reembedTimer || !document.querySelector('[data-vectors-card][data-reembed-running]')) return;
+    reembedTimer = setTimeout(function () {
+      reembedTimer = null;
+      if (!document.querySelector('[data-vectors-card][data-reembed-running]') || !window.SeamConsole) return;
+      if (document.hidden) { followReembed(); return; }
+      fetch(location.href, {
+        credentials: 'same-origin', cache: 'no-store',
+        headers: { Accept: 'text/html', 'X-Seam-Partial': '1' }
+      }).then(function (res) {
+        if (new URL(res.url || location.href, location.href).pathname === '/console/login') return null;
+        return res.ok ? res.text() : '';
+      }).then(function (html) {
+        if (html === null) return;
+        var fresh = html ? new DOMParser().parseFromString(html, 'text/html').querySelector('[data-vectors-card]') : null;
+        var card = document.querySelector('[data-vectors-card]');
+        if (fresh && card) window.SeamConsole.morph(card, fresh);
+        followReembed();
+      }).catch(function () { followReembed(); });
+    }, 2000);
+  }
   function enhanceSettings() {
+    followReembed();
     enhanceDirtyForm('[data-briefing-form]', 'brief-state', 'Unsaved changes — save to use them for new sessions.');
     enhanceDirtyForm('[data-features-form]', 'features-state', 'Unsaved changes — save to apply them.');
     enhanceDirtyForm('[data-backups-form]', 'backups-state', 'Unsaved changes — save to use them from the next backup.');
@@ -6978,7 +7007,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
 
     <div class="search-results-head">
       <div class="search-breakdown" aria-label="Result counts by type" data-seam-query>
-        <span data-search-kind="memory"><b>6</b> Memories</span><span data-search-kind="note"><b>3</b> Notes</span><span data-search-kind="task"><b>1</b> Tasks</span><span data-search-kind="plan"><b>1</b> Plans</span><span data-search-kind="session"><b>2</b> Sessions</span>
+        <span data-search-kind="memory"><b>6</b> Memories</span><span data-search-kind="note"><b>3</b> Notes</span><span data-search-kind="task"><b>1</b> Task</span><span data-search-kind="plan"><b>1</b> Plan</span><span data-search-kind="session"><b>2</b> Sessions</span>
       </div>
       <span class="search-order-note">Best matches first</span>
     </div>
@@ -7331,7 +7360,6 @@ Wave one is the staging ... </div>
 
 
 <div class="lib-page" data-library="trials">
-
 <header class="mv2-bar">
   <h1><svg class="ico ico-test-tube" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 2v17.5c0 1.4-1.1 2.5-2.5 2.5c-1.4 0-2.5-1.1-2.5-2.5V2"/><path d="M8.5 2h7"/><path d="M14.5 16h-5"/></svg>Trials</h1><details class="page-about"><summary aria-label="About this page" title="About this page"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary><p class="page-about-pop" role="note">Expected-versus-actual records, outcomes, and structured metrics. Newest first, grouped by lab.</p></details>
   <span class="mv2-count" aria-label="1 trials">
@@ -7344,8 +7372,7 @@ Wave one is the staging ... </div>
   <div class="mv2-sort">
     <span class="mv2-sort-label">Outcome</span>
     <div class="seg" data-seam-query>
-      
-      <a class="on" href="/console/trials/<id:19>?">all</a><a class="" href="/console/trials/<id:19>?outcome=pass">pass</a><a class="" href="/console/trials/<id:19>?outcome=fail">fail</a><a class="" href="/console/trials/<id:19>?outcome=partial">partial</a><a class="" href="/console/trials/<id:19>?outcome=inconclusive">inconclusive</a>
+      <a class="on" href="/console/trials">all</a><a class="" href="/console/trials?outcome=pass">pass</a><a class="" href="/console/trials?outcome=fail">fail</a><a class="" href="/console/trials?outcome=partial">partial</a><a class="" href="/console/trials?outcome=inconclusive">inconclusive</a>
     </div>
   </div>
   </div>
@@ -7365,7 +7392,7 @@ Wave one is the staging ... </div>
           
           <a class="rail-item selected" id="ri-<id:19>" href="/console/trials/<id:19>" data-title="Flush after five minutes" data-context="Lab / example-cache-lab" aria-current="page">
             <span class="ri-title">Flush after five minutes</span>
-            <span class="ri-meta"><span class="t-ok">pass</span> &middot; example-open-alpha &middot; 1 metric &middot; <span title="<time> UTC"><age></span></span>
+            <span class="ri-meta"><span class="t-ok">pass</span> &middot; example-open-alpha &middot; 1 metric &middot; <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
           </a>
           
         </div>
@@ -7393,7 +7420,7 @@ Wave one is the staging ... </div>
       </form>
     </h2>
     <div class="reader-facts">
-      <span class="fact" title="<time> UTC">recorded <age></span>
+      <span class="fact">recorded <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
       <span class="fact">by <a href="/console/sessions/<id:1>"><span class="mono"><sess:1></span></a></span>
     </div>
   </header>
@@ -7491,7 +7518,7 @@ Wave one is the staging ... </div>
           
           <a class="rail-item selected" id="ri-lab-example-cache-lab" href="/console/labs/example-cache-lab" data-title="example-cache-lab" data-context="Most recently active" aria-current="page">
             <span class="ri-title mono">example-cache-lab</span>
-            <span class="ri-meta">1 trial &middot; <span class="t-ok">1 pass</span> &middot; <span title="<time> UTC"><age></span></span>
+            <span class="ri-meta">1 trial &middot; <span class="t-ok">1 pass</span> &middot; <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
           </a>
           
         </div>
@@ -7511,8 +7538,8 @@ Wave one is the staging ... </div>
     <div class="reader-facts">
       <span class="fact">1 trial</span>
       <span class="fact">1 session</span>
-      <span class="fact" title="<time> UTC">first <age></span>
-      <span class="fact" title="<time> UTC">last <age></span>
+      <span class="fact">first <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
+      <span class="fact">last <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
       <span class="fact"><a href="/console/trials?lab=example-cache-lab"><svg class="ico ico-test-tube" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 2v17.5c0 1.4-1.1 2.5-2.5 2.5c-1.4 0-2.5-1.1-2.5-2.5V2"/><path d="M8.5 2h7"/><path d="M14.5 16h-5"/></svg> open in Trials</a></span>
     </div>
     <div class="reader-facts outcome-tally">
@@ -7528,7 +7555,7 @@ Wave one is the staging ... </div>
     <h3>Trials <span class="count">1</span></h3>
     <ul class="peek-refs">
       
-      <li><a href="/console/trials/<id:19>">Flush after five minutes</a> <span class="badge ok">pass</span> <span class="muted" title="<time> UTC"><age></span></li>
+      <li><a href="/console/trials/<id:19>">Flush after five minutes</a> <span class="badge ok">pass</span> <span class="muted"><time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span></li>
       
     </ul>
     

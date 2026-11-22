@@ -11,8 +11,8 @@
     <dt><a href="/console/projects/{{.Slug}}?tab=sessions">Sessions</a></dt><dd>{{.Sessions}}</dd>
     <dt><a href="/console/projects/{{.Slug}}?tab=tasks">Open tasks</a></dt><dd>{{.OpenTasks}}</dd>
     <dt><a href="/console/projects/{{.Slug}}?tab=notes">Notes</a></dt><dd>{{.Notes}}</dd>
-    <dt>Created</dt><dd title="{{ts .Created}}">{{ago .Created}}</dd>
-    <dt>Updated</dt><dd title="{{ts .Updated}}">{{ago .Updated}}</dd>
+    <dt>Created</dt><dd>{{agoTime .Created}}</dd>
+    <dt>Updated</dt><dd>{{agoTime .Updated}}</dd>
   </dl>
 </article>
 {{end}}

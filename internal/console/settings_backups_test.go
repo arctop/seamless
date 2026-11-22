@@ -343,7 +343,7 @@ func TestBackupsSection_OffOnASourceBuild(t *testing.T) {
 	require.Contains(t, sec, "Automatic backups are off: a Seamless built from source does not back up by itself.")
 	require.Contains(t, sec, `<span class="badge">Off</span>`)
 	require.Contains(t, sec, "Default for this build")
-	require.Contains(t, sec, "No backups yet. Make one now, or turn automatic backups on below.")
+	require.Contains(t, sec, "No backups yet. Make one now, or turn on Back up automatically under Schedule and folder.")
 	require.Contains(t, sec, `<input type="checkbox" name="auto" value="on">`, "the switch is off")
 	require.NotContains(t, sec, "Next backup")
 }
@@ -413,7 +413,8 @@ func TestBackupsSection_List(t *testing.T) {
 	require.Contains(t, auto, "Made by Seamless v0.8.1 on studio, schema v38")
 	require.Contains(t, auto, `href="/console/settings?s=backups&amp;restore=folder%3Aseamless-studio-20261110T030000Z-auto.tar.gz#backup-restore" data-seam-query`)
 	require.Contains(t, auto, `action="/console/settings/backups/delete"`)
-	require.Contains(t, auto, "return confirm(")
+	require.Contains(t, auto, `data-confirm="Delete this backup? It is removed from its folder and cannot be brought back." data-confirm-label="Delete it"`)
+	require.NotContains(t, auto, "confirm(", "the delete asks in the page")
 	// The details: the backup's counts beside how each project differs now.
 	require.Regexp(t, `<th scope="row">app</th><td>10</td><td>4</td><td>3</td><td>1200</td><td class="bk-vs">&#43;3 memories · −4 notes</td>`, auto)
 	require.Regexp(t, `<th scope="row">Docs site \(docs\)</th>.*?<td class="bk-vs">−2 memories · −1 note</td>`, auto)

@@ -92,7 +92,7 @@ func (s *Service) lockViewFor(r *http.Request, slug string, isolation core.Isola
 // passkey button. A locked project is read through the main handle: this page
 // shows its name and the lock, never its content.
 func (s *Service) lockPage(w http.ResponseWriter, r *http.Request) {
-	if s.approversOff(w, r) {
+	if s.lockRoutesOff(w, r, lockOffWords) {
 		return
 	}
 	slug := r.PathValue("project")
@@ -119,7 +119,7 @@ func (s *Service) lockPage(w http.ResponseWriter, r *http.Request) {
 // lockChangeRequest reads what both ceremony routes share. It writes the answer
 // and reports false when the request cannot go on.
 func (s *Service) lockChangeRequest(w http.ResponseWriter, r *http.Request) (string, approval.LockAction, bool) {
-	if s.approversOff(w, r) {
+	if s.lockRoutesOff(w, r, lockOffWords) {
 		return "", "", false
 	}
 	if s.classify(r) != credCookie {

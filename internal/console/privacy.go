@@ -48,6 +48,10 @@ type privacyFence struct {
 	Empty    string           `json:"empty"`
 	Note     string           `json:"note,omitempty"`
 	Projects []privacyProject `json:"projects"`
+	// Lockable, on the Locked fence only, is every confidential or sealed
+	// project not locked yet, each linked to its lock page: set while the
+	// lock pages exist (peer_auth, Config.Approvals), empty otherwise.
+	Lockable []privacyProject `json:"lockable,omitempty"`
 }
 
 // Count is how many projects the fence holds.
@@ -262,6 +266,14 @@ func (s *Service) privacyFences(ctx context.Context, peerAuth bool) []privacyFen
 			fences[3].Projects = append(fences[3].Projects, privacyProject{
 				Slug: t.Slug, Name: t.Name, Memories: t.Memories, Notes: t.Notes, Href: "/console/unlock/" + t.Slug,
 			})
+		}
+	}
+	if s.cfg.Approvals != nil {
+		for _, key := range []string{fenceConf, fenceSealed} {
+			for _, p := range fences[idx[key]].Projects {
+				p.Href = "/console/lock/" + p.Slug
+				fences[3].Lockable = append(fences[3].Lockable, p)
+			}
 		}
 	}
 	for i := range fences {

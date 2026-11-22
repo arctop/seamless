@@ -34,7 +34,7 @@
     <dt>Lab</dt><dd class="mono"><a href="{{labPath .Lab}}">{{.Lab}}</a></dd>
     <dt>Project</dt><dd>{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}}</dd>
     {{if .SessionID}}<dt>Session</dt><dd class="mono"><a href="/console/sessions/{{.SessionID}}">{{if .SessionName}}{{.SessionName}}{{else}}{{shortID .SessionID}}{{end}}</a></dd>{{end}}
-    <dt>Recorded</dt><dd title="{{ts .Created}}">{{ago .Created}}</dd>
+    <dt>Recorded</dt><dd>{{agoTime .Created}}</dd>
   </dl>
 
   {{if .Metrics}}

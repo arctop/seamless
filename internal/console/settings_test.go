@@ -610,8 +610,10 @@ func TestSettingsEmbeddingsReembedTrigger(t *testing.T) {
 	t.Fatal("re-embed pass did not finish before the deadline")
 }
 
-// A daemon whose embedder fell back to disabled (no key or model) surfaces the
-// cause on the page rather than silently degrading.
+// A daemon whose embedder fell back to disabled (no key or model) says so on
+// the page, in Your setup's words (add a key, restart), rather than silently
+// degrading or printing the daemon's own error, and offers no Switch off for
+// what is already off.
 func TestSettingsEmbeddingsFallbackReason(t *testing.T) {
 	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
@@ -631,9 +633,11 @@ func TestSettingsEmbeddingsFallbackReason(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/console/settings?s=engine", nil)
 	req.Header.Set("Authorization", "Bearer "+testKey)
 	page := do(mux, req).Body.String()
-	require.Contains(t, page, "No usable embedding provider")
-	require.Contains(t, page, "api_key is empty")
-	require.Contains(t, page, "lexical-only recall")
+	require.Contains(t, page, "Embeddings off")
+	require.Contains(t, page, "Search and recall use keywords only. Add an OpenAI key (or point Ollama at a local model) in the config file, then restart.")
+	require.NotContains(t, page, "api_key is empty", "the daemon's error stays in its log")
+	require.NotContains(t, page, "llm.NewEmbedder")
+	require.NotContains(t, page, `action="/console/settings/embeddings/mode"`, "nothing runs, so nothing to switch off")
 }
 
 // Settings is one section at a time. Each section renders at its level, a

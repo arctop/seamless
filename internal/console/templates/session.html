@@ -24,7 +24,7 @@
         <div class="session-detail-facts">
           <span>{{icon "folder-tree"}}{{if .Session.ProjectSlug}}<a href="/console/projects/{{.Session.ProjectSlug}}" data-peek>{{.Session.ProjectSlug}}</a>{{else}}global{{end}}</span>
           <span>{{icon "timer"}}{{if .Duration}}{{.Duration}}{{else}}duration unavailable{{end}}</span>
-          <span>updated <time title="{{ts .Session.UpdatedAt}}">{{ago .Session.UpdatedAt}}</time></span>
+          <span>updated {{agoTime .Session.UpdatedAt}}</span>
           {{if .Session.Source}}<span class="mono">{{.Session.Source}}</span>{{end}}
         </div>
       </div>
@@ -43,9 +43,9 @@
       <span class="badge {{.Tone}} flag-badge" data-verdict="{{.Verdict}}">{{icon "flag"}}{{.Verdict}}</span>
     </header>
     <dl class="session-flag-facts">
-      <div><dt>Flagged</dt><dd><time title="{{ts .FlaggedAt}}">{{ago .FlaggedAt}}</time></dd></div>
+      <div><dt>Flagged</dt><dd>{{agoTime .FlaggedAt}}</dd></div>
       <div><dt>Transcript</dt><dd>{{if .TranscriptPath}}<code class="mono">{{.TranscriptPath}}</code>{{else}}<span class="faint">no hook named one</span>{{end}}</dd></div>
-      <div><dt>Copy</dt><dd>{{.CopyText}}{{if .Kept}}{{with .Size}} &middot; {{.}}{{end}}{{with .CopiedAt}} &middot; <time title="{{ts .}}">{{ago .}}</time>{{end}} &middot; <a class="btn small" href="/console/sessions/{{$.Data.Session.ID}}/transcript" download>{{icon "arrow-down-to-line"}}Download JSONL</a>{{end}}</dd></div>
+      <div><dt>Copy</dt><dd>{{.CopyText}}{{if .Kept}}{{with .Size}} &middot; {{.}}{{end}}{{with .CopiedAt}} &middot; {{agoTime .}}{{end}} &middot; <a class="btn small" href="/console/sessions/{{$.Data.Session.ID}}/transcript" download>{{icon "arrow-down-to-line"}}Download JSONL</a>{{end}}</dd></div>
     </dl>
     <p class="faint session-flag-note">The copy is the whole conversation, kept for the owner only; clearing the flag (verdict none) deletes it.</p>
   </section>
@@ -125,7 +125,7 @@
         <div class="ix-feed" id="ix-sfeed">
           {{range .Interactions}}
           <details class="ix-row{{if .Tone}} tone-{{.Tone}}{{end}}{{if .IsError}} err{{end}}" data-sev="{{rowSev .Kind .IsError}}" data-id="{{.ID}}" data-ts="{{.TS.UnixMilli}}" data-kind="{{.Kind}}"{{if .IsError}} data-err="1"{{end}}>
-            <summary><span class="ix-ico ix-type">{{icon (evtIcon .Kind)}}</span><span class="ix-when" title="{{ts .TS}}">{{ago .TS}}</span><span class="kind {{.Tone}}" title="{{.Kind}}">{{evtLabel .Kind}}</span>{{if .Label}}<span class="ix-label">{{.Label}}</span>{{end}}<span class="ix-sum">{{.Summary}}</span>{{if .IsError}}<span class="badge danger">error</span>{{end}}{{if .DurationMS}}<span class="ix-meta">{{.DurationMS}}ms</span>{{else if .Items}}<span class="ix-meta">{{.Items}} items</span>{{end}}</summary>
+            <summary><span class="ix-ico ix-type">{{icon (evtIcon .Kind)}}</span><span class="ix-when">{{agoTime .TS}}</span><span class="kind {{.Tone}}" title="{{.Kind}}">{{evtLabel .Kind}}</span>{{if .Label}}<span class="ix-label">{{.Label}}</span>{{end}}<span class="ix-sum">{{.Summary}}</span>{{if .IsError}}<span class="badge danger">error</span>{{end}}{{if .DurationMS}}<span class="ix-meta">{{.DurationMS}}ms</span>{{else if .Items}}<span class="ix-meta">{{.Items}} items</span>{{end}}</summary>
             <div class="ix-body">
               {{if or .DurationMS .Items .IsError}}
               <div class="ix-highlights">
@@ -209,8 +209,8 @@
           <div><dt title="LLM powering this session's agent, as the provider names it">Model</dt><dd class="mono">{{if .Session.Model}}{{.Session.Model}}{{else}}&mdash;{{end}}</dd></div>
           <div><dt>Mode</dt><dd>{{if .Session.Ambient}}ambient{{else}}explicit{{end}}</dd></div>
           <div><dt>Duration</dt><dd>{{if .Duration}}{{.Duration}}{{else}}&mdash;{{end}}</dd></div>
-          <div><dt>Started</dt><dd title="{{ts .Session.CreatedAt}}">{{ago .Session.CreatedAt}}</dd></div>
-          <div><dt>Updated</dt><dd title="{{ts .Session.UpdatedAt}}">{{ago .Session.UpdatedAt}}</dd></div>
+          <div><dt>Started</dt><dd>{{agoTime .Session.CreatedAt}}</dd></div>
+          <div><dt>Updated</dt><dd>{{agoTime .Session.UpdatedAt}}</dd></div>
           <div class="session-meta-wide"><dt>CWD</dt><dd class="mono">{{if .Session.CWD}}{{.Session.CWD}}{{copyBtn .Session.CWD}}{{else}}&mdash;{{end}}</dd></div>
           <div><dt>Agent</dt><dd class="mono">{{if .Session.ExternalSessionID}}{{shortID .Session.ExternalSessionID}}{{copyBtn .Session.ExternalSessionID}}{{else}}&mdash;{{end}}</dd></div>
         </dl>

@@ -26,7 +26,7 @@
           {{range .Rows}}
           <a class="rail-item{{if and $sel (eq .Lab $sel.Row.Lab)}} selected{{end}}" id="ri-lab-{{.Lab}}" href="{{labPath .Lab}}" data-title="{{.Lab}}" data-context="Most recently active"{{if and $sel (eq .Lab $sel.Row.Lab)}} aria-current="page"{{end}}>
             <span class="ri-title mono">{{.Lab}}</span>
-            <span class="ri-meta">{{.Trials}} trial{{if ne .Trials 1}}s{{end}}{{if .Pass}} &middot; <span class="t-ok">{{.Pass}} pass</span>{{end}}{{if .Fail}} &middot; <span class="t-danger">{{.Fail}} fail</span>{{end}}{{if .Partial}} &middot; {{.Partial}} partial{{end}}{{if .Inconclusive}} &middot; {{.Inconclusive}} inconclusive{{end}} &middot; <span title="{{ts .Last}}">{{ago .Last}}</span></span>
+            <span class="ri-meta">{{.Trials}} trial{{if ne .Trials 1}}s{{end}}{{if .Pass}} &middot; <span class="t-ok">{{.Pass}} pass</span>{{end}}{{if .Fail}} &middot; <span class="t-danger">{{.Fail}} fail</span>{{end}}{{if .Partial}} &middot; {{.Partial}} partial{{end}}{{if .Inconclusive}} &middot; {{.Inconclusive}} inconclusive{{end}} &middot; {{agoTime .Last}}</span>
           </a>
           {{end}}
         </div>
@@ -58,8 +58,8 @@
     <div class="reader-facts">
       <span class="fact">{{.Row.Trials}} trial{{if ne .Row.Trials 1}}s{{end}}</span>
       {{if .Row.Sessions}}<span class="fact">{{.Row.Sessions}} session{{if ne .Row.Sessions 1}}s{{end}}</span>{{end}}
-      <span class="fact" title="{{ts .Row.First}}">first {{ago .Row.First}}</span>
-      <span class="fact" title="{{ts .Row.Last}}">last {{ago .Row.Last}}</span>
+      <span class="fact">first {{agoTime .Row.First}}</span>
+      <span class="fact">last {{agoTime .Row.Last}}</span>
       <span class="fact"><a href="/console/trials?lab={{.Row.Lab}}">{{icon "test-tube"}} open in Trials</a></span>
     </div>
     <div class="reader-facts outcome-tally">
@@ -75,7 +75,7 @@
     <h3>Trials <span class="count">{{len .Trials}}{{if .More}} of {{.Row.Trials}}{{end}}</span></h3>
     <ul class="peek-refs">
       {{range .Trials}}
-      <li><a href="/console/trials/{{.ID}}">{{.Title}}</a> {{if .Outcome}}<span class="badge {{outcomeTone .Outcome}}">{{.Outcome}}</span>{{end}} <span class="muted" title="{{ts .Created}}">{{ago .Created}}</span>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</li>
+      <li><a href="/console/trials/{{.ID}}">{{.Title}}</a> {{if .Outcome}}<span class="badge {{outcomeTone .Outcome}}">{{.Outcome}}</span>{{end}} <span class="muted">{{agoTime .Created}}</span>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</li>
       {{end}}
     </ul>
     {{if .More}}<div class="peek-note">{{.More}} older trial{{if ne .More 1}}s{{end}} not shown &mdash; <a href="/console/trials?lab={{.Row.Lab}}">open in Trials</a>.</div>{{end}}

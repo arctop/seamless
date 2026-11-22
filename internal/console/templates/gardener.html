@@ -195,7 +195,7 @@
               <span class="grr-icon">{{icon .Icon}}</span>
               <span class="grr-copy">
                 <span class="grr-title">{{.RowTitle}}</span>
-                <span class="grr-meta"><span{{with .Settled}} title="{{.}}"{{end}}>{{.Outcome}}</span> by <span{{with .ByTitle}} title="{{.}}"{{end}}>{{.By}}</span> &middot; <time title="{{ts .ResolvedAt}}">{{ago .ResolvedAt}}</time>{{range .Produced}} &middot; <a href="{{.Href}}" title="{{.Title}}">{{.Label}}</a>{{end}}</span>
+                <span class="grr-meta"><span{{with .Settled}} title="{{.}}"{{end}}>{{.Outcome}}</span> by <span{{with .ByTitle}} title="{{.}}"{{end}}>{{.By}}</span> &middot; {{agoTime .ResolvedAt}}{{range .Produced}} &middot; <a href="{{.Href}}" title="{{.Title}}">{{.Label}}</a>{{end}}</span>
               </span>
               {{if and $.Data.CanAct .CanUndo}}
               <form method="post" action="/console/gardener/{{.ID}}/undo">
@@ -225,7 +225,7 @@
               <span class="grr-icon">{{icon .Icon}}</span>
               <span class="grr-copy">
                 <span class="grr-title">{{.RowTitle}}{{if .RowDetail}} &middot; {{.RowDetail}}{{end}}</span>
-                <span class="grr-meta">hidden <time title="{{ts .HiddenAt}}">{{ago .HiddenAt}}</time></span>
+                <span class="grr-meta">hidden {{agoTime .HiddenAt}}</span>
               </span>
               {{if $.Data.CanAct}}
               <form method="post" action="/console/gardener/{{.ID}}/unhide">
@@ -313,7 +313,7 @@
     <span class="gdl-meta">
       <span class="gdl-outcome outcome-{{.Status}}"{{with .Settled}} title="{{.}}"{{end}}>{{.Outcome}}</span>
       <span>by {{if .ByHref}}<a href="{{.ByHref}}" data-peek{{with .ByTitle}} title="{{.}}"{{end}}>{{.By}}</a>{{else}}<span{{with .ByTitle}} title="{{.}}"{{end}}>{{.By}}</span>{{end}}</span>
-      <time title="{{ts .ResolvedAt}}">{{agoPhrase .ResolvedAt}}</time>
+      {{timeAs .ResolvedAt (agoPhrase .ResolvedAt)}}
       {{with .Settled}}<span class="gdl-settled">{{.}}</span>{{end}}
       {{range .Produced}}<a class="gdl-produced" href="{{.Href}}" data-peek title="{{.Title}}">{{if eq .Label "note"}}{{icon "file-text"}}{{else}}{{icon "list-checks"}}{{end}}{{.Label}}: {{.Title}}</a>{{end}}
     </span>
@@ -343,7 +343,7 @@
     {{if .Fenced}}<span class="gardener-fenced-chip" title="{{template "fencedTitle" .}}">{{icon "lock"}}</span>{{end}}
     {{with .MoveWarning}}<span class="gardener-fenced-chip gardener-move-chip" title="{{template "moveWarningTitle" .}}">{{icon "triangle-alert"}}</span>{{end}}
     {{if eq .Source "request"}}<span class="gardener-src-chip you" title="Asked by you">asked by you</span>{{else}}<span class="gardener-src-chip" title="Found by a background pass">background</span>{{end}}
-    <time title="{{ts .CreatedAt}}">{{ago .CreatedAt}}</time>
+    {{agoTime .CreatedAt}}
   </span>
 </a>
 {{end}}
@@ -373,7 +373,7 @@
     <blockquote class="gardener-request-origin"><span>Asked by you</span><p>&ldquo;{{.RequestText}}&rdquo;</p></blockquote>
     {{end}}
     <div class="reader-facts">
-      <span class="fact" title="{{ts .CreatedAt}}">proposed {{ago .CreatedAt}}</span>
+      <span class="fact">proposed {{agoTime .CreatedAt}}</span>
       {{if .GroupLabel}}<span class="fact">{{.GroupLabel}}</span>{{end}}
     </div>
   </header>
@@ -455,8 +455,8 @@
 <div class="gardener-ev">
   <a class="gardener-ev-name" href="/console/memories/{{.ID}}" data-peek>{{.Name}}</a>
   <dl class="gardener-ev-facts">
-    <div><dt>Last updated</dt><dd><time title="{{ts .Updated}}">{{agoPhrase .Updated}}</time></dd></div>
-    <div><dt>Last delivered</dt><dd>{{if .LastInjected}}<time title="{{ts .LastInjected}}">{{agoPhrase .LastInjected}}</time>{{else}}never{{end}}</dd></div>
+    <div><dt>Last updated</dt><dd>{{timeAs .Updated (agoPhrase .Updated)}}</dd></div>
+    <div><dt>Last delivered</dt><dd>{{if .LastInjected}}{{timeAs .LastInjected (agoPhrase .LastInjected)}}{{else}}never{{end}}</dd></div>
     <div><dt>Delivered</dt><dd>{{.Delivered}}</dd></div>
     <div><dt>Written by</dt><dd>{{if .SourceHref}}<a href="{{.SourceHref}}" data-peek>{{.Source}}</a>{{else if .Source}}{{.Source}}{{else}}not recorded{{end}}{{with .Model}} <small>{{.}}</small>{{end}}</dd></div>
     {{if ne .Status "active"}}<div><dt>Now</dt><dd class="t-warn">{{.Status}}</dd></div>{{end}}
@@ -479,7 +479,7 @@
   {{if .StaleSources}}
   {{/* A stale copy's sources, by reference only: the gardener never reads
        their content, and neither does this card. */}}
-  <div class="proposal-query-list"><span>Sources that changed</span><div>{{range .StaleSources}}<em><a href="/console/projects/{{.Project}}" data-peek>{{.Ref}}</a>{{if .Kind}} &middot; {{.Kind}}{{end}}{{if not .Changed.IsZero}} &middot; changed <time title="{{ts .Changed}}">{{ago .Changed}}</time>{{end}}</em>{{end}}</div></div>
+  <div class="proposal-query-list"><span>Sources that changed</span><div>{{range .StaleSources}}<em><a href="/console/projects/{{.Project}}" data-peek>{{.Ref}}</a>{{if .Kind}} &middot; {{.Kind}}{{end}}{{if not .Changed.IsZero}} &middot; changed {{agoTime .Changed}}{{end}}</em>{{end}}</div></div>
   <div class="proposal-assurance">{{icon "archive"}} History stays readable; active indexes and briefings stop surfacing the stale copy. Dismiss to keep it as it is.</div>
   {{else}}
   <div class="proposal-assurance">{{icon "archive"}} History stays readable; active indexes and briefings stop surfacing it.</div>

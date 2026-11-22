@@ -3,7 +3,6 @@
 {{$sel := .Selected}}
 {{$qs := .QS}}
 <div class="lib-page" data-library="trials">
-{{$base := "/console/trials"}}{{if .Selected}}{{$base = printf "/console/trials/%s" .Selected.ID}}{{end}}
 <header class="mv2-bar">
   <h1>{{icon "test-tube"}}Trials</h1>{{about "Expected-versus-actual records, outcomes, and structured metrics. Newest first, grouped by lab."}}
   <span class="mv2-count" aria-label="{{.Count}} trials">
@@ -19,7 +18,9 @@
     <span class="mv2-sort-label">Outcome</span>
     <div class="seg" data-seam-query>
       {{$lab := .Lab}}
-      {{range outcomeSegs .Outcome}}<a class="{{if .Active}}on{{end}}" href="{{$base}}?{{if $lab}}lab={{$lab}}&amp;{{end}}{{if .Key}}outcome={{.Key}}{{end}}">{{.Label}}</a>{{end}}
+      {{- /* An outcome is a new list: its link opens /console/trials, which
+           selects the first match, never the trial on screen. */ -}}
+      {{range outcomeSegs .Outcome}}<a class="{{if .Active}}on{{end}}" href="{{if and $lab .Key}}/console/trials?lab={{$lab}}&amp;outcome={{.Key}}{{else if $lab}}/console/trials?lab={{$lab}}{{else if .Key}}/console/trials?outcome={{.Key}}{{else}}/console/trials{{end}}">{{.Label}}</a>{{end}}
     </div>
   </div>
   </div>
@@ -39,7 +40,7 @@
           {{range .Trials}}
           <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/trials/{{.ID}}{{$qs}}" data-title="{{.Title}}" data-context="Lab / {{.Lab}}"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
             <span class="ri-title">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</span>
-            <span class="ri-meta">{{if .Outcome}}<span class="t-{{outcomeTone .Outcome}}">{{.Outcome}}</span> &middot; {{end}}{{if .Project}}{{.Project}}{{else}}global{{end}}{{if .Metrics}} &middot; {{.Metrics}} metric{{if ne .Metrics 1}}s{{end}}{{end}} &middot; <span title="{{ts .Created}}">{{ago .Created}}</span>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
+            <span class="ri-meta">{{if .Outcome}}<span class="t-{{outcomeTone .Outcome}}">{{.Outcome}}</span> &middot; {{end}}{{if .Project}}{{.Project}}{{else}}global{{end}}{{if .Metrics}} &middot; {{.Metrics}} metric{{if ne .Metrics 1}}s{{end}}{{end}} &middot; {{agoTime .Created}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
           </a>
           {{end}}
         </div>
@@ -81,7 +82,7 @@
       </form>
     </h2>
     <div class="reader-facts">
-      <span class="fact" title="{{ts .Created}}">recorded {{ago .Created}}</span>
+      <span class="fact">recorded {{agoTime .Created}}</span>
       {{if .SessionID}}<span class="fact">by <a href="/console/sessions/{{.SessionID}}">{{if .SessionName}}<span class="mono">{{.SessionName}}</span>{{else}}session {{shortID .SessionID}}{{end}}</a></span>{{end}}
     </div>
   </header>

@@ -63,7 +63,7 @@
         </div>
       </div>
       <span class="proj"><a href="{{.ProjectHref}}" data-seam-query title="Only this scope's mishaps">{{icon "folder-tree"}}{{if .Project}}{{.Project}}{{else}}global{{end}}</a></span>
-      <span class="when" title="{{ts .When}}">{{ago .When}}</span>
+      <span class="when">{{agoTime .When}}</span>
     </div>
     {{end}}
   </div>

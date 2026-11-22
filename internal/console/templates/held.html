@@ -16,7 +16,7 @@
     <button class="btn small" type="submit">Turn lockdown off</button>
     {{else}}
     <input type="hidden" name="on" value="1">
-    <button class="btn small" type="submit" onclick="return confirm('Turn lockdown on? Agents receive only confirmed or reviewed memories, and their changes to binding rules wait for you.');">Turn lockdown on</button>
+    <button class="btn small" type="submit" data-confirm="Turn lockdown on? Agents receive only confirmed or reviewed memories, and their changes to binding rules wait for you." data-confirm-label="Turn it on">Turn lockdown on</button>
     {{end}}
   </form>
 </section>{{end}}
@@ -28,7 +28,7 @@
     <header class="held-card-head">
       <span class="badge">{{.What}}</span>
       {{if .Link}}<a class="held-name" href="{{.Link}}">{{.Name}}</a>{{else}}<strong class="held-name">{{.Name}}</strong>{{end}}
-      <span class="held-meta">{{if .Project}}<a href="/console/projects/{{.Project}}">{{.Project}}</a>{{else}}global{{end}} &middot; {{.Tool}}{{if .SessionID}} &middot; <a class="mono" href="/console/sessions/{{.SessionID}}">{{.Session}}</a>{{end}} &middot; <span title="{{ts .CreatedAt}}">{{ago .CreatedAt}}</span></span>
+      <span class="held-meta">{{if .Project}}<a href="/console/projects/{{.Project}}">{{.Project}}</a>{{else}}global{{end}} &middot; {{.Tool}}{{if .SessionID}} &middot; <a class="mono" href="/console/sessions/{{.SessionID}}">{{.Session}}</a>{{end}} &middot; {{agoTime .CreatedAt}}</span>
     </header>{{if .Proposal}}
     <p class="held-note held-proposer" data-proposer="{{.Account}}">Proposed by {{if .Account}}account <strong class="mono">{{.Account}}</strong>{{else}}a restricted account{{end}}</p>{{end}}
     <ul class="held-reasons" aria-label="Why it is held">
@@ -63,7 +63,7 @@
       </form>
       {{end}}
       <form method="post" action="/console/held/{{.ID}}/discard">
-        <button class="btn small" type="submit" onclick="return confirm('{{if .Proposal}}Discard this proposal? Nothing lands, and its text is erased.{{else}}Discard this held write? Nothing lands, and its text is erased.{{end}}');">{{icon "x"}} Discard</button>
+        <button class="btn small" type="submit" data-confirm="{{if .Proposal}}Discard this proposal? Nothing lands, and its text is erased.{{else}}Discard this held write? Nothing lands, and its text is erased.{{end}}" data-confirm-label="Discard it">{{icon "x"}} Discard</button>
       </form>
     </div>
   </article>
@@ -85,7 +85,7 @@
       <header class="held-card-head">
         <span class="badge">{{.ItemKind}} {{if eq .Change "unknown"}}appeared{{else}}changed{{end}}</span>
         {{if .Link}}<a class="held-name mono" href="{{.Link}}">{{.Path}}</a>{{else}}<strong class="held-name mono">{{.Path}}</strong>{{end}}
-        <span class="held-meta">{{if .Project}}{{.Project}}{{else}}global{{end}}{{with .At}} &middot; <span title="{{ts .}}">{{ago .}}</span>{{end}}</span>
+        <span class="held-meta">{{if .Project}}{{.Project}}{{else}}global{{end}}{{with .At}} &middot; {{agoTime .}}{{end}}</span>
       </header>
       {{if .Codes}}<ul class="held-reasons" aria-label="What the screens found">{{range .Codes}}<li class="held-reason" data-family="{{.Family}}"><code>{{.Code}}</code>{{if .Words}} {{.Words}}{{end}}</li>{{end}}</ul>{{else}}<p class="held-note">The screens found nothing in the changed text.</p>{{end}}
       {{if .InjectedTotal}}<p class="held-note">Injected before it changed into {{.InjectedTotal}} session{{if ne .InjectedTotal 1}}s{{end}}:{{range .Injected}} <a class="mono" href="/console/sessions/{{.SessionID}}">{{.Name}}</a>{{end}}</p>{{end}}
@@ -112,9 +112,9 @@
 <section class="held-corpus" aria-labelledby="held-review-title">
   <h2 id="held-review-title">Review</h2>
   <p class="held-sub">When write screening was first turned on, every existing memory and note went through the same screens agent writes do (on this machine; nothing leaves it). Clean ones were marked safe; the rest are below for you. A safe mark holds while the item says exactly what it said when reviewed: an agent's later change lapses it, so under lockdown that item waits for you or the next review.</p>
-  <p class="held-meta">{{.Review.Items}} items &middot; {{.Review.Safe}} safe &middot; {{.Review.Flagged}} flagged &middot; {{.Review.Unreviewed}} not reviewed{{with .Review.Baseline}} &middot; first review <span title="{{ts .}}">{{ago .}}</span>{{end}}{{with .Review.Reviewed}} &middot; last <span title="{{ts .}}">{{ago .}}</span>{{end}}</p>
+  <p class="held-meta">{{.Review.Items}} items &middot; {{.Review.Safe}} safe &middot; {{.Review.Flagged}} flagged &middot; {{.Review.Unreviewed}} not reviewed{{with .Review.Baseline}} &middot; first review {{agoTime .}}{{end}}{{with .Review.Reviewed}} &middot; last {{agoTime .}}{{end}}</p>
   <form method="post" action="/console/held/review">
-    <button class="btn small" type="submit" onclick="return confirm('Re-run the review? Every memory and note is screened again, and clean ones are marked safe as they read now.');">Re-run review</button>
+    <button class="btn small" type="submit" data-confirm="Re-run the review? Every memory and note is screened again, and clean ones are marked safe as they read now." data-confirm-label="Re-run it">Re-run review</button>
   </form>
   {{if .Flagged}}
   <div class="held-list">
@@ -123,7 +123,7 @@
       <header class="held-card-head">
         <span class="badge">{{.ItemKind}}</span>
         {{if .Link}}<a class="held-name mono" href="{{.Link}}">{{.Path}}</a>{{else}}<strong class="held-name mono">{{.Path}}</strong>{{end}}
-        <span class="held-meta">{{if .Project}}{{.Project}}{{else}}global{{end}}{{with .At}} &middot; reviewed <span title="{{ts .}}">{{ago .}}</span>{{end}}</span>
+        <span class="held-meta">{{if .Project}}{{.Project}}{{else}}global{{end}}{{with .At}} &middot; reviewed {{agoTime .}}{{end}}</span>
       </header>
       <ul class="held-reasons" aria-label="What the screens found">{{range .Codes}}<li class="held-reason" data-family="{{.Family}}"><code>{{.Code}}</code>{{if .Words}} {{.Words}}{{end}}</li>{{end}}</ul>
       {{if .InjectedTotal}}<p class="held-note">Injected into {{.InjectedTotal}} session{{if ne .InjectedTotal 1}}s{{end}}:{{range .Injected}} <a class="mono" href="/console/sessions/{{.SessionID}}">{{.Name}}</a>{{end}}</p>{{end}}
@@ -155,9 +155,9 @@
     {{range .Tainted}}
     <li class="held-taint" data-taint="{{.SessionID}}">
       <a class="mono" href="/console/sessions/{{.SessionID}}">{{.Name}}</a>
-      <span class="held-meta">{{if .Project}}{{.Project}}{{else}}global{{end}} &middot; {{.Status}} &middot; <code>{{.Reason}}</code> &middot; since <span title="{{ts .Since}}">{{ago .Since}}</span></span>
+      <span class="held-meta">{{if .Project}}{{.Project}}{{else}}global{{end}} &middot; {{.Status}} &middot; <code>{{.Reason}}</code> &middot; since {{agoTime .Since}}</span>
       <form method="post" action="/console/held/sessions/{{.SessionID}}/clear">
-        <button class="btn small" type="submit" onclick="return confirm('Clear the outside-text mark on this session? Its changes to binding rules will land without a hold.');">Clear mark</button>
+        <button class="btn small" type="submit" data-confirm="Clear the outside-text mark on this session? Its changes to binding rules will land without a hold." data-confirm-label="Clear it">Clear mark</button>
       </form>
     </li>
     {{end}}
@@ -172,7 +172,7 @@
   <h2 id="held-recent-title">Recently decided</h2>
   <ul class="held-history">
     {{range .Recent}}
-    <li><span class="badge{{if eq .Status "released"}} ok{{end}}">{{if and .Proposal (eq .Status "released")}}promoted{{else}}{{.Status}}{{end}}</span> {{.What}} <strong>{{.Name}}</strong> <span class="held-meta">{{if .Project}}{{.Project}}{{else}}global{{end}}{{if .Proposal}} &middot; proposed by {{if .Account}}account {{.Account}}{{else}}a restricted account{{end}}{{end}}{{range .Reasons}} &middot; <code>{{.Code}}</code>{{end}}{{with .ResolvedAt}} &middot; <span title="{{ts .}}">{{ago .}}</span>{{end}}</span></li>
+    <li><span class="badge{{if eq .Status "released"}} ok{{end}}">{{if and .Proposal (eq .Status "released")}}promoted{{else}}{{.Status}}{{end}}</span> {{.What}} <strong>{{.Name}}</strong> <span class="held-meta">{{if .Project}}{{.Project}}{{else}}global{{end}}{{if .Proposal}} &middot; proposed by {{if .Account}}account {{.Account}}{{else}}a restricted account{{end}}{{end}}{{range .Reasons}} &middot; <code>{{.Code}}</code>{{end}}{{with .ResolvedAt}} &middot; {{agoTime .}}{{end}}</span></li>
     {{end}}
   </ul>
 </section>

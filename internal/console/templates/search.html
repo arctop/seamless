@@ -76,7 +76,7 @@
 {{if .Rows}}
     <div class="search-results-head">
       <div class="search-breakdown" aria-label="Result counts by type" data-seam-query>
-        {{range .Groups}}<span data-search-kind="{{.Accent}}"{{if .Retired}} data-retired{{end}}><b>{{.Count}}{{if .More}}+{{end}}</b> {{.Label}}{{with .MoreHref}} <a class="search-more" href="{{.}}">Show more</a>{{end}}</span>{{end}}
+        {{range .Groups}}<span data-search-kind="{{.Accent}}"{{if .Retired}} data-retired{{end}}><b>{{.Count}}{{if .More}}+{{end}}</b> {{.Noun}}{{with .MoreHref}} <a class="search-more" href="{{.}}">Show more</a>{{end}}</span>{{end}}
       </div>
       <span class="search-order-note">{{if eq .Sort "relevance"}}Best matches first{{else}}Sorted by {{.Sort}}{{end}}</span>
     </div>

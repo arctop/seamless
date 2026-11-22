@@ -124,7 +124,7 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 				"<dt>Next update</dt>", `<strong class="mono">v0.7.3</strong>`,
 				"<span>installs by itself: waiting for 2 live agent sessions to go idle, or at a lull in requests in 19h</span>",
 				"pending since", "5h ago", "deadline in 19h",
-				`onsubmit="return confirm('Install v0.7.3 now? The daemon restarts to finish, so agent sessions lose Seamless for a moment. This skips the soak and does not wait for agents to go idle.');"`,
+				`data-confirm="Install v0.7.3 now? The daemon restarts to finish, so agent sessions lose Seamless for a moment. This skips the soak and does not wait for agents to go idle." data-confirm-label="Install now"`,
 				"Update to v0.7.3 now</button>",
 			},
 			absent: []string{"disabled title=\"No newer release"},
@@ -139,7 +139,7 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 			},
 			want: []string{
 				"<dt>Next update</dt>", "<span>installs by itself once it is 24h old</span>",
-				"soak ends around " + ts(now.Add(18*time.Hour)),
+				"soak ends around " + string(clockDate(now.Add(18*time.Hour))),
 			},
 			absent: []string{"pending since"},
 		},
@@ -240,7 +240,7 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 			want: []string{
 				`<span class="badge warn">interrupted</span>`, "v0.7.2 still runs.",
 				"<dt>Next try</dt>", "The attempt on v0.7.3 was interrupted (2 in a row); automatic updates try again",
-				">in 40m</span>.",
+				">in 40m</time>.",
 			},
 		},
 		{

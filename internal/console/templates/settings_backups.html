@@ -65,14 +65,14 @@
     <h2 id="bk-status-title">{{icon "archive"}}Automatic backups<span class="h2-meta"><span class="badge{{with .Tone}} {{.}}{{end}}">{{.Badge}}</span></span></h2>
     <div class="bk-lines" role="status" aria-live="polite">
       <p class="bk-lead">{{.Lead}}</p>
-      {{with .Running}}<p class="bk-line">{{icon "loader"}}<span title="{{ts $.Backups.Status.RunningAt}}">{{.}}</span></p>{{end}}
-      {{if .Last}}<p class="bk-line">{{icon "check"}}<span title="{{ts .LastAt}}">{{.Last}}</span></p>{{else}}<p class="bk-line">{{icon "info"}}<span>{{.None}}</span></p>{{end}}
-      {{with .Next}}<p class="bk-line">{{icon "clock"}}<span title="{{ts $.Backups.Status.NextAt}}">{{.}}</span></p>{{end}}
+      {{with .Running}}<p class="bk-line">{{icon "loader"}}<span>{{timeAs $.Backups.Status.RunningAt .}}</span></p>{{end}}
+      {{if .Last}}<p class="bk-line">{{icon "check"}}<span>{{timeAs .LastAt .Last}}</span></p>{{else}}<p class="bk-line">{{icon "info"}}<span>{{.None}}</span></p>{{end}}
+      {{with .Next}}<p class="bk-line">{{icon "clock"}}<span>{{timeAs $.Backups.Status.NextAt .}}</span></p>{{end}}
       {{with .ManualFailed}}<p class="bk-line is-warn">{{icon "triangle-alert"}}<span>{{.}}</span></p>{{end}}
     </div>
     {{with .Failing}}
     <div class="bk-failing" role="alert">
-      <p>{{icon "triangle-alert"}} <span title="{{ts .Since}}">{{.Line}}</span>{{with .Error}}: <span class="mono">{{.}}</span>{{end}}</p>
+      <p>{{icon "triangle-alert"}} <span>{{timeAs .Since .Line}}</span>{{with .Error}}: <span class="mono">{{.}}</span>{{end}}</p>
       <form method="post" action="/console/settings/backups/now"><input type="hidden" name="run" value="retry"><button class="btn small" type="submit"{{with .RetryBlocked}} disabled title="{{.}}"{{end}}>{{icon "refresh-cw"}} Try again</button></form>
     </div>
     {{end}}
@@ -140,16 +140,16 @@
       {{range .Rows}}
       <li class="bk-row{{if .Open}} is-open{{end}}" id="{{.ID}}">
         <div class="bk-row-main">
-          <p class="bk-row-when"><span title="{{ts .When}}">{{agoPhrase .When}}</span><small>{{clockDate .When}}</small></p>
+          <p class="bk-row-when">{{timeAs .When (agoPhrase .When)}}<small>{{clockDate .When}}</small></p>
           <p class="bk-row-meta"><span class="badge{{with .KindTone}} {{.}}{{end}}">{{.Kind}}</span>{{if .Undo}}<span>the last restore&rsquo;s undo</span>{{end}}{{if .Local}}<span>in Seamless&rsquo;s data folder</span>{{end}}{{with .From}}<span>{{.}}</span>{{end}}<span>{{.Size}}</span></p>
           {{with .Summary}}<p class="bk-summary">{{.}}</p>{{end}}
           {{with .Note}}<p class="bk-note">{{icon "info"}}<span>{{.}}</span></p>{{end}}
         </div>
         <div class="bk-row-acts">
           {{if .Restore}}{{if .RestoreBlocked}}<button class="btn small" type="button" disabled title="{{.RestoreBlocked}}">{{icon "history"}} Restore&hellip;</button>{{else}}<a class="btn small" href="{{.Restore}}" data-seam-query>{{icon "history"}} Restore&hellip;</a>{{end}}{{end}}
-          <form method="post" action="/console/settings/backups/delete" onsubmit="return confirm({{if .Undo}}'Delete the safety backup from before your last restore? Deleting it removes that restore\'s undo.'{{else}}'Delete this backup? It is removed from its folder and cannot be brought back.'{{end}});">
+          <form method="post" action="/console/settings/backups/delete">
             <input type="hidden" name="ref" value="{{.Ref}}">
-            <button class="btn small" type="submit">Delete</button>
+            <button class="btn small" type="submit" data-confirm="{{if .Undo}}Delete the safety backup from before your last restore? Deleting it removes that restore&rsquo;s undo.{{else}}Delete this backup? It is removed from its folder and cannot be brought back.{{end}}" data-confirm-label="Delete it">Delete</button>
           </form>
         </div>
         <details class="bk-details">

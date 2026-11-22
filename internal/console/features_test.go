@@ -790,7 +790,7 @@ func TestFeatureWhenOff_GeneratedFromTheRegistry(t *testing.T) {
 
 	line := featureWhenOff(f)
 	require.Equal(t,
-		"Hides the Labs & Trials screens, the trials search scope, and 3 agent tools (lab_open, trial_record, trial_query).",
+		"Turning this off hides the Labs & Trials screens, the trials search scope, and 3 agent tools (lab_open, trial_record, trial_query).",
 		line)
 
 	// Every tool the registry claims is named, so the line cannot drift from
@@ -840,8 +840,8 @@ func TestFeatureCards_ScreeningLineWithRestrictedAccounts(t *testing.T) {
 		restricted bool
 		want       string
 	}{
-		{"no restricted accounts", false, "Hides " + marks + " and the Held screen."},
-		{"restricted accounts keep the Held screen", true, "Hides " + marks + " and the Held screen's screening parts " +
+		{"no restricted accounts", false, "Turning this off hides " + marks + " and the Held screen."},
+		{"restricted accounts keep the Held screen", true, "Turning this off hides " + marks + " and the Held screen's screening parts " +
 			"(lockdown, the corpus review, drift, session marks, and the writes screening held). " +
 			"The Held screen stays, for restricted accounts' proposals."},
 	} {
@@ -871,7 +871,7 @@ func TestFeatureCards_ScreeningLineWithRestrictedAccounts(t *testing.T) {
 	require.Equal(t, featureCards(config.Features{}, navCounts{Held: 2}), featureCardsFor(config.Features{}, navCounts{Held: 2}, false))
 	f, ok := features.Get(features.Screening)
 	require.True(t, ok)
-	require.Equal(t, "Hides "+marks+" and the Held screen.", featureWhenOff(f))
+	require.Equal(t, "Turning this off hides "+marks+" and the Held screen.", featureWhenOff(f))
 }
 
 // The surfaces mechanism: a feature whose surfaces live inside existing pages
@@ -880,7 +880,7 @@ func TestFeatureWhenOff_NamesInPageSurfaces(t *testing.T) {
 	line := featureWhenOff(features.Feature{
 		Surfaces: []string{"the finish-line card on Overview", "the activity calendar"},
 	})
-	require.Equal(t, "Hides the finish-line card on Overview and the activity calendar.", line)
+	require.Equal(t, "Turning this off hides the finish-line card on Overview and the activity calendar.", line)
 }
 
 func TestSettingsFeaturesZone_MarkupContract(t *testing.T) {

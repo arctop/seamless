@@ -33,8 +33,8 @@
     {{if .Source}}<dt>Source</dt><dd>{{if .SourceID}}<a href="/console/sessions/{{.SourceID}}" data-peek>{{.Source}}</a>{{else}}{{.Source}}{{end}}</dd>{{end}}
     {{if .Model}}<dt title="Model that produced this content">Model</dt><dd class="mono">{{.Model}}</dd>{{end}}
     {{if .ReplacedByID}}<dt>Superseded by</dt><dd><a href="/console/memories/{{.ReplacedByID}}" data-peek>{{.ReplacedBy}}</a></dd>{{end}}
-    <dt>Created</dt><dd title="{{ts .Created}}">{{ago .Created}}</dd>
-    <dt>Updated</dt><dd title="{{ts .Updated}}">{{ago .Updated}}</dd>
+    <dt>Created</dt><dd>{{agoTime .Created}}</dd>
+    <dt>Updated</dt><dd>{{agoTime .Updated}}</dd>
     <dt>File</dt><dd class="mono">{{.FilePath}}{{copyBtn .FilePath}}</dd>
   </dl>
 

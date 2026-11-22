@@ -99,7 +99,7 @@ func (d unlockData) ItemLine() string {
 // unlockProject answers the routes that name a project: it must be one
 // peer_auth locks. It writes the 404 and reports false otherwise.
 func (s *Service) unlockProject(w http.ResponseWriter, r *http.Request) (string, bool) {
-	if s.approversOff(w, r) {
+	if s.lockRoutesOff(w, r, unlockOffWords) {
 		return "", false
 	}
 	slug := r.PathValue("project")
@@ -608,7 +608,7 @@ func afterAccessWrite(w http.ResponseWriter, r *http.Request, payload map[string
 
 // unlockEnd locks a console unlock again: any browser's, by id.
 func (s *Service) unlockEnd(w http.ResponseWriter, r *http.Request) {
-	if s.approversOff(w, r) || !ownerDecision(w, r) {
+	if s.lockRoutesOff(w, r, unlockOffWords) || !ownerDecision(w, r) {
 		return
 	}
 	u, err := store.EndConsoleUnlock(r.Context(), s.writeDB(), r.PathValue("id"), store.ConsoleUnlockEndLocked, time.Now())
@@ -625,7 +625,7 @@ func (s *Service) unlockEnd(w http.ResponseWriter, r *http.Request) {
 
 // leaseRevoke ends an agent tree's lease before its expiry.
 func (s *Service) leaseRevoke(w http.ResponseWriter, r *http.Request) {
-	if s.approversOff(w, r) || !ownerDecision(w, r) {
+	if s.lockRoutesOff(w, r, leaseOffWords) || !ownerDecision(w, r) {
 		return
 	}
 	ctx := r.Context()

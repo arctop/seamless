@@ -87,7 +87,7 @@
       <div class="settings-precedence{{if .FeaturesOverridden}} is-override{{end}}">
         <span class="state-dot"></span>
         {{if .FeaturesOverridden}}<span><strong>Stored override active</strong> &mdash; these switches ignore the file and environment until reset.</span>
-        <button class="btn small" type="submit" form="features-reset" onclick="return confirm('Clear the stored override and go back to the file/env configuration? No data is deleted.');">Reset to file + env</button>
+        <button class="btn small" type="submit" form="features-reset" data-confirm="Clear the stored override and go back to the file/env configuration? No data is deleted." data-confirm-label="Reset it">Reset to file + env</button>
         {{else}}<span><strong>Following file + env</strong> &mdash; saving stores an override that wins until reset.</span>{{end}}
       </div>
       {{end}}
@@ -152,7 +152,7 @@
         {{with .DataDir}}<div><dt>Data folder</dt><dd><span class="mono">{{.}}</span>{{copyBtn .}}</dd></div>{{end}}
         {{with .Database}}{{if .Path}}<div><dt>Database</dt><dd>{{with .SizeHuman}}<strong>{{.}}</strong>{{end}}<span class="mono">{{.Path}}</span>{{copyBtn .Path}}</dd></div>{{end}}{{end}}
         <div><dt>Agents connected</dt><dd>{{if .Setup.Clients}}{{range $i, $c := .Setup.Clients}}{{if $i}}<span class="faint">&middot;</span>{{end}}<span>{{$c.Name}} <small class="faint">last active {{agoPhrase $c.LastSeen}}</small></span>{{end}}{{else}}None yet &mdash; an agent appears here once it starts a session with the hooks installed.{{end}}</dd></div>
-        {{with .Embeddings}}<div><dt>Semantic recall</dt><dd>{{if .Enabled}}<span class="badge ok">on</span><span>with <span class="mono">{{.Model}}</span></span>{{else}}<span class="badge warn">off</span><span>{{if .OverriddenOff}}Switched off in this console. Search and recall use keywords only.{{else if .Misconfigured}}The model settings in the config file have a mistake: <span class="mono">{{.Reason}}</span>{{else}}Search and recall use keywords only. Add an OpenAI key (or point Ollama at a local model) in the config file, then restart.{{end}}</span><a href="https://thereisnospoon.org/docs/guides/troubleshooting/#recall-returns-junk-or-misses-what-you-just-wrote" target="_blank" rel="noopener">What this changes &nearr;</a>{{end}}</dd></div>{{end}}
+        {{with .Embeddings}}<div><dt>Semantic recall</dt><dd>{{if .Enabled}}<span class="badge ok">on</span><span>with <span class="mono">{{.Model}}</span></span>{{else}}<span class="badge warn">off</span><span>{{if .OverriddenOff}}Switched off in this console. Search and recall use keywords only.{{else if .Misconfigured}}The model settings in the config file have a mistake: <span class="mono">{{.Reason}}</span>{{else}}{{template "embed-off-fix"}}{{end}}</span><a href="https://thereisnospoon.org/docs/guides/troubleshooting/#recall-returns-junk-or-misses-what-you-just-wrote" target="_blank" rel="noopener">What this changes &nearr;</a>{{end}}</dd></div>{{end}}
         {{with .Setup.Backups}}<div><dt>Backups</dt><dd>{{if .Failing}}<span class="badge warn">needs attention</span>{{else if .On}}<span class="badge ok">on</span>{{else}}<span class="badge">off</span>{{end}}<span>{{.Line}}</span><a href="/console/settings?s=backups" data-seam-query>Settings &rsaquo; Backups</a></dd></div>{{end}}
         <div><dt>Gardener</dt><dd>{{if .Gardener.Enabled}}<span class="badge ok">on</span><span>suggests cleanups every {{.Gardener.IntervalMinutes}} minutes</span>{{else}}<span class="badge">suggestions off</span><span>no background suggestions are made; upkeep still runs every {{.Gardener.IntervalMinutes}} minutes (idle sessions reaped, old tool events pruned, retrieval stats refreshed)</span>{{end}}<span>{{.GardenerSwitches.SetupLine}}</span><a href="/console/settings?s=engine#settings-gardener">Settings &rsaquo; Knowledge engine &rsaquo; Gardener</a></dd></div>
       </dl>
@@ -175,7 +175,7 @@
         <div>
           <div class="settings-zone-kicker">Staying current</div>
           <h2>Updates</h2>
-          <p>Seamless asks GitHub whether a newer release exists and tells you &mdash; here, on Home, and in your agents&rsquo; briefings. An install the curl or PowerShell installer made also installs new releases by itself, at a quiet moment; anywhere else, updating stays your call.</p>
+          <p>Seamless asks GitHub whether a newer release exists and tells you &mdash; here, on the Overview, and in your agents&rsquo; briefings. An install the curl or PowerShell installer made also installs new releases by itself, at a quiet moment; anywhere else, updating stays your call.</p>
         </div>
         {{if and .Updates.Running (not .Updates.Locked)}}<span class="settings-access editable">{{icon "settings"}} Editable here</span>{{else}}<span class="settings-access">{{icon "lock"}} Read only</span>{{end}}
       </header>
@@ -192,18 +192,18 @@
         <div><dt>Mode</dt><dd>{{if and .Checking (not .Stopped)}}<span class="badge ok">{{.Mode}}</span>{{else}}<span class="badge">{{.Mode}}</span>{{end}}<span>{{.ModeReason}}</span></dd></div>
         {{if .SelfUpdating}}<div><dt>Automatic updates</dt><dd>{{if .Auto.On}}<span class="badge ok">on</span>{{else}}<span class="badge">off</span>{{end}}<span>{{.Auto.Words}}</span></dd></div>{{end}}
         <div><dt>What a check sends</dt><dd>{{if .Checking}}<span>One anonymous request to <span class="mono">api.github.com</span> every {{.Interval}}. Nothing about this install is sent: no version, host, or identifier.</span>{{else}}<span>Nothing: with checks off, this install makes no update request at all.</span>{{end}}</dd></div>
-        {{with .Signers}}<div><dt>Owner-signed releases</dt><dd><span class="badge ok">required</span><span>A release installs only once its <span class="mono">checksums.txt.sshsig</span> verifies against a key in <span class="mono">{{.Path}}</span> (update.release_signers), by itself or by hand.</span>{{with .Refused}}<small class="updates-error">{{icon "triangle-alert"}}<span>Last refused: <span class="mono">{{.Version}}</span>: {{.Words}}. <span class="faint" title="{{ts .At}}">{{agoPhrase .At}}</span></span></small>{{end}}</dd></div>{{end}}
+        {{with .Signers}}<div><dt>Owner-signed releases</dt><dd><span class="badge ok">required</span><span>A release installs only once its <span class="mono">checksums.txt.sshsig</span> verifies against a key in <span class="mono">{{.Path}}</span> (update.release_signers), by itself or by hand.</span>{{with .Refused}}<small class="updates-error">{{icon "triangle-alert"}}<span>Last refused: <span class="mono">{{.Version}}</span>: {{.Words}}. <span class="faint">{{timeAs .At (agoPhrase .At)}}</span></span></small>{{end}}</dd></div>{{end}}
         <div><dt>Installed</dt><dd><span class="mono">{{.Version}}</span><span class="faint">{{.Build}}</span>{{with .InstallReason}}<small class="faint">{{.}}</small>{{end}}</dd></div>
         <div><dt>{{if .SelfUpdating}}To update by hand{{else}}To update{{end}}</dt><dd><span class="mono">{{.Hint}}</span>{{copyBtn .Hint}}</dd></div>
-        <div><dt>Newest release</dt><dd>{{if .Newest}}<strong class="mono">{{.Newest}}</strong><span class="faint" title="{{ts .NewestPublished}}">published {{day .NewestPublished}}</span>{{if .Available}}<span class="badge warn">update available</span>{{else if .Comparable}}<span class="badge ok">up to date</span>{{end}}<a href="{{.NewestURL}}" target="_blank" rel="noopener">Release notes &nearr;</a>{{else if .CheckedAt.IsZero}}<span>Not checked yet</span>{{else}}<span>No installable release found</span>{{end}}</dd></div>
-        <div><dt>Last check</dt><dd>{{if not .CheckedAt.IsZero}}<span title="{{ts .CheckedAt}}">{{agoPhrase .CheckedAt}}</span>{{else if .Error}}<span>No check has succeeded yet</span>{{else}}<span>Not checked yet</span>{{end}}{{if .NextCheck}}<span class="faint" title="{{ts .NextCheckAt}}">next check {{.NextCheck}}</span>{{end}}{{with .Error}}<small class="updates-error" title="{{ts .Since}}">{{icon "triangle-alert"}}<span>{{.Line}}: <span class="mono">{{.Message}}</span></span></small>{{end}}</dd></div>
-        {{with .Next}}<div><dt>Next update</dt><dd><strong class="mono">{{.Version}}</strong><span>{{.Line}}</span>{{if not .SoakEnds.IsZero}}<small class="faint">soak ends around {{ts .SoakEnds}}</small>{{end}}{{if not .Pending.IsZero}}<small class="faint">pending since <span title="{{ts .Pending}}">{{agoPhrase .Pending}}</span> &middot; <span title="{{ts .Deadline}}">{{if .DeadlineIn}}deadline {{.DeadlineIn}}{{else}}past its deadline{{end}}</span></small>{{end}}</dd></div>{{end}}
-        {{with .Applying}}<div><dt>Updating now</dt><dd>{{if .Confirming}}<span class="badge ok">confirming</span>{{else}}<span class="badge accent">in progress</span>{{end}}<span class="mono">{{.From}} &rarr; {{.To}}</span><span>{{.Stage}}</span>{{with .Why}}<span class="faint">{{.}}</span>{{end}}{{if not .Since.IsZero}}<small class="faint" title="{{ts .Since}}">started {{agoPhrase .Since}}</small>{{else if not .Heard.IsZero}}<small class="faint" title="{{ts .Heard}}">last heard from {{agoPhrase .Heard}}</small>{{end}}</dd></div>{{end}}
-        {{with .LastAttempt}}<div><dt>Last attempt</dt><dd><span class="badge{{with .Tone}} {{.}}{{end}}">{{.Outcome}}</span><span class="mono">{{.From}} &rarr; {{.To}}</span>{{with .Why}}<span class="faint">{{.}}</span>{{end}}<span class="faint" title="{{ts .At}}">{{agoPhrase .At}}</span>{{with .Detail}}<small>{{.}}</small>{{end}}{{if .Rewire}}<small>Run <span class="mono">seamlessd install-hooks</span>{{copyBtn "seamlessd install-hooks"}} to re-wire your agents.</small>{{end}}{{with .Error}}<small class="updates-error updates-attempt-error">{{icon "triangle-alert"}}<span class="mono">{{.}}</span></small>{{end}}{{with .LogPath}}<small class="faint">Log: <span class="mono">{{.}}</span>{{copyBtn .}}</small>{{end}}</dd></div>{{end}}
-        {{with .Paused}}<div><dt>Paused</dt><dd><span class="badge {{if .Danger}}danger{{else}}warn{{end}}">paused</span><span>Automatic updates paused themselves: {{.Reason}}{{with .Versions}} ({{.}}){{end}}.</span><span class="faint" title="{{ts .At}}">{{agoPhrase .At}}</span><small>Nothing installs by itself until you resume them. Update now still works.</small></dd></div>{{end}}
-        {{with .Hold}}<div><dt>Held back</dt><dd><span>Releases up to <span class="mono">{{.Through}}</span> are skipped: this install went back from <span class="mono">{{.From}}</span>.</span><span class="faint" title="{{ts .At}}">{{agoPhrase .At}}</span><small>Resume lets automatic updates take them again; Update now lifts the hold too.</small></dd></div>{{end}}
-        {{with .Blocked}}<div><dt>Skipped releases</dt><dd>{{range .}}<span class="updates-line"><span class="mono">{{.Version}}</span>: {{.Reason}} <span class="faint" title="{{ts .At}}">{{agoPhrase .At}}</span></span>{{end}}<small>Automatic updates skip these releases until a newer one is out; Resume does not clear them, and Update now does not skip them.</small></dd></div>{{end}}
-        {{with .Backoff}}<div><dt>Next try</dt><dd><span>{{.Line}}; automatic updates try again <span title="{{ts .Until}}">{{.In}}</span>.</span></dd></div>{{end}}
+        <div><dt>Newest release</dt><dd>{{if .Newest}}<strong class="mono">{{.Newest}}</strong><span class="faint">{{timeAs .NewestPublished (print "published " (day .NewestPublished))}}</span>{{if .Available}}<span class="badge warn">update available</span>{{else if .Comparable}}<span class="badge ok">up to date</span>{{end}}<a href="{{.NewestURL}}" target="_blank" rel="noopener">Release notes &nearr;</a>{{else if .CheckedAt.IsZero}}<span>Not checked yet</span>{{else}}<span>No installable release found</span>{{end}}</dd></div>
+        <div><dt>Last check</dt><dd>{{if not .CheckedAt.IsZero}}{{timeAs .CheckedAt (agoPhrase .CheckedAt)}}{{else if .Error}}<span>No check has succeeded yet</span>{{else}}<span>Not checked yet</span>{{end}}{{if .NextCheck}}<span class="faint">{{timeAs .NextCheckAt (print "next check " .NextCheck)}}</span>{{end}}{{with .Error}}<small class="updates-error">{{icon "triangle-alert"}}<span>{{timeAs .Since .Line}}: <span class="mono">{{.Message}}</span></span></small>{{end}}</dd></div>
+        {{with .Next}}<div><dt>Next update</dt><dd><strong class="mono">{{.Version}}</strong><span>{{.Line}}</span>{{if not .SoakEnds.IsZero}}<small class="faint">soak ends around {{clockDate .SoakEnds}}</small>{{end}}{{if not .Pending.IsZero}}<small class="faint">{{timeAs .Pending (print "pending since " (agoPhrase .Pending))}} &middot; {{if .DeadlineIn}}{{timeAs .Deadline (print "deadline " .DeadlineIn)}}{{else}}{{timeAs .Deadline "past its deadline"}}{{end}}</small>{{end}}</dd></div>{{end}}
+        {{with .Applying}}<div><dt>Updating now</dt><dd>{{if .Confirming}}<span class="badge ok">confirming</span>{{else}}<span class="badge accent">in progress</span>{{end}}<span class="mono">{{.From}} &rarr; {{.To}}</span><span>{{.Stage}}</span>{{with .Why}}<span class="faint">{{.}}</span>{{end}}{{if not .Since.IsZero}}<small class="faint">{{timeAs .Since (print "started " (agoPhrase .Since))}}</small>{{else if not .Heard.IsZero}}<small class="faint">{{timeAs .Heard (print "last heard from " (agoPhrase .Heard))}}</small>{{end}}</dd></div>{{end}}
+        {{with .LastAttempt}}<div><dt>Last attempt</dt><dd><span class="badge{{with .Tone}} {{.}}{{end}}">{{.Outcome}}</span><span class="mono">{{.From}} &rarr; {{.To}}</span>{{with .Why}}<span class="faint">{{.}}</span>{{end}}<span class="faint">{{timeAs .At (agoPhrase .At)}}</span>{{with .Detail}}<small>{{.}}</small>{{end}}{{if .Rewire}}<small>Run <span class="mono">seamlessd install-hooks</span>{{copyBtn "seamlessd install-hooks"}} to re-wire your agents.</small>{{end}}{{with .Error}}<small class="updates-error updates-attempt-error">{{icon "triangle-alert"}}<span class="mono">{{.}}</span></small>{{end}}{{with .LogPath}}<small class="faint">Log: <span class="mono">{{.}}</span>{{copyBtn .}}</small>{{end}}</dd></div>{{end}}
+        {{with .Paused}}<div><dt>Paused</dt><dd><span class="badge {{if .Danger}}danger{{else}}warn{{end}}">paused</span><span>Automatic updates paused themselves: {{.Reason}}{{with .Versions}} ({{.}}){{end}}.</span><span class="faint">{{timeAs .At (agoPhrase .At)}}</span><small>Nothing installs by itself until you resume them. Update now still works.</small></dd></div>{{end}}
+        {{with .Hold}}<div><dt>Held back</dt><dd><span>Releases up to <span class="mono">{{.Through}}</span> are skipped: this install went back from <span class="mono">{{.From}}</span>.</span><span class="faint">{{timeAs .At (agoPhrase .At)}}</span><small>Resume lets automatic updates take them again; Update now lifts the hold too.</small></dd></div>{{end}}
+        {{with .Blocked}}<div><dt>Skipped releases</dt><dd>{{range .}}<span class="updates-line"><span class="mono">{{.Version}}</span>: {{.Reason}} <span class="faint">{{timeAs .At (agoPhrase .At)}}</span></span>{{end}}<small>Automatic updates skip these releases until a newer one is out; Resume does not clear them, and Update now does not skip them.</small></dd></div>{{end}}
+        {{with .Backoff}}<div><dt>Next try</dt><dd><span>{{.Line}}; automatic updates try again {{timeAs .Until .In}}.</span></dd></div>{{end}}
       </dl>
 
       <div class="updates-actions">
@@ -222,8 +222,8 @@
           {{else}}<input type="hidden" name="auto" value="on">
           <button class="btn small primary" type="submit"{{if .Auto.Locked}} disabled title="Set in the config file or environment"{{end}}>Turn automatic updates on</button>{{end}}
         </form>{{end}}
-        {{with .UpdateNow}}{{if .Offered}}<form method="post" action="/console/settings/updates/apply"{{if not .Blocked}} onsubmit="return confirm('Install {{.Target}} now? The daemon restarts to finish, so agent sessions lose Seamless for a moment. This skips the soak and does not wait for agents to go idle.');"{{end}}>
-          <button class="btn small" type="submit"{{with .Blocked}} disabled title="{{.}}"{{end}}>{{icon "arrow-down-to-line"}} {{if .Target}}Update to {{.Target}} now{{else}}Update now{{end}}</button>
+        {{with .UpdateNow}}{{if .Offered}}<form method="post" action="/console/settings/updates/apply">
+          <button class="btn small" type="submit"{{with .Blocked}} disabled title="{{.}}"{{else}} data-confirm="Install {{.Target}} now? The daemon restarts to finish, so agent sessions lose Seamless for a moment. This skips the soak and does not wait for agents to go idle." data-confirm-label="Install now"{{end}}>{{icon "arrow-down-to-line"}} {{if .Target}}Update to {{.Target}} now{{else}}Update now{{end}}</button>
         </form>{{end}}{{end}}
         {{with .Resume}}{{if .Offered}}<form method="post" action="/console/settings/updates/resume">
           <button class="btn small primary" type="submit"{{with .Blocked}} disabled title="{{.}}"{{end}}>{{icon "power"}} Resume automatic updates</button>
@@ -256,7 +256,7 @@
       <div class="settings-precedence{{if .BriefingOverridden}} is-override{{end}}">
         <span class="state-dot"></span>
         {{if .BriefingOverridden}}<span><strong>Console override active</strong> &mdash; new sessions use these values, not the file and environment.</span>
-        <button class="btn small" type="submit" form="brief-reset" onclick="return confirm('Clear the console override and go back to the file/env configuration?');">Reset to file + env</button>
+        <button class="btn small" type="submit" form="brief-reset" data-confirm="Clear the console override and go back to the file/env configuration?" data-confirm-label="Reset it">Reset to file + env</button>
         {{else}}<span><strong>Following file + env</strong> &mdash; saving stores an override that wins until reset.</span>{{end}}
       </div>
 
@@ -389,7 +389,7 @@
 
             <section class="brief-group family-group">
               <header><span class="brief-group-icon">{{icon "git-fork"}}</span><div><span>Shared lineage</span><h4>Project family</h4></div></header>
-              <p>Let related scopes contribute lower-priority context to the current project.</p>
+              <p>Let related projects contribute lower-priority context to the current project.</p>
               <div class="brief-fields family-fields">
                 <label class="brief-field" for="sibling-findings-count">
                   <span>Sibling findings</span>
@@ -466,14 +466,14 @@
     <section class="settings-zone settings-section" id="workspace-registry">
       <header class="settings-section-head registry-zone-head">
         <div>
-          <div class="settings-zone-kicker">Scope topology</div>
+          <div class="settings-zone-kicker">Projects and repositories</div>
           <h2>Workspaces</h2>
-          <p>See how repositories resolve to project scopes, then group related projects when they should share context.</p>
+          <p>See which project each repository resolves to, then group related projects when they should share context.</p>
         </div>
         <a class="btn small" href="/console/projects">Open project explorer {{icon "arrow-right"}}</a>
       </header>
 
-      <div class="registry-overview" aria-label="Workspace registry summary">
+      <div class="registry-overview" aria-label="Projects, repo routes and families">
         <span>{{icon "box"}}<strong>{{len .Projects}}</strong> {{if eq (len .Projects) 1}}project{{else}}projects{{end}}</span>
         <span>{{icon "link"}}<strong>{{len .RepoMap}}</strong> {{if eq (len .RepoMap) 1}}repo route{{else}}repo routes{{end}}</span>
         <span>{{icon "git-fork"}}<strong>{{len .FamilyEditors}}</strong> {{if eq (len .FamilyEditors) 1}}family{{else}}families{{end}}</span>
@@ -508,14 +508,14 @@
       <section class="registry-panel workspace-panel">
         <header class="registry-panel-head workspace-panel-head">
           <span class="runtime-icon brand">{{icon "folder-tree"}}</span>
-          <div><span>Routing directory</span><h3>Projects &amp; repo routes</h3><p>One row per scope. Family membership stays intentionally compact.</p></div>
+          <div><span>Routing directory</span><h3>Projects &amp; repo routes</h3><p>One row per project. Family membership stays intentionally compact.</p></div>
           <span class="registry-count">{{len .Workspaces}}</span>
         </header>
         {{if .Workspaces}}
         <div class="workspace-columns" aria-hidden="true">
           <span>Project</span><span>Repo route</span><span>Family</span>
         </div>
-        <div class="registry-scroll workspace-directory" tabindex="0" aria-label="Project scopes, repo routes, and family membership">
+        <div class="registry-scroll workspace-directory" tabindex="0" aria-label="Projects, repo routes, and family membership">
           {{range .Workspaces}}
           <article class="workspace-row{{if not .Registered}} is-referenced{{end}}{{if .Retired}} is-retired{{end}}" data-workspace-scope="{{.Slug}}">
             <div class="workspace-cell workspace-identity">
@@ -528,7 +528,7 @@
                     {{if .Retired}}<span class="registry-status retired">retired</span>{{else if not .Registered}}<span class="registry-status referenced">referenced</span>{{end}}
                   </div>
                   {{if and .Name (ne .Name .Slug)}}<strong>{{.Name}}</strong>{{end}}
-                  {{if .Description}}<small>{{.Description}}</small>{{else if not .Registered}}<small class="faint">Referenced by workspace metadata</small>{{end}}
+                  {{if .Description}}<small>{{.Description}}</small>{{else if not .Registered}}<small class="faint">Named by a repo route, a parent or a family, but not registered</small>{{end}}
                 </div>
                 {{copyBtn .Slug}}
               </div>
@@ -553,12 +553,12 @@
           </article>
           {{end}}
         </div>
-        {{else}}<div class="registry-empty">No workspace scopes registered or referenced yet.</div>{{end}}
+        {{else}}<div class="registry-empty">No projects registered or referenced yet.</div>{{end}}
 
         {{if and .UnboundRepos ($.Level.AtLeast "advanced")}}
         <aside class="workspace-unbound">
           <span class="workspace-unbound-icon">{{icon "triangle-alert"}}</span>
-          <div><strong>Unbound arrival routes</strong><p>These repo paths do not resolve to a project scope.</p><div>{{range .UnboundRepos}}<span class="mono" title="{{if .Host}}on {{.Host}}{{else}}host unknown{{end}}">{{.Path}}{{if .Host}} <span class="faint">({{.Host}})</span>{{end}}</span>{{end}}</div></div>
+          <div><strong>Unbound arrival routes</strong><p>These repo paths do not resolve to a project.</p><div>{{range .UnboundRepos}}<span class="mono" title="{{if .Host}}on {{.Host}}{{else}}host unknown{{end}}">{{.Path}}{{if .Host}} <span class="faint">({{.Host}})</span>{{end}}</span>{{end}}</div></div>
         </aside>
         {{end}}
       </section>
@@ -608,7 +608,7 @@
             </fieldset>
           </form>
           <footer class="family-dialog-actions split family-dialog-outer-actions">
-            <form method="post" action="/console/settings/families/delete" onsubmit="return confirm('Delete this project family? Projects and their knowledge will not be deleted.');"><input type="hidden" name="original_name" value="{{$family.Name}}"><button class="btn danger" type="submit">Delete family</button></form>
+            <form method="post" action="/console/settings/families/delete"><input type="hidden" name="original_name" value="{{$family.Name}}"><button class="btn danger" type="submit" data-confirm="Delete this project family? Projects and their knowledge will not be deleted." data-confirm-label="Delete it">Delete family</button></form>
             <div><button class="btn" type="button" data-dialog-close>Cancel</button><button class="btn primary" type="submit" form="family-save-{{$index}}">Save changes</button></div>
           </footer>
         </div>
@@ -648,24 +648,30 @@
             {{if not .Enabled}}
             <p class="embedder-reason{{if .Misconfigured}} is-error{{end}}">
               {{icon "triangle-alert"}}
-              {{if .OverriddenOff}}Switched off from this console; agents fall back to lexical-only recall.{{else if .Misconfigured}}The LLM configuration is broken and needs a fix in the config file: <span class="mono">{{.Reason}}</span>{{else}}No usable embedding provider (typically a missing model or API key), so the daemon fell back to lexical-only recall: <span class="mono">{{.Reason}}</span>{{end}}
+              {{if .OverriddenOff}}Switched off from this console; agents fall back to lexical-only recall.{{else if .Misconfigured}}The LLM configuration is broken and needs a fix in the config file: <span class="mono">{{.Reason}}</span>{{else}}{{template "embed-off-fix"}}{{end}}
             </p>
             {{end}}
             {{if .RestartNeeded}}
             <p class="embedder-restart">{{icon "timer"}} The stored switch differs from the running state &mdash; restart the daemon to apply it.</p>
             {{end}}
+            {{/* Switch off is offered only while there is something to switch
+                 off: embeddings running, or a cleared switch still waiting for
+                 the restart. Off for want of a key, the card says what to do
+                 instead. */}}
+            {{if .ModeOff}}
             <form method="post" action="/console/settings/embeddings/mode" class="embedder-toggle-form">
-              {{if .ModeOff}}
               <input type="hidden" name="mode" value="auto">
               <button class="btn small primary" type="submit">Enable embeddings</button>
-              {{else}}
-              <input type="hidden" name="mode" value="off">
-              <button class="btn small" type="submit" onclick="return confirm('Switch embeddings off? Recall and search degrade to lexical-only after the next restart.');">Switch off</button>
-              {{end}}
             </form>
+            {{else if or .Enabled .OverriddenOff}}
+            <form method="post" action="/console/settings/embeddings/mode" class="embedder-toggle-form">
+              <input type="hidden" name="mode" value="off">
+              <button class="btn small" type="submit" data-confirm="Switch embeddings off? Recall and search degrade to lexical-only after the next restart." data-confirm-label="Switch it off">Switch off</button>
+            </form>
+            {{end}}
           </article>
 
-          <article class="runtime-card vectors-card">
+          <article class="runtime-card vectors-card" data-vectors-card{{if .Reembed.Running}} data-reembed-running{{end}}>
             <header class="runtime-card-head">
               <span class="runtime-icon brand">{{icon "database"}}</span>
               <div><span>Stored vectors</span><h3>Embedding corpus</h3></div>
@@ -695,11 +701,11 @@
             {{end}}
             <div class="reembed-row">
               {{if .Reembed.Running}}
-              <span class="badge pop"><span class="live-dot"></span> re-embedding {{.Reembed.Done}}/{{.Reembed.Total}}{{if .Reembed.Failed}} ({{.Reembed.Failed}} failed){{end}}</span>
-              <small>Refresh the page to update progress.</small>
+              <span class="badge pop" role="status"><span class="live-dot"></span> re-embedding {{.Reembed.Done}}/{{.Reembed.Total}}{{if .Reembed.Failed}} ({{.Reembed.Failed}} failed){{end}}</span>
+              <small>The count follows the pass while this page is open.</small>
               {{else}}
               <form method="post" action="/console/settings/embeddings/reembed">
-                <button class="btn small" type="submit"{{if not .Enabled}} disabled title="Embeddings are disabled"{{end}} onclick="return confirm('Re-embed every memory and note with the active model? This calls the embedding provider once per item.');">{{icon "loader"}} Re-embed everything</button>
+                <button class="btn small" type="submit"{{if not .Enabled}} disabled title="Embeddings are disabled"{{end}} data-confirm="Re-embed every memory and note with the active model? This calls the embedding provider once per item." data-confirm-label="Re-embed all">{{icon "loader"}} Re-embed everything</button>
               </form>
               {{if not .Reembed.StartedAt.IsZero}}<small>Last pass {{ago .Reembed.FinishedAt}}: {{.Reembed.Done}}/{{.Reembed.Total}} items{{if .Reembed.Failed}}, {{.Reembed.Failed}} failed{{end}}.</small>{{end}}
               <small>Use after changing the embedding model &mdash; vectors from different models cannot be compared.</small>
@@ -729,7 +735,7 @@
               {{range $i, $row := .UtilityRows}}
               <tr>
                 <td>{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}<strong>Global context</strong>{{end}}</td>
-                <td><span class="badge utility-status-{{.Status}}">{{.Status}}{{if .Forced}} (forced){{end}}</span>{{if .ReadyAt}}{{if $.Features.Momentum}} <small class="mom-unlocked" title="{{ts .ReadyAt}}">unlocked {{day .ReadyAt}}</small>{{else}} <small title="{{ts .ReadyAt}}">armed {{ago .ReadyAt}}</small>{{end}}{{end}}</td>
+                <td><span class="badge utility-status-{{.Status}}">{{.Status}}{{if .Forced}} (forced){{end}}</span>{{if .ReadyAt}}{{if $.Features.Momentum}} <small class="mom-unlocked">{{timeAs .ReadyAt (print "unlocked " (day .ReadyAt))}}</small>{{else}} <small>armed {{agoTime .ReadyAt}}</small>{{end}}{{end}}</td>
                 <td>
                   <span class="utility-gate{{if .EventsOK}} met{{end}}">{{.RecentEvents}}<i>/{{index $ready 0}}</i> events</span> &middot;
                   <span class="utility-gate{{if .MemoriesOK}} met{{end}}">{{.RecentMemories}}<i>/{{index $ready 1}}</i> memories</span>
@@ -1148,7 +1154,36 @@ window.SEAM_NO_LIVE_REFRESH = true; // preserve unsaved form state on this contr
   document.addEventListener('change', function (event) {
     if (event.target.closest && event.target.closest('[data-brief-preview-project]')) refreshPreview();
   });
+  // A re-embed pass under way: the Stored vectors card follows it in place,
+  // every two seconds while the tab is in sight, until the pass is done.
+  // Only that card is morphed, so an unsaved form elsewhere keeps its values.
+  // A failed fetch leaves the card as it is and tries again; a sign-in page
+  // in its place (an expired cookie) stops it, for the next navigation to
+  // handle.
+  var reembedTimer = null;
+  function followReembed() {
+    if (reembedTimer || !document.querySelector('[data-vectors-card][data-reembed-running]')) return;
+    reembedTimer = setTimeout(function () {
+      reembedTimer = null;
+      if (!document.querySelector('[data-vectors-card][data-reembed-running]') || !window.SeamConsole) return;
+      if (document.hidden) { followReembed(); return; }
+      fetch(location.href, {
+        credentials: 'same-origin', cache: 'no-store',
+        headers: { Accept: 'text/html', 'X-Seam-Partial': '1' }
+      }).then(function (res) {
+        if (new URL(res.url || location.href, location.href).pathname === '/console/login') return null;
+        return res.ok ? res.text() : '';
+      }).then(function (html) {
+        if (html === null) return;
+        var fresh = html ? new DOMParser().parseFromString(html, 'text/html').querySelector('[data-vectors-card]') : null;
+        var card = document.querySelector('[data-vectors-card]');
+        if (fresh && card) window.SeamConsole.morph(card, fresh);
+        followReembed();
+      }).catch(function () { followReembed(); });
+    }, 2000);
+  }
   function enhanceSettings() {
+    followReembed();
     enhanceDirtyForm('[data-briefing-form]', 'brief-state', 'Unsaved changes — save to use them for new sessions.');
     enhanceDirtyForm('[data-features-form]', 'features-state', 'Unsaved changes — save to apply them.');
     enhanceDirtyForm('[data-backups-form]', 'backups-state', 'Unsaved changes — save to use them from the next backup.');
@@ -1169,6 +1204,11 @@ window.SEAM_NO_LIVE_REFRESH = true; // preserve unsaved form state on this contr
 <script src="{{static "passkey.js"}}"></script>
 <script src="{{static "backups.js"}}"></script>
 {{end}}
+
+{{/* What to do when embeddings are off for want of a provider: one sentence
+     for Your setup and the Knowledge engine's embedder card. The daemon's own
+     error stays in its log. */}}
+{{define "embed-off-fix"}}Search and recall use keywords only. Add an OpenAI key (or point Ollama at a local model) in the config file, then restart.{{end}}
 
 {{/* The briefing preview's fragments (briefing_preview.go), fetched into the
      panel's body. */}}

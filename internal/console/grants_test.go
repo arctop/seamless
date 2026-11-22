@@ -88,7 +88,7 @@ func TestGrantsConsole_OffIsNotFound(t *testing.T) {
 	for _, path := range []string{"/console/access", "/console/access/R-AAAA"} {
 		rr := do(mux, authedReq(httptest.NewRequest(http.MethodGet, path, nil)))
 		require.Equal(t, http.StatusNotFound, rr.Code, path)
-		require.Contains(t, rr.Body.String(), "no project is locked, so there are no approvers to manage")
+		require.Contains(t, rr.Body.String(), accessOffWords)
 	}
 	req := authedReq(httptest.NewRequest(http.MethodPost, "/console/access/grants/01KANY/revoke", nil))
 	rr := do(mux, req)

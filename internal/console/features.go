@@ -196,7 +196,9 @@ const heldStaysForProposals = " The Held screen stays, for restricted accounts' 
 // accounts are configured, peer_auth.restricted): the screening card then
 // names the screen's screening parts instead of the screen, and says the
 // screen stays. Every other card, and every card of an install without
-// restricted accounts, is unchanged.
+// restricted accounts, is unchanged. The sentence sits under the switch's
+// "Available in the console and to agents", on cards that are on and off
+// alike, so it names the act ("Turning this off hides ..."), never a state.
 func featureHides(f features.Feature, toolNames, keepsHeld bool) string {
 	parts := slices.Clone(f.Surfaces)
 	navIDs := f.NavIDs
@@ -237,9 +239,9 @@ func featureHides(f features.Feature, toolNames, keepsHeld bool) string {
 		parts = append(parts, tools)
 	}
 	if len(parts) == 0 {
-		return "Hides nothing on its own."
+		return "Turning this off hides nothing on its own."
 	}
-	line := "Hides " + joinWithAnd(parts) + "."
+	line := "Turning this off hides " + joinWithAnd(parts) + "."
 	if keptHeld {
 		line += heldStaysForProposals
 	}

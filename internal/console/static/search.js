@@ -97,6 +97,12 @@
     }
     // A navigation, not a run(): the level is chosen on its own Settings page.
     out.push({ title: 'Change experience level', href: '/console/settings?s=experience' });
+    // A lock is set on each project's own page, which exists only under
+    // peer_auth; Privacy's Locked card says what locking needs here and links
+    // the projects ready for it. Offered while the level shows Privacy.
+    if (document.querySelector('nav.nav a[href="/console/privacy"]')) {
+      out.push({ title: 'Lock a project', href: '/console/privacy#pv-fence-locked' });
+    }
     return out;
   }
   function recents() {

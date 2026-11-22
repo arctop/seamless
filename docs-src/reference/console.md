@@ -85,7 +85,7 @@ nothing, and their rows say so.
 | Re-embed everything | `POST /console/settings/embeddings/reembed` | Starts a background pass that re-embeds every memory and note with the active model. It changes vectors, never content. |
 | Choose the console level | `POST /console/settings/level` | Stores the [experience level](#choose-how-much-you-see) as a row that wins over file and env. Presentation only: nothing an agent receives changes. |
 | Reset the console level | `POST /console/settings/level/reset` | Clears that row, back to the file/env level. |
-| Dismiss the welcome card | `POST /console/settings/level/welcome` | Records that the Home welcome card was seen, without choosing a level. With the card's write-screening box ticked, it also turns that feature on, as a level choice with the box ticked does. |
+| Dismiss the welcome card | `POST /console/settings/level/welcome` | Records that the Overview welcome card was seen, without choosing a level. With the card's write-screening box ticked, it also turns that feature on, as a level choice with the box ticked does. |
 | Save optional features | `POST /console/settings/features` | Writes the feature switches as a stored **override row** in the DB. It changes what is exposed - console screens and the matching agent tools - and deletes nothing. |
 | Reset optional features | `POST /console/settings/features/reset` | Clears the override row, reverting to the file/env configuration - which, unless you set the keys there, means every optional feature is off again. Still deletes nothing. |
 | Turn update checks on or off | `POST /console/settings/updates` | Stores the console's `update.check` override (`check=on` or `off`). It cannot turn checks on while the config file or environment says `update.check: false` - that is final, and the form says so. Off is your decision alone: refused (403) from an agent's process on the peer_auth socket and from a paired device, whatever checks are now; on is open to them. Installs nothing. |
@@ -327,7 +327,8 @@ memories, notes, tasks, plans, sessions, projects, labs and trials you last
 opened in this browser, by their titles; an event page is never kept), **Jump
 to** (every section the sidebar offers, with its shortcut, plus Search,
 Context, and each Settings section the level shows), and **Actions** (switch
-theme, collapse the sidebar, the shortcut sheet, change the experience level).
+theme, collapse the sidebar, the shortcut sheet, change the experience level,
+and, while the level shows Privacy, lock a project: Privacy's Locked card).
 Typing matches sections and actions instantly;
 from two characters on it also searches memories, notes, tasks, plans, trials,
 projects, and sessions through the same route as [Search](#search), showing the
@@ -734,7 +735,7 @@ was cut. Memories and notes are counted apart, so many matching memories never
 squeeze the notes out.
 
 Each kind wears one color wherever Search names it: its count in the results
-header is the legend for its rows, and the Type filter, the palette's group
+header ("1 Session", "2 Sessions") is the legend for its rows, and the Type filter, the palette's group
 heads and an empty page's type chip carry the same color as a dot. Archived
 and superseded memories wear a quieter take of the memory color.
 
@@ -1444,7 +1445,8 @@ says the item is there and links back once you unlock it.
 Only while the **Repo locks** [optional feature](#optional-features) is on; a
 Standard screen. Every [repo lock](/concepts/repo-locks/), shown with its
 repository and its name (**LOCK seamless main**): the refs it guards, whether it
-is free, held or lapsed, the session that holds it with since and until (and
+is free, held (in the accent tone) or lapsed (in the warning tone), the session
+that holds it with since and until, or when it lapsed, each with its date (and
 the restricted account that session belongs to, when it is one), the lock's
 queue while sessions wait for it (how many, and the next one, with its account
 when it is a restricted account's), the repository identities that resolve to
@@ -1458,7 +1460,8 @@ and such a listed project is left out.
   repository free to be declared again. The sidebar badge counts them.
 - **Force release** - on a held or lapsed lock: ends the hold whoever holds it.
   The agent that held it is not told, so release a lock only when its holder is
-  gone or stuck.
+  gone or stuck. On a live hold it asks in the page first; a lapsed one is
+  released at once.
 
 `/console/locks/{id}` is the same page with that lock marked; with
 `?format=json`, the lock alone.
@@ -1562,7 +1565,8 @@ The flat, filterable view over every recorded trial - the console twin of the
 `trial_query` MCP tool, and part of the same
 [optional feature](#optional-features) as [Labs](#labs). The rail groups trials
 by lab (a group sits where its newest trial does) and filters by `?lab=` and
-`?outcome=`. Outcomes are
+`?outcome=`. Choosing an outcome opens the list anew, with its newest match in
+the reader, never beside the trial that was open. Outcomes are
 free-form by design, so `?outcome=` is an exact-match filter rather than a
 validated enum; the seg offers the conventional values (`pass`, `fail`,
 `partial`, `inconclusive`).
@@ -1863,7 +1867,9 @@ compromised, and where each project's knowledge may go.
 - **The four fences** - open, confidential, sealed and locked, always all
   four, empty or not: what each promises, what kind of project belongs there,
   the projects in it, and how to put a project there. A locked project shows
-  by name and counts only.
+  by name and counts only. Under peer_auth the Locked card also lists every
+  confidential or sealed project not locked yet, each linked to its lock page
+  (`/console/lock/<project>`); without it the card says what locking needs.
 - **Find the fence for a project** - three yes-or-no questions that end in a
   recommendation and its command.
 - **What to do next** - the steps that would tighten this server, in order.
@@ -1962,9 +1968,9 @@ screen, and picking System here goes back to following the computer.
 Optional features are the parts of Seamless you can switch on and off, and they
 ship **off**: a fresh install exposes none of them until you turn one on. The
 section renders one card per feature - a toggle, an Enabled/Disabled pill, what the
-feature is, a generated line naming exactly what switching it off hides, and a
-live count of the data it holds either way ("Data kept: 12 trials across 3
-labs").
+feature is, a generated line naming exactly what turning it off takes away
+("Turning this off hides the Labs & Trials screens, ..."), and a live count of
+the data it holds either way ("Data kept: 12 trials across 3 labs").
 
 There are six today:
 
@@ -2186,7 +2192,7 @@ it carried no owner's signature, was signed by a key the file does not list,
 or its signature did not verify. Without the key the row is not there. The
 console can neither set nor clear it.
 
-When a newer release is out, the Home health strip's version fact turns into
+When a newer release is out, the Overview health strip's version fact turns into
 `v0.7.2 -- v0.7.3 available` and links here - its hover says whether it installs
 by itself, and when - and a toast announces it if the console is open when the
 daemon finds it. While an update runs, the fact reads `v0.7.2 -- updating to
@@ -2355,13 +2361,13 @@ how the blended order behaves once active.
 
 `/console/settings?s=workspaces`
 
-How repositories resolve to project scopes, and which projects share context.
+Which project each repository resolves to, and which projects share context.
 **Project families** are editable here: create, rename, edit, or delete the named
 groupings that [`seamlessd family`](/reference/cli-seamlessd/#seamlessd_family)
 manages from the CLI - the same `project_families` setting, so a change on either
 surface shows up on the other. Members are chosen from a closed picker of
 registered projects; the CLI is the route for pre-registering a slug that does
-not exist yet. Below it, one bounded directory lists every scope with its repo
+not exist yet. Below it, one bounded directory lists every project with its repo
 routes and family tags. At Advanced each route also names the machine it lives
 on, and repo paths that resolve to no project are listed as unbound.
 
@@ -2372,14 +2378,17 @@ on, and repo paths that resolve to no project are listed as unbound.
 The machinery, in four groups.
 
 **Recall** - the embedder card shows the active provider and model, and when
-embeddings are off, the exact cause, with distinct copy for the owner off switch,
-the no-key lexical fallback, and a config error. The off/auto switch is a
-settings row read once at serve start, so the page flags a pending restart
-whenever the stored switch disagrees with the running process. Beside it, the
+embeddings are off, why, with distinct copy for the owner off switch, the no-key
+lexical fallback (Your setup's sentence: add a key, then restart; the daemon's
+own error stays in its log), and a config error (with the error). The off/auto
+switch is a settings row read once at serve start, so the page flags a pending
+restart whenever the stored switch disagrees with the running process, and
+**Switch off** is offered only while there is something to switch off: embeddings
+running, or a cleared switch still waiting for that restart. Beside it, the
 stored-vector counts: totals, the not-yet-embedded backlog, and a per-model
 table that badges models the running embedder no longer writes as stale -
 **re-embed everything** rewrites the corpus with the active model in the
-background.
+background, and the card follows the pass in place while the page is open.
 
 **Ranking** - the **utility activation by scope** table lists every scope with
 each readiness gate against its threshold (demand events, memories touched,

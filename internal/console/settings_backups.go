@@ -699,7 +699,7 @@ func (s *Service) backupsListFor(ctx context.Context, st backup.Status, listing 
 		case st.Settings.Auto:
 			l.Empty = "No backups yet. The first automatic one runs within the hour, or make one now."
 		default:
-			l.Empty = "No backups yet. Make one now, or turn automatic backups on below."
+			l.Empty = "No backups yet. Make one now, or turn on Back up automatically under Schedule and folder."
 		}
 	}
 	return l

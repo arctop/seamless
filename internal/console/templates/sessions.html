@@ -113,7 +113,7 @@
         </div>
       </div>
       <span class="proj">{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{icon "folder-tree"}}{{.Project}}</a>{{else}}global{{end}}</span>
-      <span class="when" title="{{ts .Updated}}">{{ago .Updated}}</span>
+      <span class="when">{{agoTime .Updated}}</span>
     </div>
     {{end}}{{end}}
   </div>
@@ -136,7 +136,7 @@
         </div>
       </div>
       <span class="proj">{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{icon "folder-tree"}}{{.Project}}</a>{{else}}global{{end}}</span>
-      <span class="when" title="{{ts .Updated}}">{{ago .Updated}}</span>
+      <span class="when">{{agoTime .Updated}}</span>
     </div>
     {{end}}{{end}}
   </div>
@@ -160,7 +160,7 @@
         </div>
       </div>
       <span class="proj">{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{icon "folder-tree"}}{{.Project}}</a>{{else}}global{{end}}</span>
-      <span class="when" title="{{ts .Updated}}">{{ago .Updated}}</span>
+      <span class="when">{{agoTime .Updated}}</span>
     </div>
     {{end}}{{end}}
   </div>

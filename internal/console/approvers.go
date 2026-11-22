@@ -119,9 +119,25 @@ type approversData struct {
 	AddCommand string `json:"-"`
 }
 
+// The sentence each lock-only page answers with while peer_auth is off
+// (Config.Approvals nil): what is true of that page, not of the Approvers.
+const (
+	approversOffWords = "no project is locked, so there are no approvers to manage"
+	accessOffWords    = "no project is locked and access requests are off, so no agent can ask for access"
+	unlockOffWords    = "no project is locked, so there is nothing to unlock"
+	leaseOffWords     = "no project is locked, so there is no lease to end"
+	lockOffWords      = "locking a project needs peer_auth, which runs the daemon as an account of its own, and it is off on this install"
+)
+
 func (s *Service) approversOff(w http.ResponseWriter, r *http.Request) bool {
+	return s.lockRoutesOff(w, r, approversOffWords)
+}
+
+// lockRoutesOff answers a lock-only route with its 404 in words while
+// peer_auth is off, and reports whether it did.
+func (s *Service) lockRoutesOff(w http.ResponseWriter, r *http.Request, words string) bool {
 	if s.cfg.Approvals == nil {
-		s.notFound(w, r, "no project is locked, so there are no approvers to manage")
+		s.notFound(w, r, words)
 		return true
 	}
 	return false

@@ -76,7 +76,7 @@
     </div>
     <div class="pv-fences">
       {{range .Fences}}
-      <article class="pv-panel pv-fence" data-f="{{.Key}}">
+      <article class="pv-panel pv-fence" id="pv-fence-{{.Key}}" data-f="{{.Key}}">
         <div class="pv-fence-art" data-live-skip><svg viewBox="0 0 260 92" data-fence-art="{{.Key}}" aria-hidden="true"></svg></div>
         <div class="pv-fence-name"><h3>{{.Name}}</h3><span class="count">{{.Count}} project{{if ne .Count 1}}s{{end}}</span></div>
         <p class="pv-promise">{{.Promise}}</p>
@@ -88,6 +88,10 @@
           {{with .Note}}<p class="pv-note-line">{{.}}</p>{{end}}
           {{else}}
           <div class="pv-empty"><b>{{.Empty}}</b></div>
+          {{end}}
+          {{with .Lockable}}
+          <p class="pv-lbl">Lock one on its page</p>
+          <div class="pv-projs" data-pv-lockable>{{range .}}<a class="pv-proj" href="{{.Href}}">{{.Slug}}</a>{{end}}</div>
           {{end}}
         </div>
         <div class="pv-howto">

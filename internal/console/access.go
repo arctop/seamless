@@ -126,10 +126,10 @@ func (s *Service) core() accessCore {
 }
 
 // accessOff answers a 404 for the access routes when neither a lock nor
-// read grants are on -- in the same words as before read grants existed.
+// read grants are on.
 func (s *Service) accessOff(w http.ResponseWriter, r *http.Request) bool {
 	if s.cfg.Approvals == nil && s.cfg.Grants == nil {
-		return s.approversOff(w, r)
+		return s.lockRoutesOff(w, r, accessOffWords)
 	}
 	return false
 }
@@ -869,13 +869,11 @@ func (s *Service) accessDeny(w http.ResponseWriter, r *http.Request) {
 		s.accessError(w, r, err)
 		return
 	}
-	payload := map[string]any{"denied": approval.ShortID(a.ID), "project": a.Project}
-	if s.cfg.Approvals == nil {
-		// The advisory tier's page denies with a plain form.
-		afterAccessWrite(w, r, payload, "Denied "+approval.ShortID(a.ID)+": "+deniedWords(a)+".")
-		return
-	}
-	writeJSON(w, http.StatusOK, payload)
+	// The locked tier's page denies from its script, which asks for JSON. A
+	// plain form follows the redirect: the advisory tier's page, and the
+	// locked tier's two-step Deny in a browser without script.
+	afterAccessWrite(w, r, map[string]any{"denied": approval.ShortID(a.ID), "project": a.Project},
+		"Denied "+approval.ShortID(a.ID)+": "+deniedWords(a)+".")
 }
 
 // deniedWords says what a denial leaves: a move's agent stays where it is, a

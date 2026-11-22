@@ -16,8 +16,8 @@
     {{if or .Tags .Machine}}<dt>Tags</dt><dd class="peek-tags">{{range .Tags}}<span class="badge">{{.}}</span> {{end}}{{with .Machine}}<details class="lib-tag-fold"><summary class="badge" title="Tags agents and hooks add for software">+{{len .}}</summary>{{range .}}<span class="badge faint">{{.}}</span> {{end}}</details>{{end}}</dd>{{end}}{{end}}
     {{if .SourceURL}}<dt>Source</dt><dd><a href="{{.SourceURL}}" rel="noopener noreferrer" target="_blank">{{.SourceURL}}</a></dd>{{end}}
     {{if .Model}}<dt title="Model that produced this content">Model</dt><dd class="mono">{{.Model}}</dd>{{end}}
-    <dt>Created</dt><dd title="{{ts .Created}}">{{ago .Created}}</dd>
-    <dt>Updated</dt><dd title="{{ts .Updated}}">{{ago .Updated}}</dd>
+    <dt>Created</dt><dd>{{agoTime .Created}}</dd>
+    <dt>Updated</dt><dd>{{agoTime .Updated}}</dd>
     <dt>File</dt><dd class="mono">{{.FilePath}}{{copyBtn .FilePath}}</dd>
   </dl>
 
