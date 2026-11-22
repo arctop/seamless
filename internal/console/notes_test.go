@@ -116,8 +116,9 @@ func TestLibNotesFilters(t *testing.T) {
 	main := libMain(t, getHTMLBody(t, mux, "/console/notes"+qs))
 	require.Contains(t, main, "<strong>1</strong>of 3 notes")
 	require.Contains(t, main, `aria-label="Project: pay"`)
-	require.Contains(t, main, `data-auto-url="/console/notes/`+b.ID+esc+`"`)
-	require.Contains(t, main, `value="/console/notes/`+b.ID+esc+`" data-lib-next>`)
+	require.Contains(t, main, `id="ml-`+b.ID+`" href="/console/notes/`+b.ID+esc+`" data-peek>`, "a row keeps the state")
+	require.NotContains(t, main, "data-auto-url", "the list opens no note")
+	require.NotContains(t, main, "data-lib-next")
 	require.Contains(t, main, `href="/console/notes?fav=1&amp;project=global">Global inbox<span class="n">1</span>`)
 
 	rr := postFavorite(mux, "note", b.ID, url.Values{"favorite": {"0"}, "next": {"/console/notes/" + b.ID + qs}})

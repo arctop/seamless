@@ -28,7 +28,7 @@ func TestKeysSheet_EveryRowSitsInItsList(t *testing.T) {
 	require.NotContains(t, sheet[last:], "<dt>", "a row after the sheet's last list sits outside every list")
 	for _, row := range []string{
 		`<div><dt><kbd>p</kbd></dt><dd>Choose a project (Memories, Notes, Plans)</dd></div>`,
-		`<div><dt><kbd>enter</kbd></dt><dd>Open the focused row's page (Memories)</dd></div>`,
+		`<div><dt><kbd>enter</kbd></dt><dd>Open the focused row's page (Memories, Notes)</dd></div>`,
 	} {
 		require.Equal(t, 1, strings.Count(sheet, row), "the sheet lists %s once", row)
 	}

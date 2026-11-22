@@ -1,25 +1,30 @@
 {{define "content"}}
 {{- with .Data.Item}}{{template "item-frame" .}}{{else}}
 {{with .Data}}
-{{$sel := .Selected}}
-{{$qs := .QS}}
+{{- /* One list, full width (plan:console-ux-pass UX 29): a page of the
+     matches, newest first in local-day groups, across every project or in
+     the one chosen. Tag chips filter it, and the agent working copies fold
+     away until asked for. A row opens the note's own page, the list's query
+     on its link. */}}
+{{$byProject := .List.ByProject}}{{$rowqs := .List.RowQS}}
 <div class="lib-page" data-library="notes">
 <header class="mv2-bar">
   <h1>{{icon "file-text"}}Notes</h1>{{about "Research, meeting context, plans, and long-form artifacts kept for later work."}}
   {{if .Filtered}}
-  <span class="mv2-count" aria-label="{{.Count}} of {{.Total}} notes match">
-    <strong>{{.Count}}</strong>of {{.Total}} note{{if ne .Total 1}}s{{end}}
+  <span class="mv2-count" aria-label="{{.List.Total}} of {{.Total}} notes match">
+    <strong>{{.List.Total}}</strong>of {{.Total}} note{{if ne .Total 1}}s{{end}}
   </span>
   <a class="lib-clear" href="{{.ClearHref}}" data-seam-query title="Show every note again">{{icon "x"}}Clear</a>
   {{else}}
-  <span class="mv2-count" aria-label="{{.Count}} notes">
-    <strong>{{.Count}}</strong>note{{if ne .Count 1}}s{{end}}{{if .Groups}}<small>across {{len .Groups}} scope{{if ne (len .Groups) 1}}s{{end}}</small>{{end}}
+  <span class="mv2-count" aria-label="{{.List.Total}} notes">
+    <strong>{{.List.Total}}</strong>note{{if ne .List.Total 1}}s{{end}}
   </span>
   {{end}}
   <form class="search lib-query" method="get" action="/console/notes" data-seam-query>
     {{icon "search"}}
-    <input name="q" aria-label="Filter notes by title, description, tag, or project" placeholder="Filter titles, descriptions, tags, and projects&hellip;" value="{{.Query}}">
+    <input name="q" aria-label="Filter notes by title, description, tag, or project" placeholder="Filter by title, description, tag or project" value="{{.Query}}">
     {{range .Keep}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">{{end}}
+    <kbd class="ml-slash" aria-hidden="true">/</kbd>
   </form>
   <button type="button" class="mv2-filter-toggle" data-filters-toggle aria-expanded="false" aria-controls="mv2-controls">{{icon "sliders"}}<span>Filters</span></button>
   <span class="mv2-spacer"></span>
@@ -28,62 +33,76 @@
   <div class="lib-flags" data-seam-query>
     <a class="lib-flag{{if .FavLink.On}} on{{end}}" href="{{.FavLink.Href}}" title="{{if .FavLink.On}}Show every note again{{else}}Show only starred notes{{end}}">{{icon "star"}}Starred{{with .FavLink.Count}}<span class="n">{{.}}</span>{{end}}</a>
   </div>
-  {{if not .AlwaysTree}}
-  <div class="lib-group" role="group" aria-label="Group">
-    <span class="lib-group-k">Group</span>
-    <div class="seg" data-seam-query>
-      <a class="{{if .Flat}}on{{end}}" href="{{.GroupNone}}" data-lib-here title="One list in the sort's order, each note with its project">None</a>
-      <a class="{{if not .Flat}}on{{end}}" href="{{.GroupProject}}" data-lib-here title="Grouped by project">Project</a>
-    </div>
-  </div>
-  {{end}}
   <details class="menu sort-menu">
     <summary class="menu-btn" aria-label="Sort: {{sortLabel .Sort}}">{{icon "arrow-up-down"}}<span class="menu-k">Sort</span><strong>{{sortLabel .Sort}}</strong>{{icon "chevron-down"}}</summary>
     <div class="menu-list" data-seam-query>
-      <a class="{{if eq .Sort "recent"}}on{{end}}" href="{{index .Sorts "recent"}}" data-lib-here>Recent</a>
-      <a class="{{if eq .Sort "name"}}on{{end}}" href="{{index .Sorts "name"}}" data-lib-here title="A to Z, grouped by project">Name</a>
-      <a class="{{if eq .Sort "favorites"}}on{{end}}" href="{{index .Sorts "favorites"}}" data-lib-here>Starred</a>
+      <a class="{{if eq .Sort "recent"}}on{{end}}" href="{{index .Sorts "recent"}}">Recent</a>
+      <a class="{{if eq .Sort "name"}}on{{end}}" href="{{index .Sorts "name"}}" title="A to Z">Name</a>
+      <a class="{{if eq .Sort "favorites"}}on{{end}}" href="{{index .Sorts "favorites"}}">Starred</a>
     </div>
   </details>
   </div>
 </header>
 
-{{if or .Rail .Filtered}}
-<div class="lib-layout"{{if and .Selected .SelectedAuto}} data-auto-url="/console/notes/{{.Selected.ID}}{{$qs}}"{{end}}>
-  <nav class="lib-rail" aria-label="Notes">
-    <div class="rail-overview"><span>Note map</span><span>{{if .Flat}}{{.OrderHint}}{{else}}Scope &rarr; note{{end}}</span></div>
-    <div class="rail-scroll">
-    {{if .Rail}}
-    <div class="rail-groups">
-      {{range $g := .Rail}}
-      <section class="rail-group" id="rg-{{if $g.All}}all{{else if $g.Project}}{{$g.Project}}{{else}}global{{end}}">
-        <header class="rail-group-hd"><span class="hd-label">{{if $g.All}}{{icon "arrow-up-down"}}All notes{{else if $g.Project}}{{icon "folder-tree"}}{{$g.Project}}{{else}}{{icon "folder-open"}}Global inbox{{end}}</span> <span class="n">{{$g.Count}}</span></header>
-        <div class="rail-items">
-          {{range $g.Notes}}
-          <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/notes/{{.ID}}{{$qs}}" data-title="{{.Title}}" data-context="{{.ScopeLabel}}"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
-            <span class="ri-title">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</span>
-            {{if .Description}}<span class="ri-desc">{{.Description}}</span>{{end}}
-            <span class="ri-meta">{{if $g.All}}<span class="ri-chip">{{.ScopeLabel}}</span> {{end}}<span>updated {{agoTime .Updated}}</span>{{with agentPill "" .Model}} {{.}}{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
-          </a>
-          {{end}}
-        </div>
-      </section>
-      {{end}}
-    </div>
-    {{else}}
-    <div class="rail-none lib-none">
-      <p>{{if .Query}}No notes match &ldquo;{{.Query}}&rdquo;{{if .Narrowed}} with these filters{{end}}.{{else}}No notes match these filters.{{end}}</p>
-      <p class="lib-none-acts"><a href="{{.ClearHref}}" data-seam-query>{{icon "x"}}Clear</a>{{with .SearchHref}}<a href="{{.}}">{{icon "search"}}Search everything for &ldquo;{{$.Data.Query}}&rdquo;</a>{{end}}</p>
-    </div>
-    {{end}}
-    </div><!-- .rail-scroll -->
-  </nav>
-  <section class="lib-reader" id="lib-reader" data-base="/console/notes" aria-live="polite" aria-label="Note">
-    {{if .Selected}}{{template "note-reader" .Selected}}{{else}}
-    <div class="reader-empty dotgrid"><span class="empty-ico">{{icon "file-text"}}</span><div>Select a note to read it here.</div></div>
-    {{end}}
+{{if .Total}}
+<nav class="ml-kinds nl-chips" aria-label="Tags" data-seam-query>
+  {{- range .TagChips}}
+  <a class="ml-chip{{if .On}} on{{end}}" href="{{.Href}}"{{with .Title}} title="{{.}}"{{end}}{{if .On}} aria-current="true"{{end}}>{{.Label}}<span class="n">{{.Count}}</span></a>
+  {{- end}}
+  {{- with .Fold}}{{if or .N .On}}
+  <span class="nl-fold" data-nl-fold>{{.N}} agent working cop{{if eq .N 1}}y{{else}}ies{{end}} {{if .On}}shown{{else}}folded{{end}} &middot; <a href="{{.Href}}" title="{{if .On}}Fold the cached runs of planning subagents away again{{else}}List the cached runs of planning subagents among the notes{{end}}">{{if .On}}fold them{{else}}show them{{end}}</a></span>
+  {{- end}}{{end}}
+</nav>
+<section class="ml-list" id="ml-list" aria-label="Notes" data-ml-list>
+  {{- range .List.Groups}}
+  <section class="ml-group" id="ml-g-{{.Key}}" aria-labelledby="ml-gh-{{.Key}}">
+    <header class="ml-group-hd"><h2 id="ml-gh-{{.Key}}">{{.Label}}</h2><span class="ml-note">{{.Note}}</span></header>
+    {{- range .Rows}}
+    <a class="ml-row nl-row{{if .Cache}} nl-cache{{end}}" id="ml-{{.ID}}" href="/console/notes/{{.ID}}{{$rowqs}}" data-peek>
+      <span class="ml-main"><span class="nl-title">{{if .Favorite}}<span class="ml-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</span>{{with .Description}}<span class="ml-desc">{{.}}</span>{{end}}</span>
+      {{- range .Plans}}
+      <span class="lib-plan-chip"{{with .Title}} title="{{.}}"{{end}}>{{icon "map"}}<span class="mono">plan:{{.Slug}}</span>{{if .Status}} <span class="badge {{.Tone}}">{{.Status}}</span>{{end}}</span>
+      {{- end}}
+      {{- range .Labels}}
+      <span class="badge">{{.}}</span>
+      {{- end}}
+      {{- with .MoreLabels}}
+      <span class="nl-more" title="{{.}} more tag{{if ne . 1}}s{{end}} on its page">+{{.}}</span>
+      {{- end}}
+      {{- if .Cache}}
+      <span class="nl-copy" title="A planning subagent's cached run">working copy</span>
+      {{- end}}
+      {{- with .Account}}
+      <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>
+      {{- end}}
+      {{- if not $byProject}}
+      <span class="ml-proj">{{.ScopeLabel}}</span>
+      {{- end}}
+      <span class="nl-when">{{with .WordsLabel}}{{.}} &middot; {{end}}{{agoTime .Updated}}</span>
+    </a>
+    {{- end}}
   </section>
-</div>
+  {{- else}}
+  <div class="ml-none lib-none">
+    {{- if .Filtered}}
+    <p>{{if .Query}}No notes match &ldquo;{{.Query}}&rdquo;{{if .Narrowed}} with these filters{{end}}.{{else}}No notes match these filters.{{end}}</p>
+    <p class="lib-none-acts"><a href="{{.ClearHref}}" data-seam-query>{{icon "x"}}Clear</a>{{with .SearchHref}}<a href="{{.}}">{{icon "search"}}Search everything for &ldquo;{{$.Data.Query}}&rdquo;</a>{{end}}</p>
+    {{- else}}
+    <p>Every note here is an agent working copy, folded away.</p>
+    <p class="lib-none-acts"><a href="{{.Fold.Href}}" data-seam-query>Show them</a></p>
+    {{- end}}
+  </div>
+  {{- end}}
+  {{- with .List}}{{if .Groups}}
+  <footer class="ml-foot" id="ml-foot">
+    <span>{{if .More}}Showing <strong>{{.Shown}}</strong> of {{.Total}}{{else}}{{.Total}} {{if eq .Total 1}}note{{else}}notes{{end}}{{end}} &middot; {{.Order}}</span>
+    {{- with .More}}
+    <a class="ml-more" href="{{.}}" data-seam-query>{{if $.Data.List.Rest}}Show the other {{$.Data.List.MoreN}}{{else}}Show {{$.Data.List.MoreN}} more{{end}}</a>
+    {{- end}}
+  </footer>
+  {{- end}}{{end}}
+</section>
+<p class="ml-keys" aria-hidden="true"><span><kbd>j</kbd> <kbd>k</kbd> move</span><span><kbd>Enter</kbd> opens the note</span><span><kbd>/</kbd> filters</span><span><kbd>p</kbd> picks a project</span></p>
 {{else}}
 <div class="empty dotgrid"><span class="empty-ico">{{icon "file-text"}}</span><div>No notes yet &mdash; agents capture research, decisions, and summaries here with notes_create.</div></div>
 {{end}}

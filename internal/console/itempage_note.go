@@ -46,11 +46,17 @@ type noteRef struct {
 const itemReadingPace = 230
 
 // noteItemPage answers a note's own URL in HTML: the item page, its place in
-// the list the URL names (lq; listed when it names one), else in its
-// project.
-func (s *Service) noteItemPage(w http.ResponseWriter, r *http.Request, d noteDetail, lq libQuery) {
+// the list the URL names (lq and v; listed when it names one,
+// namesNoteList), else in its project.
+func (s *Service) noteItemPage(w http.ResponseWriter, r *http.Request, d noteDetail, lq libQuery, v noteView) {
 	ctx := r.Context()
-	listed := lq.QS() != ""
+	listed := namesNoteList(r.URL.Query())
+	// qs is the list's state the place's neighbours and the star carry; the
+	// page size is the list's alone.
+	qs := ""
+	if listed {
+		qs = noteListQS(lq, v)
+	}
 	// The body again, with an id on each section heading for On this page;
 	// the reader's and the peek's copies keep the body Render gives them.
 	var outline []markdown.Heading
@@ -60,41 +66,45 @@ func (s *Service) noteItemPage(w http.ResponseWriter, r *http.Request, d noteDet
 	sel := s.noteReaderOf(ctx, d, lq)
 	page := &itemPage{
 		Kind: "note", ID: d.ID, Title: d.Title, Lead: d.Description,
-		Star: itemStar{Action: "/console/favorites/note/" + d.ID, Next: notesListPath + "/" + d.ID + lq.QS(),
+		Star: itemStar{Action: "/console/favorites/note/" + d.ID, Next: notesListPath + "/" + d.ID + qs,
 			On: d.Favorite, Noun: "note"},
 	}
 	if listed {
-		l := store.NoteList{ByProject: lq.Project != "", Project: lq.Project, Fav: lq.Fav,
-			Query: strings.ToLower(lq.Q), Sort: lq.Sort, Tree: lq.tree()}
-		if l.Project == validate.GlobalProject {
-			l.Project = ""
-		}
+		l := notePlaceList(lq, v)
 		place, found, err := store.NotePlace(ctx, s.db(ctx), l, d.ID)
 		if err != nil {
 			s.serverError(w, r, err)
 			return
 		}
 		if found {
-			page.Place = placeOf(place, func(n int) string { return noteListWords(l, n) }, notesListPath, lq.QS())
+			page.Place = placeOf(place, func(n int) string { return noteListWords(l, n) }, notesListPath, qs)
 		} else {
 			listed = false
 		}
 	}
 	if page.Place == nil {
-		l := store.NoteList{ByProject: true, Project: d.Project, Sort: libDefaultSort}
+		// Its project's list, newest first; an agent's working copy among
+		// the project's notes with the working copies shown, which its
+		// neighbours' links name, so k / j stay in that list.
+		own, ov := libQuery{Sort: libDefaultSort, Project: scopeParam(d.Project)}, noteView{Caches: isAgentCache(d.Tags)}
+		oqs := ""
+		if ov.Caches {
+			oqs = noteListQS(own, ov)
+		}
+		l := notePlaceList(own, ov)
 		place, found, err := store.NotePlace(ctx, s.db(ctx), l, d.ID)
 		if err != nil {
 			s.serverError(w, r, err)
 			return
 		}
 		if found {
-			page.Place = placeOf(place, func(n int) string { return noteListWords(l, n) }, notesListPath, "")
+			page.Place = placeOf(place, func(n int) string { return noteListWords(l, n) }, notesListPath, oqs)
 		}
 	}
 	scoped := listHref(notesListPath, d.Project, "", lq)
 	page.Back = frameLink{Label: noteBackLabel(d.Project), Href: listHref(notesListPath, d.Project, "", libQuery{})}
 	if listed {
-		page.Back = frameLink{Label: noteListBack(lq), Href: lq.href(notesListPath)}
+		page.Back = frameLink{Label: noteListBack(lq), Href: noteListHref(lq, noteView{Tag: v.Tag, Plans: v.Plans, Caches: v.Caches})}
 	}
 	page.Crumbs = []frameLink{s.projectCrumb(ctx, d.Project, scoped, "Global inbox"), {Label: "Notes", Href: scoped}}
 	// Delete returns to the way back (note-delete posts the Notes list with
@@ -109,7 +119,9 @@ func (s *Service) noteItemPage(w http.ResponseWriter, r *http.Request, d noteDet
 	for _, p := range sel.Tagged.Plans {
 		item.PartOf = append(item.PartOf, s.planPartOf(ctx, d.Project, p.Slug))
 	}
-	more, total, err := store.NotesOfProject(ctx, s.db(ctx), d.Project, d.ID, itemMoreLimit)
+	// The other notes the project's list draws: its working copies stay
+	// folded here as there.
+	more, total, err := store.NotesOfProject(ctx, s.db(ctx), d.Project, d.ID, plans.TagAgent, itemMoreLimit)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -126,14 +138,36 @@ func (s *Service) noteItemPage(w http.ResponseWriter, r *http.Request, d noteDet
 	s.render(w, r, "notes", pageData{Title: "Note " + d.Title, Active: "notes", Data: notesData{Item: page}})
 }
 
-// noteListWords names a Notes list of n: "notes in example-ops", "starred notes
-// matching "x"".
+// notePlaceList is the Notes list lq and v name, as a place query reads it:
+// the list the Notes page draws (notesPage, buildNoteList), in the sort's
+// order, the agent working copies left out unless v shows them.
+// TestItPlaceNotesAgreeWithTheList holds the two equal.
+func notePlaceList(lq libQuery, v noteView) store.NoteList {
+	l := store.NoteList{ByProject: lq.Project != "", Project: lq.Project, Fav: lq.Fav,
+		Query: strings.ToLower(lq.Q), Tag: v.Tag, Plans: v.Plans, Sort: lq.Sort}
+	if l.Project == validate.GlobalProject {
+		l.Project = ""
+	}
+	if !v.Caches {
+		l.Without = plans.TagAgent
+	}
+	return l
+}
+
+// noteListWords names a Notes list of n: "notes in example-ops", "starred plan
+// notes tagged research matching "x"".
 func noteListWords(l store.NoteList, n int) string {
 	var b strings.Builder
 	if l.Fav {
 		b.WriteString("starred ")
 	}
+	if l.Plans {
+		b.WriteString("plan ")
+	}
 	b.WriteString(nounOf(n, "note", "notes"))
+	if l.Tag != "" {
+		b.WriteString(" tagged " + l.Tag)
+	}
 	b.WriteString(scopeWords(l.Project, l.ByProject, "in the global inbox"))
 	b.WriteString(queryWords(l.Query))
 	return b.String()

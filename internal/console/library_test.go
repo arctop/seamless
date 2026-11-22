@@ -82,21 +82,20 @@ func TestLibraryReaderStyles_FillAvailableColumn(t *testing.T) {
 	require.Contains(t, doc, `max-width: none`)
 }
 
-func TestNotesLibrary_AutoSelectsNewest(t *testing.T) {
+// The Notes list opens no note (plan:console-ux-pass UX 29): no reader, no
+// auto-open, the rows newest first, each a link to the note's own page.
+func TestNotesLibrary_ListOpensNoNote(t *testing.T) {
 	_, mgr, mux := newConsoleWithFiles(t)
-	writeNote(t, mgr, "seamless", "n-old", "Older Note", "the older body")
-	writeNote(t, mgr, "seamless", "n-new", "Newer Note", "the newer body")
+	older := writeNote(t, mgr, "seamless", "n-old", "Older Note", "the older body")
+	newer := writeNote(t, mgr, "seamless", "n-new", "Newer Note", "the newer body")
 
 	html := getPeek(t, mux, "/console/notes")
 	require.Equal(t, http.StatusOK, html.Code)
 	body := html.Body.String()
-	require.Contains(t, body, `id="lib-reader"`)
-	// The newest note is open in the reader (its body renders) and its rail
-	// item carries the current marker + the pin URL for the client.
-	require.Contains(t, body, "the newer body")
-	require.NotContains(t, body, "the older body")
-	require.Contains(t, body, `aria-current="page"`)
-	require.Contains(t, body, "data-auto-url=")
+	require.Equal(t, []string{newer.ID, older.ID}, nlRows(body))
+	for _, gone := range []string{`id="lib-reader"`, `class="lib-rail"`, "data-auto-url=", "the newer body", `aria-current="page"`} {
+		require.NotContains(t, body, gone)
+	}
 }
 
 func TestBuildNoteGroups_RecentOrdersNewestFirst(t *testing.T) {
@@ -221,17 +220,6 @@ func libMemory(t *testing.T, mgr *files.Manager, kind core.MemoryKind, project, 
 	return m
 }
 
-// libRailRow finds a page's rail rows, in order, by item id.
-var libRailRow = regexp.MustCompile(`<a class="rail-item[^"]*" id="ri-([^"]+)"`)
-
-func libRailIDs(body string) []string {
-	var ids []string
-	for _, m := range libRailRow.FindAllStringSubmatch(body, -1) {
-		ids = append(ids, m[1])
-	}
-	return ids
-}
-
 // libSessionLink finds the session links in a stretch of markup, in order.
 var libSessionLink = regexp.MustCompile(`href="/console/sessions/([^"]+)"`)
 
@@ -311,9 +299,10 @@ func TestLibRecentIsOneListNewestFirst(t *testing.T) {
 
 	n1 := libNote(t, mgr, "", "inbox-old", "Inbox old", base, nil)
 	n2 := libNote(t, mgr, "zeta", "zeta-new", "Zeta new", base.Add(time.Hour), nil)
-	require.Equal(t, []string{n2.ID, n1.ID}, libRailIDs(getHTMLBody(t, mux, "/console/notes")),
-		"with Recent, the newest note is the first rail row")
-	require.Equal(t, []string{n1.ID, n2.ID}, libRailIDs(getHTMLBody(t, mux, "/console/notes?group=project")))
+	require.Equal(t, []string{n2.ID, n1.ID}, nlRows(getHTMLBody(t, mux, "/console/notes")),
+		"with Recent, the newest note is the first row")
+	require.Equal(t, []string{n2.ID, n1.ID}, nlRows(getHTMLBody(t, mux, "/console/notes?group=project")),
+		"an old grouping on the URL draws the same list")
 }
 
 // The filters combine, in the URL, on active and inactive memories alike; each
@@ -466,9 +455,9 @@ func TestLibStateSurvivesStarArchiveSort(t *testing.T) {
 }
 
 // After a reader swap, the page's sort and Group links follow the reader and
-// the star's next is the URL the reader is on (library.js), and every such
-// link is marked for it in the Notes template. Memories has no reader beside
-// its list (plan:console-ux-pass UX 28): its sorts are plain list links, and
+// the star's next is the URL the reader is on (library.js), for the screens
+// that keep the rail. Memories and Notes have no reader beside their lists
+// (plan:console-ux-pass UX 28, UX 29): their sorts are plain list links, and
 // only the reader fragment (?reader=1) still marks its star's next.
 func TestLibReaderSwapKeepsThePageState(t *testing.T) {
 	js := string(libraryJS)
@@ -480,20 +469,12 @@ func TestLibReaderSwapKeepsThePageState(t *testing.T) {
 	// button is inside the row's anchor, so the check asks the click's target.
 	require.Contains(t, js, "if (e.target.closest('.copy-btn')) return;")
 	require.NotContains(t, js, "a.closest('.copy-btn')", "the anchor's ancestors never include its own button")
-	for name, sorts := range map[string][]string{"notes": noteSortKeys} {
+	for _, name := range []string{"memories", "notes"} {
 		src, err := templateFS.ReadFile("templates/" + name + ".html")
 		require.NoError(t, err)
-		page := string(src)
-		require.Equal(t, len(sorts)+2, strings.Count(page, `data-lib-here`), "%s: each sort and both Group links", name)
-		require.Equal(t, 1, strings.Count(page, `data-lib-next`), "%s: the star's next", name)
-		for _, key := range sorts {
-			require.Contains(t, page, `href="{{index .Sorts "`+key+`"}}" data-lib-here`, "%s: sort %s", name, key)
-		}
+		require.NotContains(t, string(src), "data-lib-here", "%s: a sort reorders the list, with no reader to stay on", name)
+		require.Equal(t, 1, strings.Count(string(src), "data-lib-next"), "%s: the reader fragment's star", name)
 	}
-	src, err := templateFS.ReadFile("templates/memories.html")
-	require.NoError(t, err)
-	require.NotContains(t, string(src), "data-lib-here", "memories: a sort reorders the list, with no reader to stay on")
-	require.Equal(t, 1, strings.Count(string(src), "data-lib-next"), "memories: the reader fragment's star")
 }
 
 // Typing a project's slug or name narrows to that project, the header says how

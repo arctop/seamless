@@ -427,8 +427,8 @@ a superseded or archived memory finds it here too, with its status.
 | `Cmd/Ctrl+K` | Search or jump to a section |
 | `/` | Focus this screen's filter; open the palette where there is none |
 | `g` then a key | Go to a section (pressing `g` shows every key it can take, until your next key or `Esc`): `a` Access requests, `k` Approvers, `o` Overview, `n` Now, `i` Interactions, `f` Mishaps, `d` Diary, `w` Projects, `p` Plans, `t` Tasks, `s` Sessions, `b` Locks, `m` Memories, `e` Notes, `r` Retrieval, `g` Gardener, `h` Held, `l` Labs, `x` Trials, `y` System, `v` Privacy, `c` Devices, `,` Settings |
-| `j` / `k` | Next / previous item in a library rail or the Memories list, or, on [an item's own page](#item-page), in the list it is in |
-| `Enter` | On the Memories list, open the focused memory's own page |
+| `j` / `k` | Next / previous item in a library rail, the Memories list or the Notes list, or, on [an item's own page](#item-page), in the list it is in |
+| `Enter` | On the Memories or the Notes list, open the focused row's own page |
 | `p` | Open the project switcher on Memories, Notes and Plans |
 | `a` / `x` | On the Gardener: apply / dismiss the open proposal. An apply that cannot be undone asks in the page first; press `a` again to confirm |
 | `[` | Collapse or expand the sidebar |
@@ -552,8 +552,8 @@ Every route answers in the shape the caller asked for:
 - **An HTML fragment** for entity details when the caller passes `?peek=1` - the
   [reading panel](#read-in-place) (or the Diary's or Interactions' pane) loads
   it without a page navigation - or `?reader=1`, the richer
-  reader fragment the library screens (notes, tasks, plans, labs,
-  trials) swap in place.
+  reader fragment the library screens (tasks, plans, labs, trials) swap in
+  place.
 
 The event page composes its full page from the same `detail-body` block its
 peek fragment renders, so the two cannot drift. Session and project
@@ -1406,12 +1406,12 @@ Every item reads the same way:
   parameters the list puts on its links: `?sort=`, `?kind=`, `?project=`,
   `?q=` and the rest), the place follows that list's order. Without one it is
   the memory's project and kind, newest first; the note's project, newest
-  first; a plan step's plan, its closed steps in the order they closed and
+  first (an agent's working copy among them with the working copies shown); a plan step's plan, its closed steps in the order they closed and
   then the rest as the plan card orders them; or an off-plan task's project,
   as the Tasks list orders it. A list that does not hold the item falls back
-  to that. A row of the Memories list always carries its list's state
-  (`?sort=recent` on the default list), so a memory opened from it is placed
-  in that list.
+  to that. A row of the Memories or the Notes list always carries its list's
+  state (`?sort=recent` on the default list), so a memory or a note opened
+  from it is placed in that list.
 - **Where it lives**: project › Memories › kind, project › Notes, project ›
   Plans › `plan:<slug>`, or project › Tasks, each a link.
 - **The title row**: a memory's name in mono, or a note's or a task's title,
@@ -1432,7 +1432,7 @@ Every item reads the same way:
     and its file path;
   - a note: **On this page** (its h2 and h3 headings as links, once there are
     two), the plans it is **part of** with their progress, more notes in its
-    project, and its file path;
+    project (its working copies left out, as on the list), and its file path;
   - a task: its plan as a small card with every step and this one marked,
     what it depends on and what it blocks. Its history and earlier versions
     follow the body.
@@ -1544,27 +1544,62 @@ without a reload, and the row in focus keeps the ring.
 
 `/console/notes`, `/console/notes/{id}`
 
-A two-pane library for notes: under **Recent** the rail is one list,
-newest first, each row carrying its project; **Group: Project** groups it by
-project (global `""` first), and sorting by title always does. Sortable by
-recency, title, or starred; filterable by **Project** (the same project
-switcher as Memories, where the global scope reads Global inbox), by
-**Starred**, and by a substring of the title, the description, a tag, or the
-project's slug or name,
-with the same "N of M" header, Clear, Search fallback and URL state as
-Memories. The
-reader renders the note as a document - uncapped body in a measured reading
-column, description, tags, word count, source URL, and the file path with an
-editor link. A `plan:<slug>` tag is a link to [the plan](#plans) with its
-status: a captured plan's own, otherwise in progress, ready or done from its
-steps. The tags software adds - `created-by:*`, `plan-status:*`, `cc-plan` and
-`agent-cache` - fold behind a **+N** chip.
+One list, full width, in the [Memories](#memories) list's shape, with no rail
+and no reader: a note's link opens [its own page](#item-page). The list is
+every match, newest first, in local-day groups (**Today**, **Yesterday**,
+**Earlier this week**, **Earlier this month** and **Older**), each heading
+saying how many matches it holds, across every project or, with a project
+chosen in the switcher, in that one. It draws 50 rows at a time; **Show 50
+more**, or **Show the other N** when fewer are left, adds the next rows in
+place, and the address keeps how many are shown (`?show=`). **Name** (A to Z)
+and **Starred** draw the matches as one group in that order.
 
-The reader's actions are the **star** and **Delete**, in the same places as on
-Memories. Delete asks in the page first and removes the note for good. A note
-that is a plan's narrative says so, and also needs the box beside Delete
-ticked; while [Held](#held) holds the note, the reader says why instead. A
-note's own URL opens [its own page](#item-page).
+A row is one link: the title, the description on one line, each plan the
+note belongs to (its `plan:<slug>` tags) with the plan's status (a captured
+plan's own, otherwise in progress, ready or done from its steps), up to two
+of its tags and how many more, the project (on the All projects list only),
+its length in words and how long since it changed. A note written by a
+restricted local account says so on its row.
+
+The bar holds the project switcher (the same one as on Memories, where the
+global scope reads **Global inbox**), the text filter (`/` focuses it; a
+substring of the title, the description, a tag, or the project's slug or
+name), **Starred** and **Sort**. Under it the tag chips filter by tag:
+**Everything**, **plan narratives** (the notes tagged `plan:<slug>`), then
+the tags written for people that most notes in view carry, up to twelve; any
+other tag is found by typing it. The tags software adds - `created-by:*`,
+`plan-status:*`, `cc-plan` and `agent-cache` - never become chips. Every
+chip, toggle and switcher row counts what choosing it would show, the other
+filters applied, and the "N of M" header, Clear and the Search fallback work
+as on Memories.
+
+Planning subagents' cached runs (the notes tagged `agent-cache`, agents'
+working copies) are folded away by default: they are left out of the list
+and its counts, and a line after the chips says "N agent working copies
+folded · show them". **show them** (`?caches=1`) lists them among the notes,
+each marked as a working copy, and every chip, filter, sort and the switcher
+keep that; **fold them** folds them again. A plan's page and its card on
+[Plans](#plans) still list them under their plan.
+
+The whole state is in the URL: `?sort=`, `?project=` (a slug, or `global`),
+`?fav=1`, `?q=`, `?tag=`, `?plans=1`, `?caches=1` and `?show=`. A value the
+screen cannot read is a 400 naming the values it takes. `?group=project`,
+from the rail before, is still read and kept on links, and changes nothing.
+Each row's link carries the list's state (`?sort=recent` on the default
+list), so the note's page places it in this list and its `k` / `j` walk it.
+`?format=json` answers every match of the filters, unpaged, in project
+groups (global first), the working copies included, whatever the page draws.
+
+A note's [own page](#item-page) renders it as a document: its plans with
+their status, its tags (the ones software adds fold behind a **+N** chip),
+its length and reading time, its source URL, and the file path with an
+editor link. Its actions are the **star** and **Delete**. Delete asks in the
+page first and removes the note for good. A note that is a plan's narrative
+says so, and also needs the box beside Delete ticked; while [Held](#held)
+holds the note, the page says why instead.
+
+`j` and `k` move a focus ring through the rows, `Enter` opens the focused
+note's page, `/` focuses the filter and `p` opens the switcher.
 
 ## Tasks
 

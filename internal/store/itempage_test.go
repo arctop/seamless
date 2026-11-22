@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"testing"
@@ -53,7 +54,7 @@ func TestItContextColumnReads(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 4, total)
 	require.Equal(t, []string{"M3", "M1"}, []string{mems[0].ID, mems[1].ID})
-	notes, total, err := NotesOfProject(ctx, db, "example-pay", "N3", 5)
+	notes, total, err := NotesOfProject(ctx, db, "example-pay", "N3", "", 5)
 	require.NoError(t, err)
 	require.Equal(t, 4, total)
 	require.Len(t, notes, 3)
@@ -102,4 +103,89 @@ func TestItPlacesReadThroughTheView(t *testing.T) {
 	p, _, err = MemoryPlace(context.Background(), db, all, "M3")
 	require.NoError(t, err)
 	require.Equal(t, 3, p.Total, "without the view it counts")
+}
+
+// nlTags sets a note index row's tags.
+func nlTags(t *testing.T, db *sql.DB, id string, tags ...string) {
+	t.Helper()
+	raw, err := json.Marshal(tags)
+	require.NoError(t, err)
+	_, err = db.Exec(`UPDATE notes_index SET tags = ? WHERE id = ?`, string(raw), id)
+	require.NoError(t, err)
+}
+
+// A Notes list's place honours its tag chip, its plan chip and its fold:
+// a tag matches whole and exactly, a plan chip wants plan:<slug> with a
+// slug, and the folded tag leaves its notes out of the window, the count and
+// the neighbours. NotesOfProject folds the same way.
+func TestNlNotePlaceTagsPlansAndFold(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	base := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	for i, tags := range [][]string{
+		{"research"}, {"research-notes", "plan:ops"}, {"agent-cache", "plan:ops", "research"}, {"plan:"}, {"PLAN:ops", "Research"}, nil,
+	} {
+		id := fmt.Sprintf("N%d", i)
+		itRow(t, db, "notes_index", id, fmt.Sprintf("n%d", i), "example-ops", "", base.Add(time.Duration(i)*time.Hour), false)
+		if tags != nil {
+			nlTags(t, db, id, tags...)
+		}
+	}
+	ids := func(l NoteList) []string {
+		t.Helper()
+		var out []string
+		for _, id := range []string{"N5", "N4", "N3", "N2", "N1", "N0"} {
+			if _, found, err := NotePlace(ctx, db, l, id); err != nil {
+				t.Fatal(err)
+			} else if found {
+				out = append(out, id)
+			}
+		}
+		return out
+	}
+	require.Equal(t, []string{"N2", "N0"}, ids(NoteList{Tag: "research", Sort: "recent"}), "a tag matches whole, with its case")
+	require.Equal(t, []string{"N2", "N1"}, ids(NoteList{Plans: true, Sort: "recent"}), "plan:<slug> with a slug, lower case")
+	require.Equal(t, []string{"N5", "N4", "N3", "N1", "N0"}, ids(NoteList{Without: "agent-cache", Sort: "recent"}))
+	require.Equal(t, []string{"N1"}, ids(NoteList{Plans: true, Without: "agent-cache", Sort: "recent"}))
+	p, found, err := NotePlace(ctx, db, NoteList{Without: "agent-cache", Sort: "recent"}, "N3")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, ItemPlace{Pos: 3, Total: 5, Prev: ItemStep{ID: "N4", Label: "n4"}, Next: ItemStep{ID: "N1", Label: "n1"}}, p,
+		"the folded note is no neighbour")
+
+	notes, total, err := NotesOfProject(ctx, db, "example-ops", "N5", "agent-cache", 3)
+	require.NoError(t, err)
+	require.Equal(t, 5, total, "the folded note is not counted")
+	require.Equal(t, []string{"N4", "N3", "N1"}, []string{notes[0].ID, notes[1].ID, notes[2].ID})
+	_, total, err = NotesOfProject(ctx, db, "example-ops", "", "", 0)
+	require.NoError(t, err)
+	require.Equal(t, 6, total)
+}
+
+// The new filters read through a view like the rest: a hidden project's
+// tagged notes are neither counted nor neighbours.
+func TestNlNotePlaceReadsThroughTheView(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "seam.db")
+	db, err := OpenFresh(t, path)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	base := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	itRow(t, db, "notes_index", "N1", "open-old", "example-open", "", base, false)
+	itRow(t, db, "notes_index", "N2", "hidden", "example-locked", "", base.Add(time.Hour), false)
+	itRow(t, db, "notes_index", "N3", "open-new", "example-open", "", base.Add(2*time.Hour), false)
+	for _, id := range []string{"N1", "N2", "N3"} {
+		nlTags(t, db, id, "research", "plan:shared")
+	}
+	view, err := OpenView(path, []string{"example-locked"})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = view.Close() })
+	for _, l := range []NoteList{{Tag: "research", Sort: "recent"}, {Plans: true, Without: "agent-cache", Sort: "name"}} {
+		p, found, err := NotePlace(context.Background(), view, l, "N3")
+		require.NoError(t, err)
+		require.True(t, found)
+		require.Equal(t, 2, p.Total, "%+v", l)
+		_, found, err = NotePlace(context.Background(), view, l, "N2")
+		require.NoError(t, err)
+		require.False(t, found, "%+v: the hidden note has no place at all", l)
+	}
 }

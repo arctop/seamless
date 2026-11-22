@@ -9111,6 +9111,33 @@ tbody tr.row-link[data-panel-current] td:first-child { box-shadow: inset 2px 0 0
 .item-card-title.mono { font-family: var(--font-mono); font-size: var(--text-sm); }
 
 
+/* UX 29: the Notes list (templates/notes.html). It is the Memories list
+   (UX 28's .ml-* rows, groups, chips and foot) with a note's row: the title
+   in the sans face with its description on one line, each plan chip with
+   the plan's status (a span: the row is one link), up to two tags and how
+   many more, a working copy's mark, the project chip, and the length and
+   age together at the end. The tag chips are .ml-chip; the folded working
+   copies' line sits after them. */
+.nl-chips { align-items: center; }
+.nl-fold { margin-left: 6px; color: var(--faint); font-size: var(--text-xs); }
+.nl-fold a { color: var(--brand-strong); font-weight: 600; }
+.nl-title { color: var(--ink); font-size: var(--text-md); font-weight: 600; overflow-wrap: anywhere; }
+.nl-cache .nl-title { color: var(--ink-2); font-weight: 500; }
+.nl-row .lib-plan-chip { flex: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.nl-row .lib-plan-chip .mono { font-size: var(--text-2xs); }
+.nl-row > .badge { flex: none; }
+.nl-more { flex: none; color: var(--muted); font-size: var(--text-2xs); font-weight: 600; }
+.nl-copy {
+  flex: none; padding: 1px 8px; border: 1px dashed var(--border-strong); border-radius: var(--radius-pill);
+  color: var(--muted); font-size: var(--text-2xs);
+}
+.nl-when { flex: 0 0 auto; min-width: 120px; color: var(--muted); font-size: var(--text-xs); text-align: right; white-space: nowrap; }
+@media (max-width: 720px) {
+  .nl-when { min-width: 0; text-align: left; }
+  .nl-fold { flex-basis: 100%; margin: 2px 0 0; }
+}
+
+
 /* UX 42: Approvers and sign-in. Approvers shows each key as a card (its id
    and the command that removes it only in the card's hint), Add one as two
    tiles over real radios, and adding a passkey as steps. The sign-in keeps
