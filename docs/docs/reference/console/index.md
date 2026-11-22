@@ -527,18 +527,26 @@ The landing page and the health check. It carries:
   first card counts the mishaps agents reported at `session_end` (the newest
   six) and names the latest one's type, age and project. With one report it
   opens that report's event page; with more, the [Mishaps](#mishaps) screen.
+- **Going stale** - the attention strip's knowledge card counts the active
+  memories with no update, injection, or read in `gardener.staleness_days`
+  (90 days by default, the gardener's own staleness horizon), exactly the rows
+  [Retrieval](#retrieval)'s quiet-knowledge list shows, and states the horizon.
+  Changing the setting moves the card, the list and their labels together.
 - **Knowledge sky** - a star chart of every active memory, with no cap. Each
   project scope (global included) owns a wedge sized by its share of memories,
   largest first. Distance from the centre is when the memory last surfaced to an
-  agent: the core holds the last 24 hours, rings mark 7 and 45 days (the same
-  fresh and stale lines the memory reader and the "going stale" card use), and
+  agent: the core holds the last 24 hours, rings mark 7 days and the staleness
+  horizon, `gardener.staleness_days` (90 days by default; the same fresh and
+  stale lines the memory reader's "since surfaced" chip uses), and
   the rim belt holds memories that have never surfaced. Colour is kind; size is
   demand (the query-gated utility score, so a big star is one agents pull, not
   one the briefing merely shows). Hollow stars have never surfaced, a ring marks
   a starred memory, spikes mark one written today, and today's stars twinkle as
   the chart appears.
   Beside the chart, a readout states the same picture as text: each ring's
-  count, the going-stale count (always equal to the attention card's), and every
+  count, the going-stale count (memories with no update, injection, or read
+  within the staleness horizon: always the attention card's count and the rows
+  Retrieval's quiet-knowledge list shows), and every
   scope with its ring mix as a bar. Point at a star for its name and description
   (the pointer snaps to the nearest star); click it for a card with its facts and
   a link to open it; double-click to open it directly. Type in **Find a memory**
@@ -1296,9 +1304,15 @@ Five zones below it:
 3. **Scope coverage** - reach per project scope (global first), each row with
    its own reach rate and injection count.
 4. **Knowledge pressure** - the most-injected memories against **quiet
-   knowledge**: active memories not updated, injected, or read in 90 days,
-   mirroring the gardener's default staleness horizon. Unlike everything else
-   on the page, the stale list is all-time, not windowed.
+   knowledge**: active memories not updated, injected, or read within
+   `gardener.staleness_days` (90 days by default), the horizon the gardener's
+   staleness pass proposes archives by, and the label says the configured
+   value. Unlike everything else on the page, the stale list is all-time, not
+   windowed. Each row links to its memory and, when the gardener already holds
+   a pending proposal for it (an archive, a merge, a move, a reclassification),
+   to that proposal: **proposal waiting**. The staleness pass never proposes
+   archiving a constraint, a stage, or a memory another memory links to, so
+   such a row can stand without one.
 5. **Loop health** - push versus pull: is what briefings push also what agents
    pull? **Demand rate** is the share of briefed memories that were also pulled
    by a query; **waste share** is the share of injected tokens spent on memories
@@ -1316,7 +1330,7 @@ Five zones below it:
    with the **dead weight** panel: memories briefings kept injecting without a
    single recall hit, prompt match, or read in 30 days (constraints and stages
    exempt as pinned-by-design) - the evidence behind the gardener's dead-weight
-   archive proposals.
+   archive proposals. Its rows link to a waiting proposal the same way.
 
 Reachable from the Overview's retrieval-health card.
 
@@ -1357,7 +1371,8 @@ every level (whoever turns it on must reach what it holds).
 
 The owner's queue of agent writes kept out of the corpus. Each card says what
 the write would do (a constraint memory, a note, a delete, a gardener apply),
-which project, tool and session it came from, and why it was held - each
+which project, tool and session it came from (the project and the session
+link to their pages), and why it was held - each
 reason code with its meaning in words, the most serious first, each in its
 kind's color (a secret red, an injection marker orange, hidden text violet,
 hidden characters pink, an unlisted link indigo, an encoded blob teal, a
@@ -1370,6 +1385,13 @@ reason's color (hover a mark for its reason), and where matches overlap - an
 override phrase inside a hidden comment - the marks nest, so none hides
 another. The Review and Changed outside Seamless cards mark their findings
 the same way.
+
+A held update of an existing memory or note opens on **What releasing
+changes** instead: a line diff of the write against the file as it stands
+now, each removed line marked `-` and each added line `+`, unchanged lines
+beyond three either side of a change folded into a count, with the same
+treatment and marks. The whole write follows, folded. A write that matches
+the current file line for line says so. A held new item shows its text alone.
 
 - **Release** lands it through the files layer as the agent wrote it, and the
   memory reads `[owner-confirmed]` in briefings from then on. A held supersede

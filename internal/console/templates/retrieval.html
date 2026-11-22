@@ -164,7 +164,7 @@
         <h2 id="retrieval-pressure-title">What is hot &mdash; and what is quiet</h2>
         <p>Frequent retrieval reveals trusted context; long silence marks knowledge worth reviewing.</p>
       </div>
-      <span class="retrieval-zone-meta">stale = no activity in {{.StaleDays}}d</span>
+      <span class="retrieval-zone-meta" title="The gardener's staleness horizon (gardener.staleness_days): it proposes archiving what passes it">stale = no update, injection, or read in {{.StaleDays}}d</span>
     </header>
 
     <div class="retrieval-pressure-grid">
@@ -198,7 +198,7 @@
           {{range .Stale}}
           <div class="retrieval-stale-row">
             <span class="retrieval-stale-mark"></span>
-            <div class="retrieval-memory-copy"><a href="/console/memories/{{.ID}}" data-peek>{{.Name}}</a><span><i class="kind">{{.Kind}}</i>{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}}</span></div>
+            <div class="retrieval-memory-copy"><a href="/console/memories/{{.ID}}" data-peek>{{.Name}}</a><span><i class="kind">{{.Kind}}</i>{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}}{{with .Proposal}}<a class="retrieval-proposal" href="{{.Href}}" title="Waiting in the gardener: {{.Label}}">{{icon "sprout"}}proposal waiting</a>{{end}}</span></div>
             <time title="{{ts .Updated}}">updated {{ago .Updated}}</time>
           </div>
           {{end}}
@@ -287,7 +287,7 @@
         {{range .DeadWeight}}
         <div class="retrieval-stale-row">
           <span class="retrieval-stale-mark"></span>
-          <div class="retrieval-memory-copy"><a href="/console/memories/{{.ID}}" data-peek>{{.Name}}</a><span><i class="kind">{{.Kind}}</i>{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}}</span></div>
+          <div class="retrieval-memory-copy"><a href="/console/memories/{{.ID}}" data-peek>{{.Name}}</a><span><i class="kind">{{.Kind}}</i>{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}}{{with .Proposal}}<a class="retrieval-proposal" href="{{.Href}}" title="Waiting in the gardener: {{.Label}}">{{icon "sprout"}}proposal waiting</a>{{end}}</span></div>
           <div class="retrieval-memory-metrics"><strong>{{.Injects}}</strong><span>briefed</span></div>
           <time title="{{ts .Updated}}">updated {{ago .Updated}}</time>
         </div>

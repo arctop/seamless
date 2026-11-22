@@ -65,30 +65,30 @@ const (
 
 // skyBand is a ring: how long ago a memory last surfaced into an agent's
 // context. The thresholds are the console's judged ones (staleSurfacedOKDays,
-// staleSurfacedDays), so the sky, the memory reader's chip, and the Overview's
-// "going stale" card all draw the same lines.
+// and the staleness horizon, Service.staleDays), so the sky, the memory
+// reader's chip, and the Overview's "going stale" card all draw the same lines.
 type skyBand int
 
 const (
 	bandDay   skyBand = iota // within the last 24 hours
 	bandWeek                 // within staleSurfacedOKDays
-	bandMonth                // within staleSurfacedDays
+	bandMonth                // within the staleness horizon
 	bandStale                // longer ago than that
 	bandNever                // never surfaced
 	skyBands
 )
 
-// label is the readout row for the ring.
-func (b skyBand) label() string {
+// label is the readout row for the ring, under a staleness horizon of days.
+func (b skyBand) label(days int) string {
 	switch b {
 	case bandDay:
 		return "Last 24 hours"
 	case bandWeek:
 		return fmt.Sprintf("1 to %d days ago", staleSurfacedOKDays)
 	case bandMonth:
-		return fmt.Sprintf("%d to %d days ago", staleSurfacedOKDays, staleSurfacedDays)
+		return fmt.Sprintf("%d to %d days ago", staleSurfacedOKDays, days)
 	case bandStale:
-		return fmt.Sprintf("Over %d days ago", staleSurfacedDays)
+		return fmt.Sprintf("Over %d days ago", days)
 	default:
 		return "Never surfaced"
 	}
@@ -96,28 +96,29 @@ func (b skyBand) label() string {
 
 // tick is the mark on the ring's outer edge in the gutter ("" for none: the
 // stale ring's outer edge is where the never belt begins, not a time).
-func (b skyBand) tick() string {
+func (b skyBand) tick(days int) string {
 	switch b {
 	case bandDay:
 		return "24h"
 	case bandWeek:
 		return strconv.Itoa(staleSurfacedOKDays) + "d"
 	case bandMonth:
-		return strconv.Itoa(staleSurfacedDays) + "d"
+		return strconv.Itoa(days) + "d"
 	default:
 		return ""
 	}
 }
 
-// skyCuts are the ring boundaries for one render.
+// skyCuts are the ring boundaries for one render: staleAt is the staleness
+// horizon of days, reached back from now.
 type skyCuts struct{ day, week, staleAt time.Time }
 
-func skyCutoffs(now time.Time) skyCuts {
+func skyCutoffs(now time.Time, days int) skyCuts {
 	u := now.UTC()
 	return skyCuts{
 		day:     u.Add(-24 * time.Hour),
 		week:    u.AddDate(0, 0, -staleSurfacedOKDays),
-		staleAt: u.AddDate(0, 0, -staleSurfacedDays),
+		staleAt: staleCutoff(now, days),
 	}
 }
 
@@ -136,12 +137,13 @@ func (c skyCuts) band(surfaced *time.Time) skyBand {
 	}
 }
 
-// stale is the Overview's "going stale" predicate verbatim
-// (store.CountMemoriesUnsurfacedSince): old enough to have had its turn, and not
-// surfaced within the window. The readout's count and the attention card's
-// therefore always agree.
-func (c skyCuts) stale(surfaced *time.Time, created time.Time) bool {
-	return created.Before(c.staleAt) && (surfaced == nil || surfaced.IsZero() || surfaced.Before(c.staleAt))
+// stale is the console's one staleness predicate verbatim (store.StaleMemories,
+// store.CountStaleMemories, the gardener's staleness pass): no update, no
+// injection and no read since the horizon. The readout's count, the attention
+// card's, and Retrieval's quiet-knowledge list therefore always agree.
+func (c skyCuts) stale(updated time.Time, injected, read *time.Time) bool {
+	quiet := func(t *time.Time) bool { return t == nil || t.IsZero() || t.Before(c.staleAt) }
+	return updated.Before(c.staleAt) && quiet(injected) && quiet(read)
 }
 
 // skyStar is one memory as the sky draws it.
@@ -226,10 +228,11 @@ type skySeg struct {
 	W    string
 }
 
-// buildSky projects the active memories into the sky. It returns nil when
-// there is nothing to draw, so the template can drop the panel.
-func buildSky(mems []core.Memory, stats map[string]store.RetrievalStat, now time.Time) *skyData {
-	cuts := skyCutoffs(now)
+// buildSky projects the active memories into the sky, with its stale ring at a
+// staleness horizon of staleDays (Service.staleDays). It returns nil when there
+// is nothing to draw, so the template can drop the panel.
+func buildSky(mems []core.Memory, stats map[string]store.RetrievalStat, now time.Time, staleDays int) *skyData {
+	cuts := skyCutoffs(now, staleDays)
 	byScope := map[string]*skyScope{}
 	var bandN [skyBands]int
 	kinds := map[string]int{}
@@ -246,7 +249,7 @@ func buildSky(mems []core.Memory, stats map[string]store.RetrievalStat, now time
 			Surfaced: st.LastInjectedAt,
 		}
 		s.Band = cuts.band(s.Surfaced)
-		s.Stale = cuts.stale(s.Surfaced, m.Created)
+		s.Stale = cuts.stale(m.Updated, st.LastInjectedAt, st.LastReadAt)
 		s.New = !m.Created.IsZero() && now.Sub(m.Created) < 24*time.Hour
 
 		sc := byScope[m.Project]
@@ -295,19 +298,19 @@ func buildSky(mems []core.Memory, stats map[string]store.RetrievalStat, now time
 		}
 	}
 
-	chart := renderSky(scopes, radii, bandN, total)
+	chart := renderSky(scopes, radii, bandN, total, staleDays)
 	d := &skyData{
 		SVG:       chart.full(),
 		Total:     total,
 		Stale:     stale,
-		StaleDays: staleSurfacedDays,
+		StaleDays: staleDays,
 		Kinds:     skyKinds(kinds),
 		chart:     chart,
 	}
 	fullest := slices.Max(bandN[:])
 	for b := range skyBands {
 		d.Bands = append(d.Bands, skyBandRow{
-			Band: int(b), Label: b.label(), N: bandN[b],
+			Band: int(b), Label: b.label(staleDays), N: bandN[b],
 			Pct: int(math.Round(100 * float64(bandN[b]) / float64(total))),
 			W:   pct(float64(bandN[b]) / float64(max(fullest, 1))),
 		})
@@ -442,11 +445,11 @@ func skySlots(n int) int {
 // the morph keys them by id, and a stable order means it only ever inserts or
 // removes one, never re-seats the rest (a moved node would drop its glide
 // transition).
-func renderSky(scopes []*skyScope, radii [skyBands + 1]float64, bandN [skyBands]int, total int) *skyChart {
+func renderSky(scopes []*skyScope, radii [skyBands + 1]float64, bandN [skyBands]int, total, staleDays int) *skyChart {
 	alt := fmt.Sprintf("Knowledge sky: %d active memories in %d scopes, placed by when each last surfaced to an agent: "+
 		"%d in the last 24 hours, %d within %d days, %d within %d days, %d longer ago, %d never.",
 		total, len(scopes), bandN[bandDay], bandN[bandWeek], staleSurfacedOKDays,
-		bandN[bandMonth], staleSurfacedDays, bandN[bandStale], bandN[bandNever])
+		bandN[bandMonth], staleDays, bandN[bandStale], bandN[bandNever])
 	c := &skyChart{
 		open: fmt.Sprintf(`<svg class="sky-svg" viewBox="0 0 %g %g" preserveAspectRatio="xMidYMid meet" role="img" aria-label="%s" data-c="%g" data-core="%g" data-rim="%g">`,
 			skyBox, skyBox, template.HTMLEscapeString(alt), skyC, skyCore, skyRim),
@@ -524,7 +527,7 @@ func renderSky(scopes []*skyScope, radii [skyBands + 1]float64, bandN [skyBands]
 	var ticks strings.Builder
 	ticks.WriteString(`<g class="sky-ticks" id="sky-ticks">`)
 	for band := bandDay; band < bandStale; band++ {
-		fmt.Fprintf(&ticks, `<text class="sky-tick" data-b="%d" x="%g" y="%s">%s</text>`, band, skyC, f1(skyC-radii[band+1]), band.tick())
+		fmt.Fprintf(&ticks, `<text class="sky-tick" data-b="%d" x="%g" y="%s">%s</text>`, band, skyC, f1(skyC-radii[band+1]), band.tick(staleDays))
 	}
 	fmt.Fprintf(&ticks, `<text class="sky-tick" data-b="%d" x="%g" y="%s">never</text>`, bandNever, skyC, f1(skyC-(radii[bandNever]+skyRim)/2))
 	ticks.WriteString(`</g>`)

@@ -11,11 +11,6 @@ import (
 	"github.com/arctop/seamless/internal/store"
 )
 
-// staleWindowDays is how long an active memory can go without being updated,
-// injected, or read before the Retrieval page flags it as stale. It mirrors the
-// gardener's default staleness horizon.
-const staleWindowDays = 90
-
 // statsDecayWindow is how long the console lets retrieval stats stand when no
 // injection or read has been recorded since the last rebuild. Only the utility
 // decay's anchor moves in that time, and with a 14-day half-life ten minutes
@@ -57,7 +52,8 @@ func (s *Service) freshRetrievalStats(ctx context.Context) {
 
 // retrievalData is the payload for the Retrieval page. The reach funnel, by-kind,
 // trend, and top lists are all computed over the selected window; Stale is
-// window-independent.
+// window-independent, judged against the configured staleness horizon
+// (StaleDays, Service.staleDays).
 type retrievalData struct {
 	Injections       int                  `json:"injections"`
 	InjectedTokens   int                  `json:"injectedTokens"`
@@ -81,19 +77,19 @@ type retrievalData struct {
 	Trend         []store.TrendBucket  `json:"trend"`
 	TrendMax      int                  `json:"trendMax"`
 	TopInjected   []store.MemoryStat   `json:"topInjected"`
-	Stale         []store.MemoryStat   `json:"stale"`
+	Stale         []retrievalMemRow    `json:"stale"`
 	StaleDays     int                  `json:"staleDays"`
 
 	// Loop health (closed-loop retrieval): push vs pull, and its token cost.
-	BriefingSurfaced   int                `json:"briefingSurfaced"`
-	DemandedOfSurfaced int                `json:"demandedOfSurfaced"`
-	DemandRate         int                `json:"demandRate"`
-	WasteShare         int                `json:"wasteShare"`
-	PromptMatches      int                `json:"promptMatches"`
-	RecallMisses       int                `json:"recallMisses"`
-	MissRate           int                `json:"missRate"`
-	ToolMisses         int                `json:"toolMisses"`
-	DeadWeight         []store.MemoryStat `json:"deadWeight"`
+	BriefingSurfaced   int               `json:"briefingSurfaced"`
+	DemandedOfSurfaced int               `json:"demandedOfSurfaced"`
+	DemandRate         int               `json:"demandRate"`
+	WasteShare         int               `json:"wasteShare"`
+	PromptMatches      int               `json:"promptMatches"`
+	RecallMisses       int               `json:"recallMisses"`
+	MissRate           int               `json:"missRate"`
+	ToolMisses         int               `json:"toolMisses"`
+	DeadWeight         []retrievalMemRow `json:"deadWeight"`
 
 	// Read-after-inject funnel segmented by injection surface: window-scoped
 	// injections, conversions within FunnelFollowHours of each injection.
@@ -130,11 +126,13 @@ func (s *Service) retrieval(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	prior, hasPrior := s.priorVitals(ctx, win, now)
-	stale, err := store.StaleMemories(ctx, s.db(ctx), time.Now().UTC().AddDate(0, 0, -staleWindowDays))
+	staleDays := s.staleDays()
+	stale, err := store.StaleMemories(ctx, s.db(ctx), staleCutoff(now, staleDays))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
+	waiting := s.proposalsWaiting(ctx)
 	funnel, err := store.ReadAfterInjectFunnel(ctx, s.db(ctx), win.Since, 0)
 	if err != nil {
 		s.serverError(w, r, err)
@@ -162,12 +160,12 @@ func (s *Service) retrieval(w http.ResponseWriter, r *http.Request) {
 			ByKind: report.ByKind, ByProject: report.ByProject,
 			ScopesTouched: touched, ScopesQuiet: quiet,
 			Trend: report.Trend, TrendMax: trendMax,
-			TopInjected: report.Top, Stale: staleStats(stale), StaleDays: staleWindowDays,
+			TopInjected: report.Top, Stale: staleRows(stale, waiting), StaleDays: staleDays,
 			BriefingSurfaced: report.BriefingSurfaced, DemandedOfSurfaced: report.DemandedOfSurfaced,
 			DemandRate: report.DemandRate, WasteShare: report.WasteShare,
 			PromptMatches: report.PromptMatches, RecallMisses: report.RecallMisses, MissRate: report.MissRate,
 			ToolMisses:        report.ToolMisses,
-			DeadWeight:        report.DeadWeight,
+			DeadWeight:        memRows(report.DeadWeight, waiting),
 			FunnelBySurface:   funnel,
 			FunnelFollowHours: int(store.DefaultFunnelFollow.Hours()),
 
@@ -251,15 +249,102 @@ func splitScopeReach(rows []store.ProjectReach) (touched, quiet []store.ProjectR
 	return touched, quiet
 }
 
-// staleStats projects stale memories into MemoryStat for uniform rendering.
-// Stale by definition means no recent injection/read, so only the updated age
+// retrievalMemRow is one row of Retrieval's quiet-knowledge and dead-weight
+// lists: the memory (its fields keep their JSON keys), and the gardener
+// proposal already waiting on it, when there is one.
+type retrievalMemRow struct {
+	store.MemoryStat
+	Proposal *waitingProposal `json:"proposal,omitempty"`
+}
+
+// waitingProposal is a pending gardener proposal that acts on a memory.
+type waitingProposal struct {
+	ID    string `json:"id"`
+	Kind  string `json:"kind"`
+	Label string `json:"label"`
+	Href  string `json:"href"`
+}
+
+// staleRows projects stale memories into rows for uniform rendering. Stale by
+// definition means no recent injection or read, so only the updated age
 // carries information.
-func staleStats(mems []core.Memory) []store.MemoryStat {
-	out := make([]store.MemoryStat, 0, len(mems))
+func staleRows(mems []core.Memory, waiting map[string]waitingProposal) []retrievalMemRow {
+	stats := make([]store.MemoryStat, 0, len(mems))
 	for _, m := range mems {
-		out = append(out, store.MemoryStat{
+		stats = append(stats, store.MemoryStat{
 			ID: m.ID, Name: m.Name, Kind: string(m.Kind), Project: m.Project, Updated: m.Updated,
 		})
 	}
+	return memRows(stats, waiting)
+}
+
+// memRows pairs each memory with the proposal waiting on it.
+func memRows(stats []store.MemoryStat, waiting map[string]waitingProposal) []retrievalMemRow {
+	out := make([]retrievalMemRow, 0, len(stats))
+	for _, st := range stats {
+		row := retrievalMemRow{MemoryStat: st}
+		if p, ok := waiting[st.ID]; ok {
+			row.Proposal = &p
+		}
+		out = append(out, row)
+	}
 	return out
+}
+
+// proposalsWaiting maps each memory a pending gardener proposal acts on to that
+// proposal, so a Retrieval row can say a decision is already waiting for it. It
+// reads through the request's handle, on which a proposal that names a locked
+// project's item does not exist. When several proposals act on one memory, an
+// archive (what the staleness and dead-weight passes file) wins, then the
+// newest. It is decoration over the lists: a failed read costs the links, not
+// the page.
+func (s *Service) proposalsWaiting(ctx context.Context) map[string]waitingProposal {
+	pending, err := store.PendingProposals(ctx, s.db(ctx), "")
+	if err != nil {
+		s.logger.Warn("console: proposals waiting on retrieval rows", "error", err)
+		return nil
+	}
+	out := map[string]waitingProposal{}
+	for _, p := range pending { // newest first
+		label, _, _, _ := proposalPresentation(p.Kind)
+		w := waitingProposal{ID: p.ID, Kind: p.Kind, Label: label, Href: "/console/gardener/" + p.ID}
+		for _, id := range proposalMemoryIDs(p) {
+			if have, ok := out[id]; !ok || (have.Kind != store.ProposalArchive && p.Kind == store.ProposalArchive) {
+				out[id] = w
+			}
+		}
+	}
+	return out
+}
+
+// proposalMemoryIDs lists the memories a proposal acts on, by kind: the one
+// memory an archive, rekind, reproject or relocate names, both sides of a
+// merge, and every source a consolidate supersedes. The other kinds act on no
+// existing memory.
+func proposalMemoryIDs(p store.Proposal) []string {
+	var ids []string
+	add := func(m map[string]any) {
+		if id := payloadStr(m, "id"); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	switch p.Kind {
+	case store.ProposalArchive, store.ProposalRekind, store.ProposalReproject, store.ProposalRelocate:
+		add(p.Payload)
+	case store.ProposalMerge:
+		for _, side := range []string{"keep", "drop"} {
+			if m, ok := p.Payload[side].(map[string]any); ok {
+				add(m)
+			}
+		}
+	case store.ProposalConsolidate:
+		if srcs, ok := p.Payload["sources"].([]any); ok {
+			for _, src := range srcs {
+				if m, ok := src.(map[string]any); ok {
+					add(m)
+				}
+			}
+		}
+	}
+	return ids
 }

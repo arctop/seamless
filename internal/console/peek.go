@@ -62,7 +62,7 @@ type memoryDetail struct {
 	// its chip. These two -- utility and staleness -- are the decision signals
 	// a reader needs first, so the reader leads with them and demotes the rest.
 	SurfacedAge  string `json:"-"`
-	SurfacedTone string `json:"-"` // "ok" (<=7d) | "" (7-45d) | "warn" (>45d or long-unseen)
+	SurfacedTone string `json:"-"` // "ok" (<=7d) | "" (7d to staleDays) | "warn" (past staleDays, or long-unseen)
 	// BodyIsEcho reports that the stored body adds nothing to the description:
 	// absent, or the same sentence again. The reader says so instead of
 	// printing one sentence twice and calling the second one the body.
@@ -135,7 +135,7 @@ func (s *Service) memoryDetailData(ctx context.Context, m core.Memory) (memoryDe
 			d.UtilityParts = &c
 		}
 	}
-	d.SurfacedAge, d.SurfacedTone = surfacedStaleness(d.LastInjected, m.Created, time.Now())
+	d.SurfacedAge, d.SurfacedTone = surfacedStaleness(d.LastInjected, m.Created, time.Now(), s.staleDays())
 	d.BodyIsEcho = bodyEchoesDescription(d.BodyText, m.Description)
 
 	// Provenance: SourceSession holds a session name (ambient stamps) or a

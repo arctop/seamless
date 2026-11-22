@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/store"
@@ -60,74 +61,98 @@ func TestOverview_RendersKnowledgeSky(t *testing.T) {
 	require.False(t, hasSky, "the sky is HTML-only")
 }
 
-// A ring is when a memory last surfaced, on the console's own thresholds; the
-// marks say what else is true of it.
+// stDefaultStaleDays is the staleness horizon a console runs with when the
+// gardener's setting is left at its default: the sky tests that are not about
+// the horizon draw with it.
+var stDefaultStaleDays = config.Defaults().Gardener.StalenessDays
+
+// A ring is when a memory last surfaced, on the console's own thresholds: the
+// fresh week, and the staleness horizon the sky is given, whatever it is. The
+// stale mark is the one staleness predicate: no update, injection, or read
+// within that horizon.
 func TestBuildSky_RingsFollowTheConsoleThresholds(t *testing.T) {
 	now := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
-	ago := func(d time.Duration) *time.Time { t := now.Add(-d); return &t }
 	day := 24 * time.Hour
-	cases := []struct {
-		name     string
-		created  time.Time
-		surfaced *time.Time
-		band     skyBand
-		stale    bool
-	}{
-		{"hour-ago", now.Add(-90 * day), ago(time.Hour), bandDay, false},
-		{"three-days", now.Add(-90 * day), ago(3 * day), bandWeek, false},
-		{"twenty-days", now.Add(-90 * day), ago(20 * day), bandMonth, false},
-		{"sixty-days", now.Add(-90 * day), ago(60 * day), bandStale, true},
-		{"never-old", now.Add(-60 * day), nil, bandNever, true},
-		{"never-young", now.Add(-3 * day), nil, bandNever, false},
-	}
-	var mems []core.Memory
-	stats := map[string]store.RetrievalStat{}
-	for _, c := range cases {
-		id := mustID(t)
-		mems = append(mems, core.Memory{ID: id, Kind: core.KindGotcha, Name: c.name, Project: "p", Created: c.created})
-		stats[id] = store.RetrievalStat{ItemID: id, LastInjectedAt: c.surfaced, InjectCount: 3}
-	}
-	fresh := core.Memory{ID: mustID(t), Kind: core.KindRunbook, Name: "written-this-morning", Project: "p", Created: now.Add(-2 * time.Hour), Favorite: true}
-	mems = append(mems, fresh)
+	ago := func(d time.Duration) *time.Time { t := now.Add(-d); return &t }
+	for _, days := range []int{45, 90} {
+		t.Run(strconv.Itoa(days)+"d", func(t *testing.T) {
+			horizon := time.Duration(days) * day
+			long := now.Add(-horizon - 100*day)
+			cases := []struct {
+				name           string
+				created        time.Time
+				updated        time.Time
+				surfaced, read *time.Time
+				band           skyBand
+				stale          bool
+			}{
+				{"hour-ago", long, long, ago(time.Hour), nil, bandDay, false},
+				{"three-days", long, long, ago(3 * day), nil, bandWeek, false},
+				{"inside-the-horizon", long, long, ago(horizon - 5*day), nil, bandMonth, false},
+				{"past-the-horizon", long, long, ago(horizon + 15*day), nil, bandStale, true},
+				{"past-but-read-this-week", long, long, ago(horizon + 15*day), ago(2 * day), bandStale, false},
+				{"past-but-updated-this-week", long, now.Add(-2 * day), ago(horizon + 15*day), nil, bandStale, false},
+				{"never-old", now.Add(-horizon - 15*day), now.Add(-horizon - 15*day), nil, nil, bandNever, true},
+				{"never-young", now.Add(-3 * day), now.Add(-3 * day), nil, nil, bandNever, false},
+			}
+			var mems []core.Memory
+			stats := map[string]store.RetrievalStat{}
+			for _, c := range cases {
+				id := mustID(t)
+				mems = append(mems, core.Memory{ID: id, Kind: core.KindGotcha, Name: c.name, Project: "p", Created: c.created, Updated: c.updated})
+				stats[id] = store.RetrievalStat{ItemID: id, LastInjectedAt: c.surfaced, LastReadAt: c.read, InjectCount: 3}
+			}
+			fresh := core.Memory{ID: mustID(t), Kind: core.KindRunbook, Name: "written-this-morning", Project: "p",
+				Created: now.Add(-2 * time.Hour), Updated: now.Add(-2 * time.Hour), Favorite: true}
+			mems = append(mems, fresh)
 
-	sky := buildSky(mems, stats, now)
-	require.NotNil(t, sky)
-	svg := string(sky.SVG)
-	for i, c := range cases {
-		st := starTag(t, svg, mems[i].ID)
-		require.Contains(t, st, fmt.Sprintf(`data-b="%d"`, c.band), c.name)
-		if c.stale {
-			require.Contains(t, st, `data-s="1"`, c.name)
-		} else {
-			require.NotContains(t, st, `data-s="1"`, c.name)
-		}
-	}
-	require.Contains(t, starTag(t, svg, mems[0].ID), `class="st warm"`, "today's stars twinkle")
-	freshTag := starTag(t, svg, fresh.ID)
-	require.Contains(t, freshTag, `class="st fav new"`, "a star, and new today")
-	require.NotContains(t, freshTag, "data-t=", "never surfaced carries no time")
+			sky := buildSky(mems, stats, now, days)
+			require.NotNil(t, sky)
+			svg := string(sky.SVG)
+			for i, c := range cases {
+				st := starTag(t, svg, mems[i].ID)
+				require.Contains(t, st, fmt.Sprintf(`data-b="%d"`, c.band), c.name)
+				if c.stale {
+					require.Contains(t, st, `data-s="1"`, c.name)
+				} else {
+					require.NotContains(t, st, `data-s="1"`, c.name)
+				}
+			}
+			require.Contains(t, starTag(t, svg, mems[0].ID), `class="st warm"`, "today's stars twinkle")
+			freshTag := starTag(t, svg, fresh.ID)
+			require.Contains(t, freshTag, `class="st fav new"`, "a star, and new today")
+			require.NotContains(t, freshTag, "data-t=", "never surfaced carries no time")
 
-	require.Equal(t, 7, sky.Total)
-	require.Equal(t, 2, sky.Stale)
-	var counts []int
-	for _, row := range sky.Bands {
-		counts = append(counts, row.N)
+			require.Equal(t, 9, sky.Total)
+			require.Equal(t, 2, sky.Stale)
+			require.Equal(t, days, sky.StaleDays)
+			var counts []int
+			for _, row := range sky.Bands {
+				counts = append(counts, row.N)
+			}
+			require.Equal(t, []int{1, 1, 1, 3, 3}, counts)
+			require.Equal(t, fmt.Sprintf("%d to %d days ago", staleSurfacedOKDays, days), sky.Bands[bandMonth].Label)
+			require.Equal(t, fmt.Sprintf("Over %d days ago", days), sky.Bands[bandStale].Label)
+			require.Contains(t, svg, fmt.Sprintf(`>%dd</text>`, days), "the ring's tick names the horizon")
+			require.Contains(t, svg, fmt.Sprintf("1 within %d days, 3 longer ago", days), "and so does the chart's text alternative")
+		})
 	}
-	require.Equal(t, []int{1, 1, 1, 1, 3}, counts)
-	require.Equal(t, fmt.Sprintf("Over %d days ago", staleSurfacedDays), sky.Bands[bandStale].Label)
 }
 
 // The readout's "going stale" count is the Overview attention card's, by
-// construction: the same predicate over the same stats, never a second opinion.
+// construction, and both are the rows Retrieval lists: one predicate (no
+// update, injection, or read within gardener.staleness_days) over the same
+// stats, never a second opinion.
 func TestOverview_SkyStaleCountMatchesTheAttentionCard(t *testing.T) {
 	db, mgr, mux := newConsoleWithFiles(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
 	rec := events.NewRecorder(db)
-	write := func(name string, created time.Time) core.Memory {
+	old := now.AddDate(0, 0, -200)
+	write := func(name string, created, updated time.Time) core.Memory {
 		m, err := mgr.WriteMemory(ctx, core.Memory{
 			ID: mustID(t), Kind: core.KindGotcha, Name: name, Description: "d", Project: "p",
-			Body: "b", Created: created, Updated: created, ValidFrom: created,
+			Body: "b", Created: created, Updated: updated, ValidFrom: created,
 		})
 		require.NoError(t, err)
 		return m
@@ -136,18 +161,37 @@ func TestOverview_SkyStaleCountMatchesTheAttentionCard(t *testing.T) {
 		_, err := rec.Record(ctx, core.Event{Kind: core.EventInjected, TS: at, Payload: map[string]any{"item_ids": []any{m.ID}, "hook": "session-start"}})
 		require.NoError(t, err)
 	}
-	inject(write("surfaced-today", now.AddDate(0, 0, -90)), now.Add(-2*time.Hour))
-	inject(write("quiet-for-two-months", now.AddDate(0, 0, -90)), now.AddDate(0, 0, -60))
-	write("never-and-old", now.AddDate(0, 0, -90))
-	write("never-but-new", now.AddDate(0, 0, -2))
+	read := func(m core.Memory, at time.Time) {
+		_, err := rec.Record(ctx, core.Event{Kind: core.EventMemoryRead, TS: at, ItemID: m.ID})
+		require.NoError(t, err)
+	}
+	inject(write("surfaced-today", old, old), now.Add(-2*time.Hour))
+	quiet := write("quiet-for-four-months", old, old)
+	inject(quiet, now.AddDate(0, 0, -120))
+	read(write("read-this-week", old, old), now.AddDate(0, 0, -3))
+	write("updated-this-week", old, now.AddDate(0, 0, -5))
+	never := write("never-and-old", old, old)
+	write("never-but-new", now.AddDate(0, 0, -2), now.AddDate(0, 0, -2))
 
 	body := getPeek(t, mux, "/console/").Body.String() // rebuilds the stats from the event log
-	want, err := store.CountMemoriesUnsurfacedSince(ctx, db, now.AddDate(0, 0, -staleSurfacedDays))
+	want, err := store.CountStaleMemories(ctx, db, staleCutoff(now, stDefaultStaleDays))
 	require.NoError(t, err)
 	require.Equal(t, 2, want)
 	require.Contains(t, body, "<strong>2</strong> going stale", "the sky's readout")
+	require.Contains(t, body, fmt.Sprintf("no update, injection, or read in %d days", stDefaultStaleDays), "with the horizon it judges by")
 	require.Contains(t, body, "2 memories going stale", "the attention card")
+	require.Contains(t, body, fmt.Sprintf("no update, injection, or read in %dd", stDefaultStaleDays))
 	require.Equal(t, 2, strings.Count(body, `data-s="1"`), "and exactly those two stars are marked")
+	require.Contains(t, starTag(t, body, quiet.ID), `data-s="1"`)
+	require.Contains(t, starTag(t, body, never.ID), `data-s="1"`)
+
+	var ret retrievalData
+	getJSON(t, mux, "/console/retrieval?format=json", &ret)
+	var listed []string
+	for _, row := range ret.Stale {
+		listed = append(listed, row.Name)
+	}
+	require.ElementsMatch(t, []string{"quiet-for-four-months", "never-and-old"}, listed, "the card's number is Retrieval's rows")
 }
 
 // Every active memory is a star -- no cap, no sampling -- and a large, skewed
@@ -174,7 +218,7 @@ func TestBuildSky_DrawsEveryMemory(t *testing.T) {
 	superseded := time.Now()
 	mems = append(mems, core.Memory{ID: mustID(t), Kind: core.KindGotcha, Name: "gone", InvalidAt: &superseded})
 
-	sky := buildSky(mems, stats, now)
+	sky := buildSky(mems, stats, now, stDefaultStaleDays)
 	require.NotNil(t, sky)
 	svg := string(sky.SVG)
 	require.Equal(t, 1500, sky.Total, "an inactive memory is not a star")
@@ -190,7 +234,7 @@ func TestBuildSky_DrawsEveryMemory(t *testing.T) {
 		require.GreaterOrEqual(t, r, skyCore, "a star never sits inside the core")
 		require.LessOrEqual(t, r, skyRim, "or beyond the rim")
 	}
-	require.Nil(t, buildSky(nil, nil, now), "no active memories, no sky")
+	require.Nil(t, buildSky(nil, nil, now, stDefaultStaleDays), "no active memories, no sky")
 }
 
 // The layout is a pure function of the memories and their stats: the same
@@ -205,8 +249,8 @@ func TestBuildSky_Deterministic(t *testing.T) {
 		}
 	}
 	stats := map[string]store.RetrievalStat{mems[0].ID: {InjectCount: 9, Utility: 0.8, LastInjectedAt: &now}}
-	one := buildSky(mems, stats, now)
-	two := buildSky(mems, stats, now)
+	one := buildSky(mems, stats, now, stDefaultStaleDays)
+	two := buildSky(mems, stats, now, stDefaultStaleDays)
 	require.NotNil(t, one)
 	require.Equal(t, one.SVG, two.SVG)
 	require.Equal(t, 20, one.Total)
@@ -250,7 +294,7 @@ func TestPlaceRimLabels_ShownLabelsNeverOverlap(t *testing.T) {
 			mems = append(mems, core.Memory{ID: mustID(t), Kind: core.KindGotcha, Name: "m", Project: "scope-with-a-long-name-" + strconv.Itoa(k)})
 		}
 	}
-	sky := buildSky(mems, nil, time.Now())
+	sky := buildSky(mems, nil, time.Now(), stDefaultStaleDays)
 	require.NotNil(t, sky)
 
 	scopes := make([]*skyScope, 0, len(sizes))
@@ -284,7 +328,7 @@ func TestBuildSky_EscapesAgentText(t *testing.T) {
 		ID: mustID(t), Kind: core.KindGotcha, Name: "plain-name", Project: "p",
 		Description: `"><img src=x onerror=alert(1)>`, Tags: []string{`t"<b>`},
 	}
-	svg := string(buildSky([]core.Memory{m}, nil, time.Now()).SVG)
+	svg := string(buildSky([]core.Memory{m}, nil, time.Now(), stDefaultStaleDays).SVG)
 	require.NotContains(t, svg, "<img")
 	require.NotContains(t, svg, "<b>")
 	require.Contains(t, svg, `data-d="&#34;&gt;&lt;img src=x onerror=alert(1)&gt;"`)

@@ -418,31 +418,6 @@ func StaleMemories(ctx context.Context, db *sql.DB, cutoff time.Time) ([]core.Me
 	return mems, nil
 }
 
-// CountMemoriesUnsurfacedSince counts active memories that have not entered an
-// agent context since cutoff: never injected, or last injected before it. It is
-// the Overview's "going stale" bucket, and it is deliberately narrower than
-// StaleMemories -- that pass also weighs updates and reads, which answers "is
-// anyone touching this", while this one answers only "is this still reaching
-// agents".
-//
-// A memory created after the cutoff is excluded: something written yesterday has
-// not had 45 days in which to surface, and counting it would make every burst of
-// writing look like decay.
-func CountMemoriesUnsurfacedSince(ctx context.Context, db *sql.DB, cutoff time.Time) (int, error) {
-	c := core.FormatTime(cutoff.UTC())
-	var n int
-	err := db.QueryRowContext(ctx, `SELECT COUNT(*)
-		FROM memories_index
-		LEFT JOIN retrieval_stats ON retrieval_stats.item_id = memories_index.id
-		WHERE invalid_at IS NULL
-		  AND created_at < ?
-		  AND (last_injected_at IS NULL OR last_injected_at < ?)`, c, c).Scan(&n)
-	if err != nil {
-		return 0, fmt.Errorf("store.CountMemoriesUnsurfacedSince: %w", err)
-	}
-	return n, nil
-}
-
 // formatTimePtr renders a nullable timestamp for a nullable column: nil -> NULL.
 func formatTimePtr(t *time.Time) any {
 	if t == nil {

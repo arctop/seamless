@@ -3,6 +3,7 @@ package console
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -115,4 +116,36 @@ func TestInteractionsJSMirrorsSeverityMapping(t *testing.T) {
 	for _, sev := range []string{sevDanger, sevInject, sevWrite, sevSystem} {
 		require.True(t, strings.Contains(js, "'"+sev+"'"), "interactions.js must emit %q", sev)
 	}
+}
+
+// The reader chip warns past the staleness horizon it is given, whatever that
+// is: the same line the Overview's card and the sky's stale ring draw.
+func TestStReaderChip_WarnsPastTheHorizon(t *testing.T) {
+	now := time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC)
+	old := now.AddDate(0, 0, -400)
+	at := func(days int) *time.Time { v := now.AddDate(0, 0, -days); return &v }
+	for _, tc := range []struct {
+		name    string
+		last    *time.Time
+		created time.Time
+		horizon int
+		tone    string
+	}{
+		{"fresh at any horizon", at(3), old, 30, "ok"},
+		{"inside a long horizon", at(60), old, 90, ""},
+		{"past a short one", at(60), old, 30, "warn"},
+		{"just inside", at(29), old, 30, ""},
+		{"just past", at(31), old, 30, "warn"},
+		{"never surfaced, older than the horizon", nil, now.AddDate(0, 0, -45), 30, "warn"},
+		{"never surfaced, younger than the horizon", nil, now.AddDate(0, 0, -45), 90, ""},
+	} {
+		_, tone := surfacedStaleness(tc.last, tc.created, now, tc.horizon)
+		require.Equal(t, tc.tone, tone, tc.name)
+	}
+}
+
+// staleCutoff reaches back whole days from now, in UTC.
+func TestStStaleCutoff(t *testing.T) {
+	now := time.Date(2026, 11, 21, 3, 4, 5, 0, time.FixedZone("example", -8*3600))
+	require.Equal(t, time.Date(2026, 8, 23, 11, 4, 5, 0, time.UTC), staleCutoff(now, 90))
 }

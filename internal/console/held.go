@@ -32,6 +32,10 @@ const heldRecentLimit = 20
 // heldPreviewMaxRunes bounds a held write's preview on the page.
 const heldPreviewMaxRunes = 4000
 
+// heldDiffMaxRows bounds the rows of a held update's diff on the page; the
+// rest is cut, as the preview is.
+const heldDiffMaxRows = 400
+
 type heldReason struct {
 	Code  string `json:"code"`
 	Words string `json:"words"`
@@ -54,6 +58,7 @@ type heldRow struct {
 	Name       string       `json:"name"`
 	MemoryKind string       `json:"memoryKind,omitempty"`
 	Session    string       `json:"session,omitempty"`
+	SessionID  string       `json:"sessionId,omitempty"` // when this console reads the session: its link
 	Reasons    []heldReason `json:"reasons"`
 	// What names the write in a few words ("constraint memory", "note").
 	What string `json:"what"`
@@ -66,6 +71,17 @@ type heldRow struct {
 	Marks   template.HTML `json:"-"`
 	Marked  bool          `json:"-"`
 	Accent  string        `json:"-"`
+	// Diff is what releasing a held update would change in the file it
+	// replaces: the current file's lines against the write's (heldDiff),
+	// unchanged runs folded, with the same treatment and marks as the
+	// preview. Empty for a new item, a delete, a gardener apply, and a
+	// target that cannot be read. DiffSame says the write matches the
+	// current file line for line; DiffMarked that a reason marked a line;
+	// DiffFolded that an unchanged run was folded.
+	Diff       []heldDiffLine `json:"diff,omitempty"`
+	DiffSame   bool           `json:"diffSame,omitempty"`
+	DiffMarked bool           `json:"-"`
+	DiffFolded bool           `json:"-"`
 	// Note says what releasing does when there is no text to preview.
 	Note string `json:"note,omitempty"`
 	// Link points at what the hold acts on (a memory, a proposal).
@@ -79,6 +95,19 @@ type heldRow struct {
 	// accounts answers exactly as before.
 	Proposal bool   `json:"proposal,omitempty"`
 	Account  string `json:"account,omitempty"`
+}
+
+// heldDiffLine is one row of a held update's diff.
+type heldDiffLine struct {
+	// Op is "same", "del" (releasing removes the line), "add" (releasing adds
+	// it), "fold" (Folded unchanged lines, not shown) or "cut" (the rest of
+	// the diff, past heldDiffMaxRows).
+	Op     string `json:"op"`
+	Text   string `json:"text,omitempty"`
+	Folded int    `json:"folded,omitempty"`
+	// HTML is Text escaped, with what each reason matched marked on the lines
+	// the write carries.
+	HTML template.HTML `json:"-"`
 }
 
 // taintRow is one session carrying the outside-text mark.
@@ -164,10 +193,10 @@ func (s *Service) heldPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	for _, h := range pending {
-		data.Pending = append(data.Pending, s.heldRowOf(r, h, refs[h.SessionID].Name, true))
+		data.Pending = append(data.Pending, s.heldRowOf(r, h, refs, true))
 	}
 	for _, h := range recent {
-		data.Recent = append(data.Recent, s.heldRowOf(r, h, refs[h.SessionID].Name, false))
+		data.Recent = append(data.Recent, s.heldRowOf(r, h, refs, false))
 	}
 	for _, t := range tainted {
 		data.Tainted = append(data.Tainted, taintRow{SessionID: t.SessionID, Name: t.Name, Project: t.Project,
@@ -183,13 +212,20 @@ func resolvedAt(h store.HeldWrite) time.Time {
 	return h.CreatedAt
 }
 
-// heldRowOf renders one queue row. pending rows carry the preview and the
-// staleness check; resolved ones keep only the record (their text is gone).
-func (s *Service) heldRowOf(r *http.Request, h store.HeldWrite, session string, pending bool) heldRow {
+// heldRowOf renders one queue row. pending rows carry the preview, a held
+// update's diff and the staleness check; resolved ones keep only the record
+// (their text is gone). refs names the sessions this console can read.
+func (s *Service) heldRowOf(r *http.Request, h store.HeldWrite, refs map[string]store.SessionRef, pending bool) heldRow {
 	row := heldRow{
 		ID: h.ID, CreatedAt: h.CreatedAt, ResolvedAt: h.ResolvedAt, Status: h.Status, Op: h.Op, Tool: h.Tool,
 		ItemKind: h.ItemKind, ItemID: h.ItemID, Project: h.Project, Name: h.Name,
-		MemoryKind: string(h.MemoryKind), Session: session, Reasons: []heldReason{},
+		MemoryKind: string(h.MemoryKind), Reasons: []heldReason{},
+	}
+	if ref, ok := refs[h.SessionID]; ok && h.SessionID != "" {
+		row.Session, row.SessionID = ref.Name, h.SessionID
+		if row.Session == "" {
+			row.Session = h.SessionID
+		}
 	}
 	row.Reasons, row.Accent = heldReasons(h.Reasons), screening.MostSerious(h.Reasons)
 	if screening.IsProposal(h.Reasons) {
@@ -226,8 +262,68 @@ func (s *Service) heldRowOf(r *http.Request, h store.HeldWrite, session string, 
 		}
 		row.Preview = heldPreview(h)
 		row.Marks, row.Marked = s.heldMarks(row.Preview, h.Reasons)
+		s.heldDiff(&row, h)
 	}
 	return row
+}
+
+// heldDiff fills a pending held update's diff: the file it would replace,
+// read from disk as it stands now, against the held text, both with the
+// preview's treatment (secrets redacted, hidden characters spelled out) so
+// neither side shows what the preview would not. Only a write that replaces
+// an existing file has one (a base hash); a new item shows its text alone. A
+// target that cannot be read (gone, or no files layer) leaves no diff: the
+// hold is stale then, and the preview still shows the write.
+func (s *Service) heldDiff(row *heldRow, h store.HeldWrite) {
+	if h.Op != store.HeldOpWrite || h.BaseHash == "" || h.Content == "" || s.cfg.Files == nil {
+		return
+	}
+	base := h.DetailValue("path")
+	if from := h.DetailValue("from_path"); from != "" {
+		base = from // a note the write moves: it replaces the file where it is now
+	}
+	current, err := s.cfg.Files.Store().ReadFile(base)
+	if err != nil {
+		return
+	}
+	before, after := splitLines(heldText(current)), heldText(h.Content)
+	afterLines := splitLines(after)
+	marked := s.heldLineMarks(after, h.Reasons)
+	if len(marked) != len(afterLines) { // never expected: the marks then go, never the escaping
+		marked = make([]template.HTML, len(afterLines))
+		for i, l := range afterLines {
+			marked[i] = template.HTML(template.HTMLEscapeString(l))
+		}
+	}
+	rows := lineDiff(before, afterLines)
+	if !diffChanged(rows) {
+		row.DiffSame = true
+		return
+	}
+	for _, d := range foldUnchanged(rows, diffContext) {
+		if len(row.Diff) == heldDiffMaxRows {
+			row.Diff = append(row.Diff, heldDiffLine{Op: "cut"})
+			break
+		}
+		line := heldDiffLine{}
+		switch d.Op {
+		case diffFold:
+			line.Op, line.Folded = "fold", d.Folded
+			row.DiffFolded = true
+		case diffDel:
+			line.Op, line.Text = "del", before[d.Old]
+			line.HTML = template.HTML(template.HTMLEscapeString(line.Text))
+		default:
+			line.Op, line.Text, line.HTML = "same", afterLines[d.New], marked[d.New]
+			if d.Op == diffAdd {
+				line.Op = "add"
+			}
+			if strings.Contains(string(line.HTML), "<mark ") {
+				row.DiffMarked = true
+			}
+		}
+		row.Diff = append(row.Diff, line)
+	}
 }
 
 // heldReasons are a hold's reason codes as the page lists them: each with
@@ -251,21 +347,62 @@ func heldReasons(codes []string) []heldReason {
 // every run of it and every attribute value is escaped here; nothing else
 // reaches the markup. marked reports whether any reason marked something.
 func (s *Service) heldMarks(preview string, codes []string) (marks template.HTML, marked bool) {
-	var rules screening.Rules
-	if s.cfg.Screening != nil {
-		rules = s.cfg.Screening.Rules()
-	}
 	var b strings.Builder
-	for _, seg := range screening.PreviewSegments(preview, codes, rules) {
+	for _, seg := range screening.PreviewSegments(preview, codes, s.heldRules()) {
 		for _, c := range seg.Codes {
-			b.WriteString(`<mark class="held-mark" data-family="` + template.HTMLEscapeString(screening.Family(c)) +
-				`" title="` + template.HTMLEscapeString(string(c)+": "+screening.Describe(c)) + `">`)
+			b.WriteString(heldMarkOpen(c))
 			marked = true
 		}
 		b.WriteString(template.HTMLEscapeString(seg.Text))
 		b.WriteString(strings.Repeat("</mark>", len(seg.Codes)))
 	}
 	return template.HTML(b.String()), marked
+}
+
+// heldLineMarks is heldMarks cut into the text's lines (splitLines): a match
+// that spans lines is marked on each of them, and every mark opens and closes
+// within its line, so a diff can show any line on its own. The matching runs
+// over the whole text, as the preview's does, so a match is found whether or
+// not it crosses a line.
+func (s *Service) heldLineMarks(text string, codes []string) []template.HTML {
+	var lines []template.HTML
+	var b strings.Builder
+	for _, seg := range screening.PreviewSegments(text, codes, s.heldRules()) {
+		open := ""
+		for _, c := range seg.Codes {
+			open += heldMarkOpen(c)
+		}
+		closeMarks := strings.Repeat("</mark>", len(seg.Codes))
+		for i, piece := range strings.Split(seg.Text, "\n") {
+			if i > 0 {
+				lines = append(lines, template.HTML(b.String()))
+				b.Reset()
+			}
+			if piece != "" {
+				b.WriteString(open + template.HTMLEscapeString(piece) + closeMarks)
+			}
+		}
+	}
+	lines = append(lines, template.HTML(b.String()))
+	if strings.HasSuffix(text, "\n") {
+		lines = lines[:len(lines)-1] // splitLines: a final newline opens no line
+	}
+	return lines
+}
+
+// heldRules are the screens' rules, for marking what each reason matched.
+func (s *Service) heldRules() screening.Rules {
+	if s.cfg.Screening != nil {
+		return s.cfg.Screening.Rules()
+	}
+	return screening.Rules{}
+}
+
+// heldMarkOpen is the opening tag of one reason's mark: its family (the
+// color) and its words (the tooltip), escaped.
+func heldMarkOpen(c screening.Code) string {
+	return `<mark class="held-mark" data-family="` + template.HTMLEscapeString(screening.Family(c)) +
+		`" title="` + template.HTMLEscapeString(string(c)+": "+screening.Describe(c)) + `">`
 }
 
 // heldPreview is the held text as the owner reviews it: secrets redacted and
@@ -275,11 +412,17 @@ func heldPreview(h store.HeldWrite) string {
 	if h.Content == "" {
 		return ""
 	}
-	text := screening.RevealHidden(screening.RedactSecrets(h.Content))
+	text := heldText(h.Content)
 	if r := []rune(text); len(r) > heldPreviewMaxRunes {
 		text = string(r[:heldPreviewMaxRunes]) + "\n[... preview cut short]"
 	}
 	return text
+}
+
+// heldText is a text with the preview's treatment, uncut: secrets redacted
+// and every hidden character spelled out.
+func heldText(content string) string {
+	return screening.RevealHidden(screening.RedactSecrets(content))
 }
 
 func itemLink(itemKind, id string) string {

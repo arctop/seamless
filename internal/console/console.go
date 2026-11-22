@@ -893,7 +893,7 @@ type overviewData struct {
 	Live        []liveSessionRow
 	Vitals      []vital
 	StaleDays   int // the "going stale" horizon, in days, stated in the card
-	StaleUnseen int // active memories that have not surfaced within it
+	StaleUnseen int // active memories with no update, injection, or read within it: Retrieval's stale list
 
 	// Spotlight is the momentum memory-of-the-month rail panel: nil while the
 	// feature is off (no panel, no JSON key), non-nil with Found false as the
@@ -1126,7 +1126,9 @@ func (s *Service) overview(w http.ResponseWriter, r *http.Request) {
 	if analytics {
 		prior, hasPrior = s.priorVitals(ctx, win, now)
 	}
-	staleUnseen, err := store.CountMemoriesUnsurfacedSince(ctx, s.db(ctx), now.UTC().AddDate(0, 0, -staleSurfacedDays))
+	// The one staleness set (Service.staleDays): exactly the rows Retrieval lists.
+	staleDays := s.staleDays()
+	staleUnseen, err := store.CountStaleMemories(ctx, s.db(ctx), staleCutoff(now, staleDays))
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -1164,7 +1166,7 @@ func (s *Service) overview(w http.ResponseWriter, r *http.Request) {
 		Projects:         glance,
 		Mishaps:          mishaps,
 		Live:             live,
-		StaleDays:        staleSurfacedDays,
+		StaleDays:        staleDays,
 		StaleUnseen:      staleUnseen,
 	}
 	data.Attention = s.attentionCards(ctx, data)
@@ -1210,7 +1212,7 @@ func (s *Service) knowledgeSky(ctx context.Context, now time.Time, r *http.Reque
 		s.logger.Warn("console: knowledge sky: retrieval stats", "error", err)
 		return nil
 	}
-	sky := buildSky(mems, stats, now)
+	sky := buildSky(mems, stats, now, s.staleDays())
 	// The ledger is shared by every request. A chart drawn under a lease or a
 	// console unlock holds a locked project's stars, and a delta from it names
 	// the ones that left -- so it is neither remembered nor diffed against:
@@ -1293,7 +1295,7 @@ func (s *Service) attentionCards(ctx context.Context, d overviewData) []attnCard
 		out = append(out, attnCard{
 			Sev: "info", Icon: "timer",
 			Title: plural(d.StaleUnseen, "memory going stale", "memories going stale"),
-			Sub:   fmt.Sprintf("not surfaced in %dd · consider retiring", d.StaleDays),
+			Sub:   fmt.Sprintf("no update, injection, or read in %dd · consider retiring", d.StaleDays),
 			Href:  "/console/retrieval",
 		})
 	}

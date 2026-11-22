@@ -170,7 +170,7 @@
           </div>
           {{if .Stale}}
           <button type="button" class="sky-stale" data-sky-stale aria-pressed="false">
-            {{icon "timer"}}<span><strong>{{.Stale}}</strong> going stale</span><small>not surfaced in {{.StaleDays}} days</small>
+            {{icon "timer"}}<span><strong>{{.Stale}}</strong> going stale</span><small>no update, injection, or read in {{.StaleDays}} days</small>
           </button>
           {{end}}
           <h3 class="sky-eyebrow">Scopes <span>{{len .Scopes}}</span></h3>

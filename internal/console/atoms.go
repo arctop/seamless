@@ -13,16 +13,19 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/arctop/seamless/internal/config"
 )
 
 // Judgment thresholds. These are the console's stated targets, not tunables:
 // they appear verbatim in the band line under each metric ("at or above 55%
-// target"), so a reader can see what the number is being judged against.
+// target"), so a reader can see what the number is being judged against. The
+// staleness horizon is the one threshold that is a setting: it is the
+// gardener's (Service.staleDays), and every label prints the configured value.
 const (
 	reachTargetPct       = 55 // memory reach: share of active memories that surfaced
 	continuityTargetPct  = 80 // knowledge continuity: share of sessions that retained knowledge
 	demandTargetPct      = 50 // demand rate: share of briefing-surfaced memories agents also pulled
-	staleSurfacedDays    = 45 // "going stale": an active memory unseen this long
 	staleSurfacedOKDays  = 7  // "fresh": surfaced within this many days
 	deadWeightCeilingPct = 35 // waste share: injected tokens spent on undemanded memories
 	missCeilingPct       = 40 // recall miss rate
@@ -254,18 +257,41 @@ func rowSev(kind string, isError bool) string {
 // Memory reader signals
 // ---------------------------------------------------------------------------
 
+// staleDays is the console's one staleness horizon, in days: the configured
+// gardener.staleness_days. An active memory with no update, injection or read
+// for that long is stale, and the gardener's staleness pass proposes archiving
+// it. Retrieval's quiet-knowledge list and the Overview's "going stale" count
+// (one set: store.StaleMemories and store.CountStaleMemories), the knowledge
+// sky's stale ring and the memory reader's chip all judge by this one number
+// and print it, so no screen keeps a second opinion. A non-positive value falls
+// back to the default, as the gardener's own setting does; config validation
+// refuses one in a running daemon, so only a test's bare Config reaches it.
+func (s *Service) staleDays() int {
+	if d := s.cfg.GardenerCfg.StalenessDays; d > 0 {
+		return d
+	}
+	return config.Defaults().Gardener.StalenessDays
+}
+
+// staleCutoff is the instant a horizon of days reaches back to from now:
+// activity before it does not keep a memory fresh.
+func staleCutoff(now time.Time, days int) time.Time {
+	return now.UTC().AddDate(0, 0, -days)
+}
+
 // surfacedStaleness renders how long ago a memory last entered an agent context,
-// with the tone its chip carries. The thresholds match the Overview's stale
-// bucket, so a memory the attention strip counts as going stale reads warn here
-// too.
+// with the tone its chip carries. The warn line is the staleness horizon
+// (staleDays, passed in), so the chip, the sky's stale ring and the Overview's
+// card draw the same line.
 //
 // A memory that has never surfaced is only warned about once it has had the
 // full window to: something written this morning has not gone quiet, it has not
 // had its turn yet, and coloring it warn would make every burst of writing look
 // like decay.
-func surfacedStaleness(lastInjected *time.Time, created, now time.Time) (age, tone string) {
+func surfacedStaleness(lastInjected *time.Time, created, now time.Time, staleDays int) (age, tone string) {
+	horizon := time.Duration(staleDays) * 24 * time.Hour
 	if lastInjected == nil || lastInjected.IsZero() {
-		if !created.IsZero() && now.Sub(created) > staleSurfacedDays*24*time.Hour {
+		if !created.IsZero() && now.Sub(created) > horizon {
 			return "never", "warn"
 		}
 		return "never", ""
@@ -274,7 +300,7 @@ func surfacedStaleness(lastInjected *time.Time, created, now time.Time) (age, to
 	switch {
 	case since <= staleSurfacedOKDays*24*time.Hour:
 		tone = "ok"
-	case since > staleSurfacedDays*24*time.Hour:
+	case since > horizon:
 		tone = "warn"
 	}
 	return ago(*lastInjected), tone

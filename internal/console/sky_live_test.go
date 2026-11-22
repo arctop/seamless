@@ -46,7 +46,7 @@ func TestSkyLedger_AnswersWholeKeepOrDelta(t *testing.T) {
 	mems, stats := skyFixture(t, now, 60)
 	var ledger skyLedger
 
-	first := buildSky(mems, stats, now)
+	first := buildSky(mems, stats, now, stDefaultStaleDays)
 	ledger.answer(first, "")
 	require.Empty(t, first.Base, "a page holding no chart gets the whole panel")
 	require.False(t, first.Keep)
@@ -54,7 +54,7 @@ func TestSkyLedger_AnswersWholeKeepOrDelta(t *testing.T) {
 	require.Equal(t, 60, strings.Count(string(first.SVG), `<g id="s-`))
 	require.Contains(t, string(first.SVG), `<g class="sky-stars" id="sky-stars">`)
 
-	same := buildSky(mems, stats, now)
+	same := buildSky(mems, stats, now, stDefaultStaleDays)
 	ledger.answer(same, first.Version)
 	require.True(t, same.Keep, "nothing changed: the page keeps its panel")
 	require.Equal(t, first.Version, same.Base)
@@ -66,7 +66,7 @@ func TestSkyLedger_AnswersWholeKeepOrDelta(t *testing.T) {
 		moved[id] = st
 	}
 	moved[again] = store.RetrievalStat{InjectCount: 2, LastInjectedAt: &at}
-	next := buildSky(mems, moved, now)
+	next := buildSky(mems, moved, now, stDefaultStaleDays)
 	ledger.answer(next, first.Version)
 	require.False(t, next.Keep)
 	require.Equal(t, first.Version, next.Base)
@@ -83,7 +83,7 @@ func TestSkyLedger_AnswersWholeKeepOrDelta(t *testing.T) {
 	require.True(t, next.KeepKinds)
 
 	var forgetful skyLedger
-	whole := buildSky(mems, moved, now)
+	whole := buildSky(mems, moved, now, stDefaultStaleDays)
 	forgetful.answer(whole, first.Version)
 	require.Empty(t, whole.Base, "a chart this daemon does not remember gets the whole panel")
 	require.Equal(t, 60, strings.Count(string(whole.SVG), `<g id="s-`))
@@ -95,7 +95,7 @@ func TestSkyDelta_ArrivalsDeparturesAndAgedOutCharts(t *testing.T) {
 	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
 	mems, stats := skyFixture(t, now, 40)
 	var ledger skyLedger
-	base := buildSky(mems, stats, now)
+	base := buildSky(mems, stats, now, stDefaultStaleDays)
 	ledger.answer(base, "")
 
 	left := mems[7]
@@ -104,7 +104,7 @@ func TestSkyDelta_ArrivalsDeparturesAndAgedOutCharts(t *testing.T) {
 	later[7].InvalidAt = &gone
 	arrived := core.Memory{ID: mustID(t), Kind: left.Kind, Name: "arrived", Project: left.Project, Created: now.Add(-90 * 24 * time.Hour)}
 	later = append(later, arrived)
-	next := buildSky(later, stats, now)
+	next := buildSky(later, stats, now, stDefaultStaleDays)
 	ledger.answer(next, base.Version)
 	svg := string(next.SVG)
 	require.Contains(t, svg, `<g id="s-`+left.ID+`" data-live-gone></g>`)
@@ -115,9 +115,9 @@ func TestSkyDelta_ArrivalsDeparturesAndAgedOutCharts(t *testing.T) {
 		churn := map[string]store.RetrievalStat{}
 		at := now.Add(-time.Duration(i+1) * time.Second)
 		churn[mems[0].ID] = store.RetrievalStat{InjectCount: i + 10, LastInjectedAt: &at}
-		ledger.answer(buildSky(mems, churn, now), "")
+		ledger.answer(buildSky(mems, churn, now, stDefaultStaleDays), "")
 	}
-	aged := buildSky(later, stats, now)
+	aged := buildSky(later, stats, now, stDefaultStaleDays)
 	ledger.answer(aged, base.Version)
 	require.Empty(t, aged.Base, "after skyLedgerSize newer charts the base has aged out")
 }

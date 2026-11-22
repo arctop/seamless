@@ -161,7 +161,7 @@ func TestSurfacedStaleness_ThresholdsMatchTheOverviewBucket(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			age, tone := surfacedStaleness(tc.last, tc.created, now)
+			age, tone := surfacedStaleness(tc.last, tc.created, now, 45) // a 45-day horizon: 47d warns, 20d does not
 			require.Equal(t, tc.tone, tone)
 			if tc.last == nil {
 				require.Equal(t, tc.wantAge, age)

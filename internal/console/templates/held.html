@@ -28,7 +28,7 @@
     <header class="held-card-head">
       <span class="badge">{{.What}}</span>
       {{if .Link}}<a class="held-name" href="{{.Link}}">{{.Name}}</a>{{else}}<strong class="held-name">{{.Name}}</strong>{{end}}
-      <span class="held-meta">{{if .Project}}{{.Project}}{{else}}global{{end}} &middot; {{.Tool}}{{if .Session}} &middot; <span class="mono">{{.Session}}</span>{{end}} &middot; <span title="{{ts .CreatedAt}}">{{ago .CreatedAt}}</span></span>
+      <span class="held-meta">{{if .Project}}<a href="/console/projects/{{.Project}}">{{.Project}}</a>{{else}}global{{end}} &middot; {{.Tool}}{{if .SessionID}} &middot; <a class="mono" href="/console/sessions/{{.SessionID}}">{{.Session}}</a>{{end}} &middot; <span title="{{ts .CreatedAt}}">{{ago .CreatedAt}}</span></span>
     </header>{{if .Proposal}}
     <p class="held-note held-proposer" data-proposer="{{.Account}}">Proposed by {{if .Account}}account <strong class="mono">{{.Account}}</strong>{{else}}a restricted account{{end}}</p>{{end}}
     <ul class="held-reasons" aria-label="Why it is held">
@@ -37,9 +37,20 @@
     {{/* The note says what Release would do; a stale hold offers no Release,
          and its note would describe a target that has since moved on. */}}
     {{if and .Note (not .Stale)}}<p class="held-note">{{.Note}}</p>{{end}}
+    {{/* A held update shows first what releasing changes in the file it
+         replaces; the whole write follows, folded. A new item shows its
+         text alone, as before. */}}
+    {{if .Diff}}
+    <details class="held-preview-box held-diff-box" open>
+      <summary>{{if .Stale}}Against the current {{.ItemKind}}{{else}}What releasing changes{{end}} <small>(lines removed from the current {{.ItemKind}} marked &minus;, lines the write adds marked +{{if .DiffFolded}}, unchanged lines folded{{end}}; hidden characters spelled out, secrets redacted{{if .DiffMarked}}; what each reason matched is marked in its color{{end}})</small></summary>
+      <div class="held-preview held-diff" role="group" aria-label="Line changes">{{range .Diff}}{{if eq .Op "fold"}}<span class="held-diff-fold">{{.Folded}} unchanged lines</span>{{else if eq .Op "cut"}}<span class="held-diff-fold">[... comparison cut short]</span>{{else}}<span class="held-diff-line" data-op="{{.Op}}"><span class="held-diff-sign">{{if eq .Op "del"}}-{{else if eq .Op "add"}}+{{end}}</span>{{.HTML}}</span>{{end}}{{end}}</div>
+    </details>
+    {{else if .DiffSame}}
+    <p class="held-note">The write matches the current {{.ItemKind}} line for line.</p>
+    {{end}}
     {{if .Preview}}
-    <details class="held-preview-box" open>
-      <summary>The write, as an agent would read it <small>(hidden characters spelled out, secrets redacted{{if .Marked}}; what each reason matched is marked in its color{{end}})</small></summary>
+    <details class="held-preview-box"{{if not .Diff}} open{{end}}>
+      <summary>{{if .Diff}}The whole write{{else}}The write{{end}}, as an agent would read it <small>(hidden characters spelled out, secrets redacted{{if .Marked}}; what each reason matched is marked in its color{{end}})</small></summary>
       <pre class="held-preview">{{.Marks}}</pre>
     </details>
     {{end}}

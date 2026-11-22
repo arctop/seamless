@@ -5696,7 +5696,8 @@ a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex]:focus-v
    text. static/sky.js writes the interactive state (dimmed stars, a lit wedge,
    a revealed label) into its own <head> stylesheets, so nothing here hangs on a
    class the live morph could strip. Ring tones: today flows, this week is the
-   brand, this month violet, going stale warns, and never is faint. */
+   brand, up to the staleness horizon violet, past it warns, and never is
+   faint. */
 .sky-panel { overflow: hidden; margin-bottom: 18px; container: sky / inline-size; }
 .sky-panel .ov2-panel-head { align-items: baseline; }
 .sky-sub { color: var(--faint); font-size: var(--text-xs); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -5717,7 +5718,7 @@ a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex]:focus-v
 }
 
 /* The grid: a faint field, the stale ring's warm tint, the never belt, dotted
-   ring lines (the 45-day one warm: past it, a memory is going stale), the rim,
+   ring lines (the staleness-horizon one warm: gardener.staleness_days), the rim,
    and hairline spokes between scopes. */
 .sky-field { fill: color-mix(in oklab, var(--brand) 4%, transparent); }
 .sky-tint { fill: none; stroke: color-mix(in oklab, var(--band) 7%, transparent); }
@@ -7925,6 +7926,36 @@ body:has(.build-notice-card:not([hidden])) .main { padding-bottom: calc(112px + 
 @media (max-width: 720px) {
   .mishap-mem-list li { grid-template-columns: minmax(0, 1fr) 3em; }
   .mishap-mem-scope { display: none; }
+}
+
+/* UX 20: staleness and held diff */
+/* Retrieval: a quiet or dead-weight row whose memory already has a pending
+   gardener proposal links to it. The meta line wraps on a narrow screen
+   rather than squeezing the project name away. */
+.retrieval-memory-copy > span:has(.retrieval-proposal) { flex-wrap: wrap; row-gap: 3px; }
+.retrieval-memory-copy > span a.retrieval-proposal {
+  display: inline-flex; flex: none; align-items: center; gap: 4px; overflow: visible; padding: 0 7px;
+  border: 1px solid color-mix(in oklab, var(--warn) 40%, var(--border)); border-radius: 999px;
+  color: var(--ink-2); background: var(--warn-soft); line-height: 1.6;
+}
+.retrieval-memory-copy > span a.retrieval-proposal:hover { color: var(--brand); border-color: var(--brand); }
+.retrieval-proposal .ico { width: 11px; height: 11px; }
+
+/* Held: what releasing an update changes, as a line diff against the file as
+   it stands. A removed line is tinted danger and an added one ok, and the
+   sign column says the same in text, so color is never the only cue. Rows are
+   blocks of their own; the box drops the preview's preserved whitespace and
+   each line keeps its own. */
+.held-diff { padding: 6px 0; white-space: normal; }
+.held-diff-line, .held-diff-fold { display: block; padding: 0 12px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.held-diff-line[data-op="del"] { background: color-mix(in oklab, var(--danger) 13%, transparent); }
+.held-diff-line[data-op="add"] { background: color-mix(in oklab, var(--ok) 14%, transparent); }
+.held-diff-sign { display: inline-block; width: 3ch; color: var(--faint); text-align: center; user-select: none; }
+.held-diff-line[data-op="del"] .held-diff-sign { color: var(--danger); }
+.held-diff-line[data-op="add"] .held-diff-sign { color: var(--ok); }
+.held-diff-fold {
+  margin: 2px 0; padding-left: 3ch; color: var(--faint); font-style: italic;
+  border-block: 1px dashed var(--border);
 }
 
 /* UX 10: projects board */
