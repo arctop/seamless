@@ -8175,3 +8175,8 @@ a.project-global-line:focus-visible { outline: none; box-shadow: var(--shadow-fo
   .project-fold > summary .project-group-signals { margin-left: 0; }
   .project-fold-cue { position: absolute; top: 14px; right: 16px; }
 }
+
+/* In-page confirm (shell.js, button[data-confirm]): the armed button wears the
+   danger tone, and the sentence it asks about sits beside it. */
+.btn[data-armed] { color: var(--danger-ink); background: var(--danger); border-color: var(--danger); }
+.confirm-note { display: inline-block; max-width: 100%; margin-left: 8px; font-size: var(--text-xs); color: var(--danger); vertical-align: middle; }

@@ -1983,3 +1983,11 @@ lapsed, unclaimed, done or dropped, each with one tone; `taskBadge` and
 `core.Task.ClaimLive`'s alone. A relative time a template shows is `agoTime`
 (a `<time data-clock="title">` whose UTC title shell.js turns into the
 browser's local time); a task claim is a claim, never a lock.
+
+A confirmation asks in the page, never through a native `confirm()`: give the
+submit button `data-confirm="<what happens>"` (and `data-confirm-label`, the
+armed button's word, "Confirm" when absent), and `shell.js` arms it on the
+first press and posts on the second. Without script the form posts on the
+first press, so a route behind a confirm must still be safe to call. The
+`confirm()` calls left are converted as their screens are touched
+(plan:console-ux-pass UX 16).

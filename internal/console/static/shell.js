@@ -710,4 +710,58 @@
       }
     }).observe(document.body, { childList: true, subtree: true });
   }
+
+  /* ---- Confirm in the page: two-step buttons -------------------------------- */
+
+  // A submit button with data-confirm asks before its form posts, in the page
+  // instead of a native confirm() dialog. The first press arms it: the button
+  // reads data-confirm-label ("Confirm" when absent) and the data-confirm
+  // sentence shows beside it as a status line. A second press within six
+  // seconds posts. Escape, a press anywhere else or the timeout puts it back.
+  // The submit is caught in the capture phase, so the in-place client
+  // (navigation.js) and a form's own listeners never see an unconfirmed post.
+  // Without script the form posts on the first press, so a route behind a
+  // confirm must still be safe to call.
+  var armedBtn = null, armedNote = null, armedLabel = '', armedTimer = 0;
+  function disarm() {
+    if (!armedBtn) return;
+    clearTimeout(armedTimer);
+    armedBtn.innerHTML = armedLabel;
+    armedBtn.removeAttribute('data-armed');
+    armedBtn.removeAttribute('aria-describedby');
+    if (armedNote && armedNote.parentNode) armedNote.parentNode.removeChild(armedNote);
+    armedBtn = armedNote = null;
+  }
+  function arm(btn) {
+    disarm();
+    armedLabel = btn.innerHTML;
+    btn.textContent = btn.getAttribute('data-confirm-label') || 'Confirm';
+    btn.setAttribute('data-armed', '');
+    var note = document.createElement('span');
+    note.className = 'confirm-note';
+    note.id = 'seam-confirm-note';
+    note.setAttribute('role', 'status');
+    note.textContent = btn.getAttribute('data-confirm');
+    btn.insertAdjacentElement('afterend', note);
+    btn.setAttribute('aria-describedby', note.id);
+    armedBtn = btn;
+    armedNote = note;
+    armedTimer = setTimeout(disarm, 6000);
+  }
+  document.addEventListener('submit', function (e) {
+    var btn = e.submitter;
+    if (!btn || !btn.hasAttribute || !btn.hasAttribute('data-confirm')) return;
+    if (btn === armedBtn) { disarm(); return; }
+    e.preventDefault();
+    e.stopPropagation();
+    arm(btn);
+  }, true);
+  document.addEventListener('click', function (e) {
+    if (!armedBtn) return;
+    var hit = e.target && e.target.closest ? e.target.closest('button[data-armed]') : null;
+    if (hit !== armedBtn) disarm();
+  }, true);
+  document.addEventListener('keydown', function (e) {
+    if (armedBtn && e.key === 'Escape') disarm();
+  });
 })();
