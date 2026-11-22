@@ -1,7 +1,7 @@
 {{define "peek-body"}}
 <article class="peek-entity">
   <header class="peek-head">
-    <span class="kind">plan:{{.Row.Slug}}</span>{{copyBtn .Row.Slug}}
+    <span class="kind">plan:{{.Row.Slug}}</span>{{copyBtn (printf "plan:%s" .Row.Slug)}}
     {{if .Row.Status}}<span class="badge {{planTone .Row.Status}}">{{.Row.Status}}</span>{{end}}
   </header>
   <h2 class="peek-title">{{.Row.Title}}</h2>
@@ -19,7 +19,7 @@
     {{if .Row.TasksTotal}}<dt>Steps</dt><dd>{{.Row.TasksDone}}/{{.Row.TasksTotal}} done{{if .Row.TasksWIP}} &middot; {{.Row.TasksWIP}} in progress{{end}}</dd>{{end}}
     {{if .Row.Agents}}<dt>Agents</dt><dd>{{.Row.Agents}}</dd>{{end}}
     {{if .Row.TokenSessions}}<dt>Model tokens</dt><dd title="Cumulative model tokens harvested from the transcripts of the sessions attributed to this plan (moved a step, or captured the plan). Whole-session totals: a session's full burn counts toward every plan it touched, so plan totals must not be summed. Claude Code reports tokens at session end, so a live session stays unreported until it finishes.">{{if .Row.Tokens}}~{{compactNum .Row.Tokens}}{{else}}pending{{end}} &middot; {{.Row.TokenSessions}} session{{if ne .Row.TokenSessions 1}}s{{end}}{{if .Row.TokenUnreported}} ({{.Row.TokenUnreported}} unreported){{end}}{{if .Row.TokenShared}} &middot; {{.Row.TokenShared}} shared with other plans{{end}}</dd>{{end}}
-    <dt>Updated</dt><dd title="{{ts .Row.Updated}}">{{ago .Row.Updated}}</dd>
+    <dt>Updated</dt><dd>{{agoTime .Row.Updated}}</dd>
     <dt>Note</dt><dd><a href="/console/notes/{{.Row.NoteID}}" data-peek>note &rarr;</a></dd>
   </dl>
 
@@ -34,7 +34,7 @@
           <tr class="row-link" data-href="/console/notes/{{.ID}}" data-peek>
             <td class="mem-name"><strong><a href="/console/notes/{{.ID}}" data-peek>{{.Title}}</a></strong><div class="desc mono">{{.Slug}}</div></td>
             <td>{{if .IsAgent}}<span class="badge">agent-cache</span>{{else}}<span class="badge">note</span>{{end}}</td>
-            <td class="muted" title="{{ts .Updated}}">{{ago .Updated}}</td>
+            <td class="muted">{{agoTime .Updated}}</td>
           </tr>
           {{end}}
         </tbody>
@@ -52,8 +52,8 @@
         <tbody>
           {{range .Tasks}}
           <tr class="row-link" data-href="/console/tasks/{{.ID}}" data-peek>
-            <td><a href="/console/tasks/{{.ID}}" data-peek>{{.Title}}</a></td>
-            <td><span class="badge {{taskTone .Status}}">{{.Status}}</span></td>
+            <td><a href="/console/tasks/{{.ID}}" data-peek>{{.Title}}</a> <span class="mono-id">{{shortID .ID}}</span>{{copyBtn .ID}}</td>
+            <td>{{taskBadge .Word}}</td>
           </tr>
           {{end}}
         </tbody>

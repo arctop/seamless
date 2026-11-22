@@ -434,7 +434,7 @@ inside the gardener's pass</strong>. With <code>gardener.enabled</code> off, not
 sessions and nothing returns a dead agent's claims. See
 <a href="../../guides/troubleshooting/">Troubleshooting</a>.</p>
 <p>Nobody wants to wait 45 minutes for an obvious corpse, so there is an owner
-override - the console's <strong>release lock</strong> button, or <code>seam task release --force &lt;id&gt;</code>. It force-releases any holder's claim regardless of the lease, and it is
+override - the console's <strong>Release claim</strong> button, or <code>seam task release --force &lt;id&gt;</code>. It force-releases any holder's claim regardless of the lease, and it is
 deliberately <strong>not on the MCP surface</strong>: agents get the cooperative protocol, you
 get the override.</p>
 <h2 id="commit-time-lock-checks">Commit-time lock checks</h2>
@@ -664,9 +664,9 @@ being in its loop.</p>
 </span></span><span class="line"><span class="cl">seam task list --status in_progress  <span class="c1"># what is claimed right now</span>
 </span></span><span class="line"><span class="cl">seam sessions --status active        <span class="c1"># who is alive</span>
 </span></span></code></pre></div>
-<p>A task sitting in <strong>In progress</strong> with an <strong>expired</strong> lease is the signature of a
-crashed holder. If the gardener is running, leave it - the reaper will return it.
-If you need it now, release the lock.</p>
+<p>A task that reads <strong>claim lapsed</strong> - in progress, its lease run out - is the
+signature of a crashed holder. If the gardener is running, leave it - the reaper
+will return it. If you need it now, release the claim.</p>
 <h2 id="one-more-collision-to-know-about">One more collision to know about</h2>
 <p>Coordination has a scope failure mode, not just a queue one. When several agents
 are live in <strong>different repos</strong> and one of them writes durable knowledge without a

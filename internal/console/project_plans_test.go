@@ -434,3 +434,61 @@ func TestProjectTasksPanel_StaysInsideTheDocument(t *testing.T) {
 		"the skipped dossier island must re-sync after a mutation patch")
 	require.Contains(t, page, "'toggle'", "the dossier loads lazily on first open")
 }
+
+// TestRwProjectTab_StepRowsWordsAndCopy covers the Plans & tasks tab: every
+// step row and ready-queue row copies its whole id, the plan head copies
+// plan:<slug>, each step reads its word, and the holder links to its
+// session with the lease in words.
+func TestRwProjectTab_StepRowsWordsAndCopy(t *testing.T) {
+	db, mux := newConsole(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	require.NoError(t, store.CreateProject(ctx, db, core.Project{
+		ID: mustID(t), Slug: "demo", Name: "Demo", CreatedAt: now, UpdatedAt: now,
+	}))
+	f := rwSeedFleet(t, db, "rw-plan")
+	offPlan := mustID(t)
+	require.NoError(t, store.CreateTask(ctx, db, core.Task{ID: offPlan, ProjectSlug: "demo", Title: "rw off plan",
+		Status: core.TaskOpen, CreatedAt: now, UpdatedAt: now}))
+
+	body := getHTMLBody(t, mux, "/console/projects/demo?tab=tasks")
+	require.Contains(t, body, `<a class="nm" href="/console/plans/rw-plan">plan:rw-plan</a><button type="button" class="copy-btn" data-copy="plan:rw-plan"`,
+		"the plan head copies plan:<slug>")
+	step := func(id string) string {
+		at := strings.Index(body, `<details class="step `)
+		require.GreaterOrEqual(t, at, 0)
+		at = strings.Index(body, `id="`+id+`">`)
+		require.GreaterOrEqual(t, at, 0, "no step row %s", id)
+		row := body[at:]
+		return row[:strings.Index(row, "</summary>")]
+	}
+	for id, word := range map[string]string{
+		f.ready: "ready", f.blocker: "ready", f.blocked: "blocked", f.gate: "waiting", f.gated: "waiting",
+		f.held: "in-progress", f.lapsed: "claim-lapsed", f.claimless: "unclaimed", f.done: "done", f.dropped: "dropped",
+	} {
+		row := step(id)
+		require.Contains(t, row, `<span class="mono">`+shortID(id)+`</span><button type="button" class="copy-btn" data-copy="`+id+`"`,
+			"step %s copies its whole id from inside its summary", id)
+		require.Contains(t, row, `<span class="kind`, id)
+		require.Contains(t, row, `data-word="`+word+`"`, "step %s reads %s", id, word)
+	}
+	held := step(f.held)
+	require.Contains(t, held, `<a href="/console/sessions/`+f.sess+`">`+f.sessName+`</a>`, "the holder links to its session")
+	require.Contains(t, held, "m left</span>")
+	require.NotContains(t, held, "ico-lock", "a claim is not drawn as a lock")
+	lapsed := step(f.lapsed)
+	require.Regexp(t, `<span class="v">lapsed (59m|1h) ago</span>`, lapsed)
+	require.Contains(t, step(f.blocked), `title="blocked by rw blocker &middot; ready"`, "a chain chip words its blocker")
+	require.NotContains(t, step(f.gated), " ready", "a step behind a gate is not ready")
+	require.NotContains(t, body, `class="step open ready" id="`+f.gated+`"`)
+
+	queue := body[strings.Index(body, "Ready queue"):]
+	row := queue[strings.Index(queue, `id="`+offPlan+`"`):]
+	row = row[:strings.Index(row, "</tr>")]
+	require.Contains(t, row, `data-copy="`+offPlan+`"`, "a ready-queue row copies its whole id")
+	require.Contains(t, row, `data-word="ready"`)
+	require.Contains(t, row, `data-clock="title"`)
+	panel := tabPanel(t, body, "tasks")
+	require.NotContains(t, panel, ">in_progress<")
+	require.NotContains(t, panel, ">open</span>", "no step or task prints its stored status")
+}

@@ -329,6 +329,7 @@ type taskRef struct {
 	Status string        `json:"status"`
 	Kind   string        `json:"kind,omitempty"` // "gate" for a gate, "" for a step
 	Gate   *taskGateView `json:"gate,omitempty"`
+	Word   taskWord      `json:"word"` // its state in the owner's words (taskwords.go)
 }
 
 // taskDetail is the payload for a single task's peek/detail. Unlike the Tasks
@@ -350,6 +351,14 @@ type taskDetail struct {
 	ClaimLive   bool          `json:"claimLive,omitempty"` // lease unexpired as of render time
 	Deps        []taskRef     `json:"deps,omitempty"`      // tasks this one depends on
 	Blocks      []taskRef     `json:"blocks,omitempty"`    // tasks that depend on this one
+	// Word is the task's state in the owner's words (taskwords.go). Creator
+	// and Holder are the sessions created_by and claimed_by name, resolved to
+	// a name and a link where the request reads them; Lease says where the
+	// claim's lease stands ("lease live, 12m left", "lapsed 3m ago").
+	Word    taskWord     `json:"word"`
+	Creator *taskSession `json:"creator,omitempty"`
+	Holder  *taskSession `json:"holder,omitempty"`
+	Lease   string       `json:"lease,omitempty"`
 	// LockedBlockers are this task's unfinished blockers in a locked project
 	// the request does not read, one project slug per
 	// blocker (markLockedBlockers' rule): the request's handle hides them
@@ -402,17 +411,25 @@ func (d taskDetail) DependsOn() int { return len(d.Deps) + len(d.LockedBlockers)
 func (d taskDetail) LockedIn() []string { return slices.Compact(slices.Clone(d.LockedBlockers)) }
 
 // taskDetailData projects a task into the full detail payload, resolving both
-// dependency directions.
+// dependency directions, the sessions it names, and the words for it and for
+// each task it links.
 func (s *Service) taskDetailData(ctx context.Context, t core.Task) (taskDetail, error) {
+	now := time.Now().UTC()
+	namer := s.sessionNamer(ctx)
 	d := taskDetail{
 		ID: t.ID, Title: t.Title, Project: t.ProjectSlug, Status: string(t.Status),
 		Favorite: t.Favorite,
 		BodyText: t.Body, PlanSlug: t.PlanSlug, CreatedBy: t.CreatedBy,
 		ClaimedBy: t.ClaimedBy, LeaseExpiry: t.LeaseExpiresAt,
 		Account: t.Account, UpdatedAccount: t.UpdatedAccount,
-		ClaimLive: t.ClaimLive(time.Now().UTC()),
+		ClaimLive: t.ClaimLive(now),
 		Created:   t.CreatedAt, Updated: t.UpdatedAt, Closed: t.ClosedAt,
 		Kind: taskKind(t), Gate: gateView(t),
+		Creator: s.creatorLink(ctx, t.CreatedBy, namer),
+		Holder:  holderLink(t.ClaimedBy, namer),
+	}
+	if t.ClaimedBy != "" {
+		d.Lease = claimLease(t.LeaseExpiresAt, d.ClaimLive, now)
 	}
 	// Task bodies get the same markdown + wiki-link treatment as memory/note
 	// bodies, scoped to the task's project.
@@ -427,6 +444,7 @@ func (s *Service) taskDetailData(ctx context.Context, t core.Task) (taskDetail, 
 			Body: s.renderBody(ctx, r.Body, t.ProjectSlug), BodyText: r.Body, Change: string(r.Change),
 			ReplacedAt: r.ReplacedAt, ReplacedBy: r.ReplacedBy, UpdatedAccount: r.UpdatedAccount})
 	}
+	var linked []core.Task // the tasks this one links, worded together below
 	for _, depID := range t.DependsOn {
 		dep, derr := store.TaskByID(ctx, s.db(ctx), depID)
 		if derr != nil {
@@ -435,6 +453,7 @@ func (s *Service) taskDetailData(ctx context.Context, t core.Task) (taskDetail, 
 			}
 			return taskDetail{}, derr
 		}
+		linked = append(linked, dep)
 		d.Deps = append(d.Deps, taskRef{ID: dep.ID, Title: dep.Title, Status: string(dep.Status),
 			Kind: taskKind(dep), Gate: gateView(dep)})
 	}
@@ -452,7 +471,21 @@ func (s *Service) taskDetailData(ctx context.Context, t core.Task) (taskDetail, 
 		return taskDetail{}, err
 	}
 	for _, b := range blocks {
+		linked = append(linked, b)
 		d.Blocks = append(d.Blocks, taskRef{ID: b.ID, Title: b.Title, Status: string(b.Status)})
+	}
+	// The task itself rides along: its dependencies are linked already, so
+	// its own word costs no further read.
+	words, err := s.wordTasks(ctx, append(linked, t), now)
+	if err != nil {
+		return taskDetail{}, err
+	}
+	d.Word = words[t.ID]
+	for i := range d.Deps {
+		d.Deps[i].Word = words[d.Deps[i].ID]
+	}
+	for i := range d.Blocks {
+		d.Blocks[i].Word = words[d.Blocks[i].ID]
 	}
 	return d, nil
 }

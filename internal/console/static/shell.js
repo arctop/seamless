@@ -665,7 +665,8 @@
   remember(location.pathname, document.title);
   document.addEventListener('click', function (e) {
     var a = e.target.closest ? e.target.closest('a[href]') : null;
-    if (!a || a.closest('.copy-btn')) return;
+    // A copy button inside a row link copies; it does not open the row.
+    if (!a || e.target.closest('.copy-btn')) return;
     var title = a.getAttribute('data-title') || (a.querySelector('.rail-title, strong, .t') || a).textContent;
     remember(a.getAttribute('href'), (title || '').replace(/\s+/g, ' '));
   }, true);
@@ -675,17 +676,21 @@
   // A time[data-clock] (the clock and clockDate template helpers) carries its
   // instant in datetime and the daemon's wall clock as its text; here it reads
   // as this browser's own wall clock, naming no zone, as the CLI prints the
-  // terminal's. Fragments swapped in later are caught by the observer.
+  // terminal's. A data-clock="title" one (agoTime, timeAs) keeps its text, a
+  // relative age, and trades its UTC title for this browser's date and time.
+  // Fragments swapped in later are caught by the observer; a live refresh
+  // morphs the server's text and title back onto the nodes it keeps (and drops
+  // data-clocked), so every refresh localizes again.
   function two(n) { return (n < 10 ? '0' : '') + n; }
   function localClock(el) {
     if (el.getAttribute('data-clocked')) return;
     var d = new Date(el.getAttribute('datetime'));
     if (isNaN(d.getTime())) return;
     var text = two(d.getHours()) + ':' + two(d.getMinutes());
-    if (el.getAttribute('data-clock') === 'date') {
-      text = d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate()) + ' ' + text;
-    }
-    el.textContent = text;
+    var date = d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate());
+    var kind = el.getAttribute('data-clock');
+    if (kind === 'title') el.setAttribute('title', date + ' ' + text);
+    else el.textContent = kind === 'date' ? date + ' ' + text : text;
     el.setAttribute('data-clocked', '1');
   }
   function localClocks(scope) {
@@ -694,6 +699,7 @@
     for (var i = 0; i < els.length; i++) localClock(els[i]);
   }
   localClocks(document);
+  document.addEventListener('seam:content-updated', function () { localClocks(document); });
   if (window.MutationObserver && document.body) {
     new MutationObserver(function (records) {
       for (var i = 0; i < records.length; i++) {

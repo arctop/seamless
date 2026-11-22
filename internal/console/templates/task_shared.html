@@ -10,7 +10,7 @@
       <dt>What</dt><dd>{{.What}}</dd>
       {{with .Decision}}<dt>Decision</dt><dd>{{.}}</dd>{{end}}
       {{with .ReadyWhen}}<dt>Ready when</dt><dd>{{.}}</dd>{{end}}
-      {{if .ClearedAt}}<dt>Cleared</dt><dd title="{{ts .ClearedAt}}">{{ago .ClearedAt}}{{with .ClearedBy}} by <span class="mono">{{.}}</span>{{end}}</dd>{{end}}
+      {{if .ClearedAt}}<dt>Cleared</dt><dd>{{agoTime .ClearedAt}}{{with .ClearedBy}} by <span class="mono">{{.}}</span>{{end}}</dd>{{end}}
       {{with .Note}}<dt>Note</dt><dd>{{.}}</dd>{{end}}
     </dl>
   </section>
@@ -26,13 +26,18 @@
       <summary>Earlier versions <span class="count">{{len .}}</span></summary>
       <ol class="peek-refs">
         {{range .}}<li data-revision="{{.Revision}}">
-          <div class="muted">{{if eq .Change "append"}}appended to{{else}}replaced{{end}} <span title="{{ts .ReplacedAt}}">{{ago .ReplacedAt}}</span>{{with .ReplacedBy}} by <a class="mono" href="/console/sessions/{{.}}">{{shortID .}}</a>{{end}}{{with .UpdatedAccount}} <span class="kind faint" data-updated-account="{{.}}" title="Text by a restricted local account (peer_auth.restricted)">text by account {{.}}</span>{{end}}</div>
+          <div class="muted">{{if eq .Change "append"}}appended to{{else}}replaced{{end}} {{agoTime .ReplacedAt}}{{with .ReplacedBy}} by <a class="mono" href="/console/sessions/{{.}}">{{shortID .}}</a>{{end}}{{with .UpdatedAccount}} <span class="kind faint" data-updated-account="{{.}}" title="Text by a restricted local account (peer_auth.restricted)">text by account {{.}}</span>{{end}}</div>
           <div class="prose">{{.Body}}</div>
         </li>{{end}}
       </ol>
     </details>
   </section>
 {{end}}{{end}}
+
+{{/* task-session names a session a task names (a *taskSession: its creator
+     or its claim's holder), linked to its page when it resolved to one the
+     request reads, and as written when it did not. */}}
+{{define "task-session"}}{{if .ID}}<a class="mono" href="/console/sessions/{{.ID}}">{{.Name}}</a>{{else}}<span class="mono">{{.Name}}</span>{{end}}{{end}}
 
 {{/* task-ref-gate follows a dependency that is a gate with what it waits on. */}}
 {{define "task-ref-gate"}}{{if and .Kind .Gate}}{{if .Gate.Open}} <span class="muted" data-gate-who="{{.Gate.Who}}">gate &middot; waits on {{.Gate.Who}}: {{.Gate.What}}</span>{{end}}{{end}}{{end}}

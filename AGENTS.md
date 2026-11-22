@@ -1951,7 +1951,7 @@ files; use them.
 The observability console is `html/template` + vanilla JS + SSE, served by
 `internal/console` -- no node, npm, React, or build step. It is read-mostly: the
 writes are the owner's overrides and curation actions, among them -- archive a
-memory, approve a plan, force-release a task's claim lock,
+memory, approve a plan, force-release a task's claim,
 ask/split/apply/dismiss/retarget a gardener proposal, save or reset the
 briefing settings, switch update checks and automatic updates (or hand both
 back to the config), check for updates now, update now, resume automatic
@@ -1973,3 +1973,13 @@ one only by re-running it. No series wears a status color, the single-hue
 charts wear brand or ink and never a series color, and text is always ink.
 Every href a chart primitive renders goes through `safeHref` (a same-origin
 path or an in-page `#anchor`, escaped; anything else renders as text).
+
+A task or plan step prints its state through one vocabulary
+(`internal/console/taskwords.go`): `wordFor` maps a row's facts (status, gate,
+open blockers, claim) to ready, in progress, blocked, waiting on <who>, claim
+lapsed, unclaimed, done or dropped, each with one tone; `taskBadge` and
+`taskChip` render it. No template prints a task's stored status as a label
+(`TestRwTemplatesPrintNoRawTaskStatus`), and "in progress" is
+`core.Task.ClaimLive`'s alone. A relative time a template shows is `agoTime`
+(a `<time data-clock="title">` whose UTC title shell.js turns into the
+browser's local time); a task claim is a claim, never a lock.

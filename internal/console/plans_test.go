@@ -589,3 +589,40 @@ func TestPlans_NoTokenAttributionRendersNothing(t *testing.T) {
 	require.NotContains(t, rr.Body.String(), "model tokens")
 	require.NotContains(t, rr.Body.String(), " tok<")
 }
+
+// TestRwPlansReader_StepsWordAndCopy covers the Plans screen's reader and its
+// peek: each step reads its word and copies its whole id, and the plan copies
+// as plan:<slug>, the form an agent is handed.
+func TestRwPlansReader_StepsWordAndCopy(t *testing.T) {
+	db, mgr, mux := newConsoleWithFiles(t)
+	seedComposedPlan(t, mgr, "rw-plan")
+	f := rwSeedFleet(t, db, "rw-plan")
+	for _, path := range []string{"/console/plans/rw-plan", "/console/plans/rw-plan?peek=1"} {
+		body := getHTMLBody(t, mux, path)
+		require.Contains(t, body, `data-copy="plan:rw-plan"`, path)
+		require.NotContains(t, body, `data-copy="rw-plan"`, "%s: the plan copies with its plan: prefix", path)
+		for id, word := range map[string]string{f.ready: "ready", f.blocked: "blocked", f.gated: "waiting",
+			f.held: "in-progress", f.lapsed: "claim-lapsed", f.done: "done"} {
+			require.Contains(t, body, `data-copy="`+id+`"`, "%s: step %s copies its id", path, id)
+			at := strings.Index(body, `href="/console/tasks/`+id+`"`)
+			require.GreaterOrEqual(t, at, 0)
+			near := body[at:]
+			end := strings.Index(near, "</li>")
+			if tr := strings.Index(near, "</tr>"); end < 0 || (tr >= 0 && tr < end) {
+				end = tr
+			}
+			near = near[:end]
+			require.Contains(t, near, `data-copy="`+id+`"`)
+			require.Contains(t, near, `data-word="`+word+`"`, "%s: step %s reads %s", path, id, word)
+		}
+		require.NotContains(t, body, ">in_progress<", path)
+	}
+	var d planDetailData
+	getJSON(t, mux, "/console/plans/rw-plan?format=json", &d)
+	words := map[string]string{}
+	for _, st := range d.Tasks {
+		words[st.ID] = st.Word.Key
+	}
+	require.Equal(t, wordLapsed, words[f.lapsed])
+	require.Equal(t, wordWaiting, words[f.gate])
+}

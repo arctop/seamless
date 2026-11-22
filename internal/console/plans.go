@@ -140,11 +140,13 @@ type planNoteRef struct {
 	Updated time.Time `json:"updated"`
 }
 
-// planTaskRef is a compact pointer to a plan step task.
+// planTaskRef is a compact pointer to a plan step task, with its state in the
+// owner's words (taskwords.go).
 type planTaskRef struct {
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	Status string `json:"status"`
+	ID     string   `json:"id"`
+	Title  string   `json:"title"`
+	Status string   `json:"status"`
+	Word   taskWord `json:"word"`
 }
 
 // planDetailData is the single-plan payload: the row, the rendered plan body,
@@ -376,8 +378,12 @@ func (s *Service) planDetailBySlug(ctx context.Context, slug string) (planDetail
 	if err != nil {
 		return planDetailData{}, false, err
 	}
+	words, err := s.wordTasks(ctx, tasks, time.Now().UTC())
+	if err != nil {
+		return planDetailData{}, false, err
+	}
 	for _, t := range tasks {
-		d.Tasks = append(d.Tasks, planTaskRef{ID: t.ID, Title: t.Title, Status: string(t.Status)})
+		d.Tasks = append(d.Tasks, planTaskRef{ID: t.ID, Title: t.Title, Status: string(t.Status), Word: words[t.ID]})
 	}
 	return d, true, nil
 }

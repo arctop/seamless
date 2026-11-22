@@ -2,8 +2,10 @@ package console
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -105,7 +107,7 @@ func TestTasksPage_RailGroupsOrderNewestFirst(t *testing.T) {
 
 func ptrStatus(s core.TaskStatus) *core.TaskStatus { return &s }
 
-// TestTaskRelease_OwnerOverride covers the console release-lock button: the peek
+// TestTaskRelease_OwnerOverride covers the console Release claim button: the peek
 // surfaces the holder and offers the button, and POSTing the release reopens the
 // task (clearing the claim) regardless of who held it.
 func TestTaskRelease_OwnerOverride(t *testing.T) {
@@ -122,13 +124,14 @@ func TestTaskRelease_OwnerOverride(t *testing.T) {
 	_, err = store.ClaimTask(ctx, db, id, "cc/agent-x", time.Minute, now)
 	require.NoError(t, err)
 
-	// The peek surfaces the holder and the release-lock button.
+	// The peek surfaces the holder and the Release claim button.
 	req := httptest.NewRequest(http.MethodGet, "/console/tasks/"+id, nil)
 	req.Header.Set("Authorization", "Bearer "+testKey)
 	rr := do(mux, req)
 	require.Equal(t, http.StatusOK, rr.Code)
 	require.Contains(t, rr.Body.String(), "cc/agent-x")
-	require.Contains(t, rr.Body.String(), "Release lock")
+	require.Contains(t, rr.Body.String(), "Release claim")
+	require.NotContains(t, rr.Body.String(), rwOldRelease, "a task's claim is a claim, never a lock")
 
 	// POST the release: a browser gets a redirect back to the task.
 	rr = do(mux, postAuthed("/console/tasks/"+id+"/release"))
@@ -145,7 +148,7 @@ func TestTaskRelease_OwnerOverride(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/console/tasks/"+id, nil)
 	req.Header.Set("Authorization", "Bearer "+testKey)
 	rr = do(mux, req)
-	require.NotContains(t, rr.Body.String(), "Release lock")
+	require.NotContains(t, rr.Body.String(), "Release claim")
 
 	// A JSON caller (the seam CLI --force path) gets 200 with the reopened task;
 	// releasing an unclaimed task is an error, not a silent success.
@@ -251,4 +254,165 @@ func TestConsole_AQuietHolderOfALiveClaimIsLive(t *testing.T) {
 	require.Zero(t, active, "the lease lapsed: nothing keeps it live")
 	require.Equal(t, 2, idleN)
 	require.False(t, live[holder])
+}
+
+// The task-claim action's old names, which no page may print: a claim is a
+// claim, never a lock (the console's locks are repo locks and locked
+// projects). Spelled in two halves so a grep of the tree for the old names
+// finds no page, doc or test that still uses them.
+const (
+	rwOldRelease = "Release " + "lock"
+	rwOldConfirm = "Release the " + "lock"
+)
+
+// rwFleet is one task in every state the console's words name, in project
+// demo, under plan ("" for tasks outside a plan): ready, blocked (by blocker,
+// itself ready), a gate and a step behind it, a live claim, a lapsed one, a
+// claimless start, done and dropped. sess is the holder, created_by names it.
+type rwFleet struct {
+	sess, sessName                                                string
+	ready, blocker, blocked, gate, gated, held, lapsed, claimless string
+	done, dropped                                                 string
+	all                                                           []string
+}
+
+func rwSeedFleet(t *testing.T, db *sql.DB, plan string) rwFleet {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	f := rwFleet{sess: mustID(t), sessName: "cc/rw-holder"}
+	require.NoError(t, store.CreateSession(ctx, db, core.Session{
+		ID: f.sess, Name: f.sessName, ProjectSlug: "demo", Status: core.SessionActive, CreatedAt: now, UpdatedAt: now,
+	}))
+	n := 0
+	mk := func(title string, mut func(*core.Task)) string {
+		n++
+		task := core.Task{ID: mustID(t), ProjectSlug: "demo", Title: title, Status: core.TaskOpen, PlanSlug: plan,
+			CreatedBy: f.sessName, CreatedAt: now.Add(time.Duration(n) * time.Second), UpdatedAt: now}
+		if mut != nil {
+			mut(&task)
+		}
+		require.NoError(t, store.CreateTask(ctx, db, task))
+		f.all = append(f.all, task.ID)
+		return task.ID
+	}
+	f.ready = mk("rw ready", nil)
+	f.blocker = mk("rw blocker", nil)
+	f.blocked = mk("rw blocked", func(k *core.Task) { k.DependsOn = []string{f.blocker} })
+	f.gate = mk("rw gate", func(k *core.Task) {
+		k.Kind, k.Gate = core.TaskKindGate, core.TaskGate{Who: "owner", What: "sign off"}
+	})
+	f.gated = mk("rw gated", func(k *core.Task) { k.DependsOn = []string{f.gate} })
+	f.held = mk("rw held", nil)
+	f.lapsed = mk("rw lapsed", nil)
+	f.claimless = mk("rw claimless", func(k *core.Task) { k.Status = core.TaskInProgress })
+	f.done = mk("rw done", func(k *core.Task) { k.Status, k.ClosedAt = core.TaskDone, &now })
+	f.dropped = mk("rw dropped", func(k *core.Task) { k.Status, k.ClosedAt = core.TaskDropped, &now })
+	_, err := store.ClaimTask(ctx, db, f.held, f.sess, 15*time.Minute, now)
+	require.NoError(t, err)
+	_, err = store.ClaimTask(ctx, db, f.lapsed, f.sess, time.Minute, now.Add(-time.Hour))
+	require.NoError(t, err)
+	return f
+}
+
+// TestRwTasksPage_EveryRowCopiesItsWholeID: every rail row on Tasks, the
+// closed ones included, carries a copy button with the 26-character id
+// beside the short id it shows, and the in progress rows name their holder.
+func TestRwTasksPage_EveryRowCopiesItsWholeID(t *testing.T) {
+	db, mux := newConsole(t)
+	f := rwSeedFleet(t, db, "")
+	page := getHTMLBody(t, mux, "/console/tasks")
+	for _, id := range f.all {
+		require.Len(t, id, 26)
+		item := page[strings.Index(page, `id="ri-`+id+`"`):]
+		item = item[:strings.Index(item, "</a>")]
+		require.Contains(t, item, `<span class="mono">`+shortID(id)+`</span><button type="button" class="copy-btn" data-copy="`+id+`"`,
+			"row %s copies its whole id beside its short one", id)
+	}
+	held := between(t, page, "rw held", `<a class="rail-item`, "</a>")
+	require.Contains(t, held, `class="ri-holder"`)
+	require.Contains(t, held, f.sessName, "the holder by name")
+	require.NotContains(t, held, `data-word=`, "a live claim is the group's own word")
+	lapsed := between(t, page, "rw lapsed", `<a class="rail-item`, "</a>")
+	require.Contains(t, lapsed, `data-word="claim-lapsed"`)
+	claimless := between(t, page, "rw claimless", `<a class="rail-item`, "</a>")
+	require.Contains(t, claimless, `data-word="unclaimed"`)
+	done := between(t, page, "rw done", `<a class="rail-item`, "</a>")
+	require.Contains(t, done, "&middot; done &middot;")
+	require.NotContains(t, page, ">in_progress<")
+	require.Contains(t, page, `data-clock="title"`, "rail times carry their instant for a local-time title")
+}
+
+// TestRwTaskReader_WordsHolderLease covers the reader and the peek: the
+// task's word, its holder and creator by name linked to their session, the
+// lease in words (never "expires now"), and Release claim, never a lock.
+func TestRwTaskReader_WordsHolderLease(t *testing.T) {
+	db, mux := newConsole(t)
+	f := rwSeedFleet(t, db, "")
+	sessLink := `<a class="mono" href="/console/sessions/` + f.sess + `">` + f.sessName + `</a>`
+
+	for _, path := range []string{"/console/tasks/" + f.held, "/console/tasks/" + f.held + "?peek=1"} {
+		body := getHTMLBody(t, mux, path)
+		require.Contains(t, body, `data-word="in-progress"`, path)
+		require.Contains(t, body, sessLink, "%s: the holder links to its session", path)
+		require.Contains(t, body, "lease live, ", path)
+		require.NotContains(t, body, "expires now", path)
+		require.NotContains(t, body, "expires ", path)
+		require.Regexp(t, `<time datetime="[^"]+" data-clock="title" title="[^"]+ UTC">lease live, 1[45]m left</time>`, body, path)
+		require.Contains(t, strings.ToLower(body), "release claim", path)
+		require.NotContains(t, strings.ToLower(body), strings.ToLower(rwOldRelease), path)
+		require.NotContains(t, body, rwOldConfirm, path)
+		require.Contains(t, body, "Release the claim on this task?", path)
+	}
+	reader := getHTMLBody(t, mux, "/console/tasks/"+f.held)
+	require.Contains(t, reader, `created by `+sessLink, "the creator links to its session")
+
+	lapsed := getHTMLBody(t, mux, "/console/tasks/"+f.lapsed+"?peek=1")
+	require.Contains(t, lapsed, `data-word="claim-lapsed"`)
+	require.Regexp(t, `class="task-lease is-lapsed"><time [^>]+>lapsed (59m|1h) ago</time>`, lapsed)
+
+	for id, word := range map[string]string{
+		f.ready: "ready", f.blocked: "blocked", f.gate: "waiting", f.gated: "waiting",
+		f.claimless: "unclaimed", f.done: "done", f.dropped: "dropped",
+	} {
+		body := getHTMLBody(t, mux, "/console/tasks/"+id+"?peek=1")
+		require.Contains(t, body, `<span class="badge`, id)
+		require.Contains(t, body, `data-word="`+word+`"`, "task %s reads %s", id, word)
+	}
+	gated := getHTMLBody(t, mux, "/console/tasks/"+f.gated+"?peek=1")
+	require.Contains(t, gated, ">waiting on owner</span>")
+	// The dependency list words each blocker and copies its id.
+	blocked := getHTMLBody(t, mux, "/console/tasks/"+f.blocked+"?peek=1")
+	deps := blocked[strings.Index(blocked, "Depends on"):]
+	require.Contains(t, deps, `data-word="ready"`, "the blocker is itself ready")
+	require.Contains(t, deps, `data-copy="`+f.blocker+`"`)
+	blocker := getHTMLBody(t, mux, "/console/tasks/"+f.blocker+"?peek=1")
+	blocks := blocker[strings.Index(blocker, "Blocks"):]
+	require.Contains(t, blocks, `data-word="blocked"`, "what it blocks reads blocked")
+
+	// JSON callers get the word, the resolved holder and the lease line.
+	var d taskDetail
+	getJSON(t, mux, "/console/tasks/"+f.held+"?format=json", &d)
+	require.Equal(t, wordInProgress, d.Word.Key)
+	require.Equal(t, &taskSession{ID: f.sess, Name: f.sessName}, d.Holder)
+	require.Equal(t, &taskSession{ID: f.sess, Name: f.sessName}, d.Creator)
+	require.True(t, strings.HasPrefix(d.Lease, "lease live, "), d.Lease)
+}
+
+// TestRwTaskReader_UnresolvedSessionsAreNotLinked: a holder or creator that
+// names no session the console reads keeps its text and gets no link, so the
+// page never links to a session it cannot open; "console" is a creator too.
+func TestRwTaskReader_UnresolvedSessionsAreNotLinked(t *testing.T) {
+	db, mux := newConsole(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	id := mustID(t)
+	require.NoError(t, store.CreateTask(ctx, db, core.Task{ID: id, ProjectSlug: "demo", Title: "orphan claim",
+		Status: core.TaskOpen, CreatedBy: "console", CreatedAt: now, UpdatedAt: now}))
+	_, err := store.ClaimTask(ctx, db, id, "cc/agent-gone", time.Minute, now)
+	require.NoError(t, err)
+	body := getHTMLBody(t, mux, "/console/tasks/"+id+"?peek=1")
+	require.Contains(t, body, `<span class="mono">cc/agent-gone</span>`)
+	require.Contains(t, body, `<span class="mono">console</span>`)
+	require.NotContains(t, body, `href="/console/sessions/`)
 }

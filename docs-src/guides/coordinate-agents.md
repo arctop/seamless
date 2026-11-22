@@ -196,7 +196,7 @@ sessions and nothing returns a dead agent's claims. See
 [Troubleshooting](/guides/troubleshooting/).
 
 Nobody wants to wait 45 minutes for an obvious corpse, so there is an owner
-override - the console's **release lock** button, or `seam task release --force
+override - the console's **Release claim** button, or `seam task release --force
 <id>`. It force-releases any holder's claim regardless of the lease, and it is
 deliberately **not on the MCP surface**: agents get the cooperative protocol, you
 get the override.
@@ -402,9 +402,9 @@ seam task list --status in_progress  # what is claimed right now
 seam sessions --status active        # who is alive
 ```
 
-A task sitting in **In progress** with an **expired** lease is the signature of a
-crashed holder. If the gardener is running, leave it - the reaper will return it.
-If you need it now, release the lock.
+A task that reads **claim lapsed** - in progress, its lease run out - is the
+signature of a crashed holder. If the gardener is running, leave it - the reaper
+will return it. If you need it now, release the claim.
 
 ## One more collision to know about
 

@@ -17,7 +17,7 @@ nothing, and their rows say so.
 | Action | Route | Effect |
 |---|---|---|
 | Archive a memory | `POST /console/memories/{id}/archive` | Routes through `lifecycle.Archive`: the memory is stamped invalid and leaves every index, its file stays on disk with a tombstone. |
-| Force-release a task claim | `POST /console/tasks/{id}/release` | The owner override: releases a claimed task's lock regardless of who holds it, reopening it for any agent. Not reachable from the agent MCP tools. |
+| Force-release a task claim | `POST /console/tasks/{id}/release` | The owner override, **Release claim** on a task: takes the task's claim from whoever holds it, reopening it for any agent. Not reachable from the agent MCP tools. |
 | Force-release a repo lock | `POST /console/locks/{id}/release` | [Repo locks](#locks): ends the hold a lock carries, live or lapsed, whoever holds it; the lock stays declared. What `seam lock release --force` sends. Refused when nobody holds it (409), from an agent's process on the peer_auth socket, and from a paired device. |
 | Approve a lock declaration | `POST /console/locks/{id}/approve` | Makes a restricted account's waiting declaration an active lock, which agents may then hold. Refused for a lock already active (409), from an agent's process on the peer_auth socket, and from a paired device. |
 | Discard a lock declaration | `POST /console/locks/{id}/discard` | Deletes a restricted account's waiting declaration with its repository identities, so the repository may be declared again. An active lock is refused (409): no route removes one. Refused from an agent's process on the peer_auth socket, and from a paired device. |
@@ -617,7 +617,7 @@ Top to bottom:
   lease, a claimless start (`tasks_update status=in_progress` without a
   claim), or a holder that went quiet mid-lease. A lapsed claim offers
   **release claim** with no confirmation - the lease is already dead, so there
-  is no live holder to interrupt, only a stale lock to clear.
+  is no live holder to interrupt, only a stale claim to clear.
 - **Plans in motion** - a horizontally scrolling rail of every incomplete plan
   across every project, done/in-flight progress bars and ready counts, cards
   dimmed once a plan has rested for 24h. Each links to its project's Plans &
@@ -993,7 +993,7 @@ project alone:
 | Tab | Shows |
 |---|---|
 | Overview | The project's metrics, memory kinds, injection trend, recent events. |
-| Plans & tasks | Per-plan step timelines with each step's status, claiming session, lease countdown, and blocking dependency; plus the ready queue. |
+| Plans & tasks | Per-plan step timelines with each step's [status words](#tasks), claiming session, lease countdown, and blocking dependency; plus the ready queue. Each row copies its task's whole id, and each plan's head copies `plan:<slug>`. |
 | Sessions | The project's sessions, with the tasks each currently holds. |
 | Memories | The project's memories with a lineage cell - provenance session, or a supersession pointer - plus the memories it *inherits* from a parent that a strict per-slug count excludes. |
 | Notes | The project's notes. |
@@ -1155,8 +1155,34 @@ The same library shape, with the rail grouped into four buckets: **ready** (no
 unfinished blocker), **in progress**, **blocked**, and **closed** (done and
 dropped merged, newest first, capped at 25 with a count of the rest, collapsed
 by default). The reader carries the task's body, claim and lease state, and
-both dependency directions; **force-release** is the action, and it is the
-owner override - it takes the lock from whoever holds it.
+both dependency directions; **Release claim** is the action, and it is the
+owner override - it takes the claim from whoever holds it.
+
+Every task and plan step says where it stands in the same words, on Tasks,
+the project workspace and Plans:
+
+| Word | Means |
+|---|---|
+| **ready** | Open, with nothing unfinished before it: an agent can claim it now. |
+| **in progress** | Held by a live claim. |
+| **blocked** | Open, waiting on unfinished work before it. |
+| **waiting on** *who* | A gate, or a step an open gate holds - its own, or a gate it depends on - named by who must act (`waiting on owner`). |
+| **claim lapsed** | In progress, but its holder's lease ran out: any agent can claim it. |
+| **unclaimed** | Marked in progress without a claim (`seam task start`, or `tasks_update status=in_progress`): any agent can claim it. |
+| **done**, **dropped** | Closed. |
+
+A task's holder and creator are named by their session and link to its page
+when the console can read it. The lease reads `lease live, 12m left` while the
+claim holds and `lapsed 3m ago` once it runs out.
+
+Each task row - a rail row, a plan step, a ready-queue row, a dependency -
+shows the last 8 characters of the task's id with a copy button beside it that
+copies the whole id, the form you hand an agent (`run <id>`). In a list the
+button stays quiet until you hover or focus the row; on a touch screen it is
+always there. A plan copies as `plan:<slug>`.
+
+Hover a relative time (`3d`) to see the moment it names, in your browser's own
+time; without JavaScript the hover shows it in UTC.
 
 Under a lock, a task blocked by a task in a locked project you
 haven't unlocked sits in the blocked rail, its blocker named only by project
@@ -1210,7 +1236,8 @@ When the window hides plans, the rail ends with how many last moved before it
 and the wider windows to switch to.
 
 A capture owns its slug; composed plans fill only the rest. The reader shows
-the rendered plan body, the step tasks, and the notes attached to the
+the rendered plan body, the step tasks (each in its [status word](#tasks),
+with a copy button for its id), and the notes attached to the
 composition (supporting notes and agent caches). **Approve** appears here, for
 captures only.
 

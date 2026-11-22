@@ -944,15 +944,13 @@ func pctOf(part, whole int) string {
 }
 
 // dyStatus words a task status for a line ("in progress"); "" is a task
-// created on the day.
+// created on the day. A day's record keeps only the status, so the word is
+// statusWord's (taskwords.go, the one mapping).
 func dyStatus(s string) string {
-	switch s {
-	case "":
+	if s == "" {
 		return "new"
-	case "in_progress":
-		return "in progress"
 	}
-	return s
+	return statusWord(s).Text
 }
 
 // threadClause says in a few words what a thread did, for its line under

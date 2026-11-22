@@ -2,10 +2,10 @@
 <article class="peek-entity">
   <header class="peek-head">
     <span class="mono-id">{{shortID .ID}}</span>{{copyBtn .ID}}
-    <span class="badge {{taskTone .Status}}">{{.Status}}</span>
+    {{taskBadge .Word}}
     {{- if .Kind}}
     <span class="kind" data-kind="{{.Kind}}">{{.Kind}}</span>{{end}}
-    {{if .PlanSlug}}<span class="kind">plan:{{.PlanSlug}}</span>{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{with .UpdatedAccount}} <span class="kind faint" data-updated-account="{{.}}" title="Title or body rewritten by a restricted local account (peer_auth.restricted)">updated by account {{.}}</span>{{end}}{{with .MayContain}} <span class="kind faint" data-may-contain title="Provenance stamp: the agent that wrote this held content from these confidential or sealed projects. It names projects and approvals, never content.">{{mayContain .}}</span>{{end}}
+    {{if .PlanSlug}}<span class="kind">plan:{{.PlanSlug}}</span>{{copyBtn (printf "plan:%s" .PlanSlug)}}{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{with .UpdatedAccount}} <span class="kind faint" data-updated-account="{{.}}" title="Title or body rewritten by a restricted local account (peer_auth.restricted)">updated by account {{.}}</span>{{end}}{{with .MayContain}} <span class="kind faint" data-may-contain title="Provenance stamp: the agent that wrote this held content from these confidential or sealed projects. It names projects and approvals, never content.">{{mayContain .}}</span>{{end}}
   </header>
   <h2 class="peek-title">{{.Title}}{{copyBtn .Title}}
     <form class="star-form" method="post" action="/console/favorites/task/{{.ID}}">
@@ -25,21 +25,21 @@
   <dl class="peek-kv">
     <dt>Project</dt><dd>{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}}</dd>
     {{if .PlanSlug}}<dt>Plan</dt><dd class="mono"><a href="/console/plans/{{.PlanSlug}}">{{.PlanSlug}}</a></dd>{{end}}
-    {{if .CreatedBy}}<dt>Created by</dt><dd class="mono">{{.CreatedBy}}{{copyBtn .CreatedBy}}</dd>{{end}}
-    {{if .ClaimedBy}}
-    <dt>Claimed by</dt><dd class="mono">{{.ClaimedBy}}{{copyBtn .ClaimedBy}}</dd>
-    <dt>Lease</dt><dd>{{if .ClaimLive}}<span class="badge ok">live</span> <span class="muted">&middot; expires {{ago .LeaseExpiry}}</span>{{else}}<span class="muted">expired {{ago .LeaseExpiry}}</span>{{end}}</dd>
+    {{with .Creator}}<dt>Created by</dt><dd>{{template "task-session" .}}{{copyBtn $.CreatedBy}}</dd>{{end}}
+    {{with .Holder}}
+    <dt>Claimed by</dt><dd data-holder>{{template "task-session" .}}{{copyBtn $.ClaimedBy}}</dd>
+    {{with $.Lease}}<dt>Lease</dt><dd class="task-lease{{if not $.ClaimLive}} is-lapsed{{end}}">{{timeAs $.LeaseExpiry .}}</dd>{{end}}
     {{end}}
-    <dt>Created</dt><dd title="{{ts .Created}}">{{ago .Created}}</dd>
-    <dt>Updated</dt><dd title="{{ts .Updated}}">{{ago .Updated}}</dd>
-    {{if .Closed}}<dt>Closed</dt><dd title="{{ts .Closed}}">{{ago .Closed}}</dd>{{end}}
+    <dt>Created</dt><dd>{{agoTime .Created}}</dd>
+    <dt>Updated</dt><dd>{{agoTime .Updated}}</dd>
+    {{if .Closed}}<dt>Closed</dt><dd>{{agoTime .Closed}}</dd>{{end}}
   </dl>
 
   {{if .DependsOn}}
   <section class="peek-section">
     <h3>Depends on <span class="count">{{.DependsOn}}</span></h3>
-    <ul class="peek-refs">
-      {{range .Deps}}<li><a href="/console/tasks/{{.ID}}" data-peek>{{.Title}}</a> <span class="badge {{taskTone .Status}}">{{.Status}}</span>{{template "task-ref-gate" .}}</li>{{end}}{{range .LockedIn}}
+    <ul class="peek-refs task-refs">
+      {{range .Deps}}<li><a href="/console/tasks/{{.ID}}" data-peek>{{.Title}}</a> {{taskBadge .Word}}{{template "task-ref-gate" .}}{{copyBtn .ID}}</li>{{end}}{{range .LockedIn}}
       <li data-locked-blocker="{{.}}" title="Unlock {{.}} in the console to see the task">{{icon "lock"}} a task in locked project {{.}} blocks this one</li>{{end}}
     </ul>
   </section>
@@ -48,8 +48,8 @@
   {{if .Blocks}}
   <section class="peek-section">
     <h3>Blocks <span class="count">{{len .Blocks}}</span></h3>
-    <ul class="peek-refs">
-      {{range .Blocks}}<li><a href="/console/tasks/{{.ID}}" data-peek>{{.Title}}</a> <span class="badge {{taskTone .Status}}">{{.Status}}</span></li>{{end}}
+    <ul class="peek-refs task-refs">
+      {{range .Blocks}}<li><a href="/console/tasks/{{.ID}}" data-peek>{{.Title}}</a> {{taskBadge .Word}}{{copyBtn .ID}}</li>{{end}}
     </ul>
   </section>
   {{end}}
@@ -57,9 +57,9 @@
 
   {{if .ClaimedBy}}
   <div class="peek-actions">
-    <form method="post" action="/console/tasks/{{.ID}}/release" onsubmit="return confirm('Release the lock on this task? It reopens for any agent to claim.');">
+    <form method="post" action="/console/tasks/{{.ID}}/release" onsubmit="return confirm('Release the claim on this task? It reopens for any agent to claim.');">
       {{if .Next}}<input type="hidden" name="next" value="{{.Next}}">{{end}}
-      <button class="link-act danger" type="submit">release lock</button>
+      <button class="link-act danger" type="submit" title="Owner override: takes the claim from whoever holds it">release claim</button>
     </form>
   </div>
   {{end}}

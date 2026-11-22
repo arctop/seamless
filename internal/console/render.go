@@ -306,6 +306,10 @@ var funcs = template.FuncMap{
 	"deltaChip":     deltaChip,
 	"bandLine":      bandLine,
 	"taskTone":      taskTone,
+	"taskBadge":     taskBadge,
+	"taskChip":      taskChip,
+	"agoTime":       agoTime,
+	"timeAs":        timeAs,
 	"planTone":      planTone,
 	"outcomeTone":   outcomeTone,
 	"outcomeSegs":   outcomeSegs,
@@ -547,21 +551,10 @@ func evtIcon(kind string) string {
 	}
 }
 
-// taskTone maps a task status to a badge tone class (see console.css .badge.*),
-// so status chips read at a glance: done green, in-progress brand, open amber,
-// dropped neutral.
-func taskTone(status string) string {
-	switch status {
-	case "done":
-		return "ok"
-	case "in_progress":
-		return "accent"
-	case "open":
-		return "warn"
-	default: // dropped
-		return ""
-	}
-}
+// taskTone is a bare task status's badge tone (see console.css .badge.*), for
+// a row that carries nothing but the status: the tone of its word (taskwords.go,
+// the one mapping).
+func taskTone(status string) string { return statusWord(status).Tone }
 
 // parseTemplates parses the layout + every page into its own template set (an
 // entity page also parses its peek_<name>.html companion so its content block
@@ -860,22 +853,17 @@ func (s *Service) serverError(w http.ResponseWriter, r *http.Request, err error)
 // time.Time or *time.Time (nil/zero -> "-") so templates can pass nullable
 // timestamps directly.
 func ago(v any) string {
-	var t time.Time
-	switch x := v.(type) {
-	case time.Time:
-		t = x
-	case *time.Time:
-		if x == nil {
-			return "-"
-		}
-		t = *x
-	default:
+	t, ok := timeOf(v)
+	if !ok {
 		return "-"
 	}
-	if t.IsZero() {
-		return "-"
-	}
-	d := time.Since(t)
+	return agoAt(t, time.Now())
+}
+
+// agoAt is ago measured from now. A time after now answers "now": ago is for
+// what already happened; a lease's time left is durUntil's.
+func agoAt(t, now time.Time) string {
+	d := now.Sub(t)
 	switch {
 	case d < 0:
 		return "now"
@@ -892,6 +880,49 @@ func ago(v any) string {
 	default:
 		return fmt.Sprintf("%dy", int(d.Hours()/(24*365)))
 	}
+}
+
+// timeOf reads a template's time.Time or *time.Time argument; ok is false for
+// nil, zero, or anything else.
+func timeOf(v any) (time.Time, bool) {
+	var t time.Time
+	switch x := v.(type) {
+	case time.Time:
+		t = x
+	case *time.Time:
+		if x == nil {
+			return time.Time{}, false
+		}
+		t = *x
+	default:
+		return time.Time{}, false
+	}
+	return t, !t.IsZero()
+}
+
+// agoTime is ago as a <time>: the relative age as its text, the instant in
+// datetime, and ts's UTC stamp as its title -- the no-JS fallback, which
+// shell.js replaces with this browser's local time (data-clock="title").
+// A nil or zero time renders ago's "-".
+func agoTime(v any) template.HTML {
+	t, ok := timeOf(v)
+	if !ok {
+		return "-"
+	}
+	return timeAs(t, agoAt(t, time.Now()))
+}
+
+// timeAs renders text as a <time> for the instant v, with agoTime's titles:
+// a lease line, say, whose hover tells when the lease runs out. A nil or zero
+// time renders the text alone.
+func timeAs(v any, text string) template.HTML {
+	esc := template.HTMLEscapeString(text)
+	t, ok := timeOf(v)
+	if !ok {
+		return template.HTML(esc)
+	}
+	return template.HTML(`<time datetime="` + t.UTC().Format(time.RFC3339) + `" data-clock="title" title="` +
+		ts(t) + `">` + esc + `</time>`)
 }
 
 // ts formats a timestamp for a title= tooltip: a clean minute-precision UTC

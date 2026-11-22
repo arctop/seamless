@@ -405,7 +405,7 @@ type taskReleaseOpts struct {
 func bindTaskRelease(fs *flag.FlagSet) *taskReleaseOpts {
 	return &taskReleaseOpts{
 		force: fs.Bool("force", false,
-			"owner override: release the lock even if you do not hold it (routes through the console owner surface, not the agent claim path)"),
+			"owner override: release the claim even if you do not hold it (routes through the console owner surface, not the agent claim path)"),
 		session: actorSessionFlag(fs),
 	}
 }

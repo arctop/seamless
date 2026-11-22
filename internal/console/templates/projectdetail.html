@@ -118,7 +118,7 @@
   {{if .CameFromOn}}{{template "came-from-tasks" .}}{{else}}{{range .Plans}}
   <div class="plan-card" id="plan-{{.Slug}}">
     <div class="plan-head">
-      {{icon "git-merge"}}<a class="nm" href="/console/plans/{{.Slug}}">plan:{{.Slug}}</a>
+      {{icon "git-merge"}}<a class="nm" href="/console/plans/{{.Slug}}">plan:{{.Slug}}</a>{{copyBtn (printf "plan:%s" .Slug)}}
       {{if .Status}}<span class="kind {{planTone .Status}}">{{.Status}}</span>{{end}}
       {{if .Stale}}<a class="kind warn" href="/console/gardener" title="A gardener settlement is pending for this plan">stale?</a>{{end}}
       {{if .HasNote}}
@@ -128,7 +128,7 @@
         <button class="star{{if .Favorite}} on{{end}}" type="submit" aria-pressed="{{if .Favorite}}true{{else}}false{{end}}" title="{{if .Favorite}}Unstar{{else}}Star{{end}} this plan">{{icon "star"}}</button>
       </form>
       {{end}}
-      <span class="prog">{{.Done}}/{{.Total}} done{{if .InFlight}} &middot; {{.InFlight}} in flight{{end}}{{if .Claimable}} &middot; <b class="ready-n">{{.Claimable}} ready</b>{{end}} &middot; moved {{ago .LastActivity}}</span>
+      <span class="prog">{{.Done}}/{{.Total}} done{{if .InFlight}} &middot; {{.InFlight}} in flight{{end}}{{if .Claimable}} &middot; <b class="ready-n">{{.Claimable}} ready</b>{{end}} &middot; moved {{agoTime .LastActivity}}</span>
     </div>
     <div class="plan-bar"><span class="done" style="width:{{.DonePct}}%"></span><span class="doing" style="width:{{.DoingPct}}%"></span></div>
     {{if .Recent}}
@@ -139,7 +139,7 @@
         <span class="vb {{.Tone}}">{{icon .Icon}}{{.Verb}}</span>
         <a class="st" href="#{{.StepID}}" data-jump title="{{.StepTitle}}">{{.StepTitle}}</a>
         {{if .Owner}}<span class="who owner" title="an owner action from this console">you</span>{{else if .SessionID}}<a class="who" href="/console/sessions/{{.SessionID}}" title="{{.Session}}">{{.Session}}</a>{{end}}
-        <span class="when">{{ago .When}}</span>
+        <span class="when">{{agoTime .When}}</span>
       </span>
       {{end}}
     </div>
@@ -147,7 +147,7 @@
     {{range .Groups}}
       {{if .DoneRun}}
       <details class="step-run" id="run-{{(index .Steps 0).ID}}">
-        <summary>{{len .Steps}} completed steps{{if .LastTitle}} &middot; last: {{.LastTitle}}{{end}}{{if not .LastClosed.IsZero}} &middot; {{ago .LastClosed}}{{end}}</summary>
+        <summary>{{len .Steps}} completed steps{{if .LastTitle}} &middot; last: {{.LastTitle}}{{end}}{{if not .LastClosed.IsZero}} &middot; {{agoTime .LastClosed}}{{end}}</summary>
         {{range .Steps}}{{template "plan-step" .}}{{end}}
       </details>
       {{else}}{{range .Steps}}{{template "plan-step" .}}{{end}}{{end}}
@@ -159,7 +159,7 @@
   <details class="plan-done-group" id="plans-completed">
     <summary>{{len .DonePlans}} completed plan{{if ne (len .DonePlans) 1}}s{{end}}{{if .DonePlansMore}} <span class="muted">&middot; {{.DonePlansMore}} older not shown</span>{{end}}</summary>
     {{range .DonePlans}}
-    <div class="done-plan"><a href="/console/plans/{{.Slug}}">plan:{{.Slug}}</a><span class="muted">{{.Total}} step{{if ne .Total 1}}s{{end}} &middot; last moved {{ago .LastActivity}}</span></div>
+    <div class="done-plan"><a href="/console/plans/{{.Slug}}">plan:{{.Slug}}</a>{{copyBtn (printf "plan:%s" .Slug)}}<span class="muted">{{.Total}} step{{if ne .Total 1}}s{{end}} &middot; last moved {{agoTime .LastActivity}}</span></div>
     {{end}}
   </details>
   {{end}}
@@ -172,7 +172,7 @@
       <thead><tr><th>Task</th><th>Status</th><th>Depends on</th><th>Created</th></tr></thead>
       <tbody>
         {{range .Ready}}
-        <tr id="{{.ID}}" class="row-link" data-href="/console/tasks/{{.ID}}"><td><span class="mono-id">{{shortID .ID}}</span> <a href="/console/tasks/{{.ID}}">{{.Title}}</a>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</td><td><span class="kind {{taskTone .Status}}">{{.Status}}</span></td><td class="muted">{{if .Deps}}{{.Deps}} dep{{if ne .Deps 1}}s{{end}}{{else}}&mdash;{{end}}</td><td class="muted">{{ago .Created}}</td></tr>
+        <tr id="{{.ID}}" class="row-link" data-href="/console/tasks/{{.ID}}"><td><span class="mono-id">{{shortID .ID}}</span>{{copyBtn .ID}} <a href="/console/tasks/{{.ID}}">{{.Title}}</a>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</td><td>{{taskChip .Word}}</td><td class="muted">{{if .Deps}}{{.Deps}} dep{{if ne .Deps 1}}s{{end}}{{else}}&mdash;{{end}}</td><td class="muted">{{agoTime .Created}}</td></tr>
         {{end}}
       </tbody>
     </table>
@@ -283,7 +283,9 @@
 <!-- One step row. A <details> so the dossier expands in place; the summary
      carries the grid the old div row had, and the state dot replaces the
      disclosure triangle. The lapsed-claim strip sits OUTSIDE the details on
-     purpose: a form nested in a summary would toggle the row on every click. -->
+     purpose: a form nested in a summary would toggle the row on every click.
+     The copy button inside the summary does not: the shared copy handler
+     (layout.html) cancels the click's default, and with it the toggle. -->
 {{define "plan-step"}}
 <details class="step {{.State}}{{if .Claimable}} ready{{end}}" id="{{.ID}}">
   <summary class="step-row">
@@ -291,26 +293,26 @@
     <span class="body">
       <span class="t">{{.Title}}</span>
       <span class="meta">
-        <span class="mono">{{shortID .ID}}</span>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}
-        {{if .ClaimedBy}}<span class="claim">{{icon "lock"}}{{.ClaimedBy}}</span>{{end}}
-        {{if .LeaseExp}}<span class="lease{{if .LeaseLapsed}} lease-lapsed{{end}}" data-lease-exp="{{.LeaseExp}}">{{icon "timer"}}<span class="v">{{.LeaseLeft}}</span></span>{{end}}
-        {{range .Chain}}<a class="edge" href="{{if .OnPage}}#{{.ID}}{{else}}/console/tasks/{{.ID}}{{end}}"{{if .OnPage}} data-jump{{end}} title="blocked by {{.Title}} &middot; {{.Status}}">{{icon "link"}}{{.Title}}</a>{{end}}{{range .LockedIn}}<span class="edge" data-locked-blocker="{{.}}" title="Unlock {{.}} in the console to see the task">{{icon "lock"}}a task in locked project {{.}} blocks this one</span>{{end}}
+        <span class="mono">{{shortID .ID}}</span>{{copyBtn .ID}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}
+        {{if .ClaimedBy}}<span class="claim" title="The session that holds the claim">{{icon "terminal"}}{{if .ClaimedByID}}<a href="/console/sessions/{{.ClaimedByID}}">{{.ClaimedBy}}</a>{{else}}{{.ClaimedBy}}{{end}}</span>{{end}}
+        {{if .LeaseExp}}<span class="lease{{if .LeaseLapsed}} lease-lapsed{{end}}" data-lease-exp="{{.LeaseExp}}" title="{{if .LeaseLapsed}}The claim's lease ran out{{else}}The claim's lease: time left{{end}}">{{icon "timer"}}<span class="v">{{.LeaseLeft}}</span></span>{{end}}
+        {{range .Chain}}<a class="edge" href="{{if .OnPage}}#{{.ID}}{{else}}/console/tasks/{{.ID}}{{end}}"{{if .OnPage}} data-jump{{end}} title="blocked by {{.Title}} &middot; {{.Word.Text}}">{{icon "link"}}{{.Title}}</a>{{end}}{{range .LockedIn}}<span class="edge" data-locked-blocker="{{.}}" title="Unlock {{.}} in the console to see the task">{{icon "lock"}}a task in locked project {{.}} blocks this one</span>{{end}}
         {{if .Unblocks}}<span class="edge ok" title="unblocks {{.UnblocksTitle}}">{{icon "arrow-right"}}unblocks {{len .Unblocks}}</span>{{end}}
       </span>
     </span>
-    <span class="kind {{taskTone .Status}}">{{.Status}}</span>
+    {{taskChip .Word}}
   </summary>
   <div class="step-dossier" id="dossier-{{.ID}}" data-live-skip data-dossier="/console/tasks/{{.ID}}"></div>
 </details>
 {{/* No confirm on this release, unlike the dossier's: the lease is already
      gone, so any agent can reclaim the step anyway -- there is no live holder
-     to interrupt, only a stale lock to clear. */}}
+     to interrupt, only a stale claim to clear. */}}
 {{if .LeaseLapsed}}
 <div class="step-alert">
   {{icon "triangle-alert"}}<span>lease lapsed &mdash; reclaimable</span>
   <form method="post" action="/console/tasks/{{.ID}}/release">
     <input type="hidden" name="next" value="/console/projects/{{.Project}}?tab=tasks">
-    <button class="link-act danger" type="submit">release claim</button>
+    <button class="link-act danger" type="submit" title="Takes the lapsed claim off the step">release claim</button>
   </form>
 </div>
 {{end}}
@@ -338,7 +340,7 @@
     <thead><tr><th>Task</th><th>Status</th><th>Created</th></tr></thead>
     <tbody>
       {{range .CameFrom.Tasks}}
-      <tr id="{{.ID}}" class="row-link" data-href="/console/tasks/{{.ID}}"><td><span class="mono-id">{{shortID .ID}}</span> <a href="/console/tasks/{{.ID}}">{{.Title}}</a>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{with .MayContain}} <span class="kind faint" data-may-contain title="Provenance stamp: the agent that wrote this held content from these confidential or sealed projects. It names projects and approvals, never content.">{{mayContain .}}</span>{{end}}</td><td><span class="kind {{taskTone .Status}}">{{.Status}}</span></td><td class="muted">{{ago .Created}}</td></tr>
+      <tr id="{{.ID}}" class="row-link" data-href="/console/tasks/{{.ID}}"><td><span class="mono-id">{{shortID .ID}}</span>{{copyBtn .ID}} <a href="/console/tasks/{{.ID}}">{{.Title}}</a>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{with .MayContain}} <span class="kind faint" data-may-contain title="Provenance stamp: the agent that wrote this held content from these confidential or sealed projects. It names projects and approvals, never content.">{{mayContain .}}</span>{{end}}</td><td>{{taskChip .Word}}</td><td class="muted">{{agoTime .Created}}</td></tr>
       {{end}}
     </tbody>
   </table>
@@ -509,7 +511,9 @@
       if (isNaN(exp) || !v) return;
       var left = Math.floor((exp - now) / 1000);
       if (left <= 0) {
-        v.textContent = 'lapsed';
+        var gone = Math.floor(-left / 60);
+        v.textContent = gone < 1 ? 'lapsed just now' : gone < 60 ? 'lapsed ' + gone + 'm ago' :
+          gone < 1440 ? 'lapsed ' + Math.floor(gone / 60) + 'h ago' : 'lapsed ' + Math.floor(gone / 1440) + 'd ago';
         el.classList.add('lease-lapsed');
         el.classList.remove('lease-warn');
         return;

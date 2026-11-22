@@ -38,6 +38,26 @@ type taskRow struct {
 	// task waits on outside Seamless, nil when nothing.
 	Kind string        `json:"kind,omitempty"`
 	Gate *taskGateView `json:"gate,omitempty"`
+	// ClaimedBy is the session id the claim names ("" for none), ClaimLive
+	// whether that claim is live as of the read (core.Task.ClaimLive, the
+	// only authority on held), and Holder the session it resolved to, set
+	// where a list names holders (the Tasks rail's in progress group).
+	ClaimedBy string       `json:"claimedBy,omitempty"`
+	ClaimLive bool         `json:"claimLive,omitempty"`
+	Holder    *taskSession `json:"holder,omitempty"`
+	// dependsOn is the task's own dependencies, for a list that reads their
+	// blockers after the fact (readRowBlockers); blockersRead says Blockers
+	// is the row's whole set of unfinished blockers.
+	dependsOn    []string
+	blockersRead bool
+}
+
+// Word is the row's state in the owner's words (taskwords.go).
+func (r taskRow) Word() taskWord {
+	return wordFor(taskFacts{
+		Status: r.Status, Gate: r.Kind == string(core.TaskKindGate), WaitsOn: r.WaitsOn(),
+		Blocked: r.BlockedBy(), Holder: r.ClaimedBy != "", Live: r.ClaimLive,
+	})
 }
 
 // taskGateView is a task's gate as the console shows it (core.TaskGate).
@@ -148,6 +168,7 @@ func (s *Service) tasksPage(ctx context.Context) (tasksData, error) {
 	}
 	// A gate someone marked in progress stays in the people's queue, once.
 	inProgress = slices.DeleteFunc(inProgress, core.Task.IsGate)
+	namer := s.sessionNamer(ctx)
 	done, err := store.AllTasksByStatus(ctx, s.db(ctx), core.TaskDone)
 	if err != nil {
 		return tasksData{}, err
@@ -173,7 +194,7 @@ func (s *Service) tasksPage(ctx context.Context) (tasksData, error) {
 
 	data := tasksData{
 		Ready:      taskRows(ready),
-		InProgress: taskRows(inProgress),
+		InProgress: heldRows(taskRows(inProgress), namer),
 		Blocked:    blockedRows(blocked),
 		Gates:      blockedRows(gates),
 		Gated:      blockedRows(gated),
@@ -273,7 +294,7 @@ func defaultTaskID(data tasksData) string {
 }
 
 // taskRelease is the owner override for a claimed task: it force-releases the
-// lock (reopening the task for any agent to claim) regardless of who holds it.
+// claim (reopening the task for any agent to claim) regardless of who holds it.
 // It is reachable only from this owner surface (the console button and the
 // bearer-authenticated `seam task release --force`), never the agent MCP tools.
 func (s *Service) taskRelease(w http.ResponseWriter, r *http.Request) {
@@ -365,16 +386,77 @@ func sortTaskRowsNewest(rows []taskRow) {
 	})
 }
 
+// taskRows projects tasks into rows. A row knows its blockers only when its
+// list read them: an open row with dependencies reads them through
+// readRowBlockers, or a list of ready tasks has none to read.
 func taskRows(tasks []core.Task) []taskRow {
+	now := time.Now().UTC()
 	out := make([]taskRow, 0, len(tasks))
 	for _, t := range tasks {
 		out = append(out, taskRow{
 			ID: t.ID, Title: t.Title, Project: t.ProjectSlug, Status: string(t.Status),
 			Favorite: t.Favorite, Deps: len(t.DependsOn), Account: t.Account, Created: t.CreatedAt, Closed: t.ClosedAt,
 			Kind: taskKind(t), Gate: gateView(t),
+			ClaimedBy: t.ClaimedBy, ClaimLive: t.ClaimLive(now),
+			dependsOn: t.DependsOn, blockersRead: len(t.DependsOn) == 0,
 		})
 	}
 	return out
+}
+
+// heldRows names each row's holder, the session its claim names.
+func heldRows(rows []taskRow, namer func(string) core.Session) []taskRow {
+	for i := range rows {
+		rows[i].Holder = holderLink(rows[i].ClaimedBy, namer)
+	}
+	return rows
+}
+
+// readRowBlockers reads the unfinished blockers of the open rows a list
+// projected without them (taskRows), in one query through the request's
+// handle, and the ones in locked projects by project only
+// (markLockedBlockers' rule), so each row's word tells ready from blocked.
+func (s *Service) readRowBlockers(ctx context.Context, rows []taskRow) error {
+	var ids, open []string
+	for _, r := range rows {
+		if r.blockersRead || core.TaskStatus(r.Status).Closed() {
+			continue
+		}
+		open = append(open, r.ID)
+		for _, id := range r.dependsOn {
+			if !slices.Contains(ids, id) {
+				ids = append(ids, id)
+			}
+		}
+	}
+	if len(open) == 0 {
+		return nil
+	}
+	deps, err := store.TasksByIDs(ctx, s.db(ctx), ids)
+	if err != nil {
+		return err
+	}
+	var lockedBy map[string][]string
+	if locked := lockedProjects(ctx); len(locked) > 0 {
+		if lockedBy, err = store.OpenBlockerProjects(ctx, s.writeDB(), open, locked); err != nil {
+			return err
+		}
+	}
+	for i := range rows {
+		r := &rows[i]
+		if r.blockersRead || core.TaskStatus(r.Status).Closed() {
+			continue
+		}
+		for _, id := range r.dependsOn {
+			if d, ok := deps[id]; ok && !d.Status.Closed() {
+				r.Blockers = append(r.Blockers, blocker{ID: d.ID, Title: d.Title, Status: string(d.Status),
+					Kind: taskKind(d), Gate: gateView(d)})
+			}
+		}
+		r.LockedBlockers = lockedBy[r.ID]
+		r.blockersRead = true
+	}
+	return nil
 }
 
 func blockedRows(blocked []store.BlockedTask) []taskRow {
@@ -385,6 +467,8 @@ func blockedRows(blocked []store.BlockedTask) []taskRow {
 			Status: string(b.Task.Status), Favorite: b.Task.Favorite,
 			Deps: len(b.Task.DependsOn), Account: b.Task.Account, Created: b.Task.CreatedAt,
 			Kind: taskKind(b.Task), Gate: gateView(b.Task),
+			ClaimedBy: b.Task.ClaimedBy, ClaimLive: b.Task.ClaimLive(time.Now().UTC()),
+			dependsOn: b.Task.DependsOn, blockersRead: true,
 		}
 		for _, bl := range b.Blockers {
 			row.Blockers = append(row.Blockers, blocker{ID: bl.ID, Title: bl.Title, Status: string(bl.Status),

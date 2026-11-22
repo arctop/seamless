@@ -328,6 +328,14 @@ func (s *Service) projectWorkspace(w http.ResponseWriter, r *http.Request, p cor
 		s.serverError(w, r, err)
 		return
 	}
+	if cameFrom != nil {
+		// The came-from rows are read by id, without their blockers: read
+		// them, so each row's word tells ready from blocked.
+		if err := s.readRowBlockers(ctx, cameFrom.Tasks); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+	}
 	data.CameFrom = cameFrom
 	s.applyCameFrom(ctx, &data, keep)
 	contextData, found, err := s.buildContextData(ctx, slug)

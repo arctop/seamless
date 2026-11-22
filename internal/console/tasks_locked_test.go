@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/plans"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -204,4 +205,58 @@ func TestTaskDetail_LockedBlockerNamed(t *testing.T) {
 	require.Equal(t, http.StatusOK, rr.Code)
 	require.NotContains(t, rr.Body.String(), "data-locked-blocker")
 	require.Contains(t, rr.Body.String(), lc.taskID, "unlocked, the blocker itself")
+}
+
+// TestRwLockedProjectIsAbsentFromTaskWords covers the reads the task words
+// add, each through the request's handle: a holder or creator in a locked
+// project resolves to no name and no link, and a blocker there makes its
+// dependent read blocked on the reader, the project tab and the Plans
+// screen while its content stays out.
+func TestRwLockedProjectIsAbsentFromTaskWords(t *testing.T) {
+	lc := newLockedConsole(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	const plan = "rw-ops-plan"
+	_, err := lc.mgr.WriteNote(ctx, core.Note{ID: mustID(t), Slug: "rw-ops-narrative", Title: "Ops plan", Project: openSlug,
+		Description: "the ops plan", Body: "# Ops", Tags: []string{plans.SlugTag(plan), "created-by:agent"}, Created: now, Updated: now})
+	require.NoError(t, err)
+	held := mustID(t)
+	require.NoError(t, store.CreateTask(ctx, lc.db, core.Task{ID: held, ProjectSlug: openSlug, Title: "ops held by a locked session",
+		Status: core.TaskOpen, PlanSlug: plan, CreatedBy: "cc/ledger", CreatedAt: now, UpdatedAt: now}))
+	_, err = store.ClaimTask(ctx, lc.db, held, lc.sessID, 15*time.Minute, now)
+	require.NoError(t, err)
+	waits := mustID(t)
+	require.NoError(t, store.CreateTask(ctx, lc.db, core.Task{ID: waits, ProjectSlug: openSlug, Title: "ops waits on the ledger",
+		Status: core.TaskOpen, PlanSlug: plan, DependsOn: []string{lc.taskID}, CreatedAt: now, UpdatedAt: now}))
+
+	get := func(path string) string {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Authorization", "Bearer "+testKey)
+		rr := lc.do(req)
+		require.Equal(t, http.StatusOK, rr.Code, path)
+		body := rr.Body.String()
+		require.NotContains(t, body, lockedSecret, path)
+		require.NotContains(t, body, `href="/console/sessions/`+lc.sessID+`"`, "%s links to a session the request cannot read", path)
+		return body
+	}
+	reader := get("/console/tasks/" + held)
+	require.NotContains(t, reader, ">cc/ledger</a>", "the locked session's name is not resolved into a link")
+	require.Contains(t, reader, `data-word="in-progress"`, "the claim is live whoever holds it")
+	peek := get("/console/tasks/" + waits + "?peek=1")
+	require.Contains(t, peek, `data-word="blocked"`, "a blocker in a locked project blocks")
+	require.Contains(t, peek, `data-locked-blocker="`+lockedSlug+`"`)
+
+	tab := get("/console/projects/" + openSlug + "?tab=tasks")
+	row := tab[strings.Index(tab, `id="`+waits+`">`):]
+	row = row[:strings.Index(row, "</summary>")]
+	require.Contains(t, row, `data-word="blocked"`)
+	require.NotContains(t, tab, ">cc/ledger<", "the holder of a step resolves through the request's handle")
+
+	plansPage := get("/console/plans/" + plan + "?peek=1")
+	at := strings.Index(plansPage, `href="/console/tasks/`+waits+`"`)
+	require.GreaterOrEqual(t, at, 0)
+	step := plansPage[at:]
+	step = step[:strings.Index(step, "</tr>")]
+	require.Contains(t, step, `data-word="blocked"`, "the Plans screen counts the locked blocker too")
+	require.NotContains(t, plansPage, lc.taskID, "the locked blocker's id stays out")
 }

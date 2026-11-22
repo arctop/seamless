@@ -7928,6 +7928,35 @@ body:has(.build-notice-card:not([hidden])) .main { padding-bottom: calc(112px + 
   .mishap-mem-scope { display: none; }
 }
 
+/* UX 02: task rows */
+/* A task row's copy button stays quiet until its row is hovered or focused
+   (a rail row, a step's summary, a plan's step list), and is always there on
+   a touch screen or a phone-width window, where nothing hovers. */
+.rail-item .copy-btn, .step-row .copy-btn, .task-refs li .copy-btn { opacity: 0; }
+.rail-item:hover .copy-btn, .rail-item:focus-within .copy-btn, .rail-item:focus-visible .copy-btn,
+.step-row:hover .copy-btn, .step-row:focus-within .copy-btn,
+.task-refs li:hover .copy-btn, .task-refs li:focus-within .copy-btn,
+.rail-item .copy-btn:focus-visible, .step-row .copy-btn:focus-visible, .task-refs li .copy-btn:focus-visible,
+.rail-item .copy-btn.copied, .step-row .copy-btn.copied, .task-refs li .copy-btn.copied { opacity: 1; }
+@media (hover: none), (max-width: 720px) {
+  .rail-item .copy-btn, .step-row .copy-btn, .task-refs li .copy-btn,
+  .tabpanel[data-panel="tasks"] tr .copy-btn, .peek-section tr .copy-btn { opacity: 1; }
+}
+.rail-item .ri-meta .copy-btn { margin-left: 3px; padding: 1px; }
+.rail-item .ri-meta .copy-btn .ico { width: 12px; height: 12px; }
+.step .meta .copy-btn { margin-left: -8px; padding: 1px; }
+.step .meta .copy-btn .ico { width: 12px; height: 12px; }
+.plan-card .plan-head .nm + .copy-btn { margin-left: -6px; }
+.plan-card .plan-head .copy-btn .ico { width: 13px; height: 13px; color: inherit; }
+/* A rail row's word, where the group's own name does not already say it. */
+.rail-item .ri-word[data-word="claim-lapsed"] { color: var(--danger); font-weight: 600; }
+.rail-item .ri-word[data-word="unclaimed"], .rail-item .ri-word[data-word="waiting"] { color: var(--warn); font-weight: 600; }
+.rail-item .ri-holder { font-family: var(--font-mono); }
+/* The holder links to its session; the lease line warns once it lapsed. */
+.step .meta .claim a { color: inherit; }
+.step .meta .claim a:hover { color: var(--brand); }
+.task-lease.is-lapsed { color: var(--danger); }
+
 /* UX 20: staleness and held diff */
 /* Retrieval: a quiet or dead-weight row whose memory already has a pending
    gardener proposal links to it. The meta line wraps on a narrow screen

@@ -104,6 +104,7 @@ type depChipVM struct {
 	Status string
 	State  string
 	OnPage bool
+	Word   taskWord // a blocker's state in the owner's words, for its title
 }
 
 // planStepVM is one step in a plan timeline: its status, claim/lease, and both
@@ -116,12 +117,13 @@ type planStepVM struct {
 	Account   string // restricted account that created the step ("" = owner)
 	Status    string
 	State     string
+	Word      taskWord  // its state in the owner's words (taskwords.go)
 	Claimable bool      // open and unblocked: an agent could take it right now
 	Created   time.Time // the plan's own step order, oldest first
 	Closed    time.Time // when it reached a terminal status (the done-run label)
 
-	ClaimedBy   string // session name
-	ClaimedByID string
+	ClaimedBy   string // session name; the holder's short id when it resolved to none
+	ClaimedByID string // the session's id, for its link; "" when it resolved to none
 	LeaseLeft   string // server-rendered remaining lease, the no-JS fallback
 	LeaseExp    string // RFC3339 expiry, for the client ticker
 	LeaseLapsed bool   // held by a session whose lease ran out: reclaimable
@@ -375,14 +377,16 @@ func (s *Service) planStep(ctx context.Context, t core.Task, pc planStepCtx) pla
 	// (constraint claimtask-claimless-inprogress-and-lease-boundary); this only
 	// reads it.
 	if t.ClaimedBy != "" && t.Status == core.TaskInProgress {
-		if sess := pc.namer(t.ClaimedBy); sess.ID != "" {
-			step.ClaimedBy, step.ClaimedByID = sess.Name, sess.ID
-		}
-		if t.LeaseExpiresAt != nil {
-			step.LeaseLeft = durUntil(*t.LeaseExpiresAt, pc.now)
-			step.LeaseExp = t.LeaseExpiresAt.UTC().Format(time.RFC3339)
+		if h := holderLink(t.ClaimedBy, pc.namer); h.ID != "" {
+			step.ClaimedBy, step.ClaimedByID = h.Name, h.ID
+		} else {
+			step.ClaimedBy = shortID(t.ClaimedBy)
 		}
 		step.LeaseLapsed = !t.ClaimLive(pc.now)
+		if t.LeaseExpiresAt != nil {
+			step.LeaseLeft = stepLease(*t.LeaseExpiresAt, !step.LeaseLapsed, pc.now)
+			step.LeaseExp = t.LeaseExpiresAt.UTC().Format(time.RFC3339)
+		}
 	}
 	if t.Status == core.TaskOpen {
 		step.LockedBlockers = pc.lockedBy[t.ID]
@@ -391,6 +395,13 @@ func (s *Service) planStep(ctx context.Context, t core.Task, pc planStepCtx) pla
 		} else {
 			step.Claimable = true
 		}
+	}
+	// The walk above put an open step's blockers in the cache; a blocker it
+	// never read counts as finished, as the walk does.
+	step.Word = wordFor(factsOf(t, pc.lookup, len(step.LockedBlockers), pc.now))
+	if step.Word.Key == wordWaiting {
+		// A step a gate holds is not claimable, whatever its blockers say.
+		step.Claimable = false
 	}
 	// A closed step's reverse edges are spent: it already unblocked whatever was
 	// waiting, so saying so on the row is noise rather than a cue.
@@ -405,6 +416,23 @@ func (s *Service) planStep(ctx context.Context, t core.Task, pc planStepCtx) pla
 		step.UnblocksTitle = strings.Join(titles, " · ")
 	}
 	return step
+}
+
+// stepLease is a step row's lease cell: the time left while the claim is
+// live ("12m left": the row's timer icon says lease), "lapsed 3m ago" once it
+// ran out. The client ticker keeps it current between refreshes.
+func stepLease(exp time.Time, live bool, now time.Time) string {
+	if live {
+		return leaseLeft(exp, now)
+	}
+	return "lapsed " + agoPhraseAt(exp, now)
+}
+
+// lookup answers a task the page's cache holds: its plan steps and the
+// blockers the dependency walk read.
+func (pc planStepCtx) lookup(id string) (core.Task, bool) {
+	t, ok := pc.cache[id]
+	return t, ok
 }
 
 // taskState is the CSS row modifier for a task status. "blocked" is not a
@@ -454,7 +482,9 @@ func (s *Service) blockingChain(ctx context.Context, t core.Task, pc planStepCtx
 			if dep.Status != core.TaskOpen && dep.Status != core.TaskInProgress {
 				continue
 			}
-			chain = append(chain, depChip(dep, pc.onPage[dep.ID]))
+			chip := depChip(dep, pc.onPage[dep.ID])
+			chip.Word = wordFor(factsOf(dep, pc.lookup, 0, pc.now))
+			chain = append(chain, chip)
 			next = append(next, dep.DependsOn...)
 		}
 		frontier = next
