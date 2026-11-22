@@ -55,7 +55,16 @@ window.SEAM_NO_LIVE_REFRESH = true; // preserve unsaved form state on this contr
   // its switches left Knowledge engine, so their old link (s=engine with
   // #settings-gardener) opens Settings > Gardener on the block.
   var to = legacy[location.hash], at = /[?&]s=([^&#]*)/.exec(location.search);
-  if (to && (!at || (to === 'gardener' && at[1] === 'engine')) && window.SeamConsole) window.SeamConsole.load('/console/settings?s=' + to + (to === 'gardener' ? location.hash : ''), { history: 'replace', source: 'query' });
+  // This script runs while the page parses, before navigation.js (loaded at
+  // the end of the body) defines SeamConsole, so the load waits for the
+  // parsed document.
+  function mapLegacy() {
+    if (window.SeamConsole) window.SeamConsole.load('/console/settings?s=' + to + (to === 'gardener' ? location.hash : ''), { history: 'replace', source: 'query' });
+  }
+  if (to && (!at || (to === 'gardener' && at[1] === 'engine'))) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mapLegacy, { once: true });
+    else mapLegacy();
+  }
 })();
 (function () {
   function snapshot(form) {

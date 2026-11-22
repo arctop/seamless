@@ -210,7 +210,12 @@ func TestGsLinks_PointAtTheGardenerSection(t *testing.T) {
 	page := settingsPageSource(t)
 	require.Contains(t, page, `'#runtime-profile': 'engine', '#settings-gardener': 'gardener' };`)
 	require.Contains(t, page, `var to = legacy[location.hash], at = /[?&]s=([^&#]*)/.exec(location.search);`)
-	require.Contains(t, page, `if (to && (!at || (to === 'gardener' && at[1] === 'engine')) && window.SeamConsole) window.SeamConsole.load('/console/settings?s=' + to + (to === 'gardener' ? location.hash : ''), { history: 'replace', source: 'query' });`)
+	require.Contains(t, page, `if (to && (!at || (to === 'gardener' && at[1] === 'engine'))) {`)
+	require.Contains(t, page, `if (window.SeamConsole) window.SeamConsole.load('/console/settings?s=' + to + (to === 'gardener' ? location.hash : ''), { history: 'replace', source: 'query' });`)
+	// The page script runs while the page parses, before navigation.js
+	// defines SeamConsole (layout.html loads it at the end of the body): a
+	// guard read at parse time was always false, so no old link ever mapped.
+	require.Contains(t, page, `if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mapLegacy, { once: true });`)
 	require.NotContains(t, page, `!/[?&]s=/.test(location.search)`, "the one condition replaced the old one")
 }
 

@@ -6059,7 +6059,16 @@ window.SEAM_NO_LIVE_REFRESH = true;
   
   
   var to = legacy[location.hash], at = /[?&]s=([^&#]*)/.exec(location.search);
-  if (to && (!at || (to === 'gardener' && at[1] === 'engine')) && window.SeamConsole) window.SeamConsole.load('/console/settings?s=' + to + (to === 'gardener' ? location.hash : ''), { history: 'replace', source: 'query' });
+  
+  
+  
+  function mapLegacy() {
+    if (window.SeamConsole) window.SeamConsole.load('/console/settings?s=' + to + (to === 'gardener' ? location.hash : ''), { history: 'replace', source: 'query' });
+  }
+  if (to && (!at || (to === 'gardener' && at[1] === 'engine'))) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mapLegacy, { once: true });
+    else mapLegacy();
+  }
 })();
 (function () {
   function snapshot(form) {
