@@ -551,27 +551,27 @@ turn checks off in **Settings -> Updates** or set `update.check: false`.
 it has not been installed yet. Usually that is the design working:
 [automatic updates](https://thereisnospoon.org/docs/updating/#when-it-installs) wait out a soak, then wait for a
 quiet daemon. **Settings -> Updates** says what this one waits for on its
-**Next update** row (and on the Home health strip's hover);
+**Install updates by themselves** row (and on the Home health strip's hover);
 `seamlessd update --check` prints the release and its deadline on its `target`
 and `pending` rows.
 
-| Next update says | Why | What to do |
+| The row says | Why | What to do |
 |---|---|---|
 | `installs by itself once it is 24h old` | The release is younger than `update.min_age`. | Wait, or use **Update now**. |
 | `waiting for 2 live agent sessions to go idle, or at a lull in requests in 19h` | Agents are working. Past `update.max_defer` it takes the next lull instead. | Nothing. |
 | `past its 24h deadline; waiting for 90s without requests` | Something keeps calling the daemon. | Nothing: at 1.5 times `max_defer` it installs once no request is in flight. An open **Interactions** page refreshes every 15 seconds, so closing it lets the lull come sooner. |
 | `waiting for 1 request in flight to finish` | A request is being served. | Nothing: at twice `max_defer` it installs anyway. |
-| `an earlier attempt failed; trying again in 1h` | The backoff after a failed attempt. | Read **Last attempt**; **Update now** does not wait for the backoff. |
+| `an earlier attempt failed; trying again in 1h` | The backoff after a failed attempt. | Read the attempt in the alert card; **Update now** does not wait for the backoff. |
 | `an updater is already running` | A `seamlessd update` holds the update lock. | Let it finish. |
 | `re-checking the release list in 12m before installing v0.7.3`, or `could not be re-checked` | Its copy of the release list is older than a minute, and it re-checks at most every 15 minutes. | Nothing; if the check keeps failing, see [the update check keeps failing](#the-update-check-keeps-failing). |
 | `live agent sessions could not be counted` | The database did not answer the count, which never counts as idle. | Run `seamlessd doctor`. |
 | `the update state could not be saved` | `~/.seamless/update/` cannot be written - a full disk, or permissions. | Free space or fix the permissions; an update never starts without its record on disk. |
 | `v0.7.3 carries no signed checksums bundle` | Automatic updates verify that bundle, and this release has none. | Update by hand with `seamlessd update`. |
 
-No **Next update** row at all means nothing is pending: the release sits under
-**Held back** (you went back to an older release) or **Skipped releases** (an
-update to it failed), or the **Mode** row says automatic updates are off or
-paused. [Automatic updates](https://thereisnospoon.org/docs/updating/#automatic-updates) covers each.
+A row that names no release means nothing is pending: the section's alert card
+says the release is held back (you went back to an older release) or skipped
+(an update to it failed), or that automatic updates paused themselves; or the
+switch is off. [Automatic updates](https://thereisnospoon.org/docs/updating/#automatic-updates) covers each.
 
 ## An automatic update failed {#an-automatic-update-failed}
 
@@ -580,8 +580,8 @@ paused. [Automatic updates](https://thereisnospoon.org/docs/updating/#automatic-
 banner ("The update to v0.7.3 rolled back."), and three places read the same
 record:
 
-- **Settings -> Updates -> Last attempt**: the outcome, the updater's own error,
-  and its log;
+- **Settings -> Updates**, the attempt in its alert card: the outcome, the
+  updater's own error (in its hint), and its log;
 - `seamlessd doctor`, on its `updates` row;
 - `seamlessd update --check`, on its `last`, `error`, `log` and `backup` rows.
 
@@ -635,7 +635,7 @@ it is:
    The backup lives inside the data dir, so after the move its path starts with
    the new name. Anything written after the backup was taken stays in the moved
    directory.
-4. Once the install is healthy, press **Resume automatic updates** in
+4. Once the install is healthy, press **Resume** in
    **Settings -> Updates**. The release that failed stays skipped.
 
 Causes worth knowing:
@@ -643,7 +643,7 @@ Causes worth knowing:
 - **The updater refused to start it.** The attempt failed while checking it may
   install now (the `gates` stage), before anything changed. The daemon tries
   again after the backoff, and is refused the same way until you act.
-  **Last attempt**, the console banner, `seamlessd doctor`'s `updates` row and
+  The attempt in **Settings -> Updates**, the console banner, `seamlessd doctor`'s `updates` row and
   `seamlessd update --check`'s `fix` row name the cause and, while the daemon
   still runs the release the attempt started from, the fix:
 
@@ -704,8 +704,9 @@ backup now:
 | the backup folder is not private to Seamless | Under [peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/#restore) no other account may be able to change the folder or any folder above it. Choose one that only root and the daemon's account can write to. |
 | the disk does not keep backups private to Seamless | Under [peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/#restore) a backup must stay owned by the daemon's account and private to it, which exFAT disks and many network shares cannot do. Choose a folder on a disk that keeps file owners. |
 
-A backup that **Back up now** makes and that fails shows its reason on the
-status card too, but does not count toward the alert.
+A backup that **Back up now** makes and that fails says so, with its reason, in
+the section's own alert card too, but does not count toward the every-page
+alert.
 
 ## A restore did not finish {#a-restore-did-not-finish}
 

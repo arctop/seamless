@@ -10,14 +10,14 @@ import (
 )
 
 // The console's view of automatic updates (plan 2.4): the Settings > Updates
-// rows for the switch, the pending update, the one under way, the last attempt
-// and what holds automatic updates back, plus the failure banner every page
-// carries.
+// switch row and its next update, the update under way, the last attempt, and
+// the alert card that says what holds automatic updates back, plus the
+// failure banner every page carries.
 //
 // Every word here is fixed or built from a parsed update.Version. The one free
 // text is an attempt's Error, the updater's own summary for the owner: only the
-// Last attempt row in Settings > Updates shows it -- never the banner, a flash,
-// a toast, an event summary or the health strip.
+// hint of the attempt in Settings > Updates shows it -- never the banner, a
+// flash, a toast, an event summary or the health strip.
 
 // troubleBannerWindow is how long after a pause or a failed attempt every page
 // says so: the same week the briefing's trouble line covers (internal/update).
@@ -26,24 +26,26 @@ const troubleBannerWindow = 7 * 24 * time.Hour
 
 // selfUpdating reports whether this install can install a release by itself
 // at all: a release build the installer made, with an updater wired. Only then
-// do the Auto switch, Update now, Resume and the rows about what holds
-// automatic updates back mean anything; everywhere else the mode line says
-// what is missing.
+// do the Auto switch, Update now, Resume and the alerts about what holds
+// automatic updates back mean anything; everywhere else the first card's
+// "To update" row says what is missing.
 func selfUpdating(st update.Status) bool {
 	return st.Release && !st.Install.NotifyOnly() && st.CanApply
 }
 
-// updatesAutoRow is the Automatic updates row and its switch: whether the owner
-// lets this install update itself, and who decided.
+// updatesAutoRow is the "Install updates by themselves" row and its switch:
+// whether the owner lets this install update itself.
 type updatesAutoRow struct {
-	// On is the effective permission (Settings.Auto); Words says who decided
-	// and what that means.
-	On    bool
-	Words string
+	// On is the effective permission (Settings.Auto), the switch's state.
+	// Sub is the row's line when no update is pending (Next says it then),
+	// and Hint what happens when one is.
+	On   bool
+	Sub  string
+	Hint string
 	// Switch offers the console's switch. It needs checks on: with them off
 	// nothing is fetched to install, and the switch could not show the choice
 	// that comes back with them. Locked disables turning it on, and LockedNote
-	// says where it was set.
+	// is the hint of the locked chip beside it, which says where it was set.
 	Switch     bool
 	Locked     bool
 	LockedNote string
@@ -59,33 +61,39 @@ func autoLockedText(set update.Settings) string {
 	return updatesLockedText
 }
 
-// autoRow builds the Automatic updates row from the effective settings; paused
-// is true while automatic updates have paused themselves, which an "on" row
-// says.
-func autoRow(set update.Settings, paused bool) updatesAutoRow {
-	r := updatesAutoRow{On: set.Auto, Switch: set.Check, Locked: set.AutoLocked}
+// autoRow builds the automatic-updates row from the effective settings;
+// paused is true while automatic updates have paused themselves, which the
+// alert card says and an "on" row points to. Who decided is the source
+// chip's to say (the head's, or the locked one beside the switch), so the
+// line says only what the switch means now.
+func autoRow(set update.Settings, paused bool, byHand string) updatesAutoRow {
+	r := updatesAutoRow{On: set.Auto, Switch: set.Check, Locked: set.AutoLocked, Hint: autoHint(set, byHand)}
 	switch {
 	case set.AutoSource == update.SourceCheck:
-		r.Words = "Off while update checks are off: with no update traffic there is nothing to install. " +
-			"Turning checks back on brings back the setting in force before."
-	case set.AutoSource == update.SourceConfig && !set.Auto:
-		r.Words = "Off: update.auto: false is set in the config file or environment, so this console cannot turn them on."
-	case set.AutoSource == update.SourceConfig:
-		r.Words = "On: update.auto: true is set in the config file or environment; you can still turn them off here."
-	case set.AutoSource == update.SourceConsole && set.Auto:
-		r.Words = "On: turned on in this console, which wins over the config file until you reset it."
-	case set.AutoSource == update.SourceConsole:
-		r.Words = "Off: turned off in this console. New releases are announced, and installing one is your call."
+		r.Sub = "Off while update checks are off: with no update traffic there is nothing to install."
+	case !set.Auto:
+		r.Sub = "Off: new releases are announced, and installing one is your call."
+	case paused:
+		r.Sub = "On, but they paused themselves: see above."
 	default:
-		r.Words = "On by default: a new release installs by itself at a quiet moment."
-	}
-	if paused && r.On {
-		r.Words += " For now they paused themselves: see Paused below."
+		r.Sub = "On: a new release installs by itself at a quiet moment."
 	}
 	if r.Switch && r.Locked {
 		r.LockedNote = autoLockedText(set)
 	}
 	return r
+}
+
+// autoHint says what automatic updates do with a new release, in the
+// settings' own words (update.SpanWords, as Status.Mode says them), and the
+// command that updates this install by hand.
+func autoHint(set update.Settings, byHand string) string {
+	h := "A new release installs by itself"
+	if set.MinAge > 0 {
+		h += " once it is " + update.SpanWords(set.MinAge) + " old"
+	}
+	return h + ", when no agent session is live, or at a lull in requests after waiting " + update.SpanWords(set.MaxDefer) +
+		". Seamless restarts to finish; a release that fails its health check is rolled back and skipped. To update by hand, run " + byHand + "."
 }
 
 // updatesNext is the Next update row: the release automatic updates install
@@ -178,14 +186,16 @@ func applyingRow(st update.Status) *updatesApplying {
 	return r
 }
 
-// updatesAttempt is the Last attempt row. Error and LogPath appear here and
-// nowhere else in the console.
+// updatesAttempt is the last update attempt: the first card's quiet line
+// when it needs nothing from the owner, else the alert card's attempt. Error
+// and LogPath appear in Settings > Updates and nowhere else in the console.
 type updatesAttempt struct {
-	// Outcome is the result in words and Tone its badge ("ok", "warn",
+	// Outcome is the result in words, Code update's word for it
+	// (update.OutcomeRolledBack), and Tone its weight ("ok", "warn",
 	// "danger", or "" for neutral).
-	Outcome, Tone string
-	To, From      string // "v0.7.3"
-	Why           string
+	Outcome, Code, Tone string
+	To, From            string // "v0.7.3"
+	Why                 string
 	// At is when it finished, or when the daemon settled it.
 	At time.Time
 	// Detail says what the outcome means for the install, in fixed words.
@@ -198,13 +208,16 @@ type updatesAttempt struct {
 	// Rewire is set for an update that applied with warnings: the new version
 	// serves, and seamlessd install-hooks re-wires the agents.
 	Rewire bool
+	// Hint is the quiet line's hint: what it meant, and the updater's own
+	// message.
+	Hint string
 }
 
 // attemptRow builds the Last attempt row.
 func attemptRow(a update.AttemptResult) *updatesAttempt {
 	to, from := "v"+a.To.String(), "v"+a.From.String()
 	r := &updatesAttempt{
-		To: to, From: from, Why: whyWords(a.Why), At: a.FinishedAt,
+		To: to, From: from, Why: whyWords(a.Why), At: a.FinishedAt, Code: a.Outcome,
 		Error: strings.TrimSpace(a.Error), LogPath: strings.TrimSpace(a.LogPath),
 	}
 	if r.At.IsZero() {
@@ -237,7 +250,7 @@ func attemptRow(a update.AttemptResult) *updatesAttempt {
 		r.Outcome, r.Tone = "not rolled back", "danger"
 		r.Detail = "It failed after installing, and " + from + " could not be restored cleanly, so automatic updates paused themselves."
 		if r.Error != "" {
-			r.Detail += " The error below says how to recover."
+			r.Detail += " Its details say how to recover."
 		}
 	case update.OutcomeInterrupted:
 		r.Outcome, r.Tone = "interrupted", "warn"
@@ -278,36 +291,6 @@ func failedDetail(stage update.Stage, from string) string {
 	}
 }
 
-// updatesPaused is the Paused row: automatic updates turned themselves off.
-type updatesPaused struct {
-	// Reason is why, in words; Versions the releases that caused it ("v0.7.3,
-	// v0.7.4").
-	Reason, Versions string
-	At               time.Time
-	// Danger marks a pause after an update that could not be rolled back.
-	Danger bool
-}
-
-// updatesHold is the Held back row: a deliberate downgrade's skip-through.
-type updatesHold struct {
-	Through, From string // "v0.7.4"
-	At            time.Time
-}
-
-// updatesBlock is one release automatic updates skip, and why.
-type updatesBlock struct {
-	Version, Reason string
-	At              time.Time
-}
-
-// updatesBackoff is the Next try row: a failed attempt delays the next one.
-type updatesBackoff struct {
-	// Line names the failure ("The attempt on v0.7.3 was interrupted"); In is
-	// when the next try may run ("in 1h") and Until exactly when.
-	Line, In string
-	Until    time.Time
-}
-
 // updatesAction is one of the automatic-update buttons. Offered renders it,
 // Blocked disables it and says why (empty when it can run), and Target names
 // the release Update now installs ("v0.7.3").
@@ -317,37 +300,98 @@ type updatesAction struct {
 	Target  string
 }
 
-// autoRows fills the panel's automatic-update rows and buttons from st.
+// upAlertCard is the one alert card Settings > Updates and Settings > Backups
+// open with while something needs the owner: every exceptional state, worst
+// first, each with its own action. Tone is the card's, its worst item's.
+type upAlertCard struct {
+	Tone  string
+	Items []upAlertItem
+}
+
+// upAlertItem is one exceptional state in an alert card: a head, one line,
+// the details one hint away, and the action that answers it.
+type upAlertItem struct {
+	// Kind names the state, for tests and styling: "stopped", "paused",
+	// "held", "skipped", "backoff", "attempt" (Updates), "failing",
+	// "manual" (Backups). Tone is "danger" or "warn".
+	Kind, Tone string
+	Head, Line string
+	// At is when it began, said after the line ("2h ago"); Until and
+	// UntilWords end the line with when it changes ("in 40m").
+	At         time.Time
+	Until      time.Time
+	UntilWords string
+	// Detail is the service's own words for the cause, on a line of its own
+	// (Backups' run error). Hint keeps the rest one hover away.
+	Detail string
+	Hint   string
+	// The actions: Resume automatic updates (Blocked says why it waits),
+	// the command that re-wires the agents, the updater's log, and Backups'
+	// Try again.
+	Resume        bool
+	ResumeBlocked string
+	Rewire        bool
+	Log           pathView
+	Retry         bool
+	RetryBlocked  string
+}
+
+// add appends item and keeps the card's tone its worst item's.
+func (c *upAlertCard) add(item upAlertItem) {
+	c.Items = append(c.Items, item)
+	if c.Tone != "danger" {
+		c.Tone = item.Tone
+	}
+}
+
+// orNil is the card, or nil without an item.
+func (c *upAlertCard) orNil() *upAlertCard {
+	if len(c.Items) == 0 {
+		return nil
+	}
+	return c
+}
+
+// autoRows fills the panel's automatic-update parts from st: the switch row
+// and its next update, the update under way, Update now, the last attempt,
+// and the alert card.
 func autoRows(p *updatesPanel, st update.Status, now time.Time) {
 	p.SelfUpdating = selfUpdating(st)
 	if st.Applying != nil {
 		p.Applying = applyingRow(st)
 	}
+	card := &upAlertCard{}
+	if st.Stopped {
+		card.add(upAlertItem{Kind: "stopped", Tone: "danger", Head: "The update checker stopped after an internal error.",
+			Line: "The daemon keeps serving; restart it to revive the check."})
+	}
+	defer func() { p.Alert = card.orNil() }()
+
+	var attempt *updatesAttempt
+	alerting := false
 	if a := st.LastAttempt; a != nil {
-		p.LastAttempt = attemptRow(*a)
+		attempt = attemptRow(*a)
 		if act := refusalAction(st, *a); act != "" {
-			p.LastAttempt.Detail += " " + capitalize(act) + "."
+			attempt.Detail += " " + capitalize(act) + "."
+		}
+		alerting = attemptNeedsOwner(st, *a)
+		if !alerting {
+			attempt.Hint = attempt.Detail
+			if attempt.Error != "" {
+				attempt.Hint += "\n\nThe updater said: " + attempt.Error
+			}
+			p.LastUpdate = attempt
 		}
 	}
 	if !p.SelfUpdating {
+		if alerting {
+			card.add(attemptItem(st, attempt, nil, nil, now))
+		}
 		return
 	}
-	p.Auto = autoRow(st.Settings, st.Paused != nil)
+	p.Auto = autoRow(st.Settings, st.Paused != nil, st.Install.Hint)
 	if mode, _ := st.Mode(); mode == update.ModeAuto && st.Applying == nil {
 		p.Next = nextRow(st, now)
-	}
-	if pz := st.Paused; pz != nil {
-		p.Paused = &updatesPaused{Reason: update.PauseWords(pz.Reason), Versions: versionList(pz.Versions), At: pz.At,
-			Danger: pz.Reason == update.PauseBroken}
-	}
-	if h := st.Hold; h != nil {
-		p.Hold = &updatesHold{Through: "v" + h.Through.String(), From: "v" + h.From.String(), At: h.At}
-	}
-	for _, b := range st.Blocked {
-		p.Blocked = append(p.Blocked, updatesBlock{Version: "v" + b.Version.String(), Reason: update.BlockWords(b.Reason), At: b.At})
-	}
-	if b := st.Backoff; b != nil {
-		p.Backoff = &updatesBackoff{Line: backoffLine(*b), In: untilPhrase(b.Until, now), Until: b.Until}
 	}
 
 	p.UpdateNow = updatesAction{Offered: true}
@@ -366,12 +410,140 @@ func autoRows(p *updatesPanel, st update.Status, now time.Time) {
 	case !st.Newest.ChecksumsBundle:
 		p.UpdateNow.Blocked = p.UpdateNow.Target + " carries no signed checksums bundle, which Update now verifies"
 	}
-	if st.Hold != nil || st.Paused != nil {
-		p.Resume = updatesAction{Offered: true}
-		if st.Stopped {
-			p.Resume.Blocked = "The update checker is not running"
+
+	resumeBlocked := ""
+	if st.Stopped {
+		resumeBlocked = "The update checker is not running"
+	}
+	resumeOffered := false
+	if pz := st.Paused; pz != nil {
+		tone := "warn"
+		if pz.Reason == update.PauseBroken {
+			tone = "danger"
+		}
+		line := capitalize(update.PauseWords(pz.Reason))
+		if vs := versionList(pz.Versions); vs != "" {
+			line += " (" + vs + ")"
+		}
+		card.add(upAlertItem{Kind: "paused", Tone: tone, Head: "Automatic updates paused themselves.",
+			Line: line + ". Update now still works.", At: pz.At,
+			Hint:   "Nothing installs by itself until you resume them. Resume lifts the pause; it changes no setting.",
+			Resume: true, ResumeBlocked: resumeBlocked})
+		resumeOffered = true
+	}
+	if h := st.Hold; h != nil {
+		card.add(upAlertItem{Kind: "held", Tone: "warn", Head: "Releases up to v" + h.Through.String() + " are held back.",
+			Line: "This install went back from v" + h.From.String() + ".", At: h.At,
+			Hint:   "Resume lets automatic updates take them again; Update now lifts the hold too.",
+			Resume: !resumeOffered, ResumeBlocked: resumeBlocked})
+	}
+
+	// A skip or a backoff that is about the failed attempt's release says so
+	// in the attempt's own line; any other gets an item of its own.
+	var forAttempt *update.Block
+	var others []update.Block
+	for i, b := range st.Blocked {
+		if alerting && b.Version == st.LastAttempt.To && forAttempt == nil {
+			forAttempt = &st.Blocked[i]
+			continue
+		}
+		others = append(others, b)
+	}
+	if len(others) > 0 {
+		card.add(skippedItem(others))
+	}
+	var backoff *update.Backoff
+	if b := st.Backoff; b != nil {
+		if alerting && b.Version == st.LastAttempt.To {
+			backoff = b
+		} else {
+			card.add(upAlertItem{Kind: "backoff", Tone: "warn", Head: backoffLine(*b) + ".",
+				Line: "Automatic updates try again", Until: b.Until, UntilWords: untilPhrase(b.Until, now)})
 		}
 	}
+	if alerting {
+		card.add(attemptItem(st, attempt, forAttempt, backoff, now))
+	}
+}
+
+// skippedHint is what a skipped release means for the owner's two buttons.
+const skippedHint = "Automatic updates skip these releases until a newer one is out; Resume does not clear them, and Update now does not skip them."
+
+// skippedItem is the alert for releases automatic updates skip.
+func skippedItem(bs []update.Block) upAlertItem {
+	item := upAlertItem{Kind: "skipped", Tone: "warn", Hint: skippedHint}
+	if len(bs) == 1 {
+		item.Head = "Automatic updates skip v" + bs[0].Version.String() + "."
+		item.Line = capitalize(update.BlockWords(bs[0].Reason)) + "."
+		item.At = bs[0].At
+		return item
+	}
+	item.Head = fmt.Sprintf("Automatic updates skip %d releases.", len(bs))
+	parts := make([]string, len(bs))
+	for i, b := range bs {
+		parts[i] = "v" + b.Version.String() + ": " + update.BlockWords(b.Reason)
+	}
+	item.Line = capitalize(strings.Join(parts, "; ")) + "."
+	return item
+}
+
+// attemptNeedsOwner reports whether the last attempt belongs in the alert
+// card: it failed, rolled back or was interrupted while the install is still
+// below the release it tried, it could not be rolled back cleanly, or it
+// applied with warnings to the version running now. Anything else -- applied,
+// superseded, or a failure the install has since moved past -- is history,
+// the first card's quiet line.
+func attemptNeedsOwner(st update.Status, a update.AttemptResult) bool {
+	cur, ok := st.Current()
+	switch a.Outcome {
+	case update.OutcomeBroken:
+		return true
+	case update.OutcomeApplied:
+		return a.Warnings && (!ok || cur == a.To)
+	case update.OutcomeFailed, update.OutcomeRolledBack, update.OutcomeInterrupted:
+		return !ok || cur.Compare(a.To) < 0
+	}
+	return false
+}
+
+// attemptItem is the alert for an attempt that needs the owner: its head,
+// what it meant (with what automatic updates do next about its release:
+// skip it, or try again), and its details -- who started it and the
+// updater's own message -- in the hint, beside its log and, for one that
+// applied with warnings, the command that re-wires the agents.
+func attemptItem(st update.Status, a *updatesAttempt, skip *update.Block, backoff *update.Backoff, now time.Time) upAlertItem {
+	item := upAlertItem{Kind: "attempt", Tone: "warn", Line: a.Detail, At: a.At, Rewire: a.Rewire, Log: viewPath(a.LogPath)}
+	switch {
+	case a.Tone == "danger":
+		item.Tone = "danger"
+		item.Head = "The update to " + a.To + " could not be rolled back cleanly."
+	case a.Rewire:
+		item.Head = a.To + " applied with warnings."
+		item.Line = a.Detail + " Run seamlessd install-hooks to re-wire your agents."
+	case a.Code == update.OutcomeRolledBack:
+		item.Head = "The update to " + a.To + " rolled back."
+	case a.Code == update.OutcomeInterrupted:
+		item.Head = "The update to " + a.To + " did not finish."
+	default:
+		item.Head = "The update to " + a.To + " failed."
+	}
+	switch {
+	case skip != nil:
+		item.Line += " Automatic updates skip " + a.To + ": " + update.BlockWords(skip.Reason) + "."
+		item.Hint = skippedHint + " "
+	case backoff != nil:
+		item.Line += " " + backoffLine(*backoff) + "; automatic updates try again"
+		item.Until, item.UntilWords = backoff.Until, untilPhrase(backoff.Until, now)
+	}
+	item.Hint += a.From + " to " + a.To
+	if a.Why != "" {
+		item.Hint += ", " + a.Why
+	}
+	item.Hint += ": " + a.Outcome + "."
+	if a.Error != "" {
+		item.Hint += "\n\nThe updater said: " + a.Error
+	}
+	return item
 }
 
 // updateAlert is the banner every page carries while automatic updates are in

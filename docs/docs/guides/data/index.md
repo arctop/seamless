@@ -23,12 +23,12 @@ project holds. Like an export, it holds no config and no key.
 A release install (the installer's or Homebrew's) backs up **every day, keeping
 the newest 7**, in `~/.seamless/backups`. A Seamless built from source backs up only once you
 turn it on, so a throwaway daemon never writes backups. The section's
-**Schedule and folder** card sets:
+schedule sets:
 
 - **Back up automatically**, on or off;
-- **How often**: every hour, every 6 hours, every day or every week. The config
-  file can set any interval from `1h` to `720h`, and the list then shows it too;
-- **Automatic backups to keep**, from 1 to 100. Older automatic backups are
+- **How often**: hourly, every 6 hours, daily or weekly. The config file can
+  set any interval from `1h` to `720h`, and the choices then show it too;
+- **Keep**, from 1 to 100 automatic backups. Older automatic backups are
   deleted after the next one is written. Backups you make yourself, the safety
   backups taken before a restore and the updater's pre-update backups are never
   deleted automatically, and neither is another install's backup in a shared
@@ -36,15 +36,15 @@ turn it on, so a throwaway daemon never writes backups. The section's
 
 The first scheduled backup runs no sooner than ten minutes after Seamless
 starts. A run is skipped when nothing has changed since this install's newest
-backup in the folder (the card then says **Up to date**), or when the disk is
+backup in the folder (the first card then says **Nothing changed since**), or when the disk is
 short of room: a backup needs its own size free on each disk it touches, plus a
 reserve of 1 GiB or the backup's size, whichever is larger, so the updater can
 always take its own backup. **Back up now** makes one at once, whatever the
 schedule says.
 
 What you save there wins over the config file's
-[`backup:` block](https://thereisnospoon.org/docs/reference/configuration/#backups) until you press **Reset to
-the config file**, and applies from the next backup.
+[`backup:` block](https://thereisnospoon.org/docs/reference/configuration/#backups) until you press the source
+chip's **Reset**, and applies from the next backup.
 
 ### The folder
 

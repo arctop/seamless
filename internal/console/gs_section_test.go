@@ -178,11 +178,8 @@ func TestGsEngine_NoGardenerSwitches(t *testing.T) {
 // page's client map sends an old ?s=engine#settings-gardener there.
 func TestGsLinks_PointAtTheGardenerSection(t *testing.T) {
 	old := regexp.MustCompile(`s=engine#settings-gardener|s=engine&[^"']*#settings-gardener`)
-	// Your setup's Gardener row is UX 36's (the updates agent's file in the
-	// same wave): it moves to ?s=gardener there.
-	pending := map[string]bool{"templates/settings_setup.html": true}
 	err := fs.WalkDir(templateFS, "templates", func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || pending[path] {
+		if err != nil || d.IsDir() {
 			return err
 		}
 		src, rerr := templateFS.ReadFile(path)

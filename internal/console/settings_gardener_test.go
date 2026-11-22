@@ -314,8 +314,8 @@ func TestAaSettingsGardener_FileFalseLocksTheSwitch(t *testing.T) {
 }
 
 // The Gardener section renders both controls as switches with where each
-// came from, one switch per AutoSafe kind, and Your setup states both in one
-// line.
+// came from, one switch per AutoSafe kind, and Your setup states both as
+// chips (UX 36).
 func TestAaSettingsGardener_Renders(t *testing.T) {
 	c := newAaConsole(t, config.Gardener{})
 	get := func(section string) string {
@@ -333,7 +333,8 @@ func TestAaSettingsGardener_Renders(t *testing.T) {
 		require.Contains(t, page, `<input type="checkbox" role="switch" name="auto" value="`+k+`" aria-labelledby="gs-auto-`+k+`">`, k)
 	}
 	require.Equal(t, len(gardener.AutoSafeKinds()), strings.Count(page, `name="auto" value=`))
-	require.Contains(t, get("setup"), "agents may apply proposals; nothing applies by itself")
+	require.Contains(t, get("setup"), `<span class="badge compact quiet">agents apply</span>`)
+	require.NotContains(t, get("setup"), "by themselves</span>", "nothing applies by itself")
 
 	ctx := context.Background()
 	require.NoError(t, store.SetGardenerOverride(ctx, c.db, config.GardenerOverride{AgentsMayApply: new(false),
@@ -345,7 +346,9 @@ func TestAaSettingsGardener_Renders(t *testing.T) {
 	require.Contains(t, page, "Whether agents may apply proposals is set here. The kinds that apply automatically are set here.")
 	require.Contains(t, page, `<button class="btn small src-chip-reset" type="submit" form="gardener-reset">Reset</button>`)
 	require.Contains(t, page, `action="/console/settings/gardener/reset"`)
-	require.Contains(t, get("setup"), "only you apply proposals; memory wanted apply by themselves")
+	setup := get("setup")
+	require.Contains(t, setup, `<span class="badge compact quiet">only you apply</span><span class="badge compact quiet">1 by themselves</span>`)
+	require.Contains(t, setup, "Applied by themselves: memory wanted.")
 }
 
 // The frozen contract the Gardener screen reads, and the guard: a failed read

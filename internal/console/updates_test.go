@@ -187,7 +187,8 @@ func storedOverride(t *testing.T, db *sql.DB) (config.UpdateOverride, bool) {
 
 func boolPtr(b bool) *bool { return &b }
 
-// Settings > Updates in each state the check can be in.
+// Settings > Updates in each state the check can be in: the first card, the
+// check switch and its line, and the alert card when the checker stopped.
 func TestUpdatesSection_Renders(t *testing.T) {
 	now := time.Now()
 	locked := config.Update{Check: boolPtr(false)}
@@ -205,17 +206,19 @@ func TestUpdatesSection_Renders(t *testing.T) {
 			want: []string{
 				`<span class="src-chip is-file">`, `<span class="src-chip-label">Config file</span>`,
 				"The build&#39;s default: release builds check for updates and builds from source do not.",
-				`<span class="badge ok">Notify</span>`, "this install is told about new releases",
-				"One anonymous request to <span class=\"mono\">api.github.com</span> every 6 hours",
-				`<span class="mono">v0.7.2</span><span class="faint">release build</span>`,
-				`<span class="mono">seamlessd update</span>`,
-				`<strong class="mono">v0.7.2</strong>`, "published 2026-10-01", `<span class="badge ok">up to date</span>`,
+				"One anonymous request to api.github.com every 6 hours. Nothing about this install is sent: no version, host or identifier.",
+				`<span class="up-version mono">v0.7.2</span>`, `<span class="up-sub">release build &middot; installed by the installer</span>`,
+				`<span class="up-kicker">To update</span><span class="mono">seamlessd update</span>`,
+				"Seamless tells you about new releases and never installs one by itself here: no updater is wired into this daemon.",
+				"Up to date</span>", "v0.7.2 is the newest", "published 2026-10-01",
 				`href="https://github.com/arctop/seamless/releases/tag/v0.7.2"`,
-				"4m ago", "next check in 5h 30m",
-				`<form method="post" action="/console/settings/updates" aria-label="Check for updates">`,
-				"Turn update checks off", `<input type="hidden" name="check" value="off">`,
+				"Last checked ", "4m ago", " &middot; next ", ">in 5h 30m</time>",
+				`<form method="post" action="/console/settings/updates" id="updates-check-form" data-autosave>`,
+				`<input type="hidden" name="check" value="off">`,
+				`<input type="checkbox" role="switch" name="check" value="on" aria-label="Check for new releases" checked>`,
 			},
-			absent: []string{"update available", `id="updates-reset"`, "updates-error", "role=\"alert\"", "disabled"},
+			absent: []string{" is out", `id="updates-reset"`, "up-warn", `role="alert"`, "disabled", "/console/settings/updates/auto",
+				"/console/settings/updates/apply"},
 		},
 		{
 			name: "update available",
@@ -224,10 +227,11 @@ func TestUpdatesSection_Renders(t *testing.T) {
 				st.Available = true
 			},
 			want: []string{
-				`<strong class="mono">v0.7.3</strong>`, "published 2026-10-08", `<span class="badge warn">update available</span>`,
+				`<span class="badge accent up-chip">`, "v0.7.3 is out &middot; ", ">2026-10-08</time>",
 				`href="https://github.com/arctop/seamless/releases/tag/v0.7.3"`,
 			},
-			absent: []string{"up to date"},
+			// No updater is wired: updating stays a command, never a button.
+			absent: []string{"Up to date", "/console/settings/updates/apply"},
 		},
 		{
 			name: "a streak of failed checks",
@@ -238,9 +242,11 @@ func TestUpdatesSection_Renders(t *testing.T) {
 				}
 			},
 			want: []string{
-				`class="updates-error"`, "The last 3 checks failed, the first 2h ago (rate limited by GitHub)",
+				`<span class="set-row-sub up-warn">`, "The last 3 checks failed, the first 2h ago (rate limited by GitHub)",
+				`aria-label="About the failed checks"`,
 				"update: GitHub API rate limited (403 Forbidden); next request after 2026-10-09T18:00:00Z",
 			},
+			absent: []string{`role="alert"`},
 		},
 		{
 			name: "never succeeded",
@@ -249,7 +255,9 @@ func TestUpdatesSection_Renders(t *testing.T) {
 				st.CheckError = &update.CheckError{Kind: update.CheckErrorUnavailable, Count: 1, Since: now.Add(-10 * time.Minute),
 					Message: "update.Fetch: update: release list unavailable: unexpected status 503 Service Unavailable"}
 			},
-			want: []string{"No check has succeeded yet", "The last check failed 10m ago (GitHub could not be reached)", "Not checked yet"},
+			want:   []string{"The last check failed 10m ago (GitHub could not be reached)", "No release known yet"},
+			absent: []string{"Last checked", "Release notes"},
+			once:   []string{"No check has succeeded yet"},
 		},
 		{
 			name: "locked off by the config file",
@@ -260,16 +268,14 @@ func TestUpdatesSection_Renders(t *testing.T) {
 			want: []string{
 				// The file decides the whole section: the head's chip says so,
 				// with where to change it in its hint, and the switch it
-				// governs is disabled, with no sentence of its own.
+				// governs is locked, with no sentence or chip of its own.
 				`<span class="src-chip is-locked">`,
 				"update.check: false is set in the config file or SEAMLESS_UPDATE_CHECK, so this install makes no update request and installs nothing by itself; change it there.",
-				`<span class="badge">Off</span>`,
-				"update checks are off (update.check: false in the config file or environment)",
-				"Nothing: with checks off, this install makes no update request at all.",
-				`<button class="btn small primary" type="submit" disabled>Turn update checks on</button>`,
+				`<span class="set-row-sub">Off: this install makes no update request.</span>`,
+				`<input type="checkbox" role="switch" name="check" value="on" aria-label="Check for new releases" disabled>`,
 			},
-			absent: []string{`id="updates-reset"`, "next check", "Set in the config file or environment", `class="updates-note"`, "src-chip-reset"},
-			once:   []string{"Config file decides", "SEAMLESS_UPDATE_CHECK"},
+			absent: []string{`id="updates-reset"`, "next", `name="check" value="off"`, `class="updates-note"`, "src-chip-reset", "Check now"},
+			once:   []string{"Config file decides", "SEAMLESS_UPDATE_CHECK", "update.check", `<span class="src-chip `},
 		},
 		{
 			name: "turned off in the console",
@@ -281,10 +287,9 @@ func TestUpdatesSection_Renders(t *testing.T) {
 				"Update checks are set here, which wins over the config file and the build&#39;s default until you reset it.",
 				`<button class="btn small src-chip-reset" type="submit" form="updates-reset">Reset</button>`,
 				`<form id="updates-reset" method="post" action="/console/settings/updates/reset"></form>`,
-				"update checks are off (turned off in the console)",
-				`<button class="btn small primary" type="submit">Turn update checks on</button>`,
+				`<input type="checkbox" role="switch" name="check" value="on" aria-label="Check for new releases">`,
 			},
-			absent: []string{"SEAMLESS_UPDATE_CHECK; change it there"},
+			absent: []string{"SEAMLESS_UPDATE_CHECK; change it there", `name="check" value="off"`, "Check now"},
 		},
 		{
 			name: "source build, off by default",
@@ -298,22 +303,22 @@ func TestUpdatesSection_Renders(t *testing.T) {
 				}
 			},
 			want: []string{
-				`<span class="mono">0.0.0-dev</span><span class="faint">built from source</span>`,
-				"builds from source do not check unless update.check is true",
-				"git pull &amp;&amp; make install", "Not checked yet", "The build&#39;s default: release builds check",
+				`<span class="up-version mono">0.0.0-dev</span>`, `<span class="up-sub">built from source</span>`,
+				"git pull &amp;&amp; make install", "No release known yet", "The build&#39;s default: release builds check",
 			},
-			absent: []string{"make install, go install or go build", "next check", "up to date"},
+			absent: []string{"make install, go install or go build", "next", "Up to date", "About updating by hand"},
 		},
 		{
 			name:   "a stopped checker",
 			mutate: func(st *update.Status) { st.Stopped = true },
 			want: []string{
-				`<p class="updates-alert" role="alert">`, "The update checker stopped after an internal error.",
-				"restart it to revive the check", `disabled title="The update checker is not running"`,
-				"Turn update checks off", // the switch still stores, for the next start
-				`<span class="badge">Notify</span>`,
+				`<div class="up-alert is-danger" role="alert">`, `data-alert="stopped"`,
+				"The update checker stopped after an internal error.", "restart it to revive the check",
+				`disabled title="The update checker is not running"`,
+				// The switch still stores, for the next start.
+				`<input type="checkbox" role="switch" name="check" value="on" aria-label="Check for new releases" checked>`,
 			},
-			absent: []string{"next check", `<span class="badge ok">Notify</span>`},
+			absent: []string{" &middot; next "},
 		},
 		{
 			name: "homebrew: told, with the brew command",
@@ -321,7 +326,8 @@ func TestUpdatesSection_Renders(t *testing.T) {
 				st.Install = update.Install{Kind: update.KindHomebrew, Reason: "installed by Homebrew, which owns its files",
 					Hint: update.Hint(update.KindHomebrew)}
 			},
-			want: []string{"installed by Homebrew, which owns its files", "brew upgrade --cask arctop/tap/seamless"},
+			want: []string{"installed by Homebrew, which owns its files", "brew upgrade --cask arctop/tap/seamless",
+				`<span class="up-sub">release build &middot; installed by Homebrew</span>`},
 		},
 	}
 	for _, tt := range tests {
@@ -341,13 +347,16 @@ func TestUpdatesSection_Renders(t *testing.T) {
 			for _, one := range tt.once {
 				require.Equal(t, 1, strings.Count(sec, one), "%q is said once", one)
 			}
+			// Check now asks GitHub at once: there only while checks are on,
+			// and disabled exactly when it can only fail, the checker stopped.
 			check := formFor(sec, "/console/settings/updates/check")
-			require.NotEmpty(t, check, "Check now is a POST form")
-			require.Contains(t, check, `method="post"`)
-			require.Equal(t, !st.Settings.Check || st.Stopped, strings.Contains(check, "disabled"),
-				"Check now is disabled exactly when it can only fail: checks off, or the checker stopped")
-			// A Homebrew install's reason is the mode line while checking:
-			// said once, not twice.
+			require.Equal(t, st.Settings.Check, check != "", "Check now is offered while checks are on")
+			if check != "" {
+				require.Contains(t, check, `method="post"`)
+				require.Equal(t, st.Stopped, strings.Contains(check, "disabled"))
+			}
+			// The install's reason is said once, in the hint beside the
+			// command.
 			if st.Install.Reason != "" {
 				require.LessOrEqual(t, strings.Count(sec, st.Install.Reason), 1, "the install's reason appears once")
 			}
@@ -385,7 +394,8 @@ func TestUpdatesSave_StoresTheSwitch(t *testing.T) {
 
 		sec := updatesSection(t, mux)
 		require.Contains(t, sec, `<span class="src-chip-label">Set here</span>`, "the page the redirect lands on shows the new state")
-		require.Contains(t, sec, "Turn update checks on")
+		require.Contains(t, sec, `<input type="checkbox" role="switch" name="check" value="on" aria-label="Check for new releases">`)
+		require.NotContains(t, sec, `name="check" value="off"`, "an unchecked switch posts check=on alone")
 
 		param, msg = locationOf(t, postForm(mux, "/console/settings/updates", "check=on"))
 		require.Equal(t, "notice", param)

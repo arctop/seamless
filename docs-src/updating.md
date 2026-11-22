@@ -226,8 +226,9 @@ installs no installer's service; its updater swaps the binaries in place and
 the service manager restarts the daemon. Any other peer_auth layout is only
 told, and `seamlessd update` refuses one.
 
-**Settings -> Updates** (its **Mode** row) and `seamlessd update --check` (its
-`mode` row) say which kind this install is, and why. That last rule is why the update keys belong in the
+**Settings -> Updates** (its first card, and the **Install updates by
+themselves** switch an install that updates itself shows) and `seamlessd update
+--check` (its `mode` row) say which kind this install is, and why. That last rule is why the update keys belong in the
 config file, not the service's environment: `SEAMLESS_UPDATE_AUTO=true` there
 does not turn automatic updates on, it makes the install notify-only. How the
 daemon starts the updater on each OS is under
@@ -364,8 +365,8 @@ running backoff run out.
 
 For a week after automatic updates pause or an update the daemon started does
 not apply, every console page carries a banner pointing to
-**Settings -> Updates**, where **Last attempt** has the updater's own error and
-its log. New sessions' briefings mention a pause, or a release that is now
+**Settings -> Updates**, whose alert card has the attempt with the updater's own
+error and its log. New sessions' briefings mention a pause, or a release that is now
 skipped, as your action, not theirs. `seamlessd doctor` reports the same on its
 `updates` row. [An automatic update failed](/guides/troubleshooting/#an-automatic-update-failed)
 says how to read it and recover.
@@ -443,7 +444,7 @@ Installing an older release on purpose - `SEAMLESS_VERSION=0.7.1 seamlessd
 update`, or the installer with that knob - sets a hold, so automatic updates do
 not undo your choice: they skip every release up to the one you left, or the
 newest one the daemon knew of, whichever is higher. A release above that is
-taken as usual. **Resume automatic updates** or **Update now** lifts the hold,
+taken as usual. **Resume** (in **Settings -> Updates**) or **Update now** lifts the hold,
 and it ends by itself once the install reaches that version again. A rollback
 is not a choice, and sets no hold.
 
@@ -471,9 +472,9 @@ update:
 
 The daemon still checks and tells you, and installing stays yours:
 `seamlessd update`, or **Update now**. Like `check: false`, it is final: the
-console shows its switch locked. With the key left out, **Turn automatic updates
-off** in **Settings -> Updates** does the same at runtime, and **Reset to the
-config file** hands both switches back to the file. As with checks, turning
+console shows its switch locked. With the key left out, turning **Install
+updates by themselves** off in **Settings -> Updates** does the same at runtime,
+and the source chip's **Reset** hands both switches back to the file. As with checks, turning
 automatic updates off there is yours alone: an agent's process on the peer_auth
 socket and a paired device may turn them on, never off. `update.check: false`
 turns off the check and, with it, every automatic update.

@@ -1378,8 +1378,8 @@ until you turn them off. The layout above is all it needs:
   `SEAMLESS_CONFIG`, never reaches the updater, so it makes the daemon only
   notify.
 
-**Settings -> Updates** (its **Mode** row) reads "installs new releases by
-itself", or names what is missing. A daemon set up with root-owned binaries
+**Settings -> Updates** shows the **Install updates by themselves** switch, or,
+beside **To update**, a hint that names what is missing. A daemon set up with root-owned binaries
 needs `sudo chown -R _seamless:_seamless /opt/seamless/bin`, on Linux the
 linger, and a restart. Turn automatic updates off with the toggle there (your
 decision alone: an agent's process on the socket, and a paired device but for

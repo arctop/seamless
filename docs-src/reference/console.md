@@ -88,7 +88,7 @@ nothing, and their rows say so.
 | Dismiss the welcome card | `POST /console/settings/level/welcome` | Records that the Overview welcome card was seen, without choosing a level. With the card's write-screening box ticked, it also turns that feature on, as a level choice with the box ticked does. |
 | Save optional features | `POST /console/settings/features` | Writes every feature switch as a stored **override row** in the DB; a switch posts the whole form as soon as it changes. It changes what is exposed - console screens and the matching agent tools - and deletes nothing. |
 | Reset optional features | `POST /console/settings/features/reset` | Clears the override row, reverting to the file/env configuration - which, unless you set the keys there, means every optional feature is off again. Still deletes nothing. |
-| Turn update checks on or off | `POST /console/settings/updates` | Stores the console's `update.check` override (`check=on` or `off`). It cannot turn checks on while the config file or environment says `update.check: false` - that is final, and the form says so. Off is your decision alone: refused (403) from an agent's process on the peer_auth socket and from a paired device, whatever checks are now; on is open to them. Installs nothing. |
+| Turn update checks on or off | `POST /console/settings/updates` | Stores the console's `update.check` override (`check=on` or `off`). It cannot turn checks on while the config file or environment says `update.check: false` - that is final, and the switch is locked. Off is your decision alone: refused (403) from an agent's process on the peer_auth socket and from a paired device, whatever checks are now; on is open to them. Installs nothing. |
 | Reset update checks | `POST /console/settings/updates/reset` | Clears that override - both switches - handing them back to the config file (or, without one, the build's default). A build that is not a published release does not check by default, so there a reset that drops this console's `check=on` turns checks off, and automatic updates with them: it is refused like turning them off, unless the file or environment locks checks off already. It is refused even where the file's `update.check: true` would keep them on, since the console cannot see the file's update block under its own override. Every other reset, and every reset on a release build, is open to any caller. |
 | Check for updates now | `POST /console/settings/updates/check` | Asks GitHub's release list once, right away - refused while checks are off or within a minute of the last check. Reads; installs nothing. |
 | Turn automatic updates on or off | `POST /console/settings/updates/auto` | Stores the console's `update.auto` override (`auto=on` or `off`), keeping its `update.check`. It cannot turn automatic updates on while the config file or environment says `update.auto: false`, or locks `update.check: false` (nothing installs without checks). With checks merely off, the choice is kept and applies once they are back on. Off is your decision alone, refused as turning checks off is; on is open to any caller. Only an install that updates itself acts on it: the installer's, or a [peer_auth system daemon](/guides/peer-auth/#updates)'s. |
@@ -98,7 +98,7 @@ nothing, and their rows say so.
 | Reset the gardener's switches | `POST /console/settings/gardener/reset` | Clears that override - both switches - handing them back to the config file. Refused from an agent's process and from a paired device, as saving is. |
 | Save the backup schedule and folder | `POST /console/settings/backups` | Stores the console's `backup:` override: only the values that differ from the settings in force. A new folder is created and tested with a write first. Applies from the next backup. |
 | Reset the backup settings | `POST /console/settings/backups/reset` | Clears that override, handing the schedule and the folder back to the config file (or, without one, the build's default). |
-| Back up now | `POST /console/settings/backups/now` | Writes a backup at once, marked **Made by you**: never skipped, never deleted automatically. With `run=retry` (the failing card's **Try again**) it runs the schedule's backup instead, which is skipped when nothing changed and prunes after itself. Refused while a backup runs or a restore is being prepared. |
+| Back up now | `POST /console/settings/backups/now` | Writes a backup at once, marked **Made by you**: never skipped, never deleted automatically. With `run=retry` (the alert card's **Try again**) it runs the schedule's backup instead, which is skipped when nothing changed and prunes after itself. Refused while a backup runs or a restore is being prepared. |
 | Delete a backup | `POST /console/settings/backups/delete` | `ref=` a backup from the list, never a path. Removes the file from its folder, after a confirm. |
 | Begin a restore's passkey ceremony | `POST /console/settings/backups/restore/begin` | Only while [peer_auth](/guides/peer-auth/#restore) locks a project, and only from a signed-in browser. Returns a WebAuthn challenge bound to the backup file's SHA-256, which the server reads from the file itself, and to the mode. Writes nothing. A begin never waits for room: at most 4 ceremonies wait at once for one backup and mode, and 32 in all, so a begin past 4 displaces the oldest for its backup and mode, and one past 32 the oldest of the backup and mode holding the most. A displaced ceremony's finish says it expired. |
 | Restore a backup | `POST /console/settings/backups/restore` | `ref=` and `mode=replace` or `merge`. Verifies the backup and prepares the restore while Seamless serves, then restarts to finish it. A replace saves today's data as a backup first. Refused while a backup, another restore or an update is under way. Under the passkey gate it also needs the ceremony's `id` and `response`, and the file's digest must still match. |
@@ -2461,73 +2461,105 @@ data-kept chip, and leaves out the agent tool names and the source chip.
 
 `/console/settings?s=setup`
 
-Read-only facts in plain words: the version, the machine the daemon runs on, the
-config file (with a link that opens it in your editor, or a note that the daemon
-runs on defaults and environment variables), the data folder, the database file
-and its size, which agent clients have recorded sessions and when each was last
-active, whether semantic recall is on - and when it is off, what to do about it -
-whether the gardener is running and how often, how often backups run, how many
-are kept and when the last one was made, and links to these docs. No
-budgets or policy numbers: those live in Knowledge engine.
+What runs where, as one card of rows. Each value is a chip or a short path, the
+detail is one hover away in a hint, and each row whose value can change links
+to the section that changes it:
+
+- **Version**, with the Updates section's state chip (**Up to date**, **v0.7.3
+  ready**, **Checks off** and so on) and a link to [Updates](#updates);
+- **Running on**: the machine, and under [peer_auth](/guides/peer-auth/) the
+  account the daemon runs as;
+- **Config file**, with a copy button and **Open in editor** - or **None**,
+  when the daemon runs on its defaults and environment variables;
+- **Data folder**, with a copy button, and the database's size (its path in
+  the hover);
+- **Agents connected**: one chip per agent client that has recorded sessions,
+  with when it was last active;
+- **Semantic recall**: **semantic** and the model, or **keywords only**, with
+  what to do about it in a hint and a link to the troubleshooting guide; the
+  row links to [Knowledge engine](#knowledge-engine);
+- **Backups**, where a backup service runs: the Backups section's state chip,
+  how often they run and how many are kept, and a link to [Backups](#backups);
+- **Gardener**: **agents apply** or **only you apply**, how many kinds apply by
+  themselves, and **suggestions off** while its passes are off - its cadence in
+  a hint - with a link to the Gardener section.
+
+A path under your home folder reads `~`, and a long one is shortened in the
+middle; its hover and its copy button hold the whole path. Links to these docs
+close the section. No budgets or policy numbers: those live in Knowledge engine.
 
 ### Updates
 
 `/console/settings?s=updates`
 
 The [automatic update check](/updating/#automatic-update-checks) and
-[automatic updates](/updating/#automatic-updates) in plain words: the **Mode** -
-whether this install checks for new releases, and whether it installs them by
-itself or only tells you, and why (a release build checks by default, a build
-from source does not, and only an install the installer made, or a peer_auth
-system daemon in the guide's layout, updates itself) -
-what a check sends (one anonymous request to `api.github.com` every few hours;
-nothing when checks are off), the installed version and kind of build, the
-command that updates this install (with a copy button, labeled **To update by
-hand** on an install that updates itself), the newest release with its date and
-release notes - or "up to date" - and when the daemon last checked and checks
-next, including a streak of failed checks and why.
+[automatic updates](/updating/#automatic-updates), what is true first.
+
+While something needs you, one alert card opens the section, worst first, each
+item with its action and its details in a hint: the update checker **stopped**
+after an internal error (restart the daemon); and on an install that updates
+itself, automatic updates **paused themselves** and releases **held back** after
+you went back to an older one (one **Resume** lifts both), releases automatic
+updates **skip**, and the **backoff** after a failed attempt, with when they try
+again. Last comes the **last attempt**, while it
+failed, rolled back or was interrupted below the release it tried, could not be
+rolled back cleanly, or applied with warnings (with `seamlessd install-hooks`,
+which re-wires your agents, and a copy button). Its line says what it meant -
+and, when the updater refused to start, the fix - and a skip or a backoff for
+the same release joins that line. Its log path has a copy button, and its hint
+holds the updater's own error: the one place in the console either appears.
+
+The first card shows the installed version, the kind of build and who installed
+it; the newest release, with its date and release notes, or **Up to date**; and
+an attempt that needs nothing from you, in one quiet line. On an install that
+updates itself, **Update to v0.7.3 now** installs the newest release at once
+after a confirm - skipping the soak, the idle wait, skipped releases and the
+backoff - and the daemon restarts to finish. While an update runs, the card
+says **Updating to v0.7.3** and its stage, and **Confirming v0.7.3** once the
+new version serves. On an install that does not update itself, the card ends
+with **To update**: the command that does, with a copy button, and why this
+install is only told in a hint.
+
+Then the switches, which save as you flip them, with **Undo** in the toast:
+
+- **Check for new releases**. Its hint says what a check sends: one anonymous
+  request to `api.github.com` every few hours, and nothing at all while it is
+  off. Its line says when the daemon last checked and checks next, or a streak
+  of failed checks and why, the error in a hint. **Check now** asks GitHub
+  once, right away (not more than once a minute).
+- **Install updates by themselves**, on an install that updates itself: the
+  installer's, or a peer_auth system daemon in the guide's layout. Its line
+  names the next update and what it waits for - the soak, live agent sessions,
+  or a lull after its deadline - and its hint says how an update installs and
+  the command that updates by hand.
+- **Owner-signed releases**, with
+  [`update.release_signers`](/updating/#owner-signed-releases) set in the
+  config file or environment: a **required** chip, the file in its hint, and
+  the last release it refused and why: it carried no owner's signature, was
+  signed by a key the file does not list, or its signature did not verify.
+  Without the key the row is not there. The console can neither set nor clear
+  it.
 
 The source chip says who decided the switches: **Config file** (the config
 file, or the build's default), or **Set here** with **Reset** when this console
-set either switch; its hint says which. Turning checks off from here always works for you; an
-agent's process on the peer_auth socket, and a paired device but for your own
-hands through a relay, may turn checks and automatic updates on, never off. Turning them on does not work when the config
-file or `SEAMLESS_UPDATE_CHECK` says `false`: that is final, the chip reads
-**Config file decides**, the switch is disabled, and the form refuses - `false`
-promises no update traffic at all. **Check now** asks GitHub once, right away (not more than
-once a minute).
-
-On an install that updates itself, the section adds **Automatic updates** - on
-or off, who decided, and **Turn automatic updates off** / **on**, which
-`update.auto: false` in the config file or environment locks off, with a
-**Config file decides** chip beside it - and, while
-they apply, **Next update** (the release it installs next and what it waits
-for: the soak, live agent sessions, or a lull after its deadline), **Paused**,
-**Held back**, **Skipped releases** and **Next try**. **Updating now** and
-**Last attempt** appear whenever there is one; **Last attempt** carries the
-outcome, the updater's own error and its log path - the one place in the
-console either appears - and, when the updater refused to start, the fix.
-**Update to v0.7.3 now** installs the newest release at once after a confirm -
-skipping the soak, the idle wait, skipped releases and the backoff - and the
-daemon restarts to finish. **Resume automatic updates** appears while they are
-paused or holding releases back.
-
-With [`update.release_signers`](/updating/#owner-signed-releases) set in the
-config file or environment, an **Owner-signed releases** row names the file
-the updater holds every release to, and the last release it refused and why:
-it carried no owner's signature, was signed by a key the file does not list,
-or its signature did not verify. Without the key the row is not there. The
-console can neither set nor clear it.
+set either switch; its hint says which. Turning a switch off from here always
+works for you; an agent's process on the peer_auth socket, and a paired device
+but for your own hands through a relay, may turn checks and automatic updates
+on, never off. `update.check: false` in the config file or
+`SEAMLESS_UPDATE_CHECK` is final and decides the whole section: the head's chip
+reads **Config file decides**, the switches are locked, and saving checks on is
+refused - `false` promises no update traffic at all. `update.auto: false` is
+final for its own switch, so its **Config file decides** chip sits beside it.
 
 When a newer release is out, the Overview health strip's version fact turns into
 `v0.7.2 -- v0.7.3 available` and links here - its hover says whether it installs
 by itself, and when - and a toast announces it if the console is open when the
 daemon finds it. While an update runs, the fact reads `v0.7.2 -- updating to
 v0.7.3`, and once v0.7.3 is serving and the updater is only confirming it,
-`v0.7.3 -- confirming the update` (**Updating now** says **confirming** too).
-The daemon re-reads the updater's record every few seconds while an update
-runs, so both clear soon after it is confirmed. For a day after the daemon
-starts on a new version, every page carries
+`v0.7.3 -- confirming the update` (the first card says **Confirming v0.7.3**
+too). The daemon re-reads the updater's record every few seconds while an
+update runs, so both clear soon after it is confirmed. For a day after the
+daemon starts on a new version, every page carries
 a banner - "Seamless updated to v0.7.3 (from v0.7.2)" - with the release notes
 and **Got it**, which hides it in this browser. It also says when Codex's hooks
 changed with the update (re-approve them in Codex's `/hooks`) or the installer
@@ -2542,34 +2574,33 @@ are in trouble too, the two warnings share one row with one **Got it**.
 
 Scheduled backups of the whole instance into one folder you choose, the
 backups found there, and restore. [Backups in the console](/guides/data/#backups-in-the-console)
-walks through it; this is what each card holds.
+walks through it; this is what each card holds, what is true first.
 
-**Automatic backups**, the status card:
+While something needs you, one alert card opens the section, worst first: the
+backup service **stopped** after an internal error; **Automatic backups are
+failing** - how many automatic runs failed in a row and since when, the last
+one's error, and its reason in a hint - with **Try again**, which runs the
+schedule's backup now; and **Your backup did not finish**, with its error.
 
-- whether automatic backups are on, how often they run and how many are kept -
-  or why they are off: turned off here, `backup.auto: false` in the config
-  file, or a build from source, which backs up only when you turn it on;
-- the newest backup: when, its size, and how many memories and notes in how
-  many projects it holds;
-- when the next backup runs, or **Up to date: nothing has changed since the
-  last backup**, with when it checks next;
-- a backup under way, while it runs;
-- the automatic runs' failure streak - how many failed in a row, since when,
-  and the last one's reason - with **Try again**, which runs the schedule's
-  backup now;
-- the folder, with a copy button, and **Back up now**, which makes a backup
-  marked **Made by you** whatever the schedule says.
+The first card says when the last backup ran - **Backed up 2h ago**, with its
+size and what it holds in a hint - or **No backup yet**, or the backup under
+way. Its line says when the next one runs (or **Nothing changed since**, with
+when it checks next) or that automatic backups are off, how many are kept, and
+the newest backup's size. The folder is a short chip with a copy button, the
+whole path in its hover, and **Back up now** makes a backup marked **Made by
+you** whatever the schedule says. Its mark is green while backups run on time,
+amber while automatic backups have made none yet, are overdue or are failing,
+red when the service stopped, and grey while they are off.
 
-**Schedule and folder**, the form:
+The schedule, a form with a Save bar, since it holds typed values:
 
-- **Back up automatically**. A run is skipped when nothing has changed since
-  the last backup, or when the disk is short of room.
-- **How often**: Every hour, Every 6 hours, Every day or Every week. An
-  interval set in the config file (anything from `1h` to `720h`) shows among
-  them as itself.
-- **Automatic backups to keep**, 1 to 100. Older automatic backups are deleted
-  after the next one. Backups you make yourself and safety backups are never
-  deleted automatically.
+- **Back up automatically**, a switch. A run is skipped when nothing has
+  changed since the last backup, or when the disk is short of room.
+- **How often**: Hourly, 6 hours, Daily or Weekly. An interval set in the
+  config file (anything from `1h` to `720h`) shows among them as itself.
+- **Keep**, 1 to 100 automatic backups. Its hint says older automatic backups
+  are deleted after the next one, and backups you make yourself and safety
+  backups never are.
 - **Folder**, with a live check as you type (it only looks, never writes) and
   chips for the places on this machine this account can write to: iCloud
   Drive, cloud folders and external disks on macOS, Dropbox and external disks
@@ -2593,9 +2624,12 @@ pre-update backups stay). Each row has:
   notes the project holds now. A locked project shows its name and the backup's
   counts, never what it holds now. A project that is no longer here says so,
   and one that is only here now shows dashes;
-- **Restore…** and **Delete**. An iCloud placeholder (download it in Finder
-  first) and a backup a newer Seamless made (update to restore it) cannot be
-  restored and say why.
+- **Restore…** and **Delete**, which asks in place first. An iCloud
+  placeholder (download it in Finder first) and a backup a newer Seamless made
+  (update to restore it) cannot be restored and say why.
+
+The list's title carries a hint: where these backups come from, and that a
+locked project shows what the backup holds of it, never what it holds now.
 
 **Restore…** opens a confirm card in the backup's row, with a link that works
 without script:
@@ -2629,8 +2663,8 @@ not finish, expired or stopped partway says so there instead.
 
 Elsewhere:
 
-- **Settings > Your setup** has a **Backups** row: how often, how many are
-  kept, and the last backup.
+- **Settings > Your setup** has a **Backups** row: the Backups section's state
+  chip, how often they run, and how many are kept.
 - Every page carries an alert while automatic backups are in trouble, linking
   here. **Automatic backups are failing.** appears when two automatic runs in a
   row did not finish, with the first failure's time and the reason.
@@ -2679,7 +2713,7 @@ The section's sub-nav state says what the gardener may change without you:
 automatic**, **Suggestions off**, or **Unreadable** (amber) while the stored
 switches cannot be read. An old link to the switches' place in Knowledge
 engine (`?s=engine#settings-gardener`) opens this section. **Your setup**
-states both switches in one line, with a link here.
+shows both as chips, with a link to this section.
 
 ### Briefing
 

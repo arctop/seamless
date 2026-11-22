@@ -56,6 +56,9 @@ type backupsPanel struct {
 	Status backupsStatus
 	Form   backupsForm
 	List   backupsList
+	// Alert is the one alert card the section opens with while the service
+	// stopped or the schedule is failing, nil otherwise.
+	Alert *upAlertCard
 
 	// The restore side: the last restore's result until dismissed, a
 	// preparation that failed, the steps of one under way, and the confirm
@@ -74,32 +77,39 @@ type backupsPanel struct {
 	BackingUp bool
 }
 
-// backupsStatus is the status card.
+// backupsStatus is the first card: when it last ran, what comes next, how
+// many are kept, the folder, and Back up now.
 type backupsStatus struct {
-	// Badge is the state chip's word and Tone its badge class ("ok", "warn",
-	// "danger", "accent", "" for neutral): the chip is text, never colour
+	// Tone is the card's ("ok", "warn", "danger", "accent", "quiet") and
+	// Icon its mark's glyph; the title says the state in words, never colour
 	// alone.
-	Badge, Tone string
-	// Lead says whether automatic backups run, how often and how many stay.
-	Lead string
-	// Last is the newest backup this install made, LastAt its time; None
-	// stands in before there is one.
+	Tone, Icon string
+	// Last is the newest backup this install made, in a sentence (its size
+	// and what it holds), the title's hint; LastAt its time, the title.
+	// None stands in before there is one.
 	Last   string
 	LastAt time.Time
 	None   string
-	// Next is when the next automatic backup runs, or that nothing changed.
+	// Next is when the next automatic backup runs, or that nothing changed,
+	// NextAt exactly when; Off says automatic backups are off instead.
 	Next   string
 	NextAt time.Time
+	Off    bool
+	// Kept is how many automatic backups stay ("7 kept"), "" while they are
+	// off, and Size the newest backup's size.
+	Kept string
+	Size string
+	// Sub is the line under the title: Next (or Off), Kept and Size, those
+	// that apply, in that order.
+	Sub []upTimed
 	// Running is the backup under way, RunningAt when it started.
 	Running   string
 	RunningAt time.Time
-	// Failing is the automatic runs' failure streak; nil without one.
-	Failing *backupsFailing
-	// ManualFailed says the owner's own last backup did not finish.
-	ManualFailed string
-	// Folder is where backups go; FolderLocal marks Seamless's own folder,
-	// and FolderProblem what is wrong with the folder when it cannot be read.
+	// Folder is where backups go, FolderShort the chip's words for it;
+	// FolderLocal marks Seamless's own folder, and FolderProblem what is
+	// wrong with the folder when it cannot be read.
 	Folder        string
+	FolderShort   string
 	FolderLocal   bool
 	FolderProblem string
 	// BackUpNowBlocked says why Back up now cannot run, "" when it can.
@@ -107,15 +117,6 @@ type backupsStatus struct {
 	// Notes are the service's own problems: a stored setting it could not
 	// read, a record it could not save.
 	Notes []string
-}
-
-// backupsFailing is the failing card.
-type backupsFailing struct {
-	Line  string
-	Error string
-	Since time.Time
-	// RetryBlocked says why Try again cannot run, "" when it can.
-	RetryBlocked string
 }
 
 // backupsForm is the schedule form.
@@ -142,10 +143,11 @@ type backupsForm struct {
 	SourceNote string
 }
 
-// backupsOption is one How often choice.
+// backupsOption is one How often choice: Label its segment's word, Title its
+// whole name.
 type backupsOption struct {
-	Value, Label string
-	Selected     bool
+	Value, Label, Title string
+	Selected            bool
 }
 
 // backupsChip is one suggested place for the folder.
@@ -174,6 +176,9 @@ type backupsList struct {
 	Local string
 	// Locked reports a locked project the comparisons leave out.
 	Locked bool
+	// Hint says, one hover from the card's title, where the backups come
+	// from (Local) and what a locked project shows (Locked).
+	Hint string
 }
 
 // backupRow is one backup in the list.
@@ -331,6 +336,7 @@ func (s *Service) backupsPanelFor(r *http.Request, now time.Time) backupsPanel {
 	local := filepath.Clean(backup.LocalDir(s.cfg.DataDir))
 
 	p.Status = backupsStatusFor(st, listing, lerr, now)
+	p.Alert = backupsAlertFor(st)
 	p.Form = s.backupsFormFor(st, local)
 	counts := s.nowCounts(ctx)
 	busy := restoreBusyWords(st)
@@ -374,25 +380,31 @@ func backupsLead(set backup.Settings) string {
 	return "Automatic backups are off: a Seamless built from source does not back up by itself."
 }
 
-// backupsStatusFor builds the status card.
+// backupsStatusFor builds the first card.
 func backupsStatusFor(st backup.Status, listing backup.Listing, lerr error, now time.Time) backupsStatus {
 	set := st.Settings
-	c := backupsStatus{Lead: backupsLead(set), Folder: set.Dir, FolderLocal: set.DirIsLocal}
+	c := backupsStatus{Folder: set.Dir, FolderShort: viewPath(set.Dir).Short, FolderLocal: set.DirIsLocal, Off: !set.Auto}
 	switch {
 	case st.Stopped:
-		c.Badge, c.Tone = "Stopped", "danger"
+		c.Tone, c.Icon = "danger", "triangle-alert"
 	case st.Running != nil:
-		c.Badge, c.Tone = "Backing up", "accent"
+		c.Tone, c.Icon = "accent", "loader"
 	case set.Auto && st.Failures > 0:
-		c.Badge, c.Tone = "Failing", "warn"
-	case set.Auto:
-		c.Badge, c.Tone = "On", "ok"
+		c.Tone, c.Icon = "warn", "triangle-alert"
+	case !set.Auto:
+		c.Tone, c.Icon = "quiet", "archive"
+	case st.Alert(now) || st.LastBackup == nil:
+		c.Tone, c.Icon = "warn", "clock"
 	default:
-		c.Badge = "Off"
+		c.Tone, c.Icon = "ok", "check"
+	}
+	if set.Auto {
+		c.Kept = strconv.Itoa(set.Keep) + " kept"
 	}
 	if b := st.LastBackup; b != nil {
 		c.LastAt = b.At
-		c.Last = "Last backup " + agoPhrase(b.At) + ", " + humanBytes(b.Bytes)
+		c.Size = humanBytes(b.Bytes)
+		c.Last = "The last backup, " + humanBytes(b.Bytes)
 		projects := b.Projects
 		for _, e := range listing.Entries {
 			// The list's count, which leaves the global scope out, so the
@@ -405,7 +417,7 @@ func backupsStatusFor(st backup.Status, listing backup.Listing, lerr error, now 
 			}
 		}
 		if b.Memories+b.Notes > 0 {
-			c.Last += ": " + countOf(b.Memories, "memory", "memories") + " and " + countOf(b.Notes, "note", "notes")
+			c.Last += ", holds " + countOf(b.Memories, "memory", "memories") + " and " + countOf(b.Notes, "note", "notes")
 			if projects > 0 {
 				c.Last += " in " + countOf(projects, "project", "projects")
 			}
@@ -413,8 +425,6 @@ func backupsStatusFor(st backup.Status, listing backup.Listing, lerr error, now 
 		c.Last += "."
 	} else if lerr == nil && len(listing.Entries) > 0 {
 		c.None = "This install has not made a backup yet. The list below shows the backups found in its folders."
-	} else {
-		c.None = "No backup yet."
 	}
 	if r := st.Running; r != nil {
 		c.RunningAt = r.StartedAt
@@ -425,35 +435,23 @@ func backupsStatusFor(st backup.Status, listing backup.Listing, lerr error, now 
 	} else if set.Auto && !st.Stopped && !st.NextAt.IsZero() {
 		c.NextAt = st.NextAt
 		if st.UpToDate {
-			c.Next = "Up to date: nothing has changed since the last backup. Next check " + untilPhrase(st.NextAt, now) + "."
+			c.Next = "Nothing changed since: next check " + untilPhrase(st.NextAt, now)
 		} else {
-			c.Next = "Next backup " + untilPhrase(st.NextAt, now) + "."
+			c.Next = "Next " + untilPhrase(st.NextAt, now)
 		}
 	}
-	busy := ""
 	switch {
-	case st.Stopped:
-		busy = "The backup service is not running"
-	case st.Running != nil:
-		busy = "A backup is running"
-	case st.Restore.Staging != nil:
-		busy = "A restore is being prepared"
-	case st.Restore.Archiving:
-		busy = "The data a restore replaced is being saved"
+	case c.Next != "":
+		c.Sub = append(c.Sub, upTimed{Text: c.Next, At: c.NextAt})
+	case c.Off:
+		c.Sub = append(c.Sub, upTimed{Text: "Automatic backups are off"})
 	}
-	c.BackUpNowBlocked = busy
-	if set.Auto && st.Failures > 0 {
-		f := &backupsFailing{Error: st.LastError, Since: st.FailingSince, RetryBlocked: busy}
-		if st.Failures == 1 {
-			f.Line = "The last automatic backup failed " + agoPhrase(st.FailingSince)
-		} else {
-			f.Line = fmt.Sprintf("The last %d automatic backups failed, the first %s", st.Failures, agoPhrase(st.FailingSince))
+	for _, w := range []string{c.Kept, c.Size} {
+		if w != "" {
+			c.Sub = append(c.Sub, upTimed{Text: w})
 		}
-		c.Failing = f
 	}
-	if lr := st.LastRun; lr != nil && !lr.Scheduled && lr.Outcome == backup.OutcomeFailed && st.Running == nil {
-		c.ManualFailed = "Your backup " + agoPhrase(lr.At) + " did not finish: " + lr.Error
-	}
+	c.BackUpNowBlocked = backUpNowBlocked(st)
 	if lerr == nil && listing.DirCheck.State != "" && !listing.DirCheck.Usable() {
 		c.FolderProblem = sentenceStart(listing.DirCheck.Message()) + "."
 	}
@@ -466,15 +464,68 @@ func backupsStatusFor(st backup.Status, listing backup.Listing, lerr error, now 
 	return c
 }
 
+// upTimed is a few words, with the time they are about when they name one
+// (timeAs draws it as a <time> the browser shows in its own clock).
+type upTimed struct {
+	Text string
+	At   time.Time
+}
+
+// backUpNowBlocked says why Back up now (and Try again) cannot run, "" when
+// they can.
+func backUpNowBlocked(st backup.Status) string {
+	switch {
+	case st.Stopped:
+		return "The backup service is not running"
+	case st.Running != nil:
+		return "A backup is running"
+	case st.Restore.Staging != nil:
+		return "A restore is being prepared"
+	case st.Restore.Archiving:
+		return "The data a restore replaced is being saved"
+	}
+	return ""
+}
+
+// backupsAlertFor is the section's alert card: the service stopped, the
+// automatic runs' failure streak with Try again, and the owner's own backup
+// that did not finish, worst first. The run's error is the service's own
+// sentence, said here and nowhere else.
+func backupsAlertFor(st backup.Status) *upAlertCard {
+	card := &upAlertCard{}
+	if st.Stopped {
+		card.add(upAlertItem{Kind: "stopped", Tone: "danger", Head: "The backup service stopped after an internal error.",
+			Line: "Seamless keeps serving; restart it to revive backups."})
+	}
+	if st.Settings.Auto && st.Failures > 0 {
+		item := upAlertItem{Kind: "failing", Tone: "warn", Head: "Automatic backups are failing.",
+			Detail: st.LastError, Retry: true, RetryBlocked: backUpNowBlocked(st)}
+		if st.Failures == 1 {
+			item.Line = "The last automatic backup failed " + agoPhrase(st.FailingSince) + "."
+		} else {
+			item.Line = fmt.Sprintf("The last %d automatic backups failed, the first %s.", st.Failures, agoPhrase(st.FailingSince))
+		}
+		if why := backupReasonWords(st.LastReason); why != "" {
+			item.Hint = capitalize(why) + "."
+		}
+		card.add(item)
+	}
+	if lr := st.LastRun; lr != nil && !lr.Scheduled && lr.Outcome == backup.OutcomeFailed && st.Running == nil {
+		card.add(upAlertItem{Kind: "manual", Tone: "warn", Head: "Your backup did not finish.", At: lr.At,
+			Line: "Back up now tries again.", Detail: lr.Error})
+	}
+	return card.orNil()
+}
+
 // everyChoices are the How often menu's values.
 var everyChoices = []struct {
-	d     time.Duration
-	label string
+	d            time.Duration
+	label, title string
 }{
-	{time.Hour, "Every hour"},
-	{6 * time.Hour, "Every 6 hours"},
-	{24 * time.Hour, "Every day"},
-	{7 * 24 * time.Hour, "Every week"},
+	{time.Hour, "Hourly", "Every hour"},
+	{6 * time.Hour, "6 hours", "Every 6 hours"},
+	{24 * time.Hour, "Daily", "Every day"},
+	{7 * 24 * time.Hour, "Weekly", "Every week"},
 }
 
 // backupsFormFor builds the schedule form.
@@ -496,7 +547,7 @@ func (s *Service) backupsFormFor(st backup.Status, local string) backupsForm {
 			f.EveryOpts = append(f.EveryOpts, s.customEvery(set))
 			listed = true
 		}
-		f.EveryOpts = append(f.EveryOpts, backupsOption{Value: config.Duration(c.d).String(), Label: c.label, Selected: c.d == set.Every})
+		f.EveryOpts = append(f.EveryOpts, backupsOption{Value: config.Duration(c.d).String(), Label: c.label, Title: c.title, Selected: c.d == set.Every})
 	}
 	if !listed {
 		f.EveryOpts = append(f.EveryOpts, s.customEvery(set))
@@ -543,13 +594,14 @@ func (s *Service) backupsFormFor(st backup.Status, local string) backupsForm {
 // customEvery is the How often choice for an interval the menu does not list.
 func (s *Service) customEvery(set backup.Settings) backupsOption {
 	label := capitalize(everyWords(set.Every))
+	title := label
 	switch set.EverySource {
 	case backup.SourceConfig:
-		label += " (config file)"
+		title += " (config file)"
 	case backup.SourceConsole:
-		label += " (set in this console)"
+		title += " (set in this console)"
 	}
-	return backupsOption{Value: config.Duration(set.Every).String(), Label: label, Selected: true}
+	return backupsOption{Value: config.Duration(set.Every).String(), Label: label, Title: title, Selected: true}
 }
 
 // placeWords names a suggestion's kind, for its chip's title.
@@ -696,15 +748,30 @@ func (s *Service) backupsListFor(ctx context.Context, st backup.Status, listing 
 		l.Rows = append(l.Rows, row)
 	}
 	l.Locked = len(lockedProjects(ctx)) > 0
+	l.Hint = listHint(l)
 	if len(l.Rows) == 0 {
 		switch {
 		case st.Settings.Auto:
 			l.Empty = "No backups yet. The first automatic one runs within the hour, or make one now."
 		default:
-			l.Empty = "No backups yet. Make one now, or turn on Back up automatically under Schedule and folder."
+			l.Empty = "No backups yet. Make one now, or turn on Back up automatically."
 		}
 	}
 	return l
+}
+
+// listHint is the Available backups card's hint: the lines that used to sit
+// under the list (where the backups come from, what a locked project shows),
+// "" when neither applies.
+func listHint(l backupsList) string {
+	var parts []string
+	if l.Local != "" {
+		parts = append(parts, "The backup folder's backups, and the safety and pre-update backups in Seamless's data folder, "+l.Local+".")
+	}
+	if l.Locked {
+		parts = append(parts, "A locked project shows its name and what the backup holds of it, never what it holds now.")
+	}
+	return strings.Join(parts, " ")
 }
 
 // backupRowID is a list row's element id: stable for a backup, valid in HTML.

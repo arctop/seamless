@@ -18,7 +18,7 @@ import (
 // Settings > Updates: what the background update check and automatic updates
 // do on this install, what they last saw and did, and the owner's controls --
 // the check switch, the automatic-updates switch, a reset to the config file,
-// "Check now", "Update now" and "Resume automatic updates". The section and its
+// "Check now", "Update now" and Resume (automatic updates). The section and its
 // routes read and steer Config.Updates; with none (a process that runs no
 // update check) the section says so and every POST answers with an error
 // flash. Turning either switch off is the owner's own decision (switchedOff,
@@ -35,10 +35,13 @@ const updatesLockedText = "update.check: false is set in the config file or SEAM
 // updatesCheckerDown is the flash for a POST the stopped checker cannot serve.
 const updatesCheckerDown = "The update checker is not running. Restart the daemon to revive it."
 
-// updatesPanel is the Updates section's view of the update check's snapshot.
-// Every version and link in it comes from parsed update.Version values and
-// update.ReleaseURL. The free text it shows is this daemon's own: the check's
-// last error, and the last update attempt's error in the Last attempt row.
+// updatesPanel is the Updates section's view of the update check's snapshot:
+// a first card (what is installed and the newest release), the switch rows,
+// and one alert card for whatever needs the owner. Every version and link in
+// it comes from parsed update.Version values and update.ReleaseURL. The free
+// text it shows is this daemon's own: the check's last error, and the last
+// update attempt's error, in the hints of the check row and the attempt's
+// alert.
 type updatesPanel struct {
 	// Running is false when this process runs no update check: the section
 	// says so and offers nothing else.
@@ -46,19 +49,16 @@ type updatesPanel struct {
 	// Stopped reports that the checker's loop died after an internal error.
 	Stopped bool
 
-	// Checking is the effective update.check. Mode and ModeReason are
-	// Status.Mode() in words ("Automatic", "Notify" or "Off", and why).
-	Checking   bool
-	Mode       string
-	ModeReason string
-	// Interval is the time between scheduled checks, for "every ..." ("6
-	// hours").
-	Interval string
+	// Checking is the effective update.check, the check switch's state.
+	// CheckHint is its hint: what a check sends, and how often.
+	Checking  bool
+	CheckHint string
 	// Source names who decided Checking (update.SourceDefault, SourceConfig
 	// or SourceConsole). ChipSource is the section's source chip ("file",
 	// "override" or "locked": sourceChip) and SourceNote its hint, which says
 	// who decided. Locked marks an explicit file/env false the console may not
-	// turn on: the config file decides the whole section then.
+	// turn on: the config file decides the whole section then, and the head's
+	// chip is the one place that says so.
 	Source     string
 	ChipSource string
 	SourceNote string
@@ -67,13 +67,15 @@ type updatesPanel struct {
 	// Version is the running build: "v0.7.2", or the build's own version
 	// string when it is not a published release ("0.0.0-dev"). Build says
 	// which kind of build it is ("release build", "built from source",
-	// "snapshot build"), InstallReason why this install is told about
-	// updates rather than updated (empty when the mode line already says
-	// it), and Hint the command the owner runs to update.
-	Version       string
-	Build         string
-	InstallReason string
-	Hint          string
+	// "snapshot build") and Installed who installed it ("installed by the
+	// installer"; "" when the build says it). Hint is the command the owner
+	// runs to update, and HandWhy, the hint beside it, why this install is
+	// told about new releases rather than updated.
+	Version   string
+	Build     string
+	Installed string
+	Hint      string
+	HandWhy   string
 
 	// Newest is the newest installable release the last successful check saw
 	// ("v0.7.3"; empty before one has), with its publication time and release
@@ -95,8 +97,8 @@ type updatesPanel struct {
 	// Error is the current streak of failed checks, nil when the last check
 	// worked.
 	Error *updatesError
-	// CheckNowBlocked says why "Check now" cannot run (checks are off, or the
-	// checker stopped); empty when it can.
+	// CheckNowBlocked says why "Check now" cannot run (the checker stopped);
+	// empty when it can. With checks off there is no Check now.
 	CheckNowBlocked string
 	// Overridden reports a console choice in force for the check switch or
 	// the automatic-updates switch, which Reset clears.
@@ -104,30 +106,30 @@ type updatesPanel struct {
 
 	// Automatic updates (plan 2.4), filled by autoRows (updates_auto.go).
 	// SelfUpdating reports that this install can install a release by itself
-	// at all; the Auto row and switch, Update now, Resume and the rows about
-	// the pending update and what holds it back appear only then. Applying
-	// and LastAttempt show whatever the mode: an update run by hand is shown
-	// too.
+	// at all; the Auto row, Update now, and the alerts about what holds
+	// automatic updates back appear only then. Applying and the last
+	// attempt show whatever the mode: an update run by hand is shown too.
 	SelfUpdating bool
 	// Signers is update.release_signers, nil while nothing is pinned: the
-	// row names the file and the last release it refused.
-	Signers     *updatesSigners
-	Auto        updatesAutoRow
-	Next        *updatesNext
-	Applying    *updatesApplying
-	LastAttempt *updatesAttempt
-	Paused      *updatesPaused
-	Hold        *updatesHold
-	Blocked     []updatesBlock
-	Backoff     *updatesBackoff
-	UpdateNow   updatesAction
-	Resume      updatesAction
+	// row's hint names the file, and its line the last release it refused.
+	Signers   *updatesSigners
+	Auto      updatesAutoRow
+	Next      *updatesNext
+	Applying  *updatesApplying
+	UpdateNow updatesAction
+	// LastUpdate is the last attempt while it needs nothing from the owner
+	// (it applied, or the install has moved past it): a quiet line in the
+	// first card. An attempt that does is an alert instead.
+	LastUpdate *updatesAttempt
+	// Alert is the one alert card, nil while nothing needs the owner.
+	Alert *upAlertCard
 }
 
-// updatesSigners is the Owner-signed releases row: the pin's file, and the
-// last release it refused (nil when none has been).
+// updatesSigners is the Owner-signed releases row: the pin's file, in its
+// hint, and the last release it refused (nil when none has been).
 type updatesSigners struct {
 	Path    string
+	Hint    string
 	Refused *updatesSignatureRefusal
 }
 
@@ -145,7 +147,8 @@ func signersRow(st update.Status) *updatesSigners {
 	if path == "" {
 		return nil
 	}
-	row := &updatesSigners{Path: path}
+	row := &updatesSigners{Path: path, Hint: "A release installs only once its checksums.txt.sshsig verifies against a key in " +
+		path + " (update.release_signers), whether it installs by itself or by hand."}
 	if r := st.SignatureRefusal; r != nil {
 		if words := update.SignatureWords(r.Signature); words != "" {
 			row.Refused = &updatesSignatureRefusal{Version: "v" + r.Version.String(), Words: words, At: r.At}
@@ -169,24 +172,15 @@ func (s *Service) updatesPanelAt(now time.Time) updatesPanel {
 		return updatesPanel{}
 	}
 	st := s.cfg.Updates.Status()
-	mode, modeReason := st.Mode()
 	p := updatesPanel{
-		Running:    true,
-		Stopped:    st.Stopped,
-		Checking:   st.Settings.Check,
-		Mode:       "Off",
-		ModeReason: modeReason,
-		Interval:   intervalPhrase(st.Settings.CheckInterval),
-		Source:     st.Settings.CheckSource,
-		Locked:     st.Settings.CheckLocked,
-		Hint:       st.Install.Hint,
-		CheckedAt:  st.CheckedAt,
-	}
-	switch mode {
-	case update.ModeNotify:
-		p.Mode = "Notify"
-	case update.ModeAuto:
-		p.Mode = "Automatic"
+		Running:   true,
+		Stopped:   st.Stopped,
+		Checking:  st.Settings.Check,
+		CheckHint: checkHint(st.Settings.CheckInterval),
+		Source:    st.Settings.CheckSource,
+		Locked:    st.Settings.CheckLocked,
+		Hint:      st.Install.Hint,
+		CheckedAt: st.CheckedAt,
 	}
 	p.ChipSource, p.SourceNote = updatesSource(st.Settings)
 	p.Overridden = st.Settings.CheckSource == update.SourceConsole || st.Settings.AutoSource == update.SourceConsole
@@ -211,11 +205,7 @@ func (s *Service) updatesPanelAt(now time.Time) updatesPanel {
 	default:
 		p.Build = "built from source"
 	}
-	// The install's reason once: the mode line already carries it while
-	// checking, and the build line says "built from source" for that kind.
-	if reason := strings.TrimSpace(st.Install.Reason); !strings.Contains(modeReason, reason) && st.Install.Kind != update.KindSource {
-		p.InstallReason = reason
-	}
+	p.Installed = installedWords(st.Install.Kind)
 
 	if n := st.Newest; n != nil {
 		p.Newest = "v" + n.Version.String()
@@ -229,15 +219,51 @@ func (s *Service) updatesPanelAt(now time.Time) updatesPanel {
 	if ce := st.CheckError; ce != nil {
 		p.Error = &updatesError{Line: checkErrorLine(*ce), Since: ce.Since, Message: ce.Message}
 	}
-	switch {
-	case !p.Checking:
-		p.CheckNowBlocked = "Update checks are off"
-	case p.Stopped:
+	if p.Stopped {
 		p.CheckNowBlocked = "The update checker is not running"
 	}
 	p.Signers = signersRow(st)
 	autoRows(&p, st, now)
+	if !p.SelfUpdating {
+		p.HandWhy = handWhy(st)
+	}
 	return p
+}
+
+// checkHint is the check switch's hint: what a check sends, and how often.
+func checkHint(interval time.Duration) string {
+	return "One anonymous request to api.github.com every " + intervalPhrase(interval) +
+		". Nothing about this install is sent: no version, host or identifier. Off, this install makes no update request at all."
+}
+
+// installedWords says who installed this copy, for the first card's line
+// under the version; "" where the build line already says it (a build from
+// source) or nothing is known.
+func installedWords(kind update.Kind) string {
+	switch kind {
+	case update.KindInstaller:
+		return "installed by the installer"
+	case update.KindSystem:
+		return "a system install"
+	case update.KindHomebrew:
+		return "installed by Homebrew"
+	case update.KindClient:
+		return "a client machine"
+	}
+	return ""
+}
+
+// handWhy is the hint beside the command an install that does not update
+// itself is updated with: why it is told about new releases rather than
+// updated. A build from source says so in its build line already.
+func handWhy(st update.Status) string {
+	switch {
+	case st.Install.Kind == update.KindSource:
+		return ""
+	case !st.Release:
+		return "Seamless tells you about new releases and never installs one by itself here: this build is not a published release."
+	}
+	return "Seamless tells you about new releases and never installs one by itself here: " + cannotApplyWhy(st) + "."
 }
 
 // updatesSource is the Updates section's source chip and its hint: who
@@ -641,9 +667,9 @@ func cannotApplyWhy(st update.Status) string {
 	}
 }
 
-// settingsUpdatesResume is "Resume automatic updates": lift the pause they
-// put on themselves after rollbacks, and the hold a deliberate downgrade set
-// (Checker.Resume). It changes no setting. The flash says what it lifted.
+// settingsUpdatesResume is the alert card's Resume: lift the pause automatic
+// updates put on themselves after rollbacks, and the hold a deliberate
+// downgrade set (Checker.Resume). It changes no setting. The flash says what it lifted.
 func (s *Service) settingsUpdatesResume(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.Updates == nil {
 		settingsUpdatesFlash(w, r, updatesNotRunning)

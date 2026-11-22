@@ -239,28 +239,27 @@ func (s *Service) backupChrome(now time.Time) *backupAlert {
 	return backupAlertFor(s.cfg.Backups.Status(), now)
 }
 
-// setupBackups is the Backups row in Settings > Your setup.
+// setupBackups is the Backups row in Settings > Your setup: the schedule in
+// a few words beside the Backups section's state chip (sectionStatus).
 type setupBackups struct {
-	On      bool
-	Failing bool
-	Line    string
+	Line string
 }
 
 // setupBackupsRow builds the Your setup row, nil without a backup service.
+// The chip says when the last backup ran while automatic backups are on, so
+// the line says it only while they are off.
 func (s *Service) setupBackupsRow(now time.Time) *setupBackups {
 	if s.cfg.Backups == nil {
 		return nil
 	}
 	st := s.cfg.Backups.Status()
 	set := st.Settings
-	row := &setupBackups{On: set.Auto, Failing: st.Alert(now)}
 	if set.Auto {
-		row.Line = everyWords(set.Every) + ", " + keepWords(set.Keep)
-	} else {
-		row.Line = "no automatic backups"
+		return &setupBackups{Line: everyWords(set.Every) + ", " + strconv.Itoa(set.Keep) + " kept"}
 	}
+	row := &setupBackups{Line: "no automatic backups"}
 	if b := st.LastBackup; b != nil {
-		row.Line += " · last backup " + agoPhrase(b.At)
+		row.Line += ", last one " + agoPhraseAt(b.At, now)
 	}
 	return row
 }

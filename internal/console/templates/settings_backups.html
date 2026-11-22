@@ -1,12 +1,15 @@
 {{/* Settings > Backups (settings_backups.go builds .Backups). Parsed with the
-     settings page (render.go) and drawn by its Backups section. The forms ride
-     the shared no-reload POST path; Restore… opens the confirm card in place
-     through a data-seam-query link, so the whole section works without
-     script. static/backups.js adds the folder field's live check and chips,
-     the passkey ceremony under the gate, and follows a restore through the
-     restart (data-restore-state). The free text here is the backup service's
-     own -- a run's or a restore's sentence, a folder's problem, a path -- and
-     appears in this section only. */}}
+     settings page (render.go) and drawn by its Backups section. What is true
+     first: one alert card while something needs the owner, then when it last
+     ran with Back up now, then the schedule (a form with a Save bar: it has
+     typed values), then the list. The forms ride the shared no-reload POST
+     path; Restore… opens the confirm card in place through a data-seam-query
+     link, so the whole section works without script. static/backups.js adds
+     the folder field's live check and chips, the passkey ceremony under the
+     gate, and follows a restore through the restart (data-restore-state). The
+     free text here is the backup service's own -- a run's or a restore's
+     sentence, a folder's problem, a path -- and appears in this section
+     only. */}}
 {{define "settings-backups"}}
 <section class="settings-zone settings-section bk-section" id="backups" data-restore-state="{{.Backups.State}}" data-restore-restart="{{.Backups.Restart}}"{{if .Backups.BackingUp}} data-backup-running{{end}}>
   <header class="settings-section-head">
@@ -17,7 +20,10 @@
     {{if .Backups.Running}}{{with .Backups.Form}}{{template "source-chip" (sourceChip .ChipSource .SourceNote "backups-reset")}}{{end}}{{end}}
   </header>
   {{with .Backups}}{{if .Running}}
-  {{if .Stopped}}<p class="updates-alert" role="alert">{{icon "triangle-alert"}}<span><strong>The backup service stopped after an internal error.</strong> Seamless keeps serving; restart it to revive backups.</span></p>{{end}}
+  {{/* One alert card while something needs the owner: the service stopped,
+       the schedule failing (with Try again), the owner's own backup that
+       did not finish ("up-alert", settings_updates.html). */}}
+  {{with .Alert}}{{template "up-alert" .}}{{end}}
 
   {{with .Result}}
   <div class="bk-result is-{{.Tone}}" id="backup-result" role="status">
@@ -58,54 +64,45 @@
   {{with .Confirm}}{{if .Missing}}{{template "backups-confirm" .}}{{end}}{{end}}
 
   {{with .Status}}
-  <article class="card bk-card bk-status" id="backup-status" aria-labelledby="bk-status-title">
-    <h2 id="bk-status-title">{{icon "archive"}}Automatic backups<span class="h2-meta"><span class="badge{{with .Tone}} {{.}}{{end}}">{{.Badge}}</span></span></h2>
-    <div class="bk-lines" role="status" aria-live="polite">
-      <p class="bk-lead">{{.Lead}}</p>
-      {{with .Running}}<p class="bk-line">{{icon "loader"}}<span>{{timeAs $.Backups.Status.RunningAt .}}</span></p>{{end}}
-      {{if .Last}}<p class="bk-line">{{icon "check"}}<span>{{timeAs .LastAt .Last}}</span></p>{{else}}<p class="bk-line">{{icon "info"}}<span>{{.None}}</span></p>{{end}}
-      {{with .Next}}<p class="bk-line">{{icon "clock"}}<span>{{timeAs $.Backups.Status.NextAt .}}</span></p>{{end}}
-      {{with .ManualFailed}}<p class="bk-line is-warn">{{icon "triangle-alert"}}<span>{{.}}</span></p>{{end}}
+  <article class="card bk-hero is-{{.Tone}}" id="backup-status" aria-labelledby="bk-status-title">
+    <span class="bk-hero-mark" aria-hidden="true">{{icon .Icon}}</span>
+    <div class="bk-hero-copy" role="status" aria-live="polite">
+      <h3 class="bk-hero-title" id="bk-status-title">{{if .Running}}{{timeAs .RunningAt .Running}}{{else if .Last}}Backed up {{timeAs .LastAt (agoPhrase .LastAt)}}{{else}}No backup yet{{end}}{{with .Last}}{{hintFor "the last backup" .}}{{end}}</h3>
+      {{with .Sub}}<p class="bk-hero-sub">{{range $i, $w := .}}{{if $i}} &middot; {{end}}{{timeAs $w.At $w.Text}}{{end}}</p>{{end}}
+      {{with .None}}<p class="bk-hero-sub">{{.}}</p>{{end}}
+      <p class="bk-folder"><span class="bk-folder-chip" title="{{.Folder}}">{{icon "folder-open"}}<span class="mono">{{.FolderShort}}</span>{{copyBtn .Folder}}</span>{{if .FolderLocal}}<small class="faint">Seamless&rsquo;s data folder</small>{{end}}</p>
+      {{with .FolderProblem}}<p class="updates-error bk-folder-problem">{{icon "triangle-alert"}}<span>{{.}}</span></p>{{end}}
     </div>
-    {{with .Failing}}
-    <div class="bk-failing" role="alert">
-      <p>{{icon "triangle-alert"}} <span>{{timeAs .Since .Line}}</span>{{with .Error}}: <span class="mono">{{.}}</span>{{end}}</p>
-      <form method="post" action="/console/settings/backups/now"><input type="hidden" name="run" value="retry"><button class="btn small" type="submit"{{with .RetryBlocked}} disabled title="{{.}}"{{end}}>{{icon "refresh-cw"}} Try again</button></form>
-    </div>
-    {{end}}
-    <p class="bk-folder"><span class="bk-folder-label">Backups go to</span><span class="mono">{{.Folder}}</span>{{copyBtn .Folder}}{{if .FolderLocal}}<small class="faint">Seamless&rsquo;s data folder</small>{{end}}</p>
-    {{with .FolderProblem}}<p class="updates-error bk-folder-problem">{{icon "triangle-alert"}}<span>{{.}}</span></p>{{end}}
-    <div class="bk-actions">
-      <form method="post" action="/console/settings/backups/now"><button class="btn primary" type="submit"{{with .BackUpNowBlocked}} disabled title="{{.}}"{{end}}>{{icon "archive"}} Back up now</button></form>
-    </div>
-    {{range .Notes}}<p class="updates-note">{{icon "info"}}<span>{{.}}</span></p>{{end}}
+    <form class="bk-hero-act" method="post" action="/console/settings/backups/now"><button class="btn primary" type="submit"{{with .BackUpNowBlocked}} disabled title="{{.}}"{{end}}>{{icon "archive"}} Back up now</button></form>
+    {{range .Notes}}<p class="updates-note bk-hero-note">{{icon "info"}}<span>{{.}}</span></p>{{end}}
   </article>
   {{end}}
 
   {{with .Form}}
-  <article class="card bk-card bk-schedule" id="backup-schedule" aria-labelledby="bk-schedule-title">
-    <h2 id="bk-schedule-title">{{icon "clock"}}Schedule and folder</h2>
-    <form method="post" action="/console/settings/backups" class="bk-form" data-backups-form>
-      <label class="brief-toggle bk-toggle">
-        <input type="checkbox" name="auto" value="on"{{if .Auto}} checked{{end}}>
-        <span class="brief-switch" aria-hidden="true"></span>
-        <span><strong>Back up automatically</strong><small>A run is skipped when nothing has changed since the last backup, or when the disk is short of room.</small></span>
-      </label>
-      <div class="brief-fields two">
-        <label class="brief-field">How often
-          <span class="brief-number"><select name="every">{{range .EveryOpts}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></span>
-        </label>
-        <label class="brief-field">Automatic backups to keep
-          <span class="brief-number"><input type="number" name="keep" min="{{.MinKeep}}" max="{{.MaxKeep}}" value="{{.Keep}}" required><i>backups</i></span>
-          <small>Older automatic backups are deleted after the next one. Backups you make yourself and safety backups are never deleted automatically.</small>
-        </label>
+  {{/* The schedule keeps its Save bar: it has typed values, a number and a
+       folder (D9), so nothing here saves until Save. */}}
+  <article class="bk-schedule" id="backup-schedule" aria-label="Schedule and folder">
+    <form method="post" action="/console/settings/backups" class="card up-rows bk-schedule-form" data-backups-form>
+      <div class="set-row">
+        <label class="set-row-label" for="bk-auto"><strong>Back up automatically</strong>
+          <span class="set-row-sub">Skipped when nothing changed since the last backup, or the disk is short of room.</span></label>
+        <div class="set-row-control"><span class="set-switch"><input id="bk-auto" type="checkbox" role="switch" name="auto" value="on"{{if .Auto}} checked{{end}}><span class="brief-switch" aria-hidden="true"></span></span></div>
       </div>
-      <div class="bk-dir">
-        <label class="brief-field" for="bk-dir">Folder
-          <span class="brief-number bk-dir-box"><input id="bk-dir" type="text" name="dir" value="{{.Dir}}" placeholder="{{.LocalDir}}" spellcheck="false" autocomplete="off" autocapitalize="off" data-backups-dir aria-describedby="bk-dir-check"></span>
-        </label>
-        {{if .Chips}}<div class="bk-chips" role="group" aria-label="Suggested places">{{range .Chips}}<button type="button" class="bk-chip{{if .Current}} is-current{{end}}" data-backups-chip="{{.Dir}}" title="{{.Kind}}: {{.Dir}}">{{icon "folder-open"}}{{.Label}}</button>{{end}}</div>{{end}}
-        <p class="bk-dir-check" id="bk-dir-check" role="status" aria-live="polite" data-backups-check data-usable="{{.Check.Usable}}">{{.Check.Text}}</p>
+      <div class="set-row">
+        <span class="set-row-label" id="bk-every-label"><strong>How often</strong></span>
+        <div class="set-row-control"><div class="set-seg" role="radiogroup" aria-labelledby="bk-every-label">{{range .EveryOpts}}<label title="{{.Title}}"><input type="radio" name="every" value="{{.Value}}"{{if .Selected}} checked{{end}}><span>{{.Label}}</span></label>{{end}}</div></div>
+      </div>
+      <div class="set-row">
+        <label class="set-row-label" for="bk-keep"><strong>Keep</strong>{{hintFor "Keep" "Older automatic backups are deleted after the next one. Backups you make yourself, and safety backups, are never deleted by the schedule."}}</label>
+        <div class="set-row-control"><span class="set-unit"><input id="bk-keep" type="number" name="keep" min="{{.MinKeep}}" max="{{.MaxKeep}}" value="{{.Keep}}" required><span>automatic</span></span></div>
+      </div>
+      <div class="set-row bk-dir-row">
+        <label class="set-row-label" for="bk-dir"><strong>Folder</strong></label>
+        <input class="bk-dir-input mono" id="bk-dir" type="text" name="dir" value="{{.Dir}}" placeholder="{{.LocalDir}}" spellcheck="false" autocomplete="off" autocapitalize="off" data-backups-dir aria-describedby="bk-dir-check">
+        <div class="bk-dir-foot">
+          {{if .Chips}}<div class="bk-chips" role="group" aria-label="Suggested places">{{range .Chips}}<button type="button" class="bk-chip{{if .Current}} is-current{{end}}" data-backups-chip="{{.Dir}}" title="{{.Kind}}: {{.Dir}}">{{icon "folder-open"}}{{.Label}}</button>{{end}}</div>{{end}}
+          <p class="bk-dir-check" id="bk-dir-check" role="status" aria-live="polite" data-backups-check data-usable="{{.Check.Usable}}">{{.Check.Text}}</p>
+        </div>
       </div>
       <footer class="brief-actions settings-savebar">
         <div class="brief-state" id="backups-state" role="status" aria-live="polite">
@@ -124,10 +121,9 @@
 
   {{with .List}}
   <article class="card bk-card bk-list" id="backup-list" aria-labelledby="bk-list-title">
-    <h2 id="bk-list-title">{{icon "history"}}Available backups{{if .Rows}}<span class="h2-meta">newest first</span>{{end}}</h2>
+    <h2 id="bk-list-title">{{icon "history"}}Available backups{{with .Hint}}{{hintFor "Available backups" .}}{{end}}{{if .Rows}}<span class="h2-meta">newest first</span>{{end}}</h2>
     {{with .Error}}<p class="updates-error">{{icon "triangle-alert"}}<span>{{.}}</span></p>{{end}}
     {{with .Empty}}<p class="bk-empty">{{.}}</p>{{end}}
-    {{with .Local}}<p class="bk-foot">The backup folder&rsquo;s backups, and the safety and pre-update backups in Seamless&rsquo;s data folder, <span class="mono">{{.}}</span>.</p>{{end}}
     {{if .Rows}}<ul class="bk-rows">
       {{range .Rows}}
       <li class="bk-row{{if .Open}} is-open{{end}}" id="{{.ID}}">
@@ -161,7 +157,6 @@
       </li>
       {{end}}
     </ul>{{end}}
-    {{if .Locked}}<p class="bk-foot">{{icon "lock"}} A locked project shows its name and what the backup holds of it, never what it holds now.</p>{{end}}
   </article>
   {{end}}
   {{else}}

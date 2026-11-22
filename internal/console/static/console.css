@@ -6338,13 +6338,9 @@ html:not(.js) .brief-preview { display: none; }
 }
 
 /* ---- Settings > Updates ------------------------------------------------------
-   The Your setup facts list, plus a row of single-button forms (the two
-   switches, Check now, Update now, Resume), a note for a locked switch or a
-   process with no update check, and the danger-toned alert for a checker that
-   stopped. A row's notes and list lines take a line of their own; the last
-   attempt's error keeps the updater's line breaks (recovery steps). */
-.updates-facts dd small, .updates-facts dd .updates-line { flex-basis: 100%; }
-.updates-attempt-error .mono { white-space: pre-wrap; }
+   The pieces the Settings sections still share from before UX 36 (which drew
+   Updates anew in its own section, below): a warn-toned error line, a row of
+   single-button forms, a note, and the danger-toned alert. */
 .updates-error { display: inline-flex; align-items: flex-start; gap: 6px; color: var(--warn); font-size: var(--text-xs); }
 .updates-error .ico { flex: none; width: 14px; height: 14px; margin-top: 1px; }
 .updates-error .mono { color: var(--muted); overflow-wrap: anywhere; }
@@ -6824,8 +6820,7 @@ a.pv-fnode:focus-visible { outline: none; }
 @media (prefers-reduced-motion: reduce) { .pv-fade { animation: none; } }
 
 /* ---- Settings > Backups ------------------------------------------------------
-   The status card, the schedule form with its folder field and suggestion
-   chips, the list of backups with what each holds, and a restore's confirm
+   The folder's suggestion chips and live check, the list of backups with what each holds, and a restore's confirm
    card, steps and result banner. Kinds and states are text badges, not colour
    alone; rows and command lines wrap at narrow widths; nothing loops (the
    restart wait runs the shared nav progress bar through .main[aria-busy]). */
@@ -6836,35 +6831,17 @@ a.pv-fnode:focus-visible { outline: none; }
 .bk-card h2 .h2-meta a { font-weight: 600; }
 .bk-lead { margin: 0 0 6px; color: var(--ink); font-size: var(--text-sm); font-weight: 600; line-height: 1.45; }
 .bk-lead .badge { margin-left: 6px; vertical-align: 1px; }
-.bk-lines { display: grid; gap: 5px; margin: 0 0 12px; }
-.bk-line { display: flex; align-items: flex-start; gap: 7px; margin: 0; color: var(--ink-2); font-size: var(--text-sm); line-height: 1.45; overflow-wrap: anywhere; }
-.bk-line .ico { flex: none; width: 14px; height: 14px; margin-top: 3px; color: var(--faint); }
-.bk-line.is-warn, .bk-line.is-warn .ico { color: var(--warn); }
-.bk-failing {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; padding: 10px 12px;
-  border: 1px solid color-mix(in oklab, var(--warn) 40%, var(--border)); border-radius: var(--radius-md);
-  background: color-mix(in oklab, var(--warn) 8%, var(--surface)); color: var(--ink-2); font-size: var(--text-sm);
-}
-.bk-failing p { flex: 1 1 280px; min-width: 0; margin: 0; overflow-wrap: anywhere; }
-.bk-failing .ico { width: 14px; height: 14px; vertical-align: -2px; color: var(--warn); }
-.bk-failing form { margin: 0; }
 .bk-folder { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 0 0 12px; color: var(--ink-2); font-size: var(--text-sm); overflow-wrap: anywhere; }
-.bk-folder-label { color: var(--faint); font-size: var(--text-xs); font-weight: 600; }
 .bk-folder-problem { margin: -4px 0 12px; }
 .bk-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 0; }
 .bk-actions form { margin: 0; }
-.bk-actions .btn:disabled, .bk-row-acts .btn:disabled, .bk-failing .btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+.bk-actions .btn:disabled, .bk-row-acts .btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
 .bk-foot { margin: 8px 0 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; overflow-wrap: anywhere; }
 .bk-foot .ico { width: 13px; height: 13px; vertical-align: -2px; }
 .bk-empty { margin: 0; color: var(--muted); font-size: var(--text-sm); }
 .bk-wait:empty { display: none; }
 .bk-wait { margin: 8px 0 0; color: var(--ink-2); font-size: var(--text-sm); }
 
-.bk-form { --group-accent: var(--brand); display: grid; gap: 12px; }
-.bk-toggle { justify-self: start; }
-.bk-dir { display: grid; gap: 8px; min-width: 0; }
-.bk-dir-box { grid-template-columns: minmax(0, 1fr); }
-.bk-dir-box input { font-size: var(--text-xs); font-weight: 500; }
 .bk-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .bk-chip {
   display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border: 1px solid var(--border);
@@ -9695,6 +9672,146 @@ tbody tr.row-link[data-panel-current] td:first-child { box-shadow: inset 2px 0 0
 }
 
 /* UX 36: Settings > Updates, Backups and Your setup. */
+
+/* What is true first (UX 36). Updates and Backups open with one alert card
+   while something needs the owner (.up-alert: each state a row, worst
+   first, its action at the end), then a first card that says the state
+   (.up-hero: installed and newest; .bk-hero: when it last ran), then a card
+   of setting rows divided by rules (.up-rows over UX 33's .set-row). Your
+   setup is one card of rows (.setup-card). Nothing here clips its hints:
+   the cards keep overflow visible. Tokens only. */
+.up-alert {
+  display: grid; margin: 0 0 14px;
+  border: 1px solid color-mix(in oklab, var(--warn) 32%, var(--border)); border-radius: var(--radius-lg);
+  background: color-mix(in oklab, var(--warn) 7%, var(--surface-solid));
+}
+.up-alert.is-danger {
+  border-color: color-mix(in oklab, var(--danger) 38%, var(--border));
+  background: color-mix(in oklab, var(--danger) 7%, var(--surface-solid));
+}
+.up-alert-item { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 12px; min-width: 0; padding: 12px 16px; }
+.up-alert-item + .up-alert-item { border-top: 1px solid color-mix(in oklab, var(--warn) 22%, var(--border)); }
+.up-alert-item > .ico { flex: none; width: 18px; height: 18px; margin-top: 1px; color: var(--warn); }
+.up-alert-item.is-danger > .ico { color: var(--danger); }
+.up-alert-copy { flex: 1 1 240px; min-width: 0; }
+.up-alert-copy p { margin: 0; }
+.up-alert-head { color: var(--ink-2); font-size: var(--text-sm); line-height: 1.45; }
+.up-alert-head strong { color: var(--warn); font-weight: 650; }
+.up-alert-item.is-danger .up-alert-head strong { color: var(--danger); }
+.up-alert-head .faint { font-size: var(--text-xs); }
+.up-alert-head .hint { vertical-align: -6px; }
+.up-alert .hint-pop { white-space: pre-line; }
+.up-alert-copy .up-alert-line { margin-top: 2px; color: var(--muted); font-size: var(--text-xs); line-height: 1.5; overflow-wrap: anywhere; }
+.up-alert-copy .up-alert-detail { margin-top: 4px; color: var(--ink-2); font-size: var(--text-xs); white-space: pre-wrap; overflow-wrap: anywhere; }
+.up-alert-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-left: auto; }
+.up-alert-acts form { margin: 0; }
+.up-alert-acts .btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+.up-cmd {
+  display: inline-flex; align-items: center; gap: 5px; max-width: 100%; min-width: 0; padding: 1px 2px 1px 8px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2);
+  color: var(--ink-2); font-size: var(--text-xs);
+}
+.up-cmd > .ico { flex: none; width: 13px; height: 13px; color: var(--faint); }
+.up-cmd .mono { min-width: 0; overflow-wrap: anywhere; }
+
+/* The first card: what is installed beside the newest release, and, on an
+   install that does not update itself, the command that does it. */
+.up-hero {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px; margin: 0 0 14px; padding: 18px 20px;
+  background: linear-gradient(180deg, color-mix(in oklab, var(--brand) 6%, var(--surface-solid)), var(--surface-solid));
+}
+.up-hero-side { display: flex; flex: 1 1 220px; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.up-kicker { color: var(--faint); font-size: var(--text-2xs); font-weight: 700; letter-spacing: var(--tracking-wide); text-transform: uppercase; }
+.up-version { color: var(--ink); font-size: var(--text-2xl); font-weight: 600; letter-spacing: -0.01em; line-height: 1.15; overflow-wrap: anywhere; }
+.up-sub { color: var(--muted); font-size: var(--text-xs); line-height: 1.5; overflow-wrap: anywhere; }
+.up-sub .hint { vertical-align: -6px; }
+.up-chip .ico { flex: none; width: 12px; height: 12px; }
+.up-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 4px; font-size: var(--text-sm); }
+.up-acts form { margin: 0; }
+.up-acts .btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+.up-hand {
+  display: flex; flex: 1 1 100%; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0;
+  padding-top: 12px; border-top: 1px solid var(--border); color: var(--ink-2); font-size: var(--text-sm);
+}
+.up-hand .mono { min-width: 0; overflow-wrap: anywhere; }
+
+/* A card of setting rows, divided by rules: the switches in Updates, the
+   schedule in Backups. */
+.up-rows { display: grid; margin: 0 0 14px; padding: 0; }
+.up-rows > .set-row { border: 0; border-radius: 0; background: none; padding: 13px 18px; }
+.up-rows > .set-row + .set-row { border-top: 1px solid var(--border); }
+.up-rows .set-row-label .hint { vertical-align: -6px; }
+.up-rows .set-row-control form { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; }
+.up-rows .set-row-control .btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+.up-warn { display: flex; align-items: flex-start; gap: 6px; color: var(--warn); }
+.up-warn > .ico { flex: none; width: 13px; height: 13px; margin-top: 2px; }
+.up-warn .hint { vertical-align: -6px; }
+
+/* Backups' first card: a mark in the state's tone, when it last ran, what
+   comes next, the folder as a short chip with Copy, and Back up now. */
+.bk-hero { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 20px; margin: 0 0 14px; padding: 18px 20px; }
+.bk-hero-mark {
+  display: grid; flex: none; place-items: center; width: 46px; height: 46px; border-radius: var(--radius-lg);
+  background: color-mix(in oklab, var(--ink) 6%, transparent); color: var(--muted);
+}
+.bk-hero-mark .ico { width: 22px; height: 22px; }
+.bk-hero.is-ok .bk-hero-mark { background: var(--ok-soft); color: var(--ok); }
+.bk-hero.is-warn .bk-hero-mark { background: var(--warn-soft); color: var(--warn); }
+.bk-hero.is-danger .bk-hero-mark { background: var(--danger-soft); color: var(--danger); }
+.bk-hero.is-accent .bk-hero-mark { background: var(--brand-soft); color: var(--brand); }
+.bk-hero-copy { display: grid; flex: 1 1 240px; gap: 4px; min-width: 0; }
+.bk-hero-copy p { margin: 0; }
+.bk-hero-title { margin: 0; color: var(--ink); font-family: var(--font-display); font-size: var(--text-xl); font-weight: 600; line-height: 1.25; }
+.bk-hero-title .hint { vertical-align: -3px; }
+.bk-hero-sub { color: var(--muted); font-size: var(--text-xs); line-height: 1.5; overflow-wrap: anywhere; }
+.bk-hero .bk-folder { margin: 2px 0 0; }
+.bk-folder-chip {
+  display: inline-flex; align-items: center; gap: 5px; max-width: 100%; min-width: 0; padding: 1px 2px 1px 8px;
+  border-radius: var(--radius-sm); background: var(--surface-2); color: var(--ink-2); font-size: var(--text-xs);
+}
+.bk-folder-chip > .ico { flex: none; width: 13px; height: 13px; color: var(--faint); }
+.bk-folder-chip .mono { min-width: 0; overflow-wrap: anywhere; }
+.bk-hero-act { margin: 0 0 0 auto; }
+.bk-hero-act .btn:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+.bk-hero-note { flex: 1 1 100%; margin: 0; }
+.bk-schedule { display: block; margin: 0 0 14px; }
+.bk-schedule-form { margin: 0; }
+.bk-schedule-form > .settings-savebar { margin: 0 12px 12px; }
+.bk-dir-row { align-items: stretch; }
+.bk-dir-row > .set-row-label { flex-basis: 100%; }
+.bk-dir-input {
+  flex: 1 1 100%; box-sizing: border-box; min-width: 0; padding: 7px 10px;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--paper);
+  color: var(--ink); font-size: var(--text-xs);
+}
+.bk-dir-input:focus { outline: none; box-shadow: var(--shadow-focus); }
+.bk-dir-foot { display: flex; flex: 1 1 100%; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-width: 0; }
+.bk-dir-foot .bk-dir-check { margin-left: auto; }
+.bk-list h2 .hint { vertical-align: -6px; text-transform: none; letter-spacing: 0; }
+
+/* Your setup: one card of rows, the label on the left, the value as chips
+   or a short path with Copy, and the section that changes it at the end. */
+.setup-card { display: grid; margin: 0; padding: 0; }
+.setup-row {
+  display: grid; grid-template-columns: minmax(110px, 160px) minmax(0, 1fr); align-items: center; gap: 4px 14px;
+  padding: 11px 18px;
+}
+.setup-row + .setup-row { border-top: 1px solid var(--border); }
+.setup-row dt { color: var(--muted); font-size: var(--text-sm); }
+.setup-row dd { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; min-width: 0; margin: 0; color: var(--ink); font-size: var(--text-sm); }
+.setup-row dd .faint { font-size: var(--text-xs); }
+.setup-row dd .hint { vertical-align: -6px; }
+.setup-path { min-width: 0; font-size: var(--text-xs); overflow-wrap: anywhere; }
+.setup-chip { gap: 4px; }
+.setup-chip-when { color: var(--faint); font-weight: 500; }
+.setup-go { margin-left: auto; font-size: var(--text-xs); white-space: nowrap; }
+@media (max-width: 720px) {
+  .up-hero, .bk-hero { padding: 14px 16px; }
+  .up-rows > .set-row { padding: 12px 14px; }
+  .up-alert-acts, .bk-hero-act { margin-left: 0; }
+  .setup-row { grid-template-columns: minmax(0, 1fr); padding: 10px 14px; }
+  .setup-go { margin-left: 0; }
+}
 
 /* UX 37: Settings > Gardener section. */
 

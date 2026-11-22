@@ -887,14 +887,14 @@ turn checks off in <strong>Settings -&gt; Updates</strong> or set <code>update.c
 it has not been installed yet. Usually that is the design working:
 <a href="../../updating/#when-it-installs">automatic updates</a> wait out a soak, then wait for a
 quiet daemon. <strong>Settings -&gt; Updates</strong> says what this one waits for on its
-<strong>Next update</strong> row (and on the Home health strip's hover);
+<strong>Install updates by themselves</strong> row (and on the Home health strip's hover);
 <code>seamlessd update --check</code> prints the release and its deadline on its <code>target</code>
 and <code>pending</code> rows.</p>
 <div class="table-wrap">
 <table>
 <thead>
 <tr>
-<th>Next update says</th>
+<th>The row says</th>
 <th>Why</th>
 <th>What to do</th>
 </tr>
@@ -923,7 +923,7 @@ and <code>pending</code> rows.</p>
 <tr>
 <td><code>an earlier attempt failed; trying again in 1h</code></td>
 <td>The backoff after a failed attempt.</td>
-<td>Read <strong>Last attempt</strong>; <strong>Update now</strong> does not wait for the backoff.</td>
+<td>Read the attempt in the alert card; <strong>Update now</strong> does not wait for the backoff.</td>
 </tr>
 <tr>
 <td><code>an updater is already running</code></td>
@@ -953,18 +953,18 @@ and <code>pending</code> rows.</p>
 </tbody>
 </table>
 </div>
-<p>No <strong>Next update</strong> row at all means nothing is pending: the release sits under
-<strong>Held back</strong> (you went back to an older release) or <strong>Skipped releases</strong> (an
-update to it failed), or the <strong>Mode</strong> row says automatic updates are off or
-paused. <a href="../../updating/#automatic-updates">Automatic updates</a> covers each.</p>
+<p>A row that names no release means nothing is pending: the section's alert card
+says the release is held back (you went back to an older release) or skipped
+(an update to it failed), or that automatic updates paused themselves; or the
+switch is off. <a href="../../updating/#automatic-updates">Automatic updates</a> covers each.</p>
 <h2 id="an-automatic-update-failed">An automatic update failed</h2>
 <p><strong>What is happening.</strong> An update the daemon started - by itself, or through
 <strong>Update now</strong> - did not apply. For a week every console page says so in a
 banner (&quot;The update to v0.7.3 rolled back.&quot;), and three places read the same
 record:</p>
 <ul>
-<li><strong>Settings -&gt; Updates -&gt; Last attempt</strong>: the outcome, the updater's own error,
-and its log;</li>
+<li><strong>Settings -&gt; Updates</strong>, the attempt in its alert card: the outcome, the
+updater's own error (in its hint), and its log;</li>
 <li><code>seamlessd doctor</code>, on its <code>updates</code> row;</li>
 <li><code>seamlessd update --check</code>, on its <code>last</code>, <code>error</code>, <code>log</code> and <code>backup</code> rows.</li>
 </ul>
@@ -1015,7 +1015,7 @@ the new name. Anything written after the backup was taken stays in the moved
 directory.</p>
 </li>
 <li>
-<p>Once the install is healthy, press <strong>Resume automatic updates</strong> in
+<p>Once the install is healthy, press <strong>Resume</strong> in
 <strong>Settings -&gt; Updates</strong>. The release that failed stays skipped.</p>
 </li>
 </ol>
@@ -1024,7 +1024,7 @@ directory.</p>
 <li><strong>The updater refused to start it.</strong> The attempt failed while checking it may
 install now (the <code>gates</code> stage), before anything changed. The daemon tries
 again after the backoff, and is refused the same way until you act.
-<strong>Last attempt</strong>, the console banner, <code>seamlessd doctor</code>'s <code>updates</code> row and
+The attempt in <strong>Settings -&gt; Updates</strong>, the console banner, <code>seamlessd doctor</code>'s <code>updates</code> row and
 <code>seamlessd update --check</code>'s <code>fix</code> row name the cause and, while the daemon
 still runs the release the attempt started from, the fix:
 <div class="table-wrap">
@@ -1137,8 +1137,9 @@ backup now:</p>
 </tbody>
 </table>
 </div>
-<p>A backup that <strong>Back up now</strong> makes and that fails shows its reason on the
-status card too, but does not count toward the alert.</p>
+<p>A backup that <strong>Back up now</strong> makes and that fails says so, with its reason, in
+the section's own alert card too, but does not count toward the every-page
+alert.</p>
 <h2 id="a-restore-did-not-finish">A restore did not finish</h2>
 <p><strong>What is happening.</strong> The result card in <strong>Settings &gt; Backups</strong> (and
 <code>seamlessd restore</code>, and doctor's <code>backups</code> row) says the restore did not

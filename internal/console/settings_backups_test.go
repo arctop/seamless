@@ -283,70 +283,92 @@ func TestBackupsSection_NotRunning(t *testing.T) {
 	require.NotContains(t, setup, `id="backup-alert"`)
 }
 
-// The status card in each state: its badge is a word, the lines say what is
-// on, the newest backup, what comes next, and what is wrong.
+// The first card in each state: its title says when the last backup ran (or
+// that none has), its line what comes next, how many stay and the newest
+// one's size, the folder as a short chip with Copy, and Back up now. What
+// needs the owner -- a stopped service, a failing schedule, their own backup
+// that did not finish -- is one alert card above it, each with its action.
 func TestBackupsSection_StatusCard(t *testing.T) {
 	now := time.Now()
 	on := true
 	bc := newBackupsConsole(t, &fakeBackups{base: config.Backup{Auto: &on}})
 	bc.fb.status.LastBackup = &backup.Record{Name: "seamless-studio-20261110T030000Z-auto.tar.gz", At: now.Add(-3 * time.Hour),
 		Bytes: 4300000, Memories: 412, Notes: 96, Projects: 7}
+	bc.fb.status.LastConfirmed = now.Add(-3 * time.Hour)
 	bc.fb.status.NextAt = now.Add(21 * time.Hour)
 	sec := sectionOf(t, bc.page(t, ""))
-	require.Contains(t, sec, "Automatic backups are on: every day, keeping the newest 7.")
-	require.Contains(t, sec, `<span class="badge ok">On</span>`)
-	require.Contains(t, sec, "Last backup 3h ago, 4.1 MB: 412 memories and 96 notes in 7 projects.")
-	require.Contains(t, sec, "Next backup in 2")
-	require.Contains(t, sec, "Backups go to")
-	require.Contains(t, sec, bc.local())
+	require.Contains(t, sec, `<article class="card bk-hero is-ok" id="backup-status" aria-labelledby="bk-status-title">`)
+	require.Regexp(t, `<h3 class="bk-hero-title" id="bk-status-title">Backed up <time [^>]*>3h ago</time>`, sec)
+	require.Contains(t, sec, "The last backup, 4.1 MB, holds 412 memories and 96 notes in 7 projects.", "the detail is the title's hint")
+	require.Regexp(t, `<p class="bk-hero-sub"><time [^>]*>Next in 2[01]h[^<]*</time> &middot; 7 kept &middot; 4.1 MB</p>`, sec)
+	require.Contains(t, sec, `<span class="bk-folder-chip" title="`+bc.local()+`">`)
+	require.Contains(t, sec, `data-copy="`+bc.local()+`"`)
 	require.Contains(t, sec, "Seamless&rsquo;s data folder")
 	require.Regexp(t, `<button class="btn primary" type="submit">.*Back up now</button>`, sec)
+	require.NotContains(t, sec, `role="alert"`, "nothing needs the owner")
+	for _, gone := range []string{"Automatic backups are on:", "bk-lines", "Backups go to", `class="badge ok">On<`} {
+		require.NotContains(t, sec, gone, "the old status card's lines are gone")
+	}
 
 	bc.fb.status.UpToDate = true
-	require.Contains(t, sectionOf(t, bc.page(t, "")), "Up to date: nothing has changed since the last backup. Next check in ")
+	require.Contains(t, sectionOf(t, bc.page(t, "")), ">Nothing changed since: next check in ")
 
 	// Running: Back up now waits, and the section says so to its script.
 	bc.fb.status.Running = &backup.Running{Kind: archive.KindManual, StartedAt: now}
 	sec = sectionOf(t, bc.page(t, ""))
-	require.Contains(t, sec, "Backing up… started just now")
-	require.Contains(t, sec, `<span class="badge accent">Backing up</span>`)
+	require.Contains(t, sec, ">Backing up… started just now</time>")
+	require.Contains(t, sec, `<article class="card bk-hero is-accent"`)
 	require.Contains(t, sec, `disabled title="A backup is running"`)
 	require.Contains(t, sec, "data-backup-running")
 	bc.fb.status.Running = nil
 
-	// Failing: the streak, the daemon's own sentence, and Try again.
+	// Failing: one alert with the streak, the service's own sentence, the
+	// reason in its hint, and Try again.
 	bc.fb.status.Failures, bc.fb.status.FailingSince = 3, now.Add(-49*time.Hour)
 	bc.fb.status.LastReason, bc.fb.status.LastError = "folder-disconnected", "/Volumes/T7 is not connected"
 	sec = sectionOf(t, bc.page(t, ""))
-	require.Contains(t, sec, `<span class="badge warn">Failing</span>`)
-	require.Contains(t, sec, "The last 3 automatic backups failed, the first 2d ago")
-	require.Contains(t, sec, "/Volumes/T7 is not connected")
+	require.Contains(t, sec, `<div class="up-alert is-warn" role="alert">`)
+	require.Contains(t, sec, `<div class="up-alert-item is-warn" data-alert="failing">`)
+	require.Contains(t, sec, "<strong>Automatic backups are failing.</strong>")
+	require.Contains(t, sec, "The last 3 automatic backups failed, the first 2d ago.")
+	require.Contains(t, sec, `<p class="up-alert-detail mono">/Volumes/T7 is not connected</p>`)
+	require.Contains(t, sec, "The backup folder&#39;s disk is not connected.")
 	require.Contains(t, sec, `<input type="hidden" name="run" value="retry">`)
+	require.Contains(t, sec, `<article class="card bk-hero is-warn"`)
+	require.Equal(t, 1, strings.Count(sec, "/Volumes/T7 is not connected"), "the run's error is said once")
 
 	// The owner's own backup that did not finish.
 	bc.fb.status.Failures = 0
 	bc.fb.status.LastRun = &backup.LastRun{Kind: archive.KindManual, Outcome: backup.OutcomeFailed, At: now, Error: "the disk is full"}
-	require.Contains(t, sectionOf(t, bc.page(t, "")), "Your backup just now did not finish: the disk is full")
+	sec = sectionOf(t, bc.page(t, ""))
+	require.Contains(t, sec, `data-alert="manual"`)
+	require.Contains(t, sec, "<strong>Your backup did not finish.</strong>")
+	require.Contains(t, sec, `<p class="up-alert-detail mono">the disk is full</p>`)
 
-	// Stopped.
+	// Stopped: danger, first.
 	bc.fb.status.Stopped = true
 	sec = sectionOf(t, bc.page(t, ""))
+	require.Contains(t, sec, `<div class="up-alert is-danger" role="alert">`)
 	require.Contains(t, sec, "The backup service stopped after an internal error.")
-	require.Contains(t, sec, `<span class="badge danger">Stopped</span>`)
+	require.Less(t, strings.Index(sec, `data-alert="stopped"`), strings.Index(sec, `data-alert="manual"`), "worst first")
+	require.Contains(t, sec, `<article class="card bk-hero is-danger"`)
 }
 
-// Off by default on a build from source, and the source chip's hint says the
-// build decided.
+// Off by default on a build from source: the first card says so once, and
+// the source chip's hint says the build decided.
 func TestBackupsSection_OffOnASourceBuild(t *testing.T) {
 	bc := newBackupsConsole(t, &fakeBackups{})
 	sec := sectionOf(t, bc.page(t, ""))
-	require.Contains(t, sec, "Automatic backups are off: a Seamless built from source does not back up by itself.")
-	require.Contains(t, sec, `<span class="badge">Off</span>`)
+	require.Contains(t, sec, `<p class="bk-hero-sub">Automatic backups are off</p>`)
+	require.Contains(t, sec, `<article class="card bk-hero is-quiet"`)
+	require.Contains(t, sec, ">No backup yet<")
 	require.Contains(t, sec, `<span class="src-chip is-file">`)
 	require.Contains(t, sec, "The build&#39;s default: a Seamless built from source backs up only when you turn it on.")
-	require.Contains(t, sec, "No backups yet. Make one now, or turn on Back up automatically under Schedule and folder.")
-	require.Contains(t, sec, `<input type="checkbox" name="auto" value="on">`, "the switch is off")
-	require.NotContains(t, sec, "Next backup")
+	require.Equal(t, 1, strings.Count(sec, "built from source"), "said once, in the chip's hint")
+	require.Contains(t, sec, "No backups yet. Make one now, or turn on Back up automatically.")
+	require.Contains(t, sec, `<input id="bk-auto" type="checkbox" role="switch" name="auto" value="on">`, "the switch is off")
+	require.NotContains(t, sec, "Next in")
+	require.NotContains(t, sec, " kept")
 }
 
 // The list: newest first as the service lists them, each with its kind in
@@ -456,7 +478,7 @@ func TestBackupsSave_StoresOnlyWhatChanged(t *testing.T) {
 	ctx := context.Background()
 
 	sec := sectionOf(t, bc.page(t, ""))
-	require.Contains(t, sec, `<option value="12h" selected>Every 12 hours (config file)</option>`)
+	require.Contains(t, sec, `<label title="Every 12 hours (config file)"><input type="radio" name="every" value="12h" checked><span>Every 12 hours</span></label>`)
 	require.Contains(t, sec, `<span class="src-chip is-file">`)
 	require.Contains(t, sec, "Following the config file. Saving here stores your choices")
 	require.Contains(t, sec, `value="`+bc.local()+`"`, "the folder field holds the folder in force")
@@ -900,7 +922,8 @@ func TestBackupsSetupRow(t *testing.T) {
 	bc := newBackupsConsole(t, &fakeBackups{base: config.Backup{Auto: &on}})
 	bc.fb.status.LastBackup = &backup.Record{At: time.Now().Add(-3 * time.Hour)}
 	page := getPeek(t, bc.mux, "/console/settings?s=setup").Body.String()
-	require.Contains(t, page, `<div><dt>Backups</dt><dd><span class="badge ok">on</span><span>every day, keeping the newest 7 · last backup 3h ago</span><a href="/console/settings?s=backups" data-seam-query>Settings &rsaquo; Backups</a></dd></div>`)
+	require.Contains(t, page, `<div class="setup-row"><dt>Backups</dt><dd><span class="badge compact ok">3h ago</span><span class="faint">every day, 7 kept</span>`+
+		`<a class="setup-go" href="/console/settings?s=backups" data-seam-query>Backups</a></dd></div>`)
 }
 
 // Every Backups route is the owner's own decision: a request from a process
@@ -968,6 +991,8 @@ func TestBackupsRestore_PasskeyGate(t *testing.T) {
 	require.Regexp(t, `<th scope="row">`+lockedSlug+`</th><td>4</td><td>1</td><td>0</td><td>0</td><td class="bk-vs">locked</td>`, page)
 	require.Contains(t, page, "Locked projects are not compared.")
 	require.NotContains(t, page, lockedSecret)
+	// The list's line about it keeps its words, in the hint on its title.
+	require.Contains(t, page, "A locked project shows its name and what the backup holds of it, never what it holds now.</span>")
 
 	rr := restore(url.Values{"ref": {ref}, "mode": {"merge"}})
 	require.Equal(t, http.StatusForbidden, rr.Code, "no assertion, no restore")
@@ -1078,7 +1103,7 @@ func TestBackupsSection_RealService(t *testing.T) {
 	require.Eventually(t, func() bool { st := bs.Status(); return st.Running == nil && st.LastBackup != nil }, 60*time.Second, 10*time.Millisecond)
 	name := bs.Status().LastBackup.Name
 	sec := page("")
-	require.Contains(t, sec, "Last backup just now")
+	require.Regexp(t, `Backed up <time [^>]*>just now</time>`, sec)
 	require.Contains(t, sec, `<span class="badge brand">Made by you</span>`)
 	require.Contains(t, sec, "1 memory · 0 notes · 1 project")
 	require.Contains(t, sec, `<th scope="row">app</th><td>1</td><td>0</td><td>0</td><td>0</td><td class="bk-vs">same</td>`)

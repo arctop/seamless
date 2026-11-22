@@ -442,19 +442,3 @@ func (p gardenerPanel) ChipNote() string {
 	}
 	return strings.Join(parts, " ")
 }
-
-// SetupLine is the Your setup row's sentence about the switches.
-func (p gardenerPanel) SetupLine() string {
-	agents := "agents may apply proposals"
-	if !p.AgentsMayApply {
-		agents = "only you apply proposals"
-	}
-	if len(p.AutoApply) == 0 {
-		return agents + "; nothing applies by itself"
-	}
-	labels := make([]string, len(p.AutoApply))
-	for i, k := range p.AutoApply {
-		labels[i] = strings.ReplaceAll(k, "_", " ")
-	}
-	return agents + "; " + strings.Join(labels, ", ") + " apply by themselves"
-}

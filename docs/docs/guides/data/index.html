@@ -266,12 +266,12 @@ project holds. Like an export, it holds no config and no key.</p>
 <p>A release install (the installer's or Homebrew's) backs up <strong>every day, keeping
 the newest 7</strong>, in <code>~/.seamless/backups</code>. A Seamless built from source backs up only once you
 turn it on, so a throwaway daemon never writes backups. The section's
-<strong>Schedule and folder</strong> card sets:</p>
+schedule sets:</p>
 <ul>
 <li><strong>Back up automatically</strong>, on or off;</li>
-<li><strong>How often</strong>: every hour, every 6 hours, every day or every week. The config
-file can set any interval from <code>1h</code> to <code>720h</code>, and the list then shows it too;</li>
-<li><strong>Automatic backups to keep</strong>, from 1 to 100. Older automatic backups are
+<li><strong>How often</strong>: hourly, every 6 hours, daily or weekly. The config file can
+set any interval from <code>1h</code> to <code>720h</code>, and the choices then show it too;</li>
+<li><strong>Keep</strong>, from 1 to 100 automatic backups. Older automatic backups are
 deleted after the next one is written. Backups you make yourself, the safety
 backups taken before a restore and the updater's pre-update backups are never
 deleted automatically, and neither is another install's backup in a shared
@@ -279,14 +279,14 @@ folder.</li>
 </ul>
 <p>The first scheduled backup runs no sooner than ten minutes after Seamless
 starts. A run is skipped when nothing has changed since this install's newest
-backup in the folder (the card then says <strong>Up to date</strong>), or when the disk is
+backup in the folder (the first card then says <strong>Nothing changed since</strong>), or when the disk is
 short of room: a backup needs its own size free on each disk it touches, plus a
 reserve of 1 GiB or the backup's size, whichever is larger, so the updater can
 always take its own backup. <strong>Back up now</strong> makes one at once, whatever the
 schedule says.</p>
 <p>What you save there wins over the config file's
-<a href="../../reference/configuration/#backups"><code>backup:</code> block</a> until you press <strong>Reset to
-the config file</strong>, and applies from the next backup.</p>
+<a href="../../reference/configuration/#backups"><code>backup:</code> block</a> until you press the source
+chip's <strong>Reset</strong>, and applies from the next backup.</p>
 <h3 id="the-folder">The folder</h3>
 <p>Backups go to one folder you choose. Pick a synced folder or an external disk
 so a backup outlives the machine: the section offers the places it finds on

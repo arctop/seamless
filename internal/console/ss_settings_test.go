@@ -336,7 +336,7 @@ func TestSsHeads_OneLineAtEverySection(t *testing.T) {
 	}{
 		{"experience", true, true, "How much of the console you see."},
 		{"features", true, true, "Optional parts of Seamless, for you and your agents alike."},
-		{"setup", false, false, "What is running, where it keeps things, and which agents are connected."},
+		{"setup", false, false, "What runs where. Each line links to where you change it."},
 		{"updates", true, true, "New releases, and whether this install takes them by itself."},
 		{"backups", true, true, "Copies of everything, on a schedule."},
 		{"gardener", true, true, "Who may act on its proposals, and which apply by themselves."},
@@ -392,7 +392,8 @@ func TestSsConfigFileDecides_SaidOnce(t *testing.T) {
 	require.Equal(t, 1, strings.Count(sec, "Config file decides"))
 	head := regexp.MustCompile(`(?s)<header class="settings-section-head">.*?</header>`).FindString(sec)
 	require.Contains(t, head, `<span class="src-chip is-locked">`, "the file decides the whole section: the head says so")
-	require.Contains(t, sec, `type="submit" disabled>Turn update checks on</button>`)
+	require.Contains(t, formFor(sec, "/console/settings/updates"), `name="check" value="on" aria-label="Check for new releases" disabled>`,
+		"the switch it governs is locked, with no chip of its own")
 
 	noAuto := autoBase
 	noAuto.Auto = boolPtr(false)
@@ -402,7 +403,7 @@ func TestSsConfigFileDecides_SaidOnce(t *testing.T) {
 	sec = sectionOf(getPeek(t, mux, "/console/settings?s=updates").Body.String(), "updates")
 	require.Equal(t, 1, strings.Count(sec, "Config file decides"))
 	auto := formFor(sec, "/console/settings/updates/auto")
-	require.Contains(t, auto, `disabled>Turn automatic updates on</button>`)
+	require.Contains(t, auto, `name="auto" value="on" aria-label="Install updates by themselves" disabled>`)
 	require.Contains(t, auto, `<span class="src-chip is-locked">`, "beside the switch it decides")
 	head = regexp.MustCompile(`(?s)<header class="settings-section-head">.*?</header>`).FindString(sec)
 	require.Contains(t, head, `<span class="src-chip is-file">`, "the head says where the rest comes from")
