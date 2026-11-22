@@ -59,7 +59,8 @@ const diarySeed = 20261120
 
 // diaryTodaySpan is how many minutes before the anchor today's script starts
 // at most: its earliest session began this long ago. An anchor closer to
-// midnight squeezes today's script into the time since midnight.
+// midnight squeezes today's script into the time since midnight
+// (todayUnit).
 const diaryTodaySpan = 195
 
 // DiaryRole is what a covered day holds.
@@ -370,9 +371,17 @@ type diaryRun struct {
 	start time.Time
 	last  time.Time // its end, or its last activity (reaped, live)
 	pre   bool      // on the day older than the ledger
+	// unit is how long one of the script's minutes lasts: a minute, or less
+	// for today's script squeezed into the time since midnight (todayUnit).
+	unit time.Duration
 }
 
-func (r *diaryRun) at(m int) time.Time { return r.start.Add(time.Duration(m) * time.Minute) }
+// at is the time m of the script's minutes into the session.
+func (r *diaryRun) at(m int) time.Time { return r.start.Add(time.Duration(m) * r.unit) }
+
+// secs is n of the script's seconds, in the run's unit: a step a few seconds
+// into its minute stays inside that minute however far it is squeezed.
+func (r *diaryRun) secs(n int) time.Duration { return time.Duration(n) * r.unit / 60 }
 
 // cwd is the directory the session ran in.
 func (r *diaryRun) cwd() string {
@@ -419,17 +428,13 @@ func (d *diarySeeder) place() error {
 		}
 	}
 	today := d.cal.days[0]
-	scale := todayScale(d.anchor.Sub(today))
-	for i, spec := range diaryToday {
-		spec = scaleSession(spec, scale)
-		start := d.anchor.Add(-time.Duration(spec.ago) * time.Minute)
-		if !start.After(today) {
-			start = today.Add(time.Duration(i+1) * time.Minute)
-		}
+	unit := todayUnit(d.anchor.Sub(today))
+	for _, spec := range diaryToday {
+		start := d.anchor.Add(-time.Duration(spec.ago) * unit)
 		if spec.end == endLive {
-			spec.mins = int(d.anchor.Sub(start) / time.Minute)
+			spec.mins = spec.ago
 		}
-		if err := d.schedule(spec, today, start, false); err != nil {
+		if err := d.scheduleIn(spec, today, start, false, unit); err != nil {
 			return err
 		}
 	}
@@ -461,47 +466,24 @@ func (d *diarySeeder) allSpecs() []dSession {
 	return append(out, diaryToday...)
 }
 
-// todayScale is the factor today's script is squeezed by when the anchor is
-// less than diaryTodaySpan minutes after midnight: 1 otherwise.
-func todayScale(sinceMidnight time.Duration) float64 {
-	avail := sinceMidnight.Minutes() - 5
-	if avail >= diaryTodaySpan {
-		return 1
-	}
-	return math.Max(avail, 1) / diaryTodaySpan
-}
-
-// scaleSession is spec with every minute value scaled by f: offsets round
-// down and lengths up, so an act that came before the end still does
-// (floor(a*f) < ceil(b*f) whenever a < b).
-func scaleSession(spec dSession, f float64) dSession {
-	if f == 1 {
-		return spec
-	}
-	at := func(v int) int { return int(math.Floor(float64(v) * f)) }
-	span := func(v int) int { return max(int(math.Ceil(float64(v)*f)), 1) }
-	spec.ago, spec.mins = span(spec.ago), span(spec.mins)
-	spans := func(in []dSpan) []dSpan {
-		out := slices.Clone(in)
-		for i := range out {
-			out[i].at, out[i].mins = at(out[i].at), span(out[i].mins)
-		}
-		return out
-	}
-	spec.work, spec.subs = spans(spec.work), spans(spec.subs)
-	spec.prompts = slices.Clone(spec.prompts)
-	for i := range spec.prompts {
-		spec.prompts[i].at = at(spec.prompts[i].at)
-	}
-	spec.acts = slices.Clone(spec.acts)
-	for i := range spec.acts {
-		spec.acts[i].at = at(spec.acts[i].at)
-	}
-	return spec
+// todayUnit is how long one of today's script minutes lasts when the anchor
+// is t after midnight: a minute once there is room for the whole script and
+// five minutes to spare, less before that, so the script keeps its shape and
+// its order, its earliest session starts after midnight and its last step
+// comes before the anchor at any time of night. Squeezing it by whole
+// minutes could not: under eight minutes after midnight two sessions claimed
+// one task at once, and a live session started after the anchor.
+func todayUnit(t time.Duration) time.Duration {
+	return min(time.Minute, t/(diaryTodaySpan+5))
 }
 
 // schedule mints a session's identity and queues every step of its replay.
 func (d *diarySeeder) schedule(spec dSession, day, start time.Time, pre bool) error {
+	return d.scheduleIn(spec, day, start, pre, time.Minute)
+}
+
+// scheduleIn is schedule with the script's minute lasting unit.
+func (d *diarySeeder) scheduleIn(spec dSession, day, start time.Time, pre bool, unit time.Duration) error {
 	if _, dup := d.runs[spec.key]; dup {
 		return fmt.Errorf("session %s placed twice", spec.key)
 	}
@@ -509,7 +491,7 @@ func (d *diarySeeder) schedule(spec dSession, day, start time.Time, pre bool) er
 	if err != nil {
 		return err
 	}
-	r := &diaryRun{spec: spec, id: id, day: day, start: start, last: start.Add(time.Duration(spec.mins) * time.Minute), pre: pre}
+	r := &diaryRun{spec: spec, id: id, day: day, start: start, last: start.Add(time.Duration(spec.mins) * unit), pre: pre, unit: unit}
 	switch spec.client {
 	case clientClaude, clientCodex:
 		r.ext = d.uuid()
@@ -534,18 +516,18 @@ func (d *diarySeeder) schedule(spec dSession, day, start time.Time, pre bool) er
 	// A prompt reaches the hooks a few seconds into its minute (after the
 	// SessionStart briefing), an act a few seconds after that.
 	for _, p := range spec.prompts {
-		d.at(r.at(p.at).Add(5*time.Second), func() error { return d.prompt(r, p) })
+		d.at(r.at(p.at).Add(r.secs(5)), func() error { return d.prompt(r, p) })
 	}
 	for _, a := range spec.acts {
 		if a.at >= spec.mins {
 			return fmt.Errorf("session %s: act at minute %d, not before its end (%d)", spec.key, a.at, spec.mins)
 		}
-		d.at(r.at(a.at).Add(10*time.Second), func() error { return d.act(r, a) })
+		d.at(r.at(a.at).Add(r.secs(10)), func() error { return d.act(r, a) })
 	}
 	if spec.client == clientCodex {
 		until := r.last
 		if spec.end == endLive {
-			until = d.anchor.Add(-time.Minute)
+			until = d.anchor.Add(-r.unit)
 		}
 		turns := r.codexTurns(until)
 		if len(turns) == 0 && spec.end != endLive {
@@ -557,7 +539,7 @@ func (d *diarySeeder) schedule(spec dSession, day, start time.Time, pre bool) er
 			d.at(tn.at, func() error { return d.codexStop(r, tn, lastTurn) })
 		}
 		if pre {
-			d.at(r.last.Add(30*time.Second), func() error {
+			d.at(r.last.Add(r.secs(30)), func() error {
 				return setPreLedgerTotals(d.ctx, d.s.db, r.id, turns[len(turns)-1].cumulative)
 			})
 		}
@@ -566,10 +548,10 @@ func (d *diarySeeder) schedule(spec dSession, day, start time.Time, pre bool) er
 	case endExplicit:
 		d.at(r.last, func() error { return d.endExplicit(r) })
 		if spec.client == clientClaude {
-			d.at(r.last.Add(30*time.Second), func() error { return d.harvestClaude(r, r.last) })
+			d.at(r.last.Add(r.secs(30)), func() error { return d.harvestClaude(r, r.last) })
 		}
 		if spec.flag != nil {
-			d.at(r.last.Add(31*time.Second), func() error { return d.keepTranscript(r) })
+			d.at(r.last.Add(r.secs(31)), func() error { return d.keepTranscript(r) })
 		}
 	case endHook:
 		if spec.client != clientClaude {
@@ -577,7 +559,7 @@ func (d *diarySeeder) schedule(spec dSession, day, start time.Time, pre bool) er
 		}
 		d.at(r.last, func() error { return d.endHook(r) })
 		if pre {
-			d.at(r.last.Add(30*time.Second), func() error {
+			d.at(r.last.Add(r.secs(30)), func() error {
 				return setPreLedgerTotals(d.ctx, d.s.db, r.id, core.SumUsage(r.claudeRows(r.last)))
 			})
 		}
@@ -588,14 +570,14 @@ func (d *diarySeeder) schedule(spec dSession, day, start time.Time, pre bool) er
 		}
 	case endLive:
 		if spec.client == clientClaude {
-			at := d.anchor.Add(-2 * time.Minute)
+			at := d.anchor.Add(-2 * r.unit)
 			d.at(at, func() error { return d.harvestClaude(r, at) })
 		}
 	default:
 		return fmt.Errorf("session %s: no end", spec.key)
 	}
 	if pre && spec.client == clientClaude && spec.end == endExplicit {
-		d.at(r.last.Add(30*time.Second), func() error {
+		d.at(r.last.Add(r.secs(30)), func() error {
 			return setPreLedgerTotals(d.ctx, d.s.db, r.id, core.SumUsage(r.claudeRows(r.last)))
 		})
 	}
@@ -736,7 +718,7 @@ func (r *diaryRun) claudeRows(until time.Time) []core.UsageBucket {
 				n = 1
 			}
 			for k := range n {
-				add(t.Add(time.Duration(5+k*19)*time.Second), r.spec.model, core.UsageThreadMain, mainMessage(rng, idx, r.spec.brief))
+				add(t.Add(r.secs(5+k*19)), r.spec.model, core.UsageThreadMain, mainMessage(rng, idx, r.spec.brief))
 				idx++
 			}
 		}
@@ -753,7 +735,7 @@ func (r *diaryRun) claudeRows(until time.Time) []core.UsageBucket {
 				continue
 			}
 			for k := range 1 + rng.Intn(3) {
-				add(t.Add(time.Duration(9+k*14)*time.Second), model, core.UsageThreadSubagent, subMessage(rng, j))
+				add(t.Add(r.secs(9+k*14)), model, core.UsageThreadSubagent, subMessage(rng, j))
 				j++
 			}
 		}
@@ -826,7 +808,7 @@ func (r *diaryRun) codexTurns(until time.Time) []diaryTurn {
 	)
 	for _, sp := range r.work() {
 		for m := 1 + rng.Intn(3); m < sp.mins; m += 2 + rng.Intn(4) {
-			t := r.at(sp.at + m).Add(25 * time.Second)
+			t := r.at(sp.at + m).Add(r.secs(25))
 			if !t.Before(until) {
 				break
 			}

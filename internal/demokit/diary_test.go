@@ -463,8 +463,10 @@ func diaryCheckUsageMix(t *testing.T, s *Seeder, fx DiaryFixture) {
 // same wherever the calendar puts it. The calendar itself is checked for
 // every weekday by TestDiaryCalendar_EveryDay; these seeds cover what only a
 // replay shows: a 15-weekday window (its first script is used), a window
-// across a daylight-saving change, a zone 45 minutes off the hour, and an
-// anchor so close to midnight that today's script is squeezed.
+// across a daylight-saving change, a zone 45 minutes off the hour, and
+// anchors so close to midnight that today's script is squeezed, down to
+// seconds after it (squeezed by whole minutes, the fixture failed to seed
+// for the first eight minutes of every day).
 func diaryCheckOtherAnchors(t *testing.T, base *Seeder, baseFx DiaryFixture) {
 	baseRows := map[string]int{}
 	for key, id := range baseFx.Sessions {
@@ -481,6 +483,9 @@ func diaryCheckOtherAnchors(t *testing.T, base *Seeder, baseFx DiaryFixture) {
 		"monday, daylight saving":   {time.Date(2026, 11, 16, 21, 0, 0, 0, la), la},
 		"wednesday, 45-minute zone": {time.Date(2026, 11, 18, 21, 0, 0, 0, odd), odd},
 		"tuesday, after midnight":   {time.Date(2026, 11, 17, 0, 40, 0, 0, diaryTestZone), diaryTestZone},
+		"sunday, 7 minutes in":      {time.Date(2026, 11, 22, 0, 7, 0, 0, diaryTestZone), diaryTestZone},
+		"sunday, 3 minutes in":      {time.Date(2026, 11, 22, 0, 3, 0, 0, diaryTestZone), diaryTestZone},
+		"sunday, 30 seconds in":     {time.Date(2026, 11, 22, 0, 0, 30, 0, diaryTestZone), diaryTestZone},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
