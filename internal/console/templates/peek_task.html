@@ -19,7 +19,7 @@
 {{end}}
 
 {{define "detail-body"}}
-  {{- template "task-gate" .Gate}}
+  {{- template "task-gate" .}}
   {{if .Body}}<div class="prose">{{.Body}}</div>{{else}}<div class="peek-note">No description</div>{{end}}
 
   <dl class="peek-kv">
@@ -55,12 +55,6 @@
   {{end}}
   {{- template "task-revisions" .Revisions}}
 
-  {{if .ClaimedBy}}
-  <div class="peek-actions">
-    <form method="post" action="/console/tasks/{{.ID}}/release" onsubmit="return confirm('Release the claim on this task? It reopens for any agent to claim.');">
-      {{if .Next}}<input type="hidden" name="next" value="{{.Next}}">{{end}}
-      <button class="link-act danger" type="submit" title="Owner override: takes the claim from whoever holds it">release claim</button>
-    </form>
-  </div>
-  {{end}}
+  {{- template "task-held" .}}
+  <div class="peek-actions task-acts" data-task-actions>{{template "task-actions" .}}</div>
 {{end}}

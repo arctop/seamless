@@ -294,33 +294,34 @@ func defaultTaskID(data tasksData) string {
 }
 
 // taskRelease is the owner override for a claimed task: it force-releases the
-// claim (reopening the task for any agent to claim) regardless of who holds it.
-// It is reachable only from this owner surface (the console button and the
-// bearer-authenticated `seam task release --force`), never the agent MCP tools.
+// claim (reopening the task for any agent to claim) regardless of who holds it,
+// and whether it holds one at all: a claimless start or a lapsed lease is
+// released the same way. It is reachable only from this owner surface (the
+// console button and the bearer-authenticated `seam task release --force`),
+// never the agent MCP tools. A task no longer in progress has nothing to
+// release: the owner is told so, a JSON caller gets a 409, never a 500.
 func (s *Service) taskRelease(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id := r.PathValue("id")
-	// Read through the console's (possibly filtered) handle first: the release
-	// itself runs on the write handle, which sees every project (see writeDB).
-	if s.cfg.WriteDB != nil {
-		if _, err := store.TaskByID(ctx, s.db(ctx), id); err != nil {
-			if errors.Is(err, store.ErrTaskNotFound) {
-				s.notFound(w, r, "No task with id "+id+".")
-				return
-			}
-			s.serverError(w, r, err)
-			return
-		}
+	t, ok := s.taskForAction(w, r)
+	if !ok {
+		return
 	}
-	released, err := store.ForceReleaseTask(ctx, s.writeDB(), id, time.Now().UTC())
+	next := r.PostFormValue("next")
+	if t.Status != core.TaskInProgress {
+		s.taskNothingToRelease(w, r, t.ID, next)
+		return
+	}
+	released, err := store.ForceReleaseTask(ctx, s.writeDB(), t.ID, time.Now().UTC())
 	if err != nil {
-		if errors.Is(err, store.ErrTaskNotFound) {
-			s.notFound(w, r, "No task with id "+id+".")
-			return
+		switch {
+		case errors.Is(err, store.ErrTaskNotFound):
+			s.notFound(w, r, "No task with id "+t.ID+".")
+		case errors.Is(err, store.ErrTaskClaimConflict):
+			// It left in progress between the read and the release.
+			s.taskNothingToRelease(w, r, t.ID, next)
+		default:
+			s.serverError(w, r, err)
 		}
-		// Not in progress (nothing to release) or a store error: surface it
-		// rather than pretend success.
-		s.serverError(w, r, err)
 		return
 	}
 	if s.cfg.Events != nil {
@@ -335,27 +336,294 @@ func (s *Service) taskRelease(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, taskDetailJSON(released))
 		return
 	}
-	http.Redirect(w, r, releaseNext(r.PostFormValue("next"), released.ID), http.StatusSeeOther)
+	http.Redirect(w, r, releaseNext(next, released.ID), http.StatusSeeOther)
 }
 
-// releaseNext resolves where a force-release returns to. The tasks library is
-// the default, but the release button also lives on surfaces that own their own
-// view -- the project workspace's plan timeline, which posts its own URL -- and
-// redirecting those to the library would morph the workspace into it. safeNext
-// refuses anything off-console; a refused next falls back to the task rather
-// than dumping the owner on the console root.
+// taskNothingToRelease answers a release of a task that is not in progress:
+// the owner's page says so, a JSON caller reads it as a 409.
+func (s *Service) taskNothingToRelease(w http.ResponseWriter, r *http.Request, id, next string) {
+	s.taskAnswer(w, r, id, next, http.StatusConflict, "notice",
+		"Nothing to release: the task is not in progress.")
+}
+
+// releaseNext resolves where a force-release returns to (taskNext).
 func releaseNext(raw, taskID string) string {
+	return taskNext(raw, taskID, "notice", "Released the claim.")
+}
+
+// taskNext resolves where an owner's task action returns to, carrying its
+// one-shot flash (param is "notice" or "error"). The task's page is the
+// default, but the actions also live on surfaces that own their own view --
+// the project workspace's step dossier, which posts its own URL -- and
+// redirecting those to the library would morph the workspace into it.
+// safeNext refuses anything off-console; a refused next falls back to the
+// task rather than dumping the owner on the console root. A flash the next
+// already carried is dropped, and a fragment stays last.
+func taskNext(raw, taskID, param, msg string) string {
 	dest := "/console/tasks/" + taskID
 	if raw = strings.TrimSpace(raw); raw != "" {
 		if next := safeNext(raw); next != "/console/" {
 			dest = next
 		}
 	}
-	sep := "?"
-	if strings.Contains(dest, "?") {
-		sep = "&"
+	dest, frag, hasFrag := strings.Cut(dest, "#")
+	path, query, _ := strings.Cut(dest, "?")
+	var kept []string
+	for _, part := range strings.Split(query, "&") {
+		if part == "" || strings.HasPrefix(part, "notice=") || strings.HasPrefix(part, "error=") {
+			continue
+		}
+		kept = append(kept, part)
 	}
-	return dest + sep + "notice=" + url.QueryEscape("Released the claim.")
+	kept = append(kept, param+"="+url.QueryEscape(msg))
+	out := path + "?" + strings.Join(kept, "&")
+	if hasFrag {
+		out += "#" + frag
+	}
+	return out
+}
+
+// The owner's task actions (plan:console-ux-pass UX 06): mark a task done,
+// drop it, reopen it, and mark its gate as handled, beside the release above.
+// Each goes through the store call tasks_update makes (store.UpdateTaskDetailed),
+// so the holder rule, the unblocking of dependents and the plan settlement are
+// the MCP path's own, and records the task.transition event it records, with
+// "by": "console" and no session.
+
+// gateClearedByOwner is who a gate the console clears was cleared by
+// (store.TaskGateClear: "owner" from an owner surface).
+const gateClearedByOwner = "owner"
+
+// taskStatusMoves are the statuses POST /console/tasks/{id}/status moves a
+// task to, with the notice each one leaves.
+var taskStatusMoves = map[core.TaskStatus]string{
+	core.TaskDone:    "Marked done.",
+	core.TaskDropped: "Dropped.",
+	core.TaskOpen:    "Reopened.",
+}
+
+// taskStatus moves a task to done, dropped or open (the form's to). It
+// refuses to close a task a live claim holds -- the owner releases the claim
+// first, which tells its holder -- and a reopen of a task in progress, which
+// the release is. A move to the status the task already has writes nothing.
+func (s *Service) taskStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	t, ok := s.taskForAction(w, r)
+	if !ok {
+		return
+	}
+	next := r.PostFormValue("next")
+	to := core.TaskStatus(strings.TrimSpace(r.PostFormValue("to")))
+	notice, valid := taskStatusMoves[to]
+	if !valid {
+		s.formError(w, r, http.StatusBadRequest, "to must be done, dropped or open")
+		return
+	}
+	switch {
+	case t.Status == to:
+		s.taskAnswer(w, r, t.ID, next, http.StatusOK, "notice", "The task is already "+string(to)+".")
+		return
+	case to == core.TaskOpen && !t.Status.Closed():
+		s.taskAnswer(w, r, t.ID, next, http.StatusConflict, "error",
+			"The task is in progress, not closed: Release claim reopens it.")
+		return
+	}
+	if s.refusedHeld(w, r, t, next) {
+		return
+	}
+	res, err := store.UpdateTaskDetailed(ctx, s.writeDB(), t.ID, store.TaskPatch{Status: &to}, "", time.Now().UTC())
+	if err != nil {
+		s.taskActionFailed(w, r, t.ID, next, err)
+		return
+	}
+	s.recordTaskAction(ctx, res, nil)
+	s.taskActionDone(w, r, res.Task, next, notice)
+}
+
+// taskGateClear marks a task's open gate as handled, with the owner's
+// optional one-line note: a step's gate clears and the step goes ahead once
+// nothing else blocks it; a gate clears and closes as done, which unblocks
+// the tasks that depend on it. The clearance names the owner.
+func (s *Service) taskGateClear(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	t, ok := s.taskForAction(w, r)
+	if !ok {
+		return
+	}
+	next := r.PostFormValue("next")
+	switch {
+	case !t.Gate.Set():
+		s.taskAnswer(w, r, t.ID, next, http.StatusConflict, "error", "The task has no gate to mark as handled.")
+		return
+	case !t.Gate.Open():
+		s.taskAnswer(w, r, t.ID, next, http.StatusOK, "notice", "The gate is already handled.")
+		return
+	}
+	if s.refusedHeld(w, r, t, next) {
+		return
+	}
+	// One line: a note typed across lines, or padded, reads as one.
+	note := strings.Join(strings.Fields(r.PostFormValue("note")), " ")
+	res, err := store.UpdateTaskDetailed(ctx, s.writeDB(), t.ID, store.TaskPatch{
+		ClearGate: &store.TaskGateClear{By: gateClearedByOwner, Note: note},
+	}, "", time.Now().UTC())
+	if err != nil {
+		s.taskActionFailed(w, r, t.ID, next, err)
+		return
+	}
+	s.recordTaskAction(ctx, res, map[string]any{"gate": "cleared"})
+	msg := "Marked as handled: the step's gate is cleared."
+	if res.Task.IsGate() {
+		msg = "Marked as handled: the gate is done."
+	}
+	s.taskActionDone(w, r, res.Task, next, msg)
+}
+
+// taskActions are the owner's actions a task offers, as of the read: the
+// buttons the reader and the peek render (task_shared.html's task-actions),
+// each the route above that would take it.
+type taskActions struct {
+	// Release: the task is in progress, so there is a claim to take, live or
+	// lapsed, or none at all (a claimless start). Offered holder or not.
+	Release bool
+	// Held: a live claim holds the task, so nothing closes it until the claim
+	// is released; the page names the holder (taskDetail.Holder).
+	Held bool
+	// Done and Drop close an open or in-progress task no live claim holds.
+	// A gate whose gate is still open closes by being marked as handled, so it
+	// offers no Done.
+	Done, Drop bool
+	// Reopen: a done or dropped task.
+	Reopen bool
+	// Handle: the task's own gate is open and no live claim holds the task:
+	// Mark as handled, with a note.
+	Handle bool
+}
+
+// actionsFor is the set of actions t offers; live is core.Task.ClaimLive as
+// of the read.
+func actionsFor(t core.Task, live bool) taskActions {
+	a := taskActions{Release: t.Status == core.TaskInProgress, Held: live}
+	switch {
+	case t.Status.Closed():
+		a.Reopen = true
+	case live:
+	default:
+		a.Handle = t.Gate.Open()
+		a.Done = !(t.IsGate() && a.Handle)
+		a.Drop = true
+	}
+	return a
+}
+
+// taskForAction reads the task an owner's action names through the request's
+// handle, which hides a locked project's tasks: such a task, like one that
+// does not exist, answers not found with no title. The action itself runs on
+// the write handle (writeDB), which sees every project.
+func (s *Service) taskForAction(w http.ResponseWriter, r *http.Request) (core.Task, bool) {
+	id := r.PathValue("id")
+	t, err := store.TaskByID(r.Context(), s.db(r.Context()), id)
+	if err != nil {
+		if errors.Is(err, store.ErrTaskNotFound) {
+			s.notFound(w, r, "No task with id "+id+".")
+			return core.Task{}, false
+		}
+		s.serverError(w, r, err)
+		return core.Task{}, false
+	}
+	return t, true
+}
+
+// refusedHeld refuses, and reports that it did, an action on a task a live
+// claim holds: the console never closes a task over its holder's head (the
+// holder rule UpdateTask keeps for every caller but the holder). The owner
+// releases the claim first, which tells the holder.
+func (s *Service) refusedHeld(w http.ResponseWriter, r *http.Request, t core.Task, next string) bool {
+	if !t.ClaimLive(time.Now().UTC()) {
+		return false
+	}
+	s.taskAnswer(w, r, t.ID, next, http.StatusConflict, "error", s.heldLine(r.Context(), t))
+	return true
+}
+
+// heldLine says who holds a task's live claim and what the owner does first.
+func (s *Service) heldLine(ctx context.Context, t core.Task) string {
+	who := "An agent"
+	if h := holderLink(t.ClaimedBy, s.sessionNamer(ctx)); h != nil {
+		who = h.Name
+	}
+	return who + " holds a live claim on this task: release the claim first, then close it."
+}
+
+// taskActionFailed answers a store refusal of an owner's task action: a claim
+// taken between the read and the write is the holder's line, a gate change
+// the store refuses says why, and anything else is a server error.
+func (s *Service) taskActionFailed(w http.ResponseWriter, r *http.Request, id, next string, err error) {
+	ctx := r.Context()
+	switch {
+	case errors.Is(err, store.ErrTaskNotFound):
+		s.notFound(w, r, "No task with id "+id+".")
+	case errors.Is(err, store.ErrTaskClaimConflict):
+		line := "An agent claimed this task a moment ago: release the claim first, then close it."
+		if t, rerr := store.TaskByID(ctx, s.db(ctx), id); rerr == nil && t.ClaimLive(time.Now().UTC()) {
+			line = s.heldLine(ctx, t)
+		}
+		s.taskAnswer(w, r, id, next, http.StatusConflict, "error", line)
+	case errors.Is(err, store.ErrTaskGate):
+		why := err.Error()
+		if _, after, found := strings.Cut(why, store.ErrTaskGate.Error()+": "); found {
+			why = after
+		}
+		s.taskAnswer(w, r, id, next, http.StatusBadRequest, "error", "The gate was not marked as handled: "+why+".")
+	default:
+		s.serverError(w, r, err)
+	}
+}
+
+// recordTaskAction records an owner's task action as the task.transition
+// event tasks_update records -- the status before and after, plus extra --
+// with "by": "console" and no session: a console action attributes no
+// session to a plan (plan-token-attribution-contract). The recorder mints
+// plan.shipped from it when it closes a plan's last step, as it does for the
+// MCP path's event.
+func (s *Service) recordTaskAction(ctx context.Context, res store.TaskUpdateResult, extra map[string]any) {
+	if s.cfg.Events == nil {
+		return
+	}
+	payload := map[string]any{"to": string(res.Task.Status), "from": string(res.From), "by": "console"}
+	for k, v := range extra {
+		payload[k] = v
+	}
+	if _, err := s.eventLog(ctx).Record(ctx, core.Event{
+		Kind: core.EventTaskTransition, ProjectSlug: res.Task.ProjectSlug, ItemID: res.Task.ID, Payload: payload,
+	}); err != nil {
+		s.logger.Warn("console: record task action event", "task", res.Task.ID, "error", err)
+	}
+}
+
+// taskActionDone answers a landed action: the task as JSON, or the page the
+// owner acted from with the action's notice.
+func (s *Service) taskActionDone(w http.ResponseWriter, r *http.Request, t core.Task, next, notice string) {
+	if wantsJSON(r) {
+		writeJSON(w, http.StatusOK, taskDetailJSON(t))
+		return
+	}
+	http.Redirect(w, r, taskNext(next, t.ID, "notice", notice), http.StatusSeeOther)
+}
+
+// taskAnswer answers an action that changed nothing: a JSON caller gets msg
+// with status (an error unless status is 200), a browser the page it acted
+// from with msg as its flash.
+func (s *Service) taskAnswer(w http.ResponseWriter, r *http.Request, id, next string, status int, param, msg string) {
+	if wantsJSON(r) {
+		if status == http.StatusOK {
+			writeJSON(w, status, map[string]string{"id": id, "notice": msg})
+			return
+		}
+		writeJSON(w, status, map[string]string{"error": msg})
+		return
+	}
+	http.Redirect(w, r, taskNext(next, id, param, msg), http.StatusSeeOther)
 }
 
 // taskDetailJSON is the minimal task view returned to a CLI/JSON caller of

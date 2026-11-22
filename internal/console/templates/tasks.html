@@ -140,13 +140,7 @@
       <span class="kind" data-kind="{{.Kind}}" title="A gate: what a person, or an event outside Seamless, must do before the tasks that depend on it go ahead. Nobody claims it; clearing it closes it.">{{.Kind}}</span>{{end}}
       {{if .PlanSlug}}<a class="kind" href="/console/plans/{{.PlanSlug}}">plan:{{.PlanSlug}}</a>{{copyBtn (printf "plan:%s" .PlanSlug)}}{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{with .UpdatedAccount}} <span class="kind faint" data-updated-account="{{.}}" title="Title or body rewritten by a restricted local account (peer_auth.restricted)">updated by account {{.}}</span>{{end}}{{with .MayContain}} <span class="kind faint" data-may-contain title="Provenance stamp: the agent that wrote this held content from these confidential or sealed projects. It names projects and approvals, never content.">{{mayContain .}}</span>{{end}}
       {{if .Project}}<a class="chip-parent" href="/console/projects/{{.Project}}">{{icon "git-branch"}}{{.Project}}</a>{{else}}<span class="chip-parent">{{icon "git-branch"}}global</span>{{end}}
-      {{if .ClaimedBy}}
-      <span class="reader-actions">
-        <form method="post" action="/console/tasks/{{.ID}}/release" onsubmit="return confirm('Release the claim on this task? It reopens for any agent to claim.');">
-          <button class="ract danger" type="submit" title="Owner override: takes the claim from whoever holds it">{{icon "undo-2"}}Release claim</button>
-        </form>
-      </span>
-      {{end}}
+      <span class="reader-actions task-acts" data-task-actions>{{template "task-actions" .}}</span>
     </div>
     <h2 class="reader-title">{{.Title}}{{copyBtn .Title}}
       <form class="star-form" method="post" action="/console/favorites/task/{{.ID}}">
@@ -162,8 +156,9 @@
       <span class="fact">updated {{agoTime .Updated}}</span>
       {{if .Closed}}<span class="fact">closed {{agoTime .Closed}}</span>{{end}}
     </div>
+    {{- template "task-held" .}}
   </header>
-  {{- template "task-gate" .Gate}}
+  {{- template "task-gate" .}}
   {{if .Body}}<div class="prose doc">{{.Body}}</div>{{else}}<div class="peek-note">No description</div>{{end}}
   {{if .DependsOn}}
   <section class="reader-links">

@@ -276,7 +276,17 @@ nothing, and their rows say so.</p>
 <tr>
 <td>Force-release a task claim</td>
 <td><code>POST /console/tasks/{id}/release</code></td>
-<td>The owner override, <strong>Release claim</strong> on a task: takes the task's claim from whoever holds it, reopening it for any agent. Not reachable from the agent MCP tools.</td>
+<td>The owner override, <strong>Release claim</strong> on a task in progress, which asks in the page first: takes the task's claim from whoever holds it, live or lapsed, and tells the holder, or reopens a task marked in progress with no claim at all, so any agent may claim it. A task no longer in progress has nothing to release: the page says so (a JSON caller gets 409). Not reachable from the agent MCP tools.</td>
+</tr>
+<tr>
+<td>Mark a task done, drop it, or reopen it</td>
+<td><code>POST /console/tasks/{id}/status</code></td>
+<td><strong>Mark done</strong>, <strong>Drop</strong> (which asks in the page first) or <strong>Reopen</strong> on a task: <code>to=done</code>, <code>dropped</code> or <code>open</code>, through the update <code>tasks_update status=</code> makes, so a closed task unblocks the tasks that depend on it, and the last step of a plan closed as done settles the plan as an agent's close does. Records <code>task.transition</code> with <code>by: console</code>. Refused, naming the holder, while a live claim holds the task: release the claim first. Reopen is for a done or dropped task (one in progress reopens through <strong>Release claim</strong>); a move to the status the task has writes nothing.</td>
+</tr>
+<tr>
+<td>Mark a gate as handled</td>
+<td><code>POST /console/tasks/{id}/gate/clear</code></td>
+<td><strong>Mark as handled</strong> on a task whose own gate is open, with an optional one-line <code>note=</code>: clears the gate as <code>tasks_update gate_clear</code> does, recording the owner as who cleared it and the note. A step's gate clears, and the step goes ahead once nothing else blocks it; a gate closes as done, which unblocks the tasks waiting on it. Records <code>task.transition</code> with <code>gate: cleared</code> and <code>by: console</code>. Refused while a live claim holds the task, from an agent's process on the peer_auth socket, and from a paired device.</td>
 </tr>
 <tr>
 <td>Force-release a repo lock</td>
@@ -2172,8 +2182,15 @@ steps. The tags software adds - <code>created-by:*</code>, <code>plan-status:*</
 unfinished blocker), <strong>in progress</strong>, <strong>blocked</strong>, and <strong>closed</strong> (done and
 dropped merged, newest first, capped at 25 with a count of the rest, collapsed
 by default). The reader carries the task's body, claim and lease state, and
-both dependency directions; <strong>Release claim</strong> is the action, and it is the
-owner override - it takes the claim from whoever holds it.</p>
+both dependency directions, and the owner's actions on the task, the same in
+the reader and in the peek (the step dossier on a project's Plans &amp; tasks tab):
+<strong>Mark done</strong> and <strong>Drop</strong> on an open or in-progress task, <strong>Reopen</strong> on a
+closed one, <strong>Mark as handled</strong> with a note on an open gate, and <strong>Release
+claim</strong> on a task in progress, whoever holds it or none. Drop and Release claim
+ask in the page: the button turns into a second one to press. While a live
+claim holds the task the page names its holder and offers Release claim
+first: the console never closes a task over its holder's head. Each action
+returns to the page it came from with a line that says what it did.</p>
 <p>Every task and plan step says where it stands in the same words, on Tasks,
 the project workspace and Plans:</p>
 <div class="table-wrap">

@@ -19,7 +19,9 @@ nothing, and their rows say so.
 | Action | Route | Effect |
 |---|---|---|
 | Archive a memory | `POST /console/memories/{id}/archive` | Routes through `lifecycle.Archive`: the memory is stamped invalid and leaves every index, its file stays on disk with a tombstone. Returns to the Memories list `next=` names, its filters kept; any other `next` returns to the plain list. |
-| Force-release a task claim | `POST /console/tasks/{id}/release` | The owner override, **Release claim** on a task: takes the task's claim from whoever holds it, reopening it for any agent. Not reachable from the agent MCP tools. |
+| Force-release a task claim | `POST /console/tasks/{id}/release` | The owner override, **Release claim** on a task in progress, which asks in the page first: takes the task's claim from whoever holds it, live or lapsed, and tells the holder, or reopens a task marked in progress with no claim at all, so any agent may claim it. A task no longer in progress has nothing to release: the page says so (a JSON caller gets 409). Not reachable from the agent MCP tools. |
+| Mark a task done, drop it, or reopen it | `POST /console/tasks/{id}/status` | **Mark done**, **Drop** (which asks in the page first) or **Reopen** on a task: `to=done`, `dropped` or `open`, through the update `tasks_update status=` makes, so a closed task unblocks the tasks that depend on it, and the last step of a plan closed as done settles the plan as an agent's close does. Records `task.transition` with `by: console`. Refused, naming the holder, while a live claim holds the task: release the claim first. Reopen is for a done or dropped task (one in progress reopens through **Release claim**); a move to the status the task has writes nothing. |
+| Mark a gate as handled | `POST /console/tasks/{id}/gate/clear` | **Mark as handled** on a task whose own gate is open, with an optional one-line `note=`: clears the gate as `tasks_update gate_clear` does, recording the owner as who cleared it and the note. A step's gate clears, and the step goes ahead once nothing else blocks it; a gate closes as done, which unblocks the tasks waiting on it. Records `task.transition` with `gate: cleared` and `by: console`. Refused while a live claim holds the task, from an agent's process on the peer_auth socket, and from a paired device. |
 | Force-release a repo lock | `POST /console/locks/{id}/release` | [Repo locks](#locks): ends the hold a lock carries, live or lapsed, whoever holds it; the lock stays declared. What `seam lock release --force` sends. Refused when nobody holds it (409), from an agent's process on the peer_auth socket, and from a paired device. |
 | Approve a lock declaration | `POST /console/locks/{id}/approve` | Makes a restricted account's waiting declaration an active lock, which agents may then hold. Refused for a lock already active (409), from an agent's process on the peer_auth socket, and from a paired device. |
 | Discard a lock declaration | `POST /console/locks/{id}/discard` | Deletes a restricted account's waiting declaration with its repository identities, so the repository may be declared again. An active lock is refused (409): no route removes one. Refused from an agent's process on the peer_auth socket, and from a paired device. |
@@ -1163,8 +1165,15 @@ The same library shape, with the rail grouped into four buckets: **ready** (no
 unfinished blocker), **in progress**, **blocked**, and **closed** (done and
 dropped merged, newest first, capped at 25 with a count of the rest, collapsed
 by default). The reader carries the task's body, claim and lease state, and
-both dependency directions; **Release claim** is the action, and it is the
-owner override - it takes the claim from whoever holds it.
+both dependency directions, and the owner's actions on the task, the same in
+the reader and in the peek (the step dossier on a project's Plans & tasks tab):
+**Mark done** and **Drop** on an open or in-progress task, **Reopen** on a
+closed one, **Mark as handled** with a note on an open gate, and **Release
+claim** on a task in progress, whoever holds it or none. Drop and Release claim
+ask in the page: the button turns into a second one to press. While a live
+claim holds the task the page names its holder and offers Release claim
+first: the console never closes a task over its holder's head. Each action
+returns to the page it came from with a line that says what it did.
 
 Every task and plan step says where it stands in the same words, on Tasks,
 the project workspace and Plans:

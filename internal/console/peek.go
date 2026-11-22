@@ -360,10 +360,14 @@ type taskDetail struct {
 	// request's handle (s.db), which hides them with their task; nil while
 	// the body was never replaced, so the page renders nothing for them.
 	Revisions []taskRevisionView `json:"revisions,omitempty"`
-	// Next is where this fragment's owner actions (star, release) return to,
-	// when the surface that fetched it asked for one. Empty leaves each action
-	// on its own default -- the task page or the tasks library.
+	// Next is where this fragment's owner actions (star, release, close,
+	// reopen, mark as handled) return to, when the surface that fetched it
+	// asked for one. Empty leaves each action on its own default -- the task
+	// page or the tasks library.
 	Next string `json:"-"`
+	// Actions are the owner's actions the task offers as of the read
+	// (actionsFor): presentation only, never in the JSON.
+	Actions taskActions `json:"-"`
 }
 
 // taskRevisionView is one of a task's earlier bodies on the task page: the
@@ -404,6 +408,7 @@ func (s *Service) taskDetailData(ctx context.Context, t core.Task) (taskDetail, 
 		Creator: s.creatorLink(ctx, t.CreatedBy, namer),
 		Holder:  holderLink(t.ClaimedBy, namer),
 	}
+	d.Actions = actionsFor(t, d.ClaimLive)
 	if t.ClaimedBy != "" {
 		d.Lease = claimLease(t.LeaseExpiresAt, d.ClaimLive, now)
 	}
@@ -523,7 +528,16 @@ func (s *Service) taskDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data.Selected = &d
-	s.render(w, r, "tasks", pageData{Title: "Task " + shortID(t.ID), Active: "tasks", Data: data})
+	s.render(w, r, "tasks", pageData{Title: taskPageTitle(t), Active: "tasks", Data: data})
+}
+
+// taskPageTitle is a task page's tab title: the task's own title, so two tabs
+// tell their tasks apart; "Task <short id>" for a task with none.
+func taskPageTitle(t core.Task) string {
+	if title := strings.TrimSpace(t.Title); title != "" {
+		return title
+	}
+	return "Task " + shortID(t.ID)
 }
 
 // projectDetail is the payload for a single project's peek/detail: its metadata

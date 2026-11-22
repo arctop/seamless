@@ -1,8 +1,9 @@
 {{/* Shared by the tasks page (tasks.html) and the task peek fragment
      (peek_task.html), which parse it beside them (render.go). */}}
-{{/* task-gate renders a task's gate (a *taskGateView, nil for none): who and
-     what, the optional lines, and its clearance once cleared. */}}
-{{define "task-gate"}}{{with .}}
+{{/* task-gate renders a task's gate (the taskDetail's Gate, nil for none):
+     who and what, the optional lines, its clearance once cleared, and --
+     while it is open and the task offers it -- Mark as handled, with a note. */}}
+{{define "task-gate"}}{{with .Gate}}
   <section class="reader-links" data-gate="{{if .Open}}open{{else}}cleared{{end}}">
     <h3>{{if .Open}}Waits on {{.Who}}{{else}}Gate cleared{{end}}</h3>
     <dl class="peek-kv">
@@ -13,8 +14,59 @@
       {{if .ClearedAt}}<dt>Cleared</dt><dd>{{agoTime .ClearedAt}}{{with .ClearedBy}} by <span class="mono">{{.}}</span>{{end}}</dd>{{end}}
       {{with .Note}}<dt>Note</dt><dd>{{.}}</dd>{{end}}
     </dl>
+    {{- if $.Actions.Handle}}
+    {{/* The note keeps what the owner typed through a live refresh
+         (data-live-skip), keyed by the task so it never carries to another. */}}
+    <form class="gate-handle" method="post" action="/console/tasks/{{$.ID}}/gate/clear" data-gate-handle>
+      {{- template "task-next" $}}
+      <input class="gate-handle-note" id="gate-note-{{$.ID}}" type="text" name="note" maxlength="2000" autocomplete="off" data-live-skip placeholder="Note (optional): what was done" aria-label="Note on what was done (optional)">
+      <button class="ract" type="submit" data-task-act="handle" title="{{if eq $.Kind "gate"}}The gate is done: the tasks waiting on it go ahead{{else}}The gate is cleared: the step goes ahead once nothing else blocks it{{end}}">{{icon "check"}}Mark as handled</button>
+    </form>
+    {{- end}}
   </section>
 {{end}}{{end}}
+
+{{/* task-actions renders the owner's actions a task offers (the taskDetail's
+     Actions, taskActions) as forms, each back to the surface's Next when it
+     named one: Mark done, Drop, Reopen and Release claim. Drop and Release
+     claim ask in the page first (data-confirm, shell.js); without script they
+     post at once. The gate's Mark as handled sits with the gate (task-gate). */}}
+{{define "task-actions"}}{{with .Actions}}
+  {{- if .Done}}
+  <form method="post" action="/console/tasks/{{$.ID}}/status">
+    {{- template "task-next" $}}<input type="hidden" name="to" value="done">
+    <button class="ract" type="submit" data-task-act="done" title="Close the task as done: the tasks waiting on it go ahead">{{icon "check"}}Mark done</button>
+  </form>
+  {{- end}}
+  {{- if .Drop}}
+  <form method="post" action="/console/tasks/{{$.ID}}/status">
+    {{- template "task-next" $}}<input type="hidden" name="to" value="dropped">
+    <button class="ract danger" type="submit" data-task-act="drop" data-confirm="Drop this task? It closes without being done, and the tasks waiting on it go ahead." data-confirm-label="Drop it" title="Close the task without doing it">{{icon "archive"}}Drop</button>
+  </form>
+  {{- end}}
+  {{- if .Reopen}}
+  <form method="post" action="/console/tasks/{{$.ID}}/status">
+    {{- template "task-next" $}}<input type="hidden" name="to" value="open">
+    <button class="ract" type="submit" data-task-act="reopen" title="Open the task again: the tasks that depend on it wait for it again">{{icon "refresh-cw"}}Reopen</button>
+  </form>
+  {{- end}}
+  {{- if .Release}}
+  <form method="post" action="/console/tasks/{{$.ID}}/release">
+    {{- template "task-next" $}}
+    <button class="ract danger" type="submit" data-task-act="release" data-confirm="Release the claim on this task? It reopens for any agent to claim." data-confirm-label="Release it" title="Owner override: takes the claim from whoever holds it">{{icon "undo-2"}}Release claim</button>
+  </form>
+  {{- end}}
+{{end}}{{end}}
+
+{{/* task-held says, while a live claim holds the task, who holds it and that
+     the claim is released before the task closes: the console never closes a
+     task over its holder's head. */}}
+{{define "task-held"}}{{if .Actions.Held}}
+  <p class="task-held" data-held-live>{{with .Holder}}{{template "task-session" .}}{{else}}An agent{{end}} holds a live claim on this task{{with .Lease}} ({{timeAs $.LeaseExpiry .}}){{end}}. Release the claim before you mark it done or drop it.</p>
+{{end}}{{end}}
+
+{{/* task-next carries the surface's Next into an action's form. */}}
+{{define "task-next"}}{{if .Next}}<input type="hidden" name="next" value="{{.Next}}">{{end}}{{end}}
 
 {{/* task-revisions renders a task's earlier bodies (its Revisions, newest
      first; migration 054), folded: each body a tasks_update replaced or

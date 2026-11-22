@@ -345,6 +345,8 @@ func (s *Service) Register(mux *http.ServeMux) {
 	handle("GET /console/tasks", s.auth(s.tasks))
 	handle("GET /console/tasks/{id}", s.auth(s.taskDetail))
 	post("POST /console/tasks/{id}/release", formBodySmall, s.taskRelease)
+	post("POST /console/tasks/{id}/status", formBodySmall, s.taskStatus)
+	post("POST /console/tasks/{id}/gate/clear", formBodySmall, ownerHands(s.taskGateClear))
 	handle("GET /console/plans", s.auth(s.plansList))
 	handle("GET /console/plans/{slug}", s.auth(s.planDetail))
 	post("POST /console/plans/{slug}/approve", formBodySmall, s.planApprove)
