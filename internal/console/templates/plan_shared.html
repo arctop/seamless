@@ -25,7 +25,7 @@
     {{if .Stale}}<a class="kind warn" href="/console/gardener" title="A gardener settlement is pending for this plan">stale?</a>{{end}}
     {{if .NoteID}}<a class="plan-narrative" href="/console/notes/{{.NoteID}}" title="The plan's narrative note">{{icon "file-text"}}narrative</a>{{end}}
     {{if .HasNote}}
-    <form class="star-form" method="post" action="/console/favorites/plan/{{.Slug}}">
+    <form class="star-form" method="post" action="{{.StarAction}}">
       <input type="hidden" name="favorite" value="{{if .Favorite}}0{{else}}1{{end}}">
       <input type="hidden" name="next" value="{{.Return}}">
       <button class="star{{if .Favorite}} on{{end}}" type="submit" aria-pressed="{{if .Favorite}}true{{else}}false{{end}}" title="{{if .Favorite}}Unstar{{else}}Star{{end}} this plan">{{icon "star"}}</button>

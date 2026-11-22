@@ -203,7 +203,7 @@ func TestProjectWorkspace_PlanCardIsLiveTriage(t *testing.T) {
 	require.Contains(t, body, `id="plan-ios-demo"`, "the card is keyed so a morph reorders instead of rewriting")
 	require.Contains(t, body, `href="/console/plans/ios-demo?project=seamless"`, "the header links to the plan, its project named")
 	require.Contains(t, body, "approved", "the narrative note's status chip")
-	require.Contains(t, body, `action="/console/favorites/plan/ios-demo"`, "the plan star")
+	require.Contains(t, body, `action="/console/favorites/plan/ios-demo?project=seamless"`, "the plan star, its project named")
 	require.Contains(t, body, "1 ready", "claimable steps are the headline number")
 	require.Contains(t, body, "moved ", "last activity")
 	require.Contains(t, body, "stale?", "the pending gardener settlement badge")

@@ -313,7 +313,7 @@ func TestPcHeadTitleSlugStatusNarrative(t *testing.T) {
 	require.Contains(t, head, `plan:pc-webhooks<button type="button" class="copy-btn" data-copy="plan:pc-webhooks"`, "the slug chip copies")
 	require.Contains(t, head, `<span class="kind ok" data-plan-status="approved">approved</span>`)
 	require.Contains(t, head, `<a class="plan-narrative" href="/console/notes/`+noteID+`"`)
-	require.Contains(t, head, `action="/console/favorites/plan/pc-webhooks"`)
+	require.Contains(t, head, `action="/console/favorites/plan/pc-webhooks?project=demo"`)
 	require.NotContains(t, head, "plan-approve", "an approved plan has nothing to approve")
 
 	bare := pcHead(t, pcCard(t, page, "pc-bare"))
@@ -406,7 +406,7 @@ func TestPcPlanWithStepsAndNoNoteOpens(t *testing.T) {
 		require.Contains(t, body, "No narrative note yet.", path)
 		require.Contains(t, body, `data-no-note`, path)
 		require.NotContains(t, body, "No plan with slug", path)
-		require.NotContains(t, body, `action="/console/favorites/plan/pc-steps-only"`, "%s: nothing to star without a note", path)
+		require.NotContains(t, body, `/console/favorites/plan/pc-steps-only`, "%s: nothing to star without a note", path)
 		require.NotContains(t, body, `href="/console/notes/"`, "%s: no link to a note that does not exist", path)
 		require.NotContains(t, body, "/approve", path)
 		require.Contains(t, body, `data-copy="`+first+`"`, path)

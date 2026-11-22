@@ -198,3 +198,48 @@ func TestSearchFavFilter(t *testing.T) {
 	rr := do(mux, req)
 	require.Equal(t, http.StatusBadRequest, rr.Code)
 }
+
+// One slug is a plan per project. Named with its project, a star lands on
+// that project's narrative and leaves the other project's plan of the same
+// slug alone; without one it keeps resolving the slug as before (the
+// earliest note), and a project that is no slug is refused.
+func TestFavoriteToggle_PlanNamesItsProject(t *testing.T) {
+	_, mgr, mux := newConsoleWithFiles(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	first, err := mgr.WriteNote(ctx, core.Note{
+		ID: "01NA", Title: "Alpha's shared plan", Slug: "alpha-shared", Project: "alpha",
+		Body: "a", Tags: []string{"plan:shared"}, Created: now.Add(-time.Hour), Updated: now,
+	})
+	require.NoError(t, err)
+	second, err := mgr.WriteNote(ctx, core.Note{
+		ID: "01NB", Title: "Beta's shared plan", Slug: "beta-shared", Project: "beta",
+		Body: "b", Tags: []string{"plan:shared"}, Created: now, Updated: now,
+	})
+	require.NoError(t, err)
+	starred := func(n core.Note) bool {
+		t.Helper()
+		onDisk, err := mgr.Store().ReadNote(n.FilePath)
+		require.NoError(t, err)
+		return onDisk.Favorite
+	}
+	post := func(target string, fav string) int {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(url.Values{"favorite": {fav}}.Encode()))
+		req.Header.Set("Authorization", "Bearer "+testKey)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		return do(mux, req).Code
+	}
+
+	require.Equal(t, http.StatusSeeOther, post("/console/favorites/plan/shared?project=beta", "1"))
+	require.True(t, starred(second), "beta's card stars beta's narrative")
+	require.False(t, starred(first), "and leaves alpha's plan of the same slug alone")
+
+	require.Equal(t, http.StatusSeeOther, post("/console/favorites/plan/shared?project=beta", "0"))
+	require.Equal(t, http.StatusSeeOther, post("/console/favorites/plan/shared", "1"))
+	require.True(t, starred(first), "unnamed, the slug's earliest note, as before")
+	require.False(t, starred(second))
+
+	require.Equal(t, http.StatusNotFound, post("/console/favorites/plan/shared?project=gamma", "1"), "no such plan in gamma")
+	require.Equal(t, http.StatusBadRequest, post("/console/favorites/plan/shared?project=a/b", "1"))
+}

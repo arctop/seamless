@@ -172,6 +172,13 @@ func (tl planTimelineVM) ApproveAction() string {
 	return "/console/plans/" + url.PathEscape(tl.Slug) + "/approve?project=" + url.QueryEscape(planProjectParam(tl.Project))
 }
 
+// StarAction is the star's route for this plan, its project named, so the
+// star lands on this project's narrative, never on another project's plan of
+// the same slug.
+func (tl planTimelineVM) StarAction() string {
+	return "/console/favorites/plan/" + url.PathEscape(tl.Slug) + "?project=" + url.QueryEscape(planProjectParam(tl.Project))
+}
+
 // TitleHTML is the card's title for display (planTitleHTML).
 func (tl planTimelineVM) TitleHTML() template.HTML { return planTitleHTML(tl.Title) }
 

@@ -50,7 +50,14 @@ func (s *Service) favoriteToggle(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch kind {
 	case "memory", "note", "plan":
-		project, itemID, err = s.setFileFavorite(ctx, kind, id, fav)
+		// A plan is keyed by project and slug: ?project= names which one,
+		// as on its page and its Approve (planScope).
+		planProject, planScoped, perr := planScope(r)
+		if perr != nil && kind == "plan" {
+			s.badRequest(w, r, perr.Error())
+			return
+		}
+		project, itemID, err = s.setFileFavorite(ctx, kind, id, fav, planProject, planScoped && kind == "plan")
 	case "project":
 		_, found, perr := store.ProjectBySlug(ctx, s.db(ctx), id)
 		if perr == nil && found {
@@ -130,7 +137,12 @@ func errIsNotFound(err error) bool {
 // starring a memory an agent is appending to is the ordinary case here, and
 // unserialized the star rendered the whole file from the pre-append body and
 // erased the agent's write with no error anywhere.
-func (s *Service) setFileFavorite(ctx context.Context, kind, id string, fav bool) (project, itemID string, err error) {
+//
+// A plan named with its project (planScoped) stars that project's narrative;
+// without one, the slug's composition across every project (the earliest
+// note), so two projects' plans of one slug need the project to be told
+// apart.
+func (s *Service) setFileFavorite(ctx context.Context, kind, id string, fav bool, planProject string, planScoped bool) (project, itemID string, err error) {
 	if s.cfg.Files == nil {
 		return "", "", errNoFiles
 	}
@@ -155,7 +167,16 @@ func (s *Service) setFileFavorite(ctx context.Context, kind, id string, fav bool
 		}
 		filePath = idx.FilePath
 	case "plan":
-		primary, _, ok, perr := plans.Composition(ctx, s.db(ctx), id)
+		var (
+			primary core.Note
+			ok      bool
+			perr    error
+		)
+		if planScoped {
+			primary, _, ok, perr = plans.CompositionIn(ctx, s.db(ctx), planProject, id)
+		} else {
+			primary, _, ok, perr = plans.Composition(ctx, s.db(ctx), id)
+		}
 		if perr != nil {
 			return "", "", perr
 		}
