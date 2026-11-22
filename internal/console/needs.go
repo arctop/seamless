@@ -289,7 +289,7 @@ func (s *Service) needOpenGates(ctx context.Context, next string) []attnCard {
 		if !t.IsGate() && !t.Gate.Open() {
 			continue
 		}
-		if core.GateWhoMatches(t.Gate.Who, gateClearedByOwner) {
+		if ownerGateOpen(t) {
 			mine = append(mine, t)
 		} else {
 			others = append(others, t)
@@ -357,7 +357,7 @@ func (s *Service) needPlanApprovals(ctx context.Context, next string) []attnCard
 	}
 	var waiting []core.Note
 	for _, n := range captures {
-		if plans.StatusFromTags(n.Tags) == plans.StatusPresented && plans.SlugFromTags(n.Tags) != "" {
+		if planAwaitsApproval(n) {
 			waiting = append(waiting, n)
 		}
 	}

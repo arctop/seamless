@@ -43,6 +43,7 @@ import (
 	"github.com/arctop/seamless/internal/features"
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/gardener"
+	"github.com/arctop/seamless/internal/plans"
 	"github.com/arctop/seamless/internal/retrieve"
 	"github.com/arctop/seamless/internal/screening"
 	"github.com/arctop/seamless/internal/store"
@@ -1516,102 +1517,148 @@ func sumValues(m map[string]int) int {
 	return total
 }
 
-// navCounts fills the sidebar badges. Best-effort: a query error yields zeros
-// rather than failing the page. Badges belonging to a disabled optional feature
-// are zeroed here as well as hidden in the layout, so a stale template can never
-// leak a count for a screen the owner switched off.
+// navCounts fills the sidebar badges (plan:console-ux-pass UX 13): the queues
+// that wait on the owner, and the live-agent pulse. No inventory total is a
+// badge; those stay on the Overview and in each screen's head.
+//
+// Each queue counts what the Overview's matching needs item counts
+// (needs.go), from the same rows and through the same predicates
+// (ownerGateOpen, looseClaim, planAwaitsApproval), without building the
+// items: the sidebar is drawn on every page and every live refresh. The Tasks
+// badge is the sum of three items: the gates waiting on the owner, the lapsed
+// claims and the claimless starts.
+//
+// Every read goes through the request's handle, so a locked project's gates,
+// claims, plans and proposals are absent from the read itself. A badge whose
+// optional feature is off is not read at all. Best-effort one badge at a
+// time: a read that fails costs its badge, which then draws nothing, never
+// the page.
 func (s *Service) navCounts(ctx context.Context, feats config.Features) navCounts {
-	n, err := store.GetNavCounts(ctx, s.db(ctx))
-	if err != nil {
-		s.logger.Warn("console: nav counts", "error", err)
-		return navCounts{}
+	db := s.db(ctx)
+	now := time.Now().UTC()
+	var counts navCounts
+	read := func(what string, dest *int, count func() (int, error)) {
+		n, err := count()
+		if err != nil {
+			s.logger.Warn("console: nav "+what, "error", err)
+			return
+		}
+		*dest = n
 	}
-	counts := navCounts{
-		Sessions:  n.Sessions,
-		Memories:  n.Memories,
-		Notes:     n.Notes,
-		Tasks:     n.OpenTasks,
-		Proposals: n.PendingProposals,
-		Projects:  n.Projects,
-		Plans:     n.Plans,
-		Labs:      n.Labs,
-		Trials:    n.Trials,
-	}
-	if !features.Enabled(feats, features.Research) {
-		counts.Labs, counts.Trials = 0, 0
-	}
+	read("gardener proposals", &counts.Proposals, func() (int, error) { return store.CountPendingProposals(ctx, db) })
+	read("task queue", &counts.Tasks, func() (int, error) {
+		tasks, err := store.OwnerQueueTasks(ctx, db)
+		n := 0
+		for _, t := range tasks {
+			if ownerGateOpen(t) {
+				n++
+			}
+			if looseClaim(t, now) != "" {
+				n++
+			}
+		}
+		return n, err
+	})
+	read("plans awaiting approval", &counts.Plans, func() (int, error) {
+		captures, err := store.NotesByTag(ctx, db, "", plans.TagPlan)
+		n := 0
+		for _, c := range captures {
+			if planAwaitsApproval(c) {
+				n++
+			}
+		}
+		return n, err
+	})
 	// The held queue is counted only while its screen is offered: off, the
 	// table is not consulted at all. With screening off and restricted
 	// accounts configured, the screen shows proposals only, and so does the
 	// count.
 	switch s.heldModeFor(feats) {
 	case heldScreening:
-		if held, herr := store.CountPendingHolds(ctx, s.db(ctx)); herr != nil {
-			s.logger.Warn("console: nav held count", "error", herr)
-		} else {
-			counts.Held = held
-		}
+		read("held writes", &counts.Held, func() (int, error) { return store.CountPendingHolds(ctx, db) })
 	case heldProposals:
-		if held, herr := s.pendingProposals(ctx); herr != nil {
-			s.logger.Warn("console: nav held count", "error", herr)
-		} else {
-			counts.Held = len(held)
-		}
+		read("held proposals", &counts.Held, func() (int, error) {
+			held, err := s.pendingProposals(ctx)
+			return len(held), err
+		})
 	}
-	// Locked projects: the Access requests badge counts what waits for the
-	// owner, and the Projects badge counts the locked projects the board
-	// lists by name. Nothing is locked: neither query runs. With read grants
-	// on (isolation.requests), the same badge counts their requests.
+	// The Access requests badge counts what waits for the owner while a
+	// project is locked or read grants are on (isolation.requests); with
+	// neither, the query does not run.
 	if s.cfg.Approvals != nil || s.cfg.Grants != nil {
-		if pending, perr := store.PendingAccessApprovals(ctx, s.writeDB(), time.Now()); perr != nil {
-			s.logger.Warn("console: nav access count", "error", perr)
-		} else {
-			counts.Access = len(pending)
-		}
-	}
-	if locked := lockedProjects(ctx); len(locked) > 0 {
-		if n, lerr := store.CountRegisteredProjects(ctx, s.writeDB(), locked); lerr != nil {
-			s.logger.Warn("console: nav locked projects", "error", lerr)
-		} else {
-			counts.Projects += n
-		}
+		read("access requests", &counts.Access, func() (int, error) {
+			pending, err := store.PendingAccessApprovals(ctx, db, now)
+			return len(pending), err
+		})
 	}
 	// The Locks badge counts the declarations waiting for the owner's
 	// approval, only while its screen is offered.
 	if features.Enabled(feats, features.RepoLocks) {
-		if _, waiting, lerr := store.CountRepoLocks(ctx, s.db(ctx)); lerr != nil {
-			s.logger.Warn("console: nav lock declarations", "error", lerr)
-		} else {
-			counts.Locks = waiting
-		}
+		read("lock declarations", &counts.Locks, func() (int, error) {
+			_, waiting, err := store.CountRepoLocks(ctx, db)
+			return waiting, err
+		})
 	}
-	// The Now badge is the live agent count -- the one sidebar number that is a
-	// pulse rather than an inventory. Same best-effort rule as the rest.
+	// The Now badge is the live agent count: the sidebar's one pulse.
 	ttl := s.cfg.SessionIdleTTL
 	if ttl <= 0 {
 		ttl = core.SessionIdleTTL
 	}
-	if liveN, lerr := store.LiveSessionCount(ctx, s.db(ctx), time.Now().UTC().Add(-ttl)); lerr != nil {
-		s.logger.Warn("console: nav live count", "error", lerr)
-	} else {
-		counts.Now = liveN
-	}
+	read("live agents", &counts.Now, func() (int, error) { return store.LiveSessionCount(ctx, db, now.Add(-ttl)) })
 	return counts
 }
 
-// navCounts are the sidebar badge numbers.
+// ownerGateOpen reports whether t waits on the owner as the Overview's "gates
+// wait on you" item counts it (needOpenGates): a gate not yet closed, or an
+// open step whose own gate is open, whose gate names the owner. A step held
+// only by a gate it depends on is counted through that gate.
+func ownerGateOpen(t core.Task) bool {
+	open := t.Status == core.TaskOpen && t.Gate.Open()
+	if t.IsGate() {
+		open = t.Status == core.TaskOpen || t.Status == core.TaskInProgress
+	}
+	return open && core.GateWhoMatches(t.Gate.Who, gateClearedByOwner)
+}
+
+// looseClaim names the claim the Overview's claims items count for t
+// (needClaims, over Now's loose ends): "lapsed" for a task in progress whose
+// holder's lease ran out, "claimless" for one in progress that no claim
+// names, and "" for every other task -- a live claim is no item, whether or
+// not its holder is still live (core.Task.ClaimLive, the lease boundary
+// included). A gate is never claimed: one someone marked in progress stays
+// with the gates (ownerGateOpen), as the Tasks page keeps it, and is no loose
+// claim, or the strip and the badge would count it twice.
+func looseClaim(t core.Task, now time.Time) string {
+	switch {
+	case t.Status != core.TaskInProgress, t.IsGate():
+		return ""
+	case t.ClaimedBy == "":
+		return "claimless"
+	case !t.ClaimLive(now):
+		return "lapsed"
+	}
+	return ""
+}
+
+// planAwaitsApproval reports whether a captured plan waits on the owner's
+// approval, as the Overview's plan item counts it (needPlanApprovals): it was
+// presented, and it has a slug to approve it by.
+func planAwaitsApproval(n core.Note) bool {
+	return plans.StatusFromTags(n.Tags) == plans.StatusPresented && plans.SlugFromTags(n.Tags) != ""
+}
+
+// navCounts are the sidebar badge numbers. Every one but Labs and Trials is a
+// registry badge (screens.go's count maps the names); those two are no
+// badge: the Settings feature cards report them (featureDataKept), and
+// navCounts leaves them zero.
 type navCounts struct {
-	Now       int // live agents right now
-	Sessions  int
-	Memories  int
-	Notes     int
-	Tasks     int
-	Proposals int
-	Projects  int
-	Plans     int
-	Labs      int
-	Trials    int
-	Held      int // writes held for the owner (write screening)
-	Access    int // access requests waiting (only while a project is locked)
-	Locks     int // repo lock declarations waiting for the owner
+	Now       int // pulse: live agents right now
+	Tasks     int // queue: gates waiting on the owner, lapsed claims and claimless starts
+	Proposals int // queue: gardener proposals waiting for review
+	Plans     int // queue: captured plans awaiting the owner's approval
+	Held      int // queue: writes held for the owner (write screening, or restricted accounts' proposals)
+	Access    int // queue: access requests waiting (only while a project is locked or read grants are on)
+	Locks     int // queue: repo lock declarations waiting for the owner
+	Labs      int // the Settings feature card's data line only
+	Trials    int // the Settings feature card's data line only
 }

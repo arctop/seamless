@@ -43,12 +43,12 @@ type screen struct {
 	// Feature is the optional feature owning the screen ("" = core). A screen
 	// is visible iff its feature is on AND the level is at least Min.
 	Feature features.Key
-	// Badge names the navCounts field the entry's count shows ("" = none);
-	// BadgeTitle is the count's tooltip, and BadgeZero marks a zero count
-	// with data-zero so the collapsed rail can drop its attention dot.
+	// Badge names the navCounts field the entry's count shows ("" = none:
+	// an inventory total is no badge), BadgeKind says what that number is
+	// (every badge has one), and BadgeTitle is the count's tooltip.
 	Badge      string
+	BadgeKind  badgeKind
 	BadgeTitle string
-	BadgeZero  bool
 	// Class is an extra class on the nav link (Settings' nav-settings).
 	Class string
 	// NavRow is false for screens that are real pages with no sidebar entry
@@ -60,6 +60,22 @@ type screen struct {
 	// offered wherever the screen is visible (see searchScopesFor).
 	Scope string
 }
+
+// badgeKind is what a sidebar number means (plan:console-ux-pass UX 13). A
+// number that never asks for anything trains the eye to ignore the ones that
+// do, so the sidebar shows two kinds and no totals.
+type badgeKind string
+
+const (
+	// badgeQueue is something waiting on the owner: drawn as a pill while it
+	// is non-zero and not at all at zero. Any queue the sidebar shows lights
+	// the collapsed rail's dot on its entry and the phone bar's menu button
+	// (navSections.Waiting).
+	badgeQueue badgeKind = "queue"
+	// badgePulse is a live reading (the agents live now): drawn quietly at
+	// every value, dimmed at zero, and never an attention mark.
+	badgePulse badgeKind = "pulse"
+)
 
 // Sidebar groups, in the owner's job order: what is happening, what the fleet
 // knows and how it circulates, what is being done, and the research domain.
@@ -78,44 +94,46 @@ var screens = []screen{
 	{ID: "overview", Label: "Overview", Icon: "layout-dashboard", Href: "/console/", Group: groupLive, Key: "o",
 		Min: levelBasic, NavRow: true},
 	{ID: "now", Label: "Now", Icon: "radar", Href: "/console/now", Group: groupLive, Key: "n",
-		Min: levelStandard, NavRow: true, Badge: "now", BadgeTitle: "Agents live now", BadgeZero: true},
+		Min: levelStandard, NavRow: true, Badge: "now", BadgeKind: badgePulse, BadgeTitle: "Agents live now"},
 	{ID: "interactions", Label: "Interactions", Icon: "activity", Href: "/console/interactions", Group: groupLive, Key: "i",
 		Min: levelAdvanced, NavRow: true},
 	{ID: "memories", Label: "Memories", Icon: "database", Href: "/console/memories", Group: groupKnowledge, Key: "m",
-		Min: levelBasic, NavRow: true, Badge: "memories", Scope: "memories"},
+		Min: levelBasic, NavRow: true, Scope: "memories"},
 	{ID: "notes", Label: "Notes", Icon: "file-text", Href: "/console/notes", Group: groupKnowledge, Key: "e",
-		Min: levelBasic, NavRow: true, Badge: "notes", Scope: "notes"},
+		Min: levelBasic, NavRow: true, Scope: "notes"},
 	{ID: "retrieval", Label: "Retrieval", Icon: "brain", Href: "/console/retrieval", Group: groupKnowledge, Key: "r",
 		Min: levelAdvanced, NavRow: true},
 	{ID: "gardener", Label: "Gardener", Icon: "sprout", Href: "/console/gardener", Group: groupKnowledge, Key: "g",
-		Min: levelBasic, NavRow: true, Badge: "proposals", BadgeTitle: "Proposals waiting for review", BadgeZero: true},
+		Min: levelBasic, NavRow: true, Badge: "proposals", BadgeKind: badgeQueue, BadgeTitle: "Proposals waiting for your review"},
 	// Basic, because an owner who turns write screening on at any level must
 	// be able to reach what it holds.
 	{ID: "held", Label: "Held", Icon: "lock", Href: "/console/held", Group: groupKnowledge, Key: "h",
-		Min: levelBasic, Feature: features.Screening, NavRow: true, Badge: "held",
-		BadgeTitle: "Writes held for your review", BadgeZero: true},
+		Min: levelBasic, Feature: features.Screening, NavRow: true, Badge: "held", BadgeKind: badgeQueue,
+		BadgeTitle: "Writes held for your review"},
 	// The Diary (diary.go): one entry per day of work. Basic, and the Work
 	// group's first row, because "what happened today" is the first question
 	// an owner who turns it on asks.
 	{ID: "diary", Label: "Diary", Icon: "book-open", Href: "/console/diary", Group: groupWork, Key: "d",
 		Min: levelBasic, Feature: features.Diary, NavRow: true},
 	{ID: "projects", Label: "Projects", Icon: "table-2", Href: "/console/projects", Group: groupWork, Key: "w",
-		Min: levelStandard, NavRow: true, Badge: "projects", Scope: "projects"},
+		Min: levelStandard, NavRow: true, Scope: "projects"},
 	{ID: "plans", Label: "Plans", Icon: "map", Href: "/console/plans", Group: groupWork, Key: "p",
-		Min: levelStandard, NavRow: true, Badge: "plans", Scope: "plans"},
+		Min: levelStandard, NavRow: true, Badge: "plans", BadgeKind: badgeQueue, BadgeTitle: "Plans awaiting your approval",
+		Scope: "plans"},
 	{ID: "tasks", Label: "Tasks", Icon: "list-checks", Href: "/console/tasks", Group: groupWork, Key: "t",
-		Min: levelStandard, NavRow: true, Badge: "tasks", BadgeTitle: "Open tasks", Scope: "tasks"},
+		Min: levelStandard, NavRow: true, Badge: "tasks", BadgeKind: badgeQueue,
+		BadgeTitle: "Gates waiting on you, lapsed claims and tasks in progress with no claim", Scope: "tasks"},
 	{ID: "sessions", Label: "Sessions", Icon: "terminal", Href: "/console/sessions", Group: groupWork, Key: "s",
-		Min: levelBasic, NavRow: true, Badge: "sessions", Scope: "sessions"},
+		Min: levelBasic, NavRow: true, Scope: "sessions"},
 	// The repo locks (locks.go): every lock on a repository's refs, and the
 	// declarations waiting for the owner.
 	{ID: "locks", Label: "Locks", Icon: "git-branch", Href: "/console/locks", Group: groupWork, Key: "b",
-		Min: levelStandard, Feature: features.RepoLocks, NavRow: true, Badge: "locks",
-		BadgeTitle: "Lock declarations waiting for you", BadgeZero: true},
+		Min: levelStandard, Feature: features.RepoLocks, NavRow: true, Badge: "locks", BadgeKind: badgeQueue,
+		BadgeTitle: "Lock declarations waiting for you"},
 	{ID: "labs", Label: "Labs", Icon: "flask-conical", Href: "/console/labs", Group: groupResearch, Key: "l",
-		Min: levelStandard, Feature: features.Research, NavRow: true, Badge: "labs"},
+		Min: levelStandard, Feature: features.Research, NavRow: true},
 	{ID: "trials", Label: "Trials", Icon: "test-tube", Href: "/console/trials", Group: groupResearch, Key: "x",
-		Min: levelStandard, Feature: features.Research, NavRow: true, Badge: "trials", Scope: "trials"},
+		Min: levelStandard, Feature: features.Research, NavRow: true, Scope: "trials"},
 	// Standard: a default (Basic) install's sidebar stays as it was.
 	{ID: "system", Label: "System", Icon: "orbit", Href: "/console/system", Group: groupServer, Key: "y",
 		Min: levelStandard, NavRow: true},
@@ -145,7 +163,7 @@ const groupAccess = "Access"
 // ahead of the pinned Settings entry.
 var lockScreens = []screen{
 	{ID: "access", Label: "Access requests", Icon: "lock", Href: "/console/access", Group: groupAccess, Key: "a",
-		Min: levelBasic, NavRow: true, Badge: "access", BadgeTitle: "Access requests waiting for you", BadgeZero: true},
+		Min: levelBasic, NavRow: true, Badge: "access", BadgeKind: badgeQueue, BadgeTitle: "Access requests waiting for you"},
 	{ID: "approvers", Label: "Approvers", Icon: "key-round", Href: "/console/approvers", Group: groupAccess, Key: "k",
 		Min: levelBasic, NavRow: true},
 }
@@ -292,21 +310,48 @@ type navEntry struct {
 	screen
 	// Count is the badge number (meaningful only when Badge is set).
 	Count int
+	// Shown says the badge is drawn: a queue while something waits, a pulse
+	// at every value.
+	Shown bool
 	// LinkClass is the link's full class attribute value.
 	LinkClass string
 }
 
-// navGroup is one sidebar section: a heading (empty for the pinned tail) and
-// its entries.
+// waiting reports a queue with something in it.
+func (e navEntry) waiting() bool { return e.BadgeKind == badgeQueue && e.Count > 0 }
+
+// navGroup is one sidebar section: a heading and its entries. The pinned tail
+// (Settings) is the one group with no heading: the sidebar draws it below
+// the scrolling sections, so it never scrolls away.
 type navGroup struct {
 	Label   string
+	Pinned  bool
 	Entries []navEntry
+}
+
+// navSections is the sidebar's sections, in order.
+type navSections []navGroup
+
+// Waiting counts the queues on the sidebar with something in them: non-zero,
+// it marks the nav (data-waiting), which lights the phone bar's menu button.
+// A queue the sidebar does not offer at this level or feature state is not
+// on it, so it lights nothing.
+func (ns navSections) Waiting() int {
+	n := 0
+	for _, g := range ns {
+		for _, e := range g.Entries {
+			if e.waiting() {
+				n++
+			}
+		}
+	}
+	return n
 }
 
 // navGroups lays the visible screens with a nav row out as sidebar sections,
 // in registry order, marking the active entry and filling each badge.
-func navGroups(visible []screen, active string, counts navCounts) []navGroup {
-	var out []navGroup
+func navGroups(visible []screen, active string, counts navCounts) navSections {
+	var out navSections
 	for _, sc := range visible {
 		if !sc.NavRow {
 			continue
@@ -321,9 +366,10 @@ func navGroups(visible []screen, active string, counts navCounts) []navGroup {
 		entry := navEntry{screen: sc, LinkClass: class}
 		if sc.Badge != "" {
 			entry.Count, _ = counts.count(sc.Badge)
+			entry.Shown = sc.BadgeKind == badgePulse || entry.Count > 0
 		}
 		if len(out) == 0 || out[len(out)-1].Label != sc.Group {
-			out = append(out, navGroup{Label: sc.Group})
+			out = append(out, navGroup{Label: sc.Group, Pinned: sc.Group == ""})
 		}
 		last := &out[len(out)-1]
 		last.Entries = append(last.Entries, entry)
@@ -338,24 +384,12 @@ func (n navCounts) count(badge string) (int, bool) {
 	switch badge {
 	case "now":
 		return n.Now, true
-	case "sessions":
-		return n.Sessions, true
-	case "memories":
-		return n.Memories, true
-	case "notes":
-		return n.Notes, true
 	case "tasks":
 		return n.Tasks, true
 	case "proposals":
 		return n.Proposals, true
-	case "projects":
-		return n.Projects, true
 	case "plans":
 		return n.Plans, true
-	case "labs":
-		return n.Labs, true
-	case "trials":
-		return n.Trials, true
 	case "held":
 		return n.Held, true
 	case "access":

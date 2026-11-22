@@ -78,8 +78,9 @@ func mustLevel(t *testing.T, name string) level {
 	return lvl
 }
 
-// The registry is well formed: unique ids and chords, known levels and badges,
-// and a nav row for everything but the palette-only pages.
+// The registry is well formed: unique ids and chords, known levels, badges that
+// each name a navCounts field and a kind, and a nav row for everything but the
+// palette-only pages.
 func TestScreenRegistry_WellFormed(t *testing.T) {
 	ids, keys := map[string]bool{}, map[string]bool{}
 	for _, sc := range screenRegistry() {
@@ -93,6 +94,10 @@ func TestScreenRegistry_WellFormed(t *testing.T) {
 		if sc.Badge != "" {
 			_, ok := navCounts{}.count(sc.Badge)
 			require.True(t, ok, "%s shows badge %q, which no navCounts field answers", sc.ID, sc.Badge)
+			require.Contains(t, []badgeKind{badgeQueue, badgePulse}, sc.BadgeKind,
+				"%s shows badge %q: say whether it is a queue or a pulse (plan:console-ux-pass UX 13)", sc.ID, sc.Badge)
+		} else {
+			require.Empty(t, sc.BadgeKind, "%s has a badge kind and no badge", sc.ID)
 		}
 		if sc.NavRow {
 			require.NotEmpty(t, sc.Key, "nav entry %s needs a g-chord", sc.ID)

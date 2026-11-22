@@ -132,25 +132,29 @@ func TestNavEntries_HideWhileTheFeatureIsOff(t *testing.T) {
 	page = getPeek(t, mux, "/console/").Body.String()
 	require.Contains(t, page, `href="/console/labs"`)
 	require.Contains(t, page, `href="/console/trials"`)
-	require.Contains(t, page, `<span class="nav-label">Trials</span><span class="count">1</span>`,
-		"the badge count returns with the entry")
+	require.Contains(t, page, `<span class="nav-label">Trials</span></a>`,
+		"the entry returns with no count: a total is no badge (plan:console-ux-pass UX 13)")
 }
 
-// The badge counts are zeroed as well as hidden, so a stale or partially morphed
-// template cannot leak a count for a screen that is switched off.
+// A feature's queue badge is not read while the feature is off -- zero as well
+// as hidden, so a stale or partially morphed template cannot leak a count for
+// a screen the owner switched off -- and is read again the moment it is on.
+// The research screens carry no badge at all: navCounts never fills Labs or
+// Trials, which only the Settings feature cards report.
 func TestNavCounts_ZeroWhileTheFeatureIsOff(t *testing.T) {
 	db, _, _ := newGatedConsole(t)
+	lkSeedLock(t, db, "release", "/work/app", core.RepoLockRequested)
 	svc, err := New(Config{DB: db, APIKey: testKey})
 	require.NoError(t, err)
 	ctx := context.Background()
 
 	off := svc.navCounts(ctx, config.Features{})
-	require.Equal(t, 0, off.Labs)
-	require.Equal(t, 0, off.Trials)
+	require.Equal(t, 0, off.Locks)
 
-	on := svc.navCounts(ctx, config.Features{Research: true})
-	require.Equal(t, 1, on.Labs)
-	require.Equal(t, 1, on.Trials)
+	on := svc.navCounts(ctx, config.Features{Research: true, RepoLocks: true})
+	require.Equal(t, 1, on.Locks)
+	require.Equal(t, 0, on.Labs, "Labs is no badge")
+	require.Equal(t, 0, on.Trials, "Trials is no badge")
 }
 
 func TestSearch_TrialsScopeLeavesTheEnumWhileTheFeatureIsOff(t *testing.T) {

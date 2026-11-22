@@ -126,9 +126,10 @@ type pageData struct {
 	LevelOverridden bool
 	// Screens are the screens offered at this level and feature state, in
 	// registry order; NavGroups lays the ones with a nav row out as sidebar
-	// sections. A screen missing here keeps working by URL.
+	// sections, whose Waiting marks the nav while a queue has something in it.
+	// A screen missing here keeps working by URL.
 	Screens   []screen
-	NavGroups []navGroup
+	NavGroups navSections
 	// LevelBanner is set when this page's screen is above the current level:
 	// it still renders in full, under a note offering the switch.
 	LevelBanner *levelBanner

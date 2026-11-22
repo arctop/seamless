@@ -19807,10 +19807,26 @@ The sidebar groups the screens by the job they serve rather than by table:
 
 That is the full list, at the Advanced [level](#choose-how-much-you-see); a
 lower level shows a subset, in the same order and under the same names.
-Settings closes the list. Above the groups, a **Search or jump to** field opens
-the command palette. The sidebar collapses to an icon rail (the header button, or
-`[`) and remembers that per browser; under 720px it becomes a drawer behind the
-menu button, with every section's label and count.
+Above the groups, a **Search or jump to** field opens the command palette;
+Settings and the account row (your console level, the theme, sign out) close
+the sidebar. Only the groups scroll, with a fade at an edge that has more
+beyond it, so the search field, Settings and the account row stay on screen
+at any window height. The sidebar collapses to an icon rail (the header
+button, or `[`) and remembers that per browser; under 720px it becomes a
+drawer behind the menu button, with every section's label and badge.
+
+A number beside a section is one of two kinds:
+
+| Kind | Sections | Shows |
+|---|---|---|
+| **Waiting on you** | Tasks (gates waiting on you, lapsed claims, and tasks in progress with no claim), Plans (captured plans awaiting your approval), Gardener (proposals waiting for review), Held, Locks (declarations waiting for your approval), Access requests | A pill while something waits, and nothing at zero. Each counts what the Overview's matching **Needs you** cards count. |
+| **Live** | Now | The agents live right now, dimmed at zero. |
+
+The other sections carry no number: their totals are on the
+[Overview](#overview) and at the head of each screen. On the collapsed rail a
+section with something waiting carries a dot on its icon, and on a phone the
+menu button carries one while anything in the drawer waits. The badges follow
+the live refresh like the rest of the page.
 
 Every screen title carries an (i) button that says, in one line, what the screen
 is for.
@@ -19838,7 +19854,7 @@ a superseded or archived memory finds it here too, with its status.
 |---|---|
 | `Cmd/Ctrl+K` | Search or jump to a section |
 | `/` | Focus this screen's filter; open the palette where there is none |
-| `g` then a key | Go to a section: `o` Overview, `n` Now, `i` Interactions, `m` Memories, `e` Notes, `r` Retrieval, `g` Gardener, `h` Held, `d` Diary, `w` Projects, `p` Plans, `t` Tasks, `s` Sessions, `b` Locks, `l` Labs, `x` Trials, `y` System, `v` Privacy, `c` Devices, `a` Access requests, `k` Approvers, `,` Settings |
+| `g` then a key | Go to a section (pressing `g` shows every key it can take, until your next key or `Esc`): `o` Overview, `n` Now, `i` Interactions, `m` Memories, `e` Notes, `r` Retrieval, `g` Gardener, `h` Held, `d` Diary, `w` Projects, `p` Plans, `t` Tasks, `s` Sessions, `b` Locks, `l` Labs, `x` Trials, `y` System, `v` Privacy, `c` Devices, `a` Access requests, `k` Approvers, `,` Settings |
 | `j` / `k` | Next / previous item in a library rail |
 | `a` / `x` | On the Gardener: apply / dismiss the open proposal. An apply that cannot be undone asks in the page first; press `a` again to confirm |
 | `[` | Collapse or expand the sidebar |

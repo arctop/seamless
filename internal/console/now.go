@@ -379,7 +379,9 @@ func (s *Service) nowWork(ctx context.Context, now time.Time, scope string) (now
 	claims := map[string][]core.Task{}
 	var looseTasks []core.Task
 	for _, t := range inProg {
-		if !inScope(t.ProjectSlug) {
+		// A gate someone marked in progress is no agent's work in flight: it
+		// waits on a person, and stays with the gates (looseClaim).
+		if !inScope(t.ProjectSlug) || t.IsGate() {
 			continue
 		}
 		data.InFlight++
@@ -403,17 +405,18 @@ func (s *Service) nowWork(ctx context.Context, now time.Time, scope string) (now
 			ID: t.ID, Title: t.Title, Project: t.ProjectSlug, PlanSlug: t.PlanSlug,
 			Since: t.UpdatedAt, Word: words[t.ID],
 		}
-		switch {
-		case t.ClaimedBy == "":
+		// looseClaim (console.go) is the one rule the Tasks badge counts by too.
+		switch looseClaim(t, now) {
+		case "claimless":
 			loose.State = "claimless"
-		case t.ClaimLive(now):
+		case "lapsed":
+			loose.State = "lapsed"
+			loose.Releasable = true
+		default:
 			// Lease live, but its holder is not among the live sessions above. A
 			// live claim keeps its session live, so the holder has ended, is not
 			// active, or lies outside this view or the list's cap.
 			loose.State = "quiet-holder"
-		default:
-			loose.State = "lapsed"
-			loose.Releasable = true
 		}
 		if t.ClaimedBy != "" {
 			loose.HolderID = t.ClaimedBy

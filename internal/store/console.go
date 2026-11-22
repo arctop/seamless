@@ -70,6 +70,63 @@ func GetNavCounts(ctx context.Context, db *sql.DB) (NavCounts, error) {
 	return n, nil
 }
 
+// CountPendingProposals counts the gardener proposals waiting for review: the
+// console sidebar's Gardener badge, the rows the Overview's proposals item
+// counts (GetUsageCounts' GardenerPending, summed over the kinds).
+func CountPendingProposals(ctx context.Context, db *sql.DB) (int, error) {
+	var n int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM gardener_proposals WHERE status = 'pending'`).Scan(&n); err != nil {
+		return 0, fmt.Errorf("store.CountPendingProposals: %w", err)
+	}
+	return n, nil
+}
+
+// OwnerQueueTasks returns every task that can wait on the owner, for the
+// console sidebar's Tasks badge (plan:console-ux-pass UX 13): each gate still
+// open or in progress (sqlGates), each open step a gate holds (sqlGated), and
+// each task in progress, plan steps included, in id order. It reads only the
+// columns that judge such a task, so each core.Task carries ID, ProjectSlug,
+// Kind, Status, ClaimedBy, LeaseExpiresAt, Gate.Who and Gate.ClearedAt and
+// nothing else -- no title, body or times. The console sorts them with the
+// predicates the Overview's needs model applies to AllGateTasks,
+// AllGatedTasks and AllTasksByStatus(in_progress), the same three sets, so
+// the badge and the Overview count alike without the badge reading them
+// whole on every page.
+func OwnerQueueTasks(ctx context.Context, db *sql.DB) ([]core.Task, error) {
+	rows, err := db.QueryContext(ctx, `SELECT t.id, t.project_slug, t.kind, t.status, t.claimed_by, t.lease_expires_at,
+		       t.gate_who, t.gate_cleared_at
+		  FROM tasks t
+		 WHERE (`+sqlGates("t")+`) OR (`+sqlGated("t")+`) OR t.status = 'in_progress'
+		 ORDER BY t.id`)
+	if err != nil {
+		return nil, fmt.Errorf("store.OwnerQueueTasks: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out []core.Task
+	for rows.Next() {
+		var (
+			t             core.Task
+			kind, status  string
+			lease, gateAt sql.NullString
+		)
+		if err := rows.Scan(&t.ID, &t.ProjectSlug, &kind, &status, &t.ClaimedBy, &lease, &t.Gate.Who, &gateAt); err != nil {
+			return nil, fmt.Errorf("store.OwnerQueueTasks: scan: %w", err)
+		}
+		t.Kind, t.Status = core.TaskKind(kind), core.TaskStatus(status)
+		if t.LeaseExpiresAt, err = nullTimePtr(lease); err != nil {
+			return nil, fmt.Errorf("store.OwnerQueueTasks: lease_expires_at: %w", err)
+		}
+		if t.Gate.ClearedAt, err = nullTimePtr(gateAt); err != nil {
+			return nil, fmt.Errorf("store.OwnerQueueTasks: gate_cleared_at: %w", err)
+		}
+		out = append(out, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store.OwnerQueueTasks: %w", err)
+	}
+	return out, nil
+}
+
 // ProjectCounts are the per-project totals the console project peek shows. The
 // channels do not overlap in the way coverage does; each is a plain count.
 type ProjectCounts struct {

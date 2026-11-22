@@ -50,13 +50,27 @@
          data-key is the g-chord (g then key) shell.js binds and lists in the ?
          sheet, and search.js's Jump to reads the same links, so the shortcut
          map and the palette follow the registry with no list of their own. A
-         screen missing here still works by URL. */}}
-    <nav class="nav" aria-label="Sections" data-scopes="{{.VisibleScopes}}">
-{{- range .NavGroups}}{{if .Label}}
-      <div class="nav-sec">{{.Label}}</div>{{end}}
+         screen missing here still works by URL.
+
+         Only the sections scroll (.nav-scroll); the pinned tail (Settings)
+         sits below them with the account row, so neither ever falls below the
+         fold. A badge is a queue or a pulse (screens.go's badgeKind): a queue
+         is drawn only while something waits, and data-waiting says that one
+         does, for the phone bar's menu button. */}}
+    <nav class="nav" aria-label="Sections" data-scopes="{{.VisibleScopes}}"{{if .NavGroups.Waiting}} data-waiting{{end}}>
+      <div class="nav-scroll">
+{{- range .NavGroups}}{{if not .Pinned}}{{if .Label}}
+        <div class="nav-sec">{{.Label}}</div>{{end}}
 {{- range .Entries}}
-      <a href="{{.Href}}" data-key="{{.Key}}" data-tip="{{.Label}}" class="{{.LinkClass}}">{{icon .Icon}}<span class="nav-label">{{.Label}}</span>{{if .Badge}}<span class="count"{{with .BadgeTitle}} title="{{.}}"{{end}}{{if and .BadgeZero (not .Count)}} data-zero{{end}}>{{.Count}}</span>{{end}}</a>
-{{- end}}{{end}}
+        {{template "nav-link" .}}
+{{- end}}{{end}}{{end}}
+      </div>
+{{- range .NavGroups}}{{if .Pinned}}
+      <div class="nav-pinned">
+{{- range .Entries}}
+        {{template "nav-link" .}}
+{{- end}}
+      </div>{{end}}{{end}}
       {{/* Palette-only rows (no sidebar link): pages without a nav row and the
            Settings sections this level offers. Inside the nav so they change
            with it; search.js reads them as Jump to entries. */}}
@@ -680,6 +694,11 @@
 </body>
 </html>
 {{end}}
+
+{{/* One sidebar link: the screen's icon and label, and its badge while it is
+     drawn (navEntry.Shown). The badge's kind rides along as data-badge, so
+     the collapsed rail marks a queue and never a pulse. */}}
+{{define "nav-link"}}<a href="{{.Href}}" data-key="{{.Key}}" data-tip="{{.Label}}" class="{{.LinkClass}}">{{icon .Icon}}<span class="nav-label">{{.Label}}</span>{{if .Shown}}<span class="count" data-badge="{{.BadgeKind}}"{{with .BadgeTitle}} title="{{.}}"{{end}}{{if not .Count}} data-zero{{end}}>{{.Count}}</span>{{end}}</a>{{end}}
 
 {{/* The patch layout answers the console's own fetches of a page it is
      showing (render.go, patchRequest): the live refresh above and the in-place

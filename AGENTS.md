@@ -2009,6 +2009,18 @@ lapsed, unclaimed, done or dropped, each with one tone; `taskBadge` and
 (a `<time data-clock="title">` whose UTC title shell.js turns into the
 browser's local time); a task claim is a claim, never a lock.
 
+A sidebar number asks for something or is live, never a total (`screens.go`'s
+`badgeKind`): a queue (Tasks, Plans, Gardener, Held, Locks, Access requests)
+is drawn only while something waits on the owner, and lights the collapsed
+rail's dot and the phone bar's menu button; the one pulse (Now) is drawn at
+every value. Each queue counts what the Overview's matching needs item counts
+(`needs.go`), from the same rows, with the predicates in `console.go` beside
+`navCounts` (`ownerGateOpen`, `looseClaim`, `planAwaitsApproval`), through the
+request's handle, one badge at a time: a read that fails costs its badge,
+never the page. A new badge names its kind
+(`TestSbBadges_EveryBadgeHasAKindAndAField`), and
+`TestSbQueues_EqualTheNeedsModel` holds the two surfaces equal.
+
 A confirmation asks in the page, never through a native `confirm()`: give the
 submit button `data-confirm="<what happens>"` (and `data-confirm-label`, the
 armed button's word, "Confirm" when absent), and `shell.js` arms it on the

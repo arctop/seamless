@@ -331,7 +331,8 @@ h1, h2, h3 { text-wrap: balance; }
 
 /* The sidebar is the console's one persistent frame: brand, the search-or-jump
    field, the job-grouped sections, and the account row. It collapses to an
-   icon rail on desktop ([ or the header button) and becomes a drawer on phones. */
+   icon rail on desktop ([ or the header button) and becomes a drawer on phones.
+   It never scrolls itself: only its sections list does (.nav-scroll, UX 13). */
 .sidebar {
   width: var(--sidebar-width);
   flex: 0 0 var(--sidebar-width);
@@ -345,16 +346,16 @@ h1, h2, h3 { text-wrap: balance; }
   position: sticky;
   top: 0;
   height: 100vh;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   transition: width var(--dur-med) var(--ease-out), flex-basis var(--dur-med) var(--ease-out), padding var(--dur-med) var(--ease-out);
   scrollbar-width: thin;
 }
 
-/* Nothing in the frame may shrink: when the drawer is shorter than its
-   contents, the sidebar scrolls instead of crushing the brand or the search. */
+/* Nothing in the frame may shrink but the nav: when the window is shorter than
+   its contents, the sections list scrolls (.nav-scroll) instead of crushing the
+   brand, the search, Settings or the account row, which stay on screen. */
 .sidebar > * { flex-shrink: 0; }
 .side-head { display: flex; align-items: center; gap: 6px; min-height: 32px; }
 /* The wordmark (sidebar and phone bar) is always a.brand, never a bare .brand:
@@ -420,7 +421,7 @@ a.brand .dot.on.ping::after { animation: orb-halo 1.6s var(--ease-out); }
 .side-search-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .side-search kbd { flex: none; font-size: 10px; padding: 0 5px; }
 
-.nav { display: flex; flex-direction: column; gap: 1px; flex: 1 0 auto; }
+.nav { display: flex; flex-direction: column; gap: 1px; flex: 1 1 auto; min-height: 0; }
 .nav-sec {
   font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--faint);
   font-weight: 500; padding: 16px 12px 5px; white-space: nowrap; overflow: hidden;
@@ -502,9 +503,8 @@ a.brand .dot.on.ping::after { animation: orb-halo 1.6s var(--ease-out); }
 }
 .seam.horizontal .spark::before { left: auto; right: 50%; bottom: auto; top: 50%; width: 46px; height: 2px; margin: -1px 0 0; background: linear-gradient(to left, var(--spark, var(--brand)), transparent); }
 
-/* Settings closes the list, away from the daily sections. */
-.nav a.nav-settings { margin-top: auto; }
-.nav .nav-sec + a.nav-settings, .nav a + a.nav-settings { margin-top: auto; }
+/* Settings closes the list, away from the daily sections: it is pinned below
+   them (.nav-pinned, UX 13). */
 
 /* ---- Collapsed: an icon rail ---------------------------------------------- */
 :root[data-sidebar="collapsed"] { --sidebar-width: 64px; }
@@ -530,13 +530,16 @@ a.brand .dot.on.ping::after { animation: orb-halo 1.6s var(--ease-out); }
 /* Section labels become hairlines: the grouping survives, the words do not. */
 :root[data-sidebar="collapsed"] .nav-sec { height: 1px; padding: 0; margin: 10px 10px; background: var(--border); color: transparent; }
 :root[data-sidebar="collapsed"] .nav-sec:first-child { margin-top: 2px; }
-/* A count still earns a mark on the icon: live agents, waiting proposals. */
-:root[data-sidebar="collapsed"] .nav a[href="/console/now"] .count,
-:root[data-sidebar="collapsed"] .nav a[href="/console/gardener"] .count {
-  display: block; position: absolute; top: 4px; right: 8px; min-width: 7px; height: 7px; padding: 0;
-  border-radius: 50%; background: var(--pop); font-size: 0; color: transparent;
+/* A queue with something in it earns a mark on its icon, whichever section it
+   is (screens.go's badgeKind; a queue at zero draws no badge at all). The live
+   pulse does not: on the rail a mark means "act". Desktop only: the phone
+   drawer always shows the badges themselves. */
+@media (min-width: 721px) {
+  :root[data-sidebar="collapsed"] .nav a .count[data-badge="queue"] {
+    display: block; position: absolute; top: 4px; right: 8px; min-width: 7px; height: 7px; padding: 0;
+    border-radius: 50%; background: var(--pop); font-size: 0; color: transparent;
+  }
 }
-:root[data-sidebar="collapsed"] .nav a .count[data-zero] { display: none; }
 :root[data-sidebar="collapsed"] .side-foot { padding-inline: 0; }
 :root[data-sidebar="collapsed"] .account { flex-direction: column; padding: 6px 0; border-color: transparent; background: transparent; }
 :root[data-sidebar="collapsed"] .account > .account-act { margin-left: 0; }
@@ -2530,15 +2533,23 @@ kbd {
 .keys-body dt { flex: none; min-width: 38px; display: flex; gap: 3px; }
 .keys-body dd { margin: 0; color: var(--ink-2); font-size: var(--text-sm); min-width: 0; }
 
-/* g was pressed: the hint lists where the next key goes. */
+/* g was pressed: the hint lists every key the next press can take, as a grid
+   that wraps (shell.js), and stays until that press or Esc (UX 13). */
 .chord-hint {
   position: fixed; left: 50%; bottom: 22px; z-index: 96; translate: -50% 0;
-  display: flex; align-items: center; gap: 10px; max-width: min(92vw, 860px);
-  padding: 8px 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-pill);
+  display: flex; align-items: flex-start; gap: 12px; width: min(92vw, 760px);
+  max-height: calc(100vh - 44px); overflow-y: auto;
+  padding: 10px 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-lg);
   background: var(--surface); color: var(--muted); font-size: var(--text-xs); box-shadow: var(--shadow-lg);
   animation: seam-pop var(--dur-fast) var(--ease-out) both;
 }
-.chord-hint span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chord-keys {
+  flex: 1; min-width: 0; margin: 0; padding: 0; list-style: none;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 5px 14px;
+}
+.chord-keys li { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--ink-2); }
+.chord-keys li span { min-width: 0; overflow-wrap: anywhere; }
+.chord-keys kbd, .chord-lead { flex: none; min-width: 20px; text-align: center; }
 
 /* ===========================================================================
    LIBRARY SCREENS (2026-07) -- Memories / Notes / Tasks / Plans / Labs / Trials
@@ -8473,3 +8484,45 @@ a.ov2-attn-main:hover > .ico-arrow-right { transform: translateX(2px); }
 .step.gate .dot { border-radius: 4px; border-style: solid; }
 .step .meta .gate-kind { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--warn); }
 .step .meta .gate-kind .ico { width: 11px; height: 11px; }
+
+/* UX 13: a sidebar that fits the screen, with badges that mean "act"
+   (plan:console-ux-pass). Only the sections scroll; the head (brand, search)
+   and the foot (Settings, the account row) stay put, and a fade marks an edge
+   with more beyond it (shell.js sets data-nav-above and data-nav-below on the
+   sidebar, which the live morph never touches). The list reaches out over the
+   sidebar's side padding and takes it inside, so the active section's bar,
+   which sits on the sidebar's edge, is not clipped by the list's scroll box. */
+.nav-scroll {
+  flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 1px;
+  overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: thin;
+  margin-inline: -12px; padding: 2px 12px;
+}
+/* The list's rows keep their own height: a section label clips its text
+   (overflow: hidden), which lets a flex item shrink below it in a list
+   shorter than its contents. */
+.nav-scroll > * { flex-shrink: 0; }
+:root[data-sidebar="collapsed"] .nav-scroll { margin-inline: -10px; padding-inline: 10px; }
+.nav-pinned { flex: none; display: flex; flex-direction: column; gap: 1px; padding-top: 6px; }
+.sidebar[data-nav-above] .nav-scroll { --nav-fade-top: 28px; }
+.sidebar[data-nav-below] .nav-scroll { --nav-fade-bottom: 28px; }
+.sidebar[data-nav-above] .nav-scroll, .sidebar[data-nav-below] .nav-scroll {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black var(--nav-fade-top, 0px), black calc(100% - var(--nav-fade-bottom, 0px)), transparent);
+  mask-image: linear-gradient(to bottom, transparent, black var(--nav-fade-top, 0px), black calc(100% - var(--nav-fade-bottom, 0px)), transparent);
+}
+/* A queue (screens.go's badgeKind) is a pill while something waits; at zero
+   it draws nothing. The pulse (Now) keeps the quiet mono count. */
+.nav .count[data-badge="queue"] {
+  min-width: 20px; padding: 1px 6px; border-radius: var(--radius-pill); text-align: center;
+  background: var(--pop-soft); color: var(--pop-strong); font-weight: 650;
+}
+.nav a.active .count[data-badge="queue"] { color: var(--pop-strong); }
+@media (max-width: 720px) {
+  :root[data-sidebar="collapsed"] .nav-scroll { margin-inline: -12px; padding-inline: 12px; }
+  /* The menu button carries a dot while anything in the drawer waits: the
+     nav says so (data-waiting), and the live refresh keeps it current. */
+  #drawer-open { position: relative; }
+  .shell:has(nav.nav[data-waiting]) #drawer-open::after {
+    content: ""; position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--pop); box-shadow: 0 0 0 2px var(--surface);
+  }
+}

@@ -95,9 +95,56 @@
       if (el) showTip(el);
     });
     side.addEventListener('focusout', hideTip);
-    side.addEventListener('scroll', hideTip, { passive: true });
+    // Only the sections list scrolls (.nav-scroll), and scroll does not
+    // bubble: listen in the capture phase.
+    side.addEventListener('scroll', hideTip, { passive: true, capture: true });
     side.addEventListener('click', hideTip);
   }
+
+  /* ---- Sidebar: the sections list scrolls, the head and foot stay ---------- */
+
+  // The brand, the search field, Settings and the account row are pinned;
+  // only the sections scroll (layout.html's .nav-scroll). A fade marks each
+  // edge with more beyond it: data-nav-above and data-nav-below on the
+  // sidebar, which the live morph never touches (only the nav inside it is
+  // patched). The list keeps its place across page loads in this tab, and
+  // the active section is scrolled into view when it would sit out of sight.
+  var NAV_SCROLL = 'seamless-nav-scroll';
+  function navScroll() { return side ? side.querySelector('.nav-scroll') : null; }
+  function syncFade() {
+    var list = navScroll();
+    if (!side || !list) return;
+    var top = list.scrollTop;
+    side.toggleAttribute('data-nav-above', top > 1);
+    side.toggleAttribute('data-nav-below', top + list.clientHeight < list.scrollHeight - 1);
+  }
+  function revealActive() {
+    var list = navScroll();
+    var active = list && list.querySelector('a.active');
+    if (!active) return;
+    var box = list.getBoundingClientRect(), r = active.getBoundingClientRect();
+    if (r.top < box.top) list.scrollTop -= box.top - r.top + 8;
+    else if (r.bottom > box.bottom) list.scrollTop += r.bottom - box.bottom + 8;
+  }
+  (function () {
+    var list = navScroll();
+    if (!list) return;
+    try {
+      var kept = parseInt(sessionStorage.getItem(NAV_SCROLL) || '', 10);
+      if (kept > 0) list.scrollTop = kept;
+    } catch (e) {}
+    revealActive();
+    syncFade();
+    side.addEventListener('scroll', function (e) {
+      if (!e.target.classList || !e.target.classList.contains('nav-scroll')) return;
+      syncFade();
+      try { sessionStorage.setItem(NAV_SCROLL, String(Math.round(e.target.scrollTop))); } catch (err) {}
+    }, { passive: true, capture: true });
+    if (window.ResizeObserver) new ResizeObserver(syncFade).observe(list);
+    else window.addEventListener('resize', syncFade);
+    // A morph can add or remove sections (a feature switched in Settings).
+    document.addEventListener('seam:content-updated', syncFade);
+  })();
 
   /* ---- Phone drawer -------------------------------------------------------- */
 
@@ -183,40 +230,56 @@
 
   /* ---- g-chords ------------------------------------------------------------ */
 
-  var chordTimer = null;
+  // g was pressed: the hint lists every key the next press can take, as a
+  // grid that wraps, and stays until that press (or Esc, or a click). It used
+  // to vanish after 1.6 seconds, cut off mid-line.
+  var chording = false;
   var chordHint = null;
   function endChord() {
-    if (chordTimer) { clearTimeout(chordTimer); chordTimer = null; }
+    chording = false;
     if (chordHint) { chordHint.remove(); chordHint = null; }
   }
   function startChord() {
     endChord();
+    chording = true;
     chordHint = document.createElement('div');
     chordHint.className = 'chord-hint';
     chordHint.setAttribute('role', 'status');
     var lead = document.createElement('kbd');
+    lead.className = 'chord-lead';
     lead.textContent = 'g';
     chordHint.appendChild(lead);
-    var list = document.createElement('span');
-    list.textContent = gotoLinks().map(function (a) {
+    var list = document.createElement('ul');
+    list.className = 'chord-keys';
+    list.setAttribute('aria-label', 'then press');
+    gotoLinks().forEach(function (a) {
+      var item = document.createElement('li');
+      var key = document.createElement('kbd');
+      key.textContent = a.getAttribute('data-key');
       var label = a.querySelector('.nav-label');
-      return a.getAttribute('data-key') + ' ' + (label ? label.textContent : '');
-    }).join('  ·  ');
+      var name = document.createElement('span');
+      name.textContent = label ? label.textContent : (a.getAttribute('data-tip') || '');
+      item.appendChild(key);
+      item.appendChild(name);
+      list.appendChild(item);
+    });
     chordHint.appendChild(list);
     document.body.appendChild(chordHint);
-    chordTimer = setTimeout(endChord, 1600);
   }
+  document.addEventListener('pointerdown', function () { if (chording) endChord(); }, true);
 
   document.addEventListener('keydown', function (e) {
     if (e.defaultPrevented) return;
     if (e.key === 'Escape') {
+      endChord();
       if (keys && !keys.hidden) { e.preventDefault(); closeKeys(); return; }
       if (drawerOpen()) { e.preventDefault(); closeDrawer(true); return; }
-      endChord();
       return;
     }
-    if (e.metaKey || e.ctrlKey || e.altKey || typing(e.target) || overlayOpen()) return;
-    if (chordTimer) {
+    // A modifier pressed alone is not the next key: the hint stays for it.
+    if (chording && /^(Shift|Control|Alt|Meta|CapsLock)$/.test(e.key)) return;
+    if (e.metaKey || e.ctrlKey || e.altKey || typing(e.target) || overlayOpen()) { endChord(); return; }
+    if (chording) {
       var key = e.key.toLowerCase();
       var hit = gotoLinks().filter(function (a) { return a.getAttribute('data-key') === key; })[0];
       endChord();
@@ -471,6 +534,13 @@
       var sr = seam.getBoundingClientRect();
       from = orb ? orb.getBoundingClientRect().top + 5 - sr.top : 30;
       to = target ? target.getBoundingClientRect().top + target.offsetHeight / 2 - sr.top : sr.height * 0.5;
+      // The sections list scrolls: a section out of its view is reached at
+      // the edge it lies beyond.
+      var list = target && target.closest('.nav-scroll');
+      if (list) {
+        var lb = list.getBoundingClientRect();
+        to = Math.max(lb.top - sr.top, Math.min(lb.bottom - sr.top, to));
+      }
       frames = [
         { transform: 'translateY(' + from + 'px) scale(.6)', opacity: 0 },
         { opacity: 1, offset: 0.1 },

@@ -218,39 +218,51 @@
     }).join('\n');
   }
 
-  // syncNav keeps the sidebar in step with the fetched document. Counts and the
-  // active marker are patched in place, because that is what preserves the count
-  // bump animation. A changed link set is a structural change the in-place patch
-  // cannot express -- the two node lists no longer line up index by index -- so
-  // the whole nav is morphed instead. Without that branch, switching an optional
-  // feature off in Settings would leave the sidebar offering its screens until
-  // the next full page load, and switching one on would hide them just as long.
+  // syncNav keeps the sidebar in step with the fetched document. Each link's
+  // badge and the active marker are patched in place, because that is what
+  // preserves the count bump. A queue's badge is drawn only while something
+  // waits (screens.go), so a link gains or loses its badge with the link set
+  // unchanged: syncCount adds, updates or removes it. The nav's own attributes
+  // follow too -- data-waiting lights the phone bar's menu button. A changed
+  // link set is a structural change the in-place patch cannot express -- the
+  // two node lists no longer line up index by index -- so the whole nav is
+  // morphed instead. Without that branch, switching an optional feature off
+  // in Settings would leave the sidebar offering its screens until the next
+  // full page load, and switching one on would hide them just as long.
   function syncNav(currentNav, freshNav) {
     if (navShape(currentNav) !== navShape(freshNav)) {
       morphNode(currentNav, freshNav);
       return;
     }
-    var freshCounts = freshNav.querySelectorAll('.count');
-    var currentCounts = currentNav.querySelectorAll('.count');
-    if (freshCounts.length === currentCounts.length) {
-      for (var i = 0; i < currentCounts.length; i++) {
-        if (currentCounts[i].textContent === freshCounts[i].textContent) continue;
-        currentCounts[i].textContent = freshCounts[i].textContent;
-        // data-zero lets the collapsed rail drop an attention mark at zero.
-        if (freshCounts[i].hasAttribute('data-zero')) currentCounts[i].setAttribute('data-zero', '');
-        else currentCounts[i].removeAttribute('data-zero');
-        currentCounts[i].classList.remove('bump');
-        void currentCounts[i].offsetWidth;
-        currentCounts[i].classList.add('bump');
-      }
-    }
+    syncAttrs(currentNav, freshNav);
     var freshLinks = freshNav.querySelectorAll('a');
     var currentLinks = currentNav.querySelectorAll('a');
-    if (freshLinks.length === currentLinks.length) {
-      for (var j = 0; j < currentLinks.length; j++) {
-        currentLinks[j].classList.toggle('active', freshLinks[j].classList.contains('active'));
-      }
+    for (var j = 0; j < currentLinks.length; j++) {
+      currentLinks[j].classList.toggle('active', freshLinks[j].classList.contains('active'));
+      syncCount(currentLinks[j], freshLinks[j]);
     }
+  }
+  function bump(count) {
+    count.classList.remove('bump');
+    void count.offsetWidth;
+    count.classList.add('bump');
+  }
+  function syncCount(link, freshLink) {
+    var current = link.querySelector('.count');
+    var fresh = freshLink.querySelector('.count');
+    if (!fresh) {
+      if (current) current.remove();
+      return;
+    }
+    if (!current) {
+      bump(link.appendChild(imported(fresh)));
+      return;
+    }
+    var changed = current.textContent !== fresh.textContent;
+    syncAttrs(current, fresh);
+    if (!changed) return;
+    current.textContent = fresh.textContent;
+    bump(current);
   }
 
   // patchPage morphs a fetched console document into this one. build is the

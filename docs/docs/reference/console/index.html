@@ -690,10 +690,42 @@ cookie to the browser they can actually see. (<code>--browser</code> is macOS-on
 </div>
 <p>That is the full list, at the Advanced <a href="#choose-how-much-you-see">level</a>; a
 lower level shows a subset, in the same order and under the same names.
-Settings closes the list. Above the groups, a <strong>Search or jump to</strong> field opens
-the command palette. The sidebar collapses to an icon rail (the header button, or
-<code>[</code>) and remembers that per browser; under 720px it becomes a drawer behind the
-menu button, with every section's label and count.</p>
+Above the groups, a <strong>Search or jump to</strong> field opens the command palette;
+Settings and the account row (your console level, the theme, sign out) close
+the sidebar. Only the groups scroll, with a fade at an edge that has more
+beyond it, so the search field, Settings and the account row stay on screen
+at any window height. The sidebar collapses to an icon rail (the header
+button, or <code>[</code>) and remembers that per browser; under 720px it becomes a
+drawer behind the menu button, with every section's label and badge.</p>
+<p>A number beside a section is one of two kinds:</p>
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Sections</th>
+<th>Shows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Waiting on you</strong></td>
+<td>Tasks (gates waiting on you, lapsed claims, and tasks in progress with no claim), Plans (captured plans awaiting your approval), Gardener (proposals waiting for review), Held, Locks (declarations waiting for your approval), Access requests</td>
+<td>A pill while something waits, and nothing at zero. Each counts what the Overview's matching <strong>Needs you</strong> cards count.</td>
+</tr>
+<tr>
+<td><strong>Live</strong></td>
+<td>Now</td>
+<td>The agents live right now, dimmed at zero.</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>The other sections carry no number: their totals are on the
+<a href="#overview">Overview</a> and at the head of each screen. On the collapsed rail a
+section with something waiting carries a dot on its icon, and on a phone the
+menu button carries one while anything in the drawer waits. The badges follow
+the live refresh like the rest of the page.</p>
 <p>Every screen title carries an (i) button that says, in one line, what the screen
 is for.</p>
 <h3 id="the-command-palette">The command palette</h3>
@@ -731,7 +763,7 @@ a superseded or archived memory finds it here too, with its status.</p>
 </tr>
 <tr>
 <td><code>g</code> then a key</td>
-<td>Go to a section: <code>o</code> Overview, <code>n</code> Now, <code>i</code> Interactions, <code>m</code> Memories, <code>e</code> Notes, <code>r</code> Retrieval, <code>g</code> Gardener, <code>h</code> Held, <code>d</code> Diary, <code>w</code> Projects, <code>p</code> Plans, <code>t</code> Tasks, <code>s</code> Sessions, <code>b</code> Locks, <code>l</code> Labs, <code>x</code> Trials, <code>y</code> System, <code>v</code> Privacy, <code>c</code> Devices, <code>a</code> Access requests, <code>k</code> Approvers, <code>,</code> Settings</td>
+<td>Go to a section (pressing <code>g</code> shows every key it can take, until your next key or <code>Esc</code>): <code>o</code> Overview, <code>n</code> Now, <code>i</code> Interactions, <code>m</code> Memories, <code>e</code> Notes, <code>r</code> Retrieval, <code>g</code> Gardener, <code>h</code> Held, <code>d</code> Diary, <code>w</code> Projects, <code>p</code> Plans, <code>t</code> Tasks, <code>s</code> Sessions, <code>b</code> Locks, <code>l</code> Labs, <code>x</code> Trials, <code>y</code> System, <code>v</code> Privacy, <code>c</code> Devices, <code>a</code> Access requests, <code>k</code> Approvers, <code>,</code> Settings</td>
 </tr>
 <tr>
 <td><code>j</code> / <code>k</code></td>

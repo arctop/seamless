@@ -975,6 +975,7 @@ func TestLockScreens_OnlyWhileLocked(t *testing.T) {
 		if lock.Badge != "" {
 			_, ok := navCounts{}.count(lock.Badge)
 			require.True(t, ok, lock.Badge)
+			require.Equal(t, badgeQueue, lock.BadgeKind, "%s waits on the owner", lock.ID)
 		}
 	}
 	for _, lvl := range []level{levelBasic, levelStandard, levelAdvanced} {
