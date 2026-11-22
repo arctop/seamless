@@ -286,12 +286,33 @@ func HiddenProposals(ctx context.Context, db *sql.DB) ([]Proposal, error) {
 // rail section, where each row offers an undo. A non-positive limit or a
 // negative offset is a caller bug, not "everything".
 func ResolvedProposals(ctx context.Context, db *sql.DB, offset, limit int) ([]Proposal, error) {
+	return ResolvedProposalsOmitting(ctx, db, "", offset, limit)
+}
+
+// CountResolvedProposals is how many proposals have been decided: the length
+// of the history ResolvedProposals pages through.
+func CountResolvedProposals(ctx context.Context, db *sql.DB) (int, error) {
+	return CountResolvedProposalsOmitting(ctx, db, "")
+}
+
+// omitAppliedBy is the clause ResolvedProposalsOmitting and its count share:
+// it leaves out the proposals applied by the decider named in its two
+// arguments, and nothing at all when that name is "".
+const omitAppliedBy = ` AND NOT (? <> '' AND status = '` + ProposalApplied + `' AND resolved_by = ?)`
+
+// ResolvedProposalsOmitting is ResolvedProposals without the proposals that
+// appliedBy applied: the console's decision history lists those in a section
+// of their own (ProposalsAppliedBy), so each decision appears there once. An
+// empty appliedBy omits nothing. A proposal that decider dismissed or hid
+// stays in, and so does one it applied that was undone and decided again by
+// someone else (ReopenProposal clears resolved_by).
+func ResolvedProposalsOmitting(ctx context.Context, db *sql.DB, appliedBy string, offset, limit int) ([]Proposal, error) {
 	if limit <= 0 || offset < 0 {
 		return nil, fmt.Errorf("store.ResolvedProposals: invalid page (offset %d, limit %d)", offset, limit)
 	}
 	rows, err := db.QueryContext(ctx, `SELECT `+proposalCols+`
-		FROM gardener_proposals WHERE status <> ?
-		ORDER BY resolved_at DESC, id DESC LIMIT ? OFFSET ?`, ProposalPending, limit, offset)
+		FROM gardener_proposals WHERE status <> ?`+omitAppliedBy+`
+		ORDER BY resolved_at DESC, id DESC LIMIT ? OFFSET ?`, ProposalPending, appliedBy, appliedBy, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("store.ResolvedProposals: %w", err)
 	}
@@ -299,15 +320,34 @@ func ResolvedProposals(ctx context.Context, db *sql.DB, offset, limit int) ([]Pr
 	return scanProposals(rows)
 }
 
-// CountResolvedProposals is how many proposals have been decided: the length
-// of the history ResolvedProposals pages through.
-func CountResolvedProposals(ctx context.Context, db *sql.DB) (int, error) {
+// CountResolvedProposalsOmitting counts what ResolvedProposalsOmitting pages
+// through.
+func CountResolvedProposalsOmitting(ctx context.Context, db *sql.DB, appliedBy string) (int, error) {
 	var n int
-	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM gardener_proposals WHERE status <> ?`,
-		ProposalPending).Scan(&n); err != nil {
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM gardener_proposals WHERE status <> ?`+omitAppliedBy,
+		ProposalPending, appliedBy, appliedBy).Scan(&n); err != nil {
 		return 0, fmt.Errorf("store.CountResolvedProposals: %w", err)
 	}
 	return n, nil
+}
+
+// ProposalsAppliedBy returns every proposal by applied and still applied,
+// newest decision first, uncapped. With by = "auto" (gardener.ByAuto) it backs
+// the decision history's "Applied automatically" section: each row stays
+// listed, with its Undo, until it is undone. A by of "" names nobody and
+// returns nothing, rather than every apply whose decider was never recorded.
+func ProposalsAppliedBy(ctx context.Context, db *sql.DB, by string) ([]Proposal, error) {
+	if by == "" {
+		return nil, nil
+	}
+	rows, err := db.QueryContext(ctx, `SELECT `+proposalCols+`
+		FROM gardener_proposals WHERE status = ? AND resolved_by = ?
+		ORDER BY resolved_at DESC, id DESC`, ProposalApplied, by)
+	if err != nil {
+		return nil, fmt.Errorf("store.ProposalsAppliedBy: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	return scanProposals(rows)
 }
 
 // ProposalBlock is why one payload key is suppressed. Hard is the permanent

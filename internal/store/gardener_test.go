@@ -264,3 +264,65 @@ func mustPending(t *testing.T, db *sql.DB, kind string) []Proposal {
 	require.NoError(t, err)
 	return ps
 }
+
+// ProposalsAppliedBy lists what one decider applied and still stands applied,
+// newest first and uncapped; ResolvedProposalsOmitting and its count page
+// through every other decision, so the two together list each decision once.
+// A dismissal by that decider, and an apply it made that was undone, are not
+// its applies.
+func TestGtProposalsAppliedBy_AndTheRestOmitThem(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	base := time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC)
+	mk := func(i int) string {
+		t.Helper()
+		p, err := CreateProposal(ctx, db, ProposalToolError, map[string]any{"key": "tool_error:x:" + string(rune('a'+i))})
+		require.NoError(t, err)
+		return p.ID
+	}
+	auto1, auto2, autoDismissed, owner, undone, pending := mk(0), mk(1), mk(2), mk(3), mk(4), mk(5)
+	require.NoError(t, ResolveProposal(ctx, db, auto1, ProposalApplied, "auto", base))
+	require.NoError(t, ResolveProposal(ctx, db, auto2, ProposalApplied, "auto", base.Add(2*time.Minute)))
+	require.NoError(t, ResolveProposal(ctx, db, autoDismissed, ProposalDismissed, "auto", base.Add(3*time.Minute)))
+	require.NoError(t, ResolveProposal(ctx, db, owner, ProposalApplied, "owner", base.Add(time.Minute)))
+	require.NoError(t, ResolveProposal(ctx, db, undone, ProposalApplied, "auto", base.Add(4*time.Minute)))
+	require.NoError(t, ReopenProposal(ctx, db, undone))
+	require.NoError(t, ResolveProposal(ctx, db, undone, ProposalHidden, "owner", base.Add(5*time.Minute)))
+	_ = pending
+
+	applied, err := ProposalsAppliedBy(ctx, db, "auto")
+	require.NoError(t, err)
+	require.Equal(t, []string{auto2, auto1}, gtIDs(applied), "newest first; a dismissal is no apply, and an undone apply left")
+
+	rest, err := ResolvedProposalsOmitting(ctx, db, "auto", 0, 10)
+	require.NoError(t, err)
+	require.Equal(t, []string{undone, autoDismissed, owner}, gtIDs(rest))
+	n, err := CountResolvedProposalsOmitting(ctx, db, "auto")
+	require.NoError(t, err)
+	require.Equal(t, 3, n)
+
+	// Omitting nobody is the whole history.
+	all, err := ResolvedProposalsOmitting(ctx, db, "", 0, 10)
+	require.NoError(t, err)
+	require.Len(t, all, 5)
+	n, err = CountResolvedProposals(ctx, db)
+	require.NoError(t, err)
+	require.Equal(t, 5, n)
+
+	// A decider of "" names nobody: it lists nothing rather than every apply
+	// whose decider was never recorded.
+	require.NoError(t, ResolveProposal(ctx, db, pending, ProposalApplied, "", base.Add(6*time.Minute)))
+	none, err := ProposalsAppliedBy(ctx, db, "")
+	require.NoError(t, err)
+	require.Empty(t, none)
+	_, err = ResolvedProposalsOmitting(ctx, db, "auto", 0, 0)
+	require.Error(t, err, "a page that cannot exist is still refused")
+}
+
+func gtIDs(ps []Proposal) []string {
+	out := make([]string, 0, len(ps))
+	for _, p := range ps {
+		out = append(out, p.ID)
+	}
+	return out
+}

@@ -423,12 +423,14 @@ func TestUpdates_TheConditionalOwnerHandsRoutes(t *testing.T) {
 	}
 	require.Equal(t, []string{
 		"/console/gardener/group/dismiss",
+		"/console/gardener/group/apply",
 		"/console/gardener/plan/{slug}/apply",
 		"/console/gardener/{id}/apply",
 		"/console/gardener/{id}/dismiss",
 		"/console/gardener/{id}/hide",
 		"/console/gardener/{id}/unhide",
 		"/console/gardener/{id}/retarget",
+		"/console/gardener/{id}/swap",
 		"/console/gardener/{id}/undo",
 		"/console/settings/updates",
 		"/console/settings/updates/reset",

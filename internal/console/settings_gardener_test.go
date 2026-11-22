@@ -71,12 +71,14 @@ func aaPending(t *testing.T, db *sql.DB) string {
 func aaGardenerRoutes(id string) []struct{ path, body string } {
 	return []struct{ path, body string }{
 		{"/console/gardener/group/dismiss", "ids=" + id},
+		{"/console/gardener/group/apply", "ids=" + id},
 		{"/console/gardener/plan/split-example/apply", ""},
 		{"/console/gardener/" + id + "/apply", ""},
 		{"/console/gardener/" + id + "/dismiss", ""},
 		{"/console/gardener/" + id + "/hide", ""},
 		{"/console/gardener/" + id + "/unhide", ""},
 		{"/console/gardener/" + id + "/retarget", "to=example-ops"},
+		{"/console/gardener/" + id + "/swap", "keep=" + id},
 		{"/console/gardener/" + id + "/undo", ""},
 	}
 }

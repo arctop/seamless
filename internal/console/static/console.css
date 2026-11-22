@@ -8087,6 +8087,53 @@ a.project-global-line:focus-visible { outline: none; box-shadow: var(--shadow-fo
 .btn[data-armed] { color: var(--danger-ink); background: var(--danger); border-color: var(--danger); }
 .confirm-note { display: inline-block; max-width: 100%; margin-left: 8px; font-size: var(--text-xs); color: var(--danger); vertical-align: middle; }
 
+/* UX 22: Gardener triage. The queue comes first: one contract line and the ask
+   box folded into a button sit under the head. A merge shows both bodies side
+   by side, an archive its body, each with how agents use it; Apply all sits
+   beside Dismiss all; the decision history leads with Applied automatically. */
+.gardener-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 0 0 14px; }
+.gardener-tools .gardener-contract { flex: 1 1 320px; min-width: 0; margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.5; }
+.gardener-tools .gardener-contract a { color: var(--brand); white-space: nowrap; }
+.gardener-contract-badge.is-auto { border-color: color-mix(in oklab, var(--pop) 30%, var(--border)); color: var(--pop-strong); background: var(--pop-soft); }
+.gardener-tools .gardener-composer { flex: 0 0 auto; max-width: 100%; margin: 0; }
+.gardener-tools .gardener-composer[open] { flex-basis: 100%; }
+.gardener-ask-toggle { list-style: none; cursor: pointer; }
+.gardener-ask-toggle::-webkit-details-marker { display: none; }
+.gardener-ask-toggle .ico { width: 13px; height: 13px; }
+.gardener-composer[open] > .gardener-ask-toggle { margin-bottom: 10px; }
+.gardener-ask-off { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--faint); font-size: var(--text-xs); }
+.gardener-ask-off .ico { width: 13px; height: 13px; flex: none; }
+.gardener-ask-off a { color: var(--brand); }
+.gardener-why { margin: 0 0 12px; }
+.gardener-ev-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.gardener-ev-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.gardener-ev-side.keep { border-color: color-mix(in oklab, var(--ok) 35%, var(--border)); }
+.gardener-ev-side.drop { border-color: color-mix(in oklab, var(--warn) 35%, var(--border)); }
+.gardener-ev-role { color: var(--faint); font-size: var(--text-2xs); font-weight: 750; letter-spacing: var(--tracking-wide); text-transform: uppercase; }
+.gardener-ev-side.keep .gardener-ev-role { color: var(--ok); }
+.gardener-ev-side.drop .gardener-ev-role { color: var(--warn); }
+.gardener-ev { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.gardener-ev-one .gardener-ev { padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.gardener-ev-name { font-size: var(--text-sm); font-weight: 650; overflow-wrap: anywhere; }
+.gardener-ev-facts { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0; }
+.gardener-ev-facts > div { display: flex; align-items: baseline; gap: 5px; min-width: 0; }
+.gardener-ev-facts dt { color: var(--faint); font-size: var(--text-2xs); }
+.gardener-ev-facts dd { margin: 0; color: var(--ink-2); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.gardener-ev-facts small { color: var(--faint); font-family: var(--font-mono); font-size: var(--text-2xs); }
+.gardener-ev-body { max-height: 320px; overflow: auto; padding-top: 8px; border-top: 1px solid var(--border); font-size: var(--text-sm); }
+.gardener-ev-none { margin: 0; color: var(--faint); font-size: var(--text-xs); }
+.gardener-swap { margin: 0; }
+.gardener-swap .btn, .gardener-apply-all .btn { max-width: 100%; }
+.gardener-swap .btn .ico, .gardener-apply-all .btn .ico { width: 12px; height: 12px; }
+.gardener-section-title { display: flex; align-items: center; gap: 7px; margin: 18px 0 8px; font-family: var(--font-display); font-size: var(--text-sm); font-weight: 650; }
+.gardener-section-title .ico { width: 14px; height: 14px; color: var(--muted); }
+.gardener-section-title .n { color: var(--faint); font-size: var(--text-xs); font-weight: 500; }
+.gardener-auto .gardener-section-title .ico { color: var(--pop-strong); }
+.gardener-auto-note { margin: 0 0 8px; color: var(--muted); font-size: var(--text-xs); }
+@media (max-width: 720px) {
+  .gardener-ev-pair { grid-template-columns: 1fr; }
+}
+
 /* UX 23: Settings > Knowledge engine > Gardener, the gardener's two switches
    (settings.html #settings-gardener): one form per control, stacked. */
 .gardener-switches { --group-accent: var(--brand); }

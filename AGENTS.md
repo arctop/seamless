@@ -1961,7 +1961,7 @@ The observability console is `html/template` + vanilla JS + SSE, served by
 writes are the owner's overrides and curation actions, among them -- archive or
 restore a memory, delete a note, approve a plan, force-release a task's claim, mark a task done, drop
 or reopen it, mark a task's gate as handled,
-ask/split/apply/dismiss/retarget a gardener proposal, run a gardener pass now, save or reset the
+ask/split/apply/dismiss/retarget a gardener proposal, swap which memory a merge keeps, apply a whole gardener section of undoable proposals, run a gardener pass now, save or reset the
 briefing settings, switch update checks and automatic updates (or hand both
 back to the config), switch agents' applying of gardener proposals and automatic
 apply (or hand both back to the config), check for updates now, update now, resume automatic

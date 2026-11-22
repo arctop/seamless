@@ -5813,8 +5813,12 @@ bypass the review step - what comes back is still a proposal.
 ## Where you review
 
 - **The console** - `/console/gardener` is an inbox: one line per proposal in
-  the rail, the full evidence and the decision gate in the reader. A whole
-  group can be dismissed at once. Every decision lands in **Recently decided**
+  the rail, the full evidence and the decision gate in the reader. A merge
+  shows both memories' bodies side by side with how agents use them, and
+  **Swap** keeps the other one. A whole group can be dismissed at once, and a
+  section whose every proposal can be undone can be applied at once (**Apply
+  all**); a consolidation or a split never takes part. `a` applies the open
+  proposal and `x` dismisses it. Every decision lands in **Recently decided**
   and in the **decision history** (`/console/gardener/decisions`), where Undo
   puts it back in the queue and reverses what applying it did. Applying a
   consolidation or a project split is the exception - both create things that
@@ -19533,9 +19537,11 @@ nothing, and their rows say so.
 | Dismiss a proposal | `POST /console/gardener/{id}/dismiss` | Drops it without acting. The pattern is raised again if new evidence for it arrives after the decision. |
 | Hide a proposal forever | `POST /console/gardener/{id}/hide` | Drops it without acting and blocks the pattern permanently - no recurrence re-raises it. Listed under **Hidden forever**. |
 | Unhide a pattern | `POST /console/gardener/{id}/unhide` | Lifts a forever block. The proposal stays resolved; the gardener may propose the pattern again the next time it recurs. |
-| Retarget a reproject proposal | `POST /console/gardener/{id}/retarget` | Rewrites a **pending** reproject's destination project before it is applied. Reproject proposals only. |
+| Retarget a reproject proposal | `POST /console/gardener/{id}/retarget` | Rewrites a **pending** reproject's destination project before it is applied, and records a `gardener.action` event with the destination before and after. Reproject proposals only. |
 | Apply a whole plan batch | `POST /console/gardener/plan/{slug}/apply` | Applies every pending proposal in a plan, split setup first so the child projects exist before the memories move. Best-effort: it applies what it can, reports how many landed, and leaves the rest pending. |
-| Dismiss a whole rail group | `POST /console/gardener/group/dismiss` | Dismisses every pending proposal in one rail section or split plan, one at a time, so each keeps its own event and stays individually undoable. Only Dismiss is offered in bulk. |
+| Dismiss a whole rail group | `POST /console/gardener/group/dismiss` | Dismisses every pending proposal in one rail section or split plan, one at a time, so each keeps its own event and stays individually undoable. `src=you` or `src=auto` narrows a section to the rows the Source filter shows. |
+| Apply a whole rail section | `POST /console/gardener/group/apply` | Applies the proposals one rail section shows (`group=`, and one `id=` for each proposal shown), one at a time, so each keeps its own event and its own Undo in the decision history. Offered only on a section whose every proposal can be undone and none of which asks to be read first (it touches a project fenced since it was raised, or moves a stamped memory into a less fenced project); a batch holding any other is refused before anything is applied. A consolidation or a split never takes part. |
+| Swap which memory a merge keeps | `POST /console/gardener/{id}/swap` | Rewrites a **pending** merge so it keeps the other memory (`keep=` names it, one of the two) and retires the one it kept. Nothing changes until the merge is applied. Records a `gardener.action` event. Merge proposals only. |
 | Undo a decision | `POST /console/gardener/{id}/undo` | Returns a resolved proposal to the queue from **Recently decided** or the **decision history**, inverting whatever its apply did, for the kinds whose apply can be inverted. |
 | Run a gardener pass now | `POST /console/gardener/run` | Runs the background proposal passes now instead of at the next pass, in the background. They only ever propose. Refused while a pass runs, and while `gardener.enabled` is false. |
 | Release a held write | `POST /console/held/{id}/release` | [Write screening](#held): lands a held agent write exactly as the agent sent it, and marks the memory owner-confirmed. Refused when its target changed after it was held. |
@@ -19820,6 +19826,7 @@ a superseded or archived memory finds it here too, with its status.
 | `/` | Focus this screen's filter; open the palette where there is none |
 | `g` then a key | Go to a section: `o` Overview, `n` Now, `i` Interactions, `m` Memories, `e` Notes, `r` Retrieval, `g` Gardener, `h` Held, `d` Diary, `w` Projects, `p` Plans, `t` Tasks, `s` Sessions, `b` Locks, `l` Labs, `x` Trials, `y` System, `v` Privacy, `c` Devices, `a` Access requests, `k` Approvers, `,` Settings |
 | `j` / `k` | Next / previous item in a library rail |
+| `a` / `x` | On the Gardener: apply / dismiss the open proposal. An apply that cannot be undone asks in the page first; press `a` again to confirm |
 | `[` | Collapse or expand the sidebar |
 | `?` | The shortcut sheet |
 | `Esc` | Close the palette, a menu, the sheet, or the drawer |
@@ -21044,6 +21051,29 @@ opens a task; nothing is written until someone writes the memory.
 
 Split batches are grouped by plan and reviewed together, setup card first, with an
 apply-the-whole-plan action.
+
+The queue is the first thing under the head: one line says who may apply a
+proposal and which kinds apply automatically, with a link to **Settings ›
+Gardener**, and **Ask for a cleanup** is a button that unfolds the ask box
+(with no chat model configured it is one line pointing at Settings). The
+reader says why each proposal was raised in a plain sentence. A merge shows
+both memories side by side - each body, when it last changed, when it was
+last delivered and how often - and **Swap** keeps the other one instead; an
+archive shows the memory's body, who wrote it, when it last changed and when
+it was last delivered. A memory the request may not read is not shown. A rail
+row says **asked by you** or **background**. Each rail section offers
+**Dismiss all N** and, when every proposal in it can be undone and none asks
+to be read first, **Apply all N**. Both ask in the page. Apply all takes
+exactly the rows shown, so a proposal raised after the page rendered is never
+applied unseen; Dismiss all takes the section as the Source filter narrows it.
+Each proposal lands in the decision history with its own Undo. A section
+holding a consolidation never offers Apply all. On the Gardener `a` applies
+the open proposal and `x` dismisses it.
+
+The decision history opens with **Applied automatically**: every proposal
+automatic apply applied that is still applied, uncapped, each with its Undo
+(`/console/gardener/decisions#gardener-auto`). Every other decision is paged
+below it, so each appears once.
 
 A status line under the head says what the background passes are doing: when
 the last pass ran and when the next one is due, each check a pass skips and why

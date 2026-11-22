@@ -186,8 +186,12 @@ bypass the review step - what comes back is still a proposal.
 ## Where you review
 
 - **The console** - `/console/gardener` is an inbox: one line per proposal in
-  the rail, the full evidence and the decision gate in the reader. A whole
-  group can be dismissed at once. Every decision lands in **Recently decided**
+  the rail, the full evidence and the decision gate in the reader. A merge
+  shows both memories' bodies side by side with how agents use them, and
+  **Swap** keeps the other one. A whole group can be dismissed at once, and a
+  section whose every proposal can be undone can be applied at once (**Apply
+  all**); a consolidation or a split never takes part. `a` applies the open
+  proposal and `x` dismisses it. Every decision lands in **Recently decided**
   and in the **decision history** (`/console/gardener/decisions`), where Undo
   puts it back in the queue and reverses what applying it did. Applying a
   consolidation or a project split is the exception - both create things that

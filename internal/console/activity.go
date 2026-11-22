@@ -592,6 +592,13 @@ func gardenerSummary(p map[string]any) string {
 			return "planned a split of " + src
 		}
 		return "planned a project split"
+	case "retarget":
+		if to := payloadStr(p, "to"); to != "" {
+			return "retargeted a move to " + to
+		}
+		return "retargeted a move"
+	case "swap":
+		return "swapped which memory a merge keeps"
 	case "utility_armed":
 		if proj := payloadStr(p, "project"); proj != "" {
 			return "armed utility ranking for " + proj

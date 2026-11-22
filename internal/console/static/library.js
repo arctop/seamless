@@ -3,8 +3,9 @@
    Every rail item is a real server-rendered link; this module upgrades clicks
    to an in-place reader swap (?reader=1 fragment + history.pushState of the
    item's canonical URL) so the document and rail keep their scroll positions
-   and the switch is instant. j / k move the selection. The delegated handlers
-   stay inert without #lib-reader, but can enhance one inserted by an in-place
+   and the switch is instant. j / k move the selection; on the Gardener, a
+   applies the open proposal and x dismisses it. The delegated handlers stay
+   inert without #lib-reader, but can enhance one inserted by an in-place
    mutation response later. */
 (function () {
   'use strict';
@@ -12,6 +13,15 @@
   // Re-queried lazily: the SSE live client can morph the rail in place.
   function items() { return Array.prototype.slice.call(document.querySelectorAll('.lib-rail .rail-item')); }
   function readerEl() { return document.getElementById('lib-reader'); }
+  // The Gardener's reader carries its decision keys: a press of the key
+  // presses its button (button[data-reader-key]). No other library screen
+  // has any, and a/x mean nothing there.
+  function gardenerPage() { return !!document.querySelector('.lib-page[data-library="gardener"]'); }
+  function readerKeyButton(key) {
+    var el = readerEl();
+    var btn = el ? el.querySelector('button[data-reader-key="' + key + '"]') : null;
+    return btn && !btn.disabled && btn.form ? btn : null;
+  }
   function basePath() {
     var el = readerEl();
     return el ? el.getAttribute('data-base') || '' : '';
@@ -98,7 +108,8 @@
       actions.className = 'reader-nav-actions';
       var hint = document.createElement('span');
       hint.className = 'reader-keyhint';
-      hint.innerHTML = '<kbd>k</kbd> previous <kbd>j</kbd> next';
+      hint.innerHTML = '<kbd>k</kbd> previous <kbd>j</kbd> next' +
+        (gardenerPage() && readerKeyButton('a') ? ' <kbd>a</kbd> apply <kbd>x</kbd> dismiss' : '');
       var prev = document.createElement('button');
       prev.className = 'reader-step';
       prev.type = 'button';
@@ -203,14 +214,47 @@
     if (base && location.pathname.indexOf(base) === 0) load(location.pathname + location.search, false);
   });
 
+  // A key the shell already holds this instant: the second key of a g-chord
+  // (shell.js shows .chord-hint while it waits: g x is Trials, g k
+  // Approvers), or any key while the palette or the shortcut sheet is open.
+  // This listener runs before the shell's, so it has to step aside itself.
+  function shellHoldsKey() {
+    if (document.querySelector('.chord-hint')) return true;
+    var ids = ['cmdk', 'keys'];
+    for (var i = 0; i < ids.length; i++) {
+      var el = document.getElementById(ids[i]);
+      if (el && !el.hidden) return true;
+    }
+    return false;
+  }
+
   // j / k step the selection through the rail (list order, across groups),
   // Gmail-style. ("/" -> the page-local filter is search.js's, which owns the
   // key so the palette and the filter never both answer it.) Arrow keys are
   // left alone so they keep scrolling the document.
+  //
+  // On the Gardener, a applies the open proposal and x dismisses it: each
+  // submits its reader button, so the in-page confirm (shell.js) still asks
+  // before an apply that cannot be undone -- a second a confirms -- and the
+  // decision posts like a click. A held key does not repeat, and a key
+  // pressed while a decision is still posting (.main[aria-busy]) is dropped
+  // rather than posted twice.
   document.addEventListener('keydown', function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
     var ae = document.activeElement;
     if (ae && ae.matches && ae.matches('input, textarea, select, [contenteditable=""], [contenteditable="true"]')) return;
+    if (shellHoldsKey()) return;
+    if (e.key === 'a' || e.key === 'x') {
+      if (!gardenerPage()) return;
+      var btn = readerKeyButton(e.key);
+      if (!btn) return;
+      e.preventDefault();
+      var main = document.querySelector('.main');
+      if (e.repeat || (main && main.getAttribute('aria-busy') === 'true')) return;
+      if (btn.form.requestSubmit) btn.form.requestSubmit(btn);
+      else btn.click();
+      return;
+    }
     if (e.key !== 'j' && e.key !== 'k') return;
     if (!items().length) return;
     e.preventDefault();

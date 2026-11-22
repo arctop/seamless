@@ -82,7 +82,7 @@ func TestGardenerScreen_QueueChrome(t *testing.T) {
 	require.Contains(t, body, `class="mv2-bar"`)
 	require.Contains(t, body, `class="lib-layout"`)
 	require.Contains(t, body, `data-base="/console/gardener"`)
-	require.Contains(t, body, "Propose-only by design.")
+	require.Contains(t, body, "A proposal changes nothing until it is applied.")
 
 	// Sections render by taxonomy key, labeled, with a bulk dismiss each.
 	require.Contains(t, body, `id="rg-errors"`)

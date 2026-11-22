@@ -177,16 +177,18 @@ func TestGardenerPage_CardsDismissApply(t *testing.T) {
 	require.Equal(t, 2, byKind["tool_error"].ToolError.SessionCount)
 	require.Equal(t, "tasks_add: unknown parameter <v>", byKind["tool_error"].ToolError.SuggestedTitle)
 
-	// The HTML is a two-stage trust surface: the propose-only contract is
-	// explicit above the composer, and the selected proposal exposes its effects
-	// before the Apply gate.
+	// The HTML is a two-stage trust surface: the contract is explicit under
+	// the head, and the selected proposal exposes its effects before the
+	// Apply gate. With no chat model the ask box is one line.
 	req := httptest.NewRequest(http.MethodGet, "/console/gardener", nil)
 	req.Header.Set("Authorization", "Bearer "+testKey)
 	body := do(mux, req).Body.String()
-	require.Contains(t, body, "Propose-only by design.")
-	require.Contains(t, body, `id="gardener-ask-title"`)
+	require.Contains(t, body, "A proposal changes nothing until it is applied.")
+	require.Contains(t, body, "Settings &rsaquo; Gardener</a>")
+	require.Contains(t, body, `class="gardener-ask-off"`)
+	require.NotContains(t, body, `id="gardener-ask-title"`)
 	require.Contains(t, body, `id="gardener-review-title"`)
-	require.Contains(t, body, "Found by a background Gardener pass")
+	require.Contains(t, body, "found by a background pass")
 	require.Contains(t, body, "Dismiss suggestion")
 	require.Contains(t, body, "Apply change")
 	require.Contains(t, body, `data-base="/console/gardener"`, "the queue uses the shared library reader")
@@ -662,8 +664,9 @@ func TestGdGardenerPage_StatusLine(t *testing.T) {
 	require.Contains(t, on, "Run a pass now")
 	require.NotContains(t, on, "The garden is tidy.", "no pass has run yet")
 
-	// The sentence the owner reads is true whoever applies.
-	require.Contains(t, on, "A proposal changes nothing until it is applied, and the decision history shows who applied it.")
+	// The sentence the owner reads is true whoever applies (gardenerContract
+	// says the rest from the switches).
+	require.Contains(t, on, "A proposal changes nothing until it is applied.")
 	require.NotContains(t, on, "only you can")
 
 	var model struct {
@@ -858,7 +861,7 @@ func TestGdConsoleDecisions_AreTheOwners(t *testing.T) {
 	toolErr, archive := seeded[store.ProposalToolError], seeded[store.ProposalArchive]
 
 	page := getPeek(t, mux, "/console/gardener").Body.String()
-	require.Contains(t, page, "Each can be restored from the decision history.")
+	require.Contains(t, page, "each can be restored from the decision history.")
 	require.NotContains(t, page, "They can be restored from Recently decided.")
 
 	require.Equal(t, http.StatusSeeOther, post(mux, "/console/gardener/"+toolErr.ID+"/apply").Code)

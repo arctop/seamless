@@ -121,6 +121,13 @@
         </dl>
       </section>
       <section>
+        <h3>Gardener</h3>
+        <dl>
+          <div><dt><kbd>a</kbd></dt><dd>Apply what the reader shows (press again to confirm a change that cannot be undone)</dd></div>
+          <div><dt><kbd>x</kbd></dt><dd>Dismiss what the reader shows</dd></div>
+        </dl>
+      </section>
+      <section>
         <h3>Go to <small>press <kbd>g</kbd>, then</small></h3>
         <dl id="keys-goto"></dl>
       </section>
@@ -861,6 +868,13 @@
         <dl>
           <div><dt><kbd>j</kbd></dt><dd>Next item</dd></div>
           <div><dt><kbd>k</kbd></dt><dd>Previous item</dd></div>
+        </dl>
+      </section>
+      <section>
+        <h3>Gardener</h3>
+        <dl>
+          <div><dt><kbd>a</kbd></dt><dd>Apply what the reader shows (press again to confirm a change that cannot be undone)</dd></div>
+          <div><dt><kbd>x</kbd></dt><dd>Dismiss what the reader shows</dd></div>
         </dl>
       </section>
       <section>
@@ -1623,6 +1637,13 @@
         </dl>
       </section>
       <section>
+        <h3>Gardener</h3>
+        <dl>
+          <div><dt><kbd>a</kbd></dt><dd>Apply what the reader shows (press again to confirm a change that cannot be undone)</dd></div>
+          <div><dt><kbd>x</kbd></dt><dd>Dismiss what the reader shows</dd></div>
+        </dl>
+      </section>
+      <section>
         <h3>Go to <small>press <kbd>g</kbd>, then</small></h3>
         <dl id="keys-goto"></dl>
       </section>
@@ -2329,6 +2350,13 @@
         <dl>
           <div><dt><kbd>j</kbd></dt><dd>Next item</dd></div>
           <div><dt><kbd>k</kbd></dt><dd>Previous item</dd></div>
+        </dl>
+      </section>
+      <section>
+        <h3>Gardener</h3>
+        <dl>
+          <div><dt><kbd>a</kbd></dt><dd>Apply what the reader shows (press again to confirm a change that cannot be undone)</dd></div>
+          <div><dt><kbd>x</kbd></dt><dd>Dismiss what the reader shows</dd></div>
         </dl>
       </section>
       <section>
@@ -4004,20 +4032,16 @@
   </section>
   
 
-  <section class="gardener-composer" aria-labelledby="gardener-ask-title">
-    <h2 class="gardener-composer-title" id="gardener-ask-title">Ask for a cleanup</h2>
+  
+  <div class="gardener-tools">
     <p class="gardener-contract">
-      <span class="gardener-contract-badge"><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Propose-only by design.</span>
-      <span class="gardener-contract-copy">A proposal changes nothing until it is applied, and the decision history shows who applied it.</span>
+      <span class="gardener-contract-badge"><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Proposes only</span>
+      <span class="gardener-contract-copy">A proposal changes nothing until it is applied. You and your agents may apply one, and the decision history shows who did. None applies automatically. <a href="/console/settings?s=engine#settings-gardener">Settings &rsaquo; Gardener</a></span>
     </p>
     
-    <article class="gardener-request-card gardener-request-unavailable">
-      <span class="gardener-unavailable-icon"><svg class="ico ico-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg></span>
-      <div><strong>Natural-language cleanup is not connected.</strong><p>Configure an LLM chat provider to aim the gardener from this screen. Background proposals can still be reviewed below.</p></div>
-      <a class="btn small" href="/console/settings">Review settings <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></a>
-    </article>
+    <p class="gardener-ask-off"><svg class="ico ico-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg> Asking for a cleanup in words needs a chat model. <a href="/console/settings">Settings</a></p>
     
-  </section>
+  </div>
 
   
   <div class="empty dotgrid">
@@ -4083,6 +4107,13 @@
         <dl>
           <div><dt><kbd>j</kbd></dt><dd>Next item</dd></div>
           <div><dt><kbd>k</kbd></dt><dd>Previous item</dd></div>
+        </dl>
+      </section>
+      <section>
+        <h3>Gardener</h3>
+        <dl>
+          <div><dt><kbd>a</kbd></dt><dd>Apply what the reader shows (press again to confirm a change that cannot be undone)</dd></div>
+          <div><dt><kbd>x</kbd></dt><dd>Dismiss what the reader shows</dd></div>
         </dl>
       </section>
       <section>
@@ -4998,6 +5029,13 @@ window.SEAM_NO_LIVE_REFRESH = true;
         <dl>
           <div><dt><kbd>j</kbd></dt><dd>Next item</dd></div>
           <div><dt><kbd>k</kbd></dt><dd>Previous item</dd></div>
+        </dl>
+      </section>
+      <section>
+        <h3>Gardener</h3>
+        <dl>
+          <div><dt><kbd>a</kbd></dt><dd>Apply what the reader shows (press again to confirm a change that cannot be undone)</dd></div>
+          <div><dt><kbd>x</kbd></dt><dd>Dismiss what the reader shows</dd></div>
         </dl>
       </section>
       <section>

@@ -356,7 +356,7 @@ nothing, and their rows say so.</p>
 <tr>
 <td>Retarget a reproject proposal</td>
 <td><code>POST /console/gardener/{id}/retarget</code></td>
-<td>Rewrites a <strong>pending</strong> reproject's destination project before it is applied. Reproject proposals only.</td>
+<td>Rewrites a <strong>pending</strong> reproject's destination project before it is applied, and records a <code>gardener.action</code> event with the destination before and after. Reproject proposals only.</td>
 </tr>
 <tr>
 <td>Apply a whole plan batch</td>
@@ -366,7 +366,17 @@ nothing, and their rows say so.</p>
 <tr>
 <td>Dismiss a whole rail group</td>
 <td><code>POST /console/gardener/group/dismiss</code></td>
-<td>Dismisses every pending proposal in one rail section or split plan, one at a time, so each keeps its own event and stays individually undoable. Only Dismiss is offered in bulk.</td>
+<td>Dismisses every pending proposal in one rail section or split plan, one at a time, so each keeps its own event and stays individually undoable. <code>src=you</code> or <code>src=auto</code> narrows a section to the rows the Source filter shows.</td>
+</tr>
+<tr>
+<td>Apply a whole rail section</td>
+<td><code>POST /console/gardener/group/apply</code></td>
+<td>Applies the proposals one rail section shows (<code>group=</code>, and one <code>id=</code> for each proposal shown), one at a time, so each keeps its own event and its own Undo in the decision history. Offered only on a section whose every proposal can be undone and none of which asks to be read first (it touches a project fenced since it was raised, or moves a stamped memory into a less fenced project); a batch holding any other is refused before anything is applied. A consolidation or a split never takes part.</td>
+</tr>
+<tr>
+<td>Swap which memory a merge keeps</td>
+<td><code>POST /console/gardener/{id}/swap</code></td>
+<td>Rewrites a <strong>pending</strong> merge so it keeps the other memory (<code>keep=</code> names it, one of the two) and retires the one it kept. Nothing changes until the merge is applied. Records a <code>gardener.action</code> event. Merge proposals only.</td>
 </tr>
 <tr>
 <td>Undo a decision</td>
@@ -932,6 +942,10 @@ a superseded or archived memory finds it here too, with its status.</p>
 <tr>
 <td><code>j</code> / <code>k</code></td>
 <td>Next / previous item in a library rail</td>
+</tr>
+<tr>
+<td><code>a</code> / <code>x</code></td>
+<td>On the Gardener: apply / dismiss the open proposal. An apply that cannot be undone asks in the page first; press <code>a</code> again to confirm</td>
 </tr>
 <tr>
 <td><code>[</code></td>
@@ -2502,6 +2516,27 @@ card with the queries agents kept searching for in vain - applying that one
 opens a task; nothing is written until someone writes the memory.</p>
 <p>Split batches are grouped by plan and reviewed together, setup card first, with an
 apply-the-whole-plan action.</p>
+<p>The queue is the first thing under the head: one line says who may apply a
+proposal and which kinds apply automatically, with a link to <strong>Settings ›
+Gardener</strong>, and <strong>Ask for a cleanup</strong> is a button that unfolds the ask box
+(with no chat model configured it is one line pointing at Settings). The
+reader says why each proposal was raised in a plain sentence. A merge shows
+both memories side by side - each body, when it last changed, when it was
+last delivered and how often - and <strong>Swap</strong> keeps the other one instead; an
+archive shows the memory's body, who wrote it, when it last changed and when
+it was last delivered. A memory the request may not read is not shown. A rail
+row says <strong>asked by you</strong> or <strong>background</strong>. Each rail section offers
+<strong>Dismiss all N</strong> and, when every proposal in it can be undone and none asks
+to be read first, <strong>Apply all N</strong>. Both ask in the page. Apply all takes
+exactly the rows shown, so a proposal raised after the page rendered is never
+applied unseen; Dismiss all takes the section as the Source filter narrows it.
+Each proposal lands in the decision history with its own Undo. A section
+holding a consolidation never offers Apply all. On the Gardener <code>a</code> applies
+the open proposal and <code>x</code> dismisses it.</p>
+<p>The decision history opens with <strong>Applied automatically</strong>: every proposal
+automatic apply applied that is still applied, uncapped, each with its Undo
+(<code>/console/gardener/decisions#gardener-auto</code>). Every other decision is paged
+below it, so each appears once.</p>
 <p>A status line under the head says what the background passes are doing: when
 the last pass ran and when the next one is due, each check a pass skips and why
 (dedup with no embeddings, digest with no chat model, a pass the config turns

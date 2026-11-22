@@ -45,20 +45,25 @@
     <p class="gst-line">{{range $i, $p := .Line}}{{if $i}}<span class="gst-sep" aria-hidden="true">&middot;</span>{{end}}<span class="gst-piece{{with $p.Tone}} tone-{{.}}{{end}}"{{with $p.Title}} title="{{.}}"{{end}}>{{$p.Text}}</span>{{end}}</p>
     {{if and .CanRun $.Data.CanAct}}
     <form class="gst-run" method="post" action="/console/gardener/run">
-      <button class="btn small" type="submit" title="Run the background checks now instead of at the next pass. They only propose: nothing changes until a proposal is applied.">{{icon "refresh-cw"}} Run a pass now</button>
+      <button class="btn small" type="submit" title="Run the background checks now instead of at the next pass. {{if $.Data.Contract.Auto}}The kinds set to apply automatically apply as soon as a check finds them; every other proposal waits for a decision.{{else}}They only propose: nothing changes until a proposal is applied.{{end}}">{{icon "refresh-cw"}} Run a pass now</button>
     </form>
     {{end}}
     {{with .Note}}<p class="gst-note">{{.}}</p>{{end}}
   </section>
   {{end}}{{end}}
 
-  <section class="gardener-composer" aria-labelledby="gardener-ask-title">
-    <h2 class="gardener-composer-title" id="gardener-ask-title">Ask for a cleanup</h2>
+  {{/* The queue comes first: under the head sit one line of contract and
+       the ask box folded into a button. The contract is the screen's own
+       sentence (gardenerContract): who may apply a proposal, and which kinds
+       apply on their own. */}}
+  <div class="gardener-tools">
     <p class="gardener-contract">
-      <span class="gardener-contract-badge">{{icon "lock"}} Propose-only by design.</span>
-      <span class="gardener-contract-copy">A proposal changes nothing until it is applied, and the decision history shows who applied it.</span>
+      <span class="gardener-contract-badge{{if .Contract.Auto}} is-auto{{end}}">{{if .Contract.Auto}}{{icon "zap"}}{{else}}{{icon "lock"}}{{end}} {{.Contract.Badge}}</span>
+      <span class="gardener-contract-copy">{{.Contract.Copy}} <a href="{{.Contract.Href}}">Settings &rsaquo; Gardener</a></span>
     </p>
     {{if .CanRequest}}
+    <details class="gardener-composer" id="gardener-ask"{{if .SplitReq}} open{{end}}>
+    <summary class="btn small gardener-ask-toggle" id="gardener-ask-title">{{icon "sprout"}} Ask for a cleanup</summary>
     <form class="gardener-request-card" method="post" action="/console/gardener/request" id="req-form">
       <label class="gardener-request-label" for="req-text">
         <span>What should be tidied?</span>
@@ -106,14 +111,11 @@
       <button class="btn primary" type="submit" id="split-go">Plan the split {{icon "arrow-right"}}</button>
     </form>
     {{end}}
+    </details>
     {{else}}
-    <article class="gardener-request-card gardener-request-unavailable">
-      <span class="gardener-unavailable-icon">{{icon "brain"}}</span>
-      <div><strong>Natural-language cleanup is not connected.</strong><p>Configure an LLM chat provider to aim the gardener from this screen. Background proposals can still be reviewed below.</p></div>
-      <a class="btn small" href="/console/settings">Review settings {{icon "arrow-right"}}</a>
-    </article>
+    <p class="gardener-ask-off">{{icon "brain"}} Asking for a cleanup in words needs a chat model. <a href="/console/settings">Settings</a></p>
     {{end}}
-  </section>
+  </div>
 
   {{if or .TotalPending .Recent .Hidden}}
 
@@ -131,14 +133,12 @@
           <div class="gardener-group-note">{{icon "list-checks"}} Setup is applied first, then each memory move.</div>
           {{if $.Data.CanAct}}
           <div class="gardener-group-actions">
-            <form method="post" action="/console/gardener/plan/{{.Slug}}/apply"
-              onsubmit="return confirm('Apply every proposal in this plan? Projects are created first, then memories are moved. Setting up a split cannot be undone from the console.');">
-              <button class="btn small primary" type="submit">{{icon "check"}} Apply whole plan</button>
+            <form method="post" action="/console/gardener/plan/{{.Slug}}/apply">
+              <button class="btn small primary" type="submit" data-confirm="Applies every proposal in this plan, creating the projects first and then moving the memories; setting up a split cannot be undone from the console." data-confirm-label="Apply the plan">{{icon "check"}} Apply whole plan</button>
             </form>
-            <form class="gardener-dismiss-all" method="post" action="/console/gardener/group/dismiss"
-              onsubmit="return confirm('Dismiss all {{len .Cards}} proposal{{if ne (len .Cards) 1}}s{{end}} in this plan? Each can be restored from the decision history.');">
+            <form class="gardener-dismiss-all" method="post" action="/console/gardener/group/dismiss">
               <input type="hidden" name="plan" value="{{.Slug}}">
-              <button class="btn small" type="submit">Dismiss all {{len .Cards}}</button>
+              <button class="btn small" type="submit" data-confirm="Dismisses all {{len .Cards}} proposal{{if ne (len .Cards) 1}}s{{end}} in this plan; each can be restored from the decision history." data-confirm-label="Dismiss {{len .Cards}}">Dismiss all {{len .Cards}}</button>
             </form>
           </div>
           {{end}}
@@ -152,11 +152,25 @@
         <section class="rail-group" id="rg-{{.Key}}">
           <header class="rail-group-hd"><span class="hd-label">{{icon .Icon}}{{.Label}}</span> <span class="n">{{len .Rows}}</span></header>
           {{if $.Data.CanAct}}
-          <form class="gardener-dismiss-all" method="post" action="/console/gardener/group/dismiss"
-            onsubmit="return confirm('Dismiss all {{len .Rows}} proposal{{if ne (len .Rows) 1}}s{{end}} in {{.Label}}? Each can be restored from the decision history.');">
-            <input type="hidden" name="group" value="{{.Key}}">
-            <button class="btn small" type="submit">Dismiss all {{len .Rows}}</button>
-          </form>
+          {{/* Apply all is offered only where every row can be undone and none
+               asks to be read first (applyAllBlock): never beside a
+               consolidation. The form names the rows shown, so a proposal
+               that arrived after this page rendered is never applied unseen;
+               Dismiss all names the source filter for the same reason. */}}
+          <div class="gardener-group-actions">
+            {{if .ApplyAll}}
+            <form class="gardener-apply-all" method="post" action="/console/gardener/group/apply">
+              <input type="hidden" name="group" value="{{.Key}}">
+              {{range .Rows}}<input type="hidden" name="id" value="{{.ID}}">{{end}}
+              <button class="btn small primary" type="submit" data-confirm="Applies all {{len .Rows}} proposal{{if ne (len .Rows) 1}}s{{end}} in {{.Label}}; each can be undone from the decision history." data-confirm-label="Apply {{len .Rows}}">{{icon "check"}} Apply all {{len .Rows}}</button>
+            </form>
+            {{end}}
+            <form class="gardener-dismiss-all" method="post" action="/console/gardener/group/dismiss">
+              <input type="hidden" name="group" value="{{.Key}}">
+              {{if ne $.Data.SrcFilter "all"}}<input type="hidden" name="src" value="{{$.Data.SrcFilter}}">{{end}}
+              <button class="btn small" type="submit" data-confirm="Dismisses all {{len .Rows}} proposal{{if ne (len .Rows) 1}}s{{end}} in {{.Label}}; each can be restored from the decision history." data-confirm-label="Dismiss {{len .Rows}}">Dismiss all {{len .Rows}}</button>
+            </form>
+          </div>
           {{end}}
           <div class="rail-items">
             {{range .Rows}}{{template "gardener-row" .}}{{end}}
@@ -251,35 +265,25 @@
 <div class="lib-page gardener-page gardener-decisions" data-library="gardener">
   <header class="mv2-bar">
     <h1 id="gardener-decisions-title">{{icon "history"}}Decision history</h1>{{about "Every decided gardener proposal, newest first: what was decided, by whom, and what it produced."}}
-    <span class="mv2-count" aria-label="{{.Total}} decisions"><strong>{{.Total}}</strong>decided{{if gt .Pages 1}}<small>page {{.Page}} of {{.Pages}}</small>{{end}}</span>
+    <span class="mv2-count" aria-label="{{add .Total .AutoCount}} decisions"><strong>{{add .Total .AutoCount}}</strong>decided{{if gt .Pages 1}}<small>page {{.Page}} of {{.Pages}}</small>{{end}}</span>
     <span class="mv2-spacer"></span>
     <a class="btn small" href="/console/gardener">{{icon "chevron-left"}} Review queue</a>
   </header>
+  {{/* Applied automatically leads, uncapped: nobody reviewed these before
+       they landed, so each stays listed with its Undo until it is undone. */}}
+  {{if .Auto}}
+  <section class="gardener-auto" id="gardener-auto" aria-labelledby="gardener-auto-title">
+    <h2 class="gardener-section-title" id="gardener-auto-title">{{icon "zap"}}Applied automatically <span class="n">{{len .Auto}}</span></h2>
+    <p class="gardener-auto-note">These applied as soon as a pass found them, because their kind is set to apply automatically (Settings &rsaquo; Gardener). Undo takes one back and reverses what it did.</p>
+    <ol class="gardener-decision-list" aria-labelledby="gardener-auto-title">
+      {{range .Auto}}{{template "gardener-decision" .}}{{end}}
+    </ol>
+  </section>
+  {{end}}
   {{if .Rows}}
-  <ol class="gardener-decision-list" start="{{.From}}" aria-labelledby="gardener-decisions-title">
-    {{range .Rows}}
-    <li class="gardener-decision tone-{{.Tone}}" id="gd-{{.ID}}">
-      <span class="grr-icon">{{icon .Icon}}</span>
-      <span class="gdl-copy">
-        <span class="gdl-title">{{.RowTitle}}</span>
-        {{if .RowDetail}}<span class="gdl-detail">{{.RowDetail}}</span>{{end}}
-        <span class="gdl-meta">
-          <span class="gdl-outcome outcome-{{.Status}}"{{with .Settled}} title="{{.}}"{{end}}>{{.Outcome}}</span>
-          <span>by {{if .ByHref}}<a href="{{.ByHref}}" data-peek{{with .ByTitle}} title="{{.}}"{{end}}>{{.By}}</a>{{else}}<span{{with .ByTitle}} title="{{.}}"{{end}}>{{.By}}</span>{{end}}</span>
-          <time title="{{ts .ResolvedAt}}">{{agoPhrase .ResolvedAt}}</time>
-          {{with .Settled}}<span class="gdl-settled">{{.}}</span>{{end}}
-          {{range .Produced}}<a class="gdl-produced" href="{{.Href}}" data-peek title="{{.Title}}">{{if eq .Label "note"}}{{icon "file-text"}}{{else}}{{icon "list-checks"}}{{end}}{{.Label}}: {{.Title}}</a>{{end}}
-        </span>
-      </span>
-      {{if and $.CanAct .CanUndo}}
-      <form method="post" action="/console/gardener/{{.ID}}/undo">
-        <button class="btn small" type="submit" title="Return this proposal to the queue, reversing what applying it did">{{icon "undo-2"}} Undo</button>
-      </form>
-      {{else if not .CanUndo}}
-      <span class="grr-final" title="Applying this created projects or folded memories together, so it cannot be reversed from here">final</span>
-      {{end}}
-    </li>
-    {{end}}
+  {{if .Auto}}<h2 class="gardener-section-title" id="gardener-others-title">{{icon "history"}}Every other decision <span class="n">{{.Total}}</span></h2>{{end}}
+  <ol class="gardener-decision-list" start="{{.From}}" aria-labelledby="{{if .Auto}}gardener-others-title{{else}}gardener-decisions-title{{end}}">
+    {{range .Rows}}{{template "gardener-decision" .}}{{end}}
   </ol>
   {{if or .Prev .Next}}
   <nav class="gardener-decision-pager" aria-label="Decision history pages">
@@ -288,13 +292,40 @@
     {{if .Next}}<a class="btn small" href="{{.Next}}" rel="next">Older {{icon "chevron-right"}}</a>{{end}}
   </nav>
   {{end}}
-  {{else}}
+  {{else if not .Auto}}
   <div class="empty dotgrid">
     <span class="empty-ico">{{icon "history"}}</span>
     <div>No proposal has been decided yet. Each decision lands here, with who made it.</div>
   </div>
   {{end}}
 </div>
+{{end}}
+
+{{/* gardener-decision is one decided proposal in the decision history: what
+     was decided, the outcome, who decided, what an apply produced, and Undo
+     wherever it can be taken back. */}}
+{{define "gardener-decision"}}
+<li class="gardener-decision tone-{{.Tone}}" id="gd-{{.ID}}">
+  <span class="grr-icon">{{icon .Icon}}</span>
+  <span class="gdl-copy">
+    <span class="gdl-title">{{.RowTitle}}</span>
+    {{if .RowDetail}}<span class="gdl-detail">{{.RowDetail}}</span>{{end}}
+    <span class="gdl-meta">
+      <span class="gdl-outcome outcome-{{.Status}}"{{with .Settled}} title="{{.}}"{{end}}>{{.Outcome}}</span>
+      <span>by {{if .ByHref}}<a href="{{.ByHref}}" data-peek{{with .ByTitle}} title="{{.}}"{{end}}>{{.By}}</a>{{else}}<span{{with .ByTitle}} title="{{.}}"{{end}}>{{.By}}</span>{{end}}</span>
+      <time title="{{ts .ResolvedAt}}">{{agoPhrase .ResolvedAt}}</time>
+      {{with .Settled}}<span class="gdl-settled">{{.}}</span>{{end}}
+      {{range .Produced}}<a class="gdl-produced" href="{{.Href}}" data-peek title="{{.Title}}">{{if eq .Label "note"}}{{icon "file-text"}}{{else}}{{icon "list-checks"}}{{end}}{{.Label}}: {{.Title}}</a>{{end}}
+    </span>
+  </span>
+  {{if and .CanAct .CanUndo}}
+  <form method="post" action="/console/gardener/{{.ID}}/undo">
+    <button class="btn small" type="submit" title="Return this proposal to the queue, reversing what applying it did">{{icon "undo-2"}} Undo</button>
+  </form>
+  {{else if not .CanUndo}}
+  <span class="grr-final" title="Applying this created projects or folded memories together, so it cannot be reversed from here">final</span>
+  {{end}}
+</li>
 {{end}}
 
 {{/* gardener-row is one line of the review rail: a real link, so library.js
@@ -311,7 +342,7 @@
   <span class="gr-meta">
     {{if .Fenced}}<span class="gardener-fenced-chip" title="{{template "fencedTitle" .}}">{{icon "lock"}}</span>{{end}}
     {{with .MoveWarning}}<span class="gardener-fenced-chip gardener-move-chip" title="{{template "moveWarningTitle" .}}">{{icon "triangle-alert"}}</span>{{end}}
-    <span class="gardener-src-chip{{if eq .Source "request"}} you{{end}}">{{if eq .Source "request"}}you{{else}}auto{{end}}</span>
+    {{if eq .Source "request"}}<span class="gardener-src-chip you" title="Asked by you">asked by you</span>{{else}}<span class="gardener-src-chip" title="Found by a background pass">background</span>{{end}}
     <time title="{{ts .CreatedAt}}">{{ago .CreatedAt}}</time>
   </span>
 </a>
@@ -333,21 +364,21 @@
 <article class="reader-sheet gardener-sheet tone-{{.Tone}}">
   <header class="reader-head">
     <div class="reader-eyebrow">
-      <span class="kind">{{.Kind}}</span>
+      <span class="kind">{{if eq .Source "request"}}asked by you{{else}}found by a background pass{{end}}</span>
       <span class="badge">{{.Eyebrow}}</span>
       <span class="gardener-contract-badge small">{{icon "lock"}} Proposal only</span>
     </div>
     <h2 class="reader-title"><span class="gardener-sheet-icon">{{icon .Icon}}</span>{{.Label}}</h2>
     {{if .RequestText}}
     <blockquote class="gardener-request-origin"><span>Asked by you</span><p>&ldquo;{{.RequestText}}&rdquo;</p></blockquote>
-    {{else}}
-    <div class="gardener-scan-origin">{{icon "sprout"}} Found by a background Gardener pass</div>
     {{end}}
     <div class="reader-facts">
       <span class="fact" title="{{ts .CreatedAt}}">proposed {{ago .CreatedAt}}</span>
       {{if .GroupLabel}}<span class="fact">{{.GroupLabel}}</span>{{end}}
     </div>
   </header>
+
+  {{with .Why}}<div class="proposal-reason gardener-why"><span>Why it was proposed</span><p>{{.}}</p></div>{{end}}
 
   <div class="gardener-evidence">{{template "cardKindBody" .}}</div>
 
@@ -398,7 +429,7 @@
            and a hide is additionally liftable from Hidden forever. */}}
       <form method="post" action="/console/gardener/{{.ID}}/dismiss">
         <input type="hidden" name="next" value="{{.NextID}}">
-        <button class="btn" type="submit" title="Drop this suggestion. If the pattern behind it happens again, the gardener will raise it again.">Dismiss suggestion</button>
+        <button class="btn" type="submit" data-reader-key="x" aria-keyshortcuts="x" title="Drop this suggestion (x). If the pattern behind it happens again, the gardener will raise it again.">Dismiss suggestion</button>
       </form>
       {{if $.Level.AtLeast "standard"}}
       <form method="post" action="/console/gardener/{{.ID}}/hide">
@@ -406,15 +437,32 @@
         <button class="btn" type="submit" title="Never suggest this again, however often it recurs. Listed under Hidden forever, where you can lift it.">Hide forever</button>
       </form>
       {{end}}
-      <form method="post" action="/console/gardener/{{.ID}}/apply"
-        {{if not .CanUndoApply}}onsubmit="return confirm('Apply this {{.Kind}} proposal? This cannot be undone from the console.');"{{end}}>
+      <form method="post" action="/console/gardener/{{.ID}}/apply">
         <input type="hidden" name="next" value="{{.NextID}}">
-        <button class="btn primary" type="submit">{{icon "check"}} Apply change</button>
+        <button class="btn primary" type="submit" data-reader-key="a" aria-keyshortcuts="a" title="Apply this change (a)"{{if not .CanUndoApply}} data-confirm="This cannot be undone from the console." data-confirm-label="Apply for good"{{end}}>{{icon "check"}} Apply change</button>
       </form>
     </div>
   </footer>
   {{end}}
 </article>
+{{end}}
+
+{{/* gardener-mem-evidence is one memory as it is now (memEvidence): when it
+     last changed, how often agents were given it, who wrote it, and its body.
+     It is read through the request's handle, so a memory the request may not
+     read never reaches here. */}}
+{{define "gardener-mem-evidence"}}
+<div class="gardener-ev">
+  <a class="gardener-ev-name" href="/console/memories/{{.ID}}" data-peek>{{.Name}}</a>
+  <dl class="gardener-ev-facts">
+    <div><dt>Last updated</dt><dd><time title="{{ts .Updated}}">{{agoPhrase .Updated}}</time></dd></div>
+    <div><dt>Last delivered</dt><dd>{{if .LastInjected}}<time title="{{ts .LastInjected}}">{{agoPhrase .LastInjected}}</time>{{else}}never{{end}}</dd></div>
+    <div><dt>Delivered</dt><dd>{{.Delivered}}</dd></div>
+    <div><dt>Written by</dt><dd>{{if .SourceHref}}<a href="{{.SourceHref}}" data-peek>{{.Source}}</a>{{else if .Source}}{{.Source}}{{else}}not recorded{{end}}{{with .Model}} <small>{{.}}</small>{{end}}</dd></div>
+    {{if ne .Status "active"}}<div><dt>Now</dt><dd class="t-warn">{{.Status}}</dd></div>{{end}}
+  </dl>
+  {{if .BodyLoaded}}<div class="prose gardener-ev-body">{{.Body}}</div>{{else}}<p class="gardener-ev-none">No body beyond its description.</p>{{end}}
+</div>
 {{end}}
 
 {{/* cardKindBody renders the concrete before/after state for one proposal. */}}
@@ -427,7 +475,7 @@
     <div class="proposal-object-tags"><span>{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}}</span><span>{{.Kind}}</span></div>
   </div>
   {{end}}
-  {{if .Reason}}<div class="proposal-reason"><span>Why it was flagged</span><p>{{.Reason}}</p></div>{{end}}
+  {{with .ArchiveEv}}<div class="gardener-ev-one">{{template "gardener-mem-evidence" .}}</div>{{end}}
   {{if .StaleSources}}
   {{/* A stale copy's sources, by reference only: the gardener never reads
        their content, and neither does this card. */}}
@@ -437,12 +485,32 @@
   <div class="proposal-assurance">{{icon "archive"}} History stays readable; active indexes and briefings stop surfacing it.</div>
   {{end}}
 {{else if eq .Kind "merge"}}
-  <div class="proposal-signal">{{if eq .Source "request"}}You chose which version should survive.{{else}}The background pass measured {{.ScorePercent}}% similarity between these memories.{{end}}</div>
   <div class="proposal-compare">
     {{with .Keep}}<div class="proposal-memory keep"><span>Keep active</span><a href="/console/memories/{{.ID}}" data-peek>{{.Name}}</a><small>{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}}{{if .Description}} &middot; {{.Description}}{{end}}</small></div>{{end}}
     <div class="proposal-merge-arrow">{{icon "git-merge"}}<span>supersedes</span></div>
     {{with .Drop}}<div class="proposal-memory drop"><span>Replace with kept memory</span><a href="/console/memories/{{.ID}}" data-peek>{{.Name}}</a><small>{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}}{{if .Description}} &middot; {{.Description}}{{end}}</small></div>{{end}}
   </div>
+  {{/* Both memories as they are now, side by side: what each says and how
+       agents use it, so the owner can tell which should survive. Swap keeps
+       the other one; nothing changes until the merge is applied. */}}
+  {{if or .KeepEv .DropEv}}
+  <div class="gardener-ev-pair">
+    <section class="gardener-ev-side keep" aria-label="The memory kept">
+      <span class="gardener-ev-role">Stays active</span>
+      {{with .KeepEv}}{{template "gardener-mem-evidence" .}}{{else}}<p class="gardener-ev-none">This memory is not here to read.</p>{{end}}
+    </section>
+    <section class="gardener-ev-side drop" aria-label="The memory retired">
+      <span class="gardener-ev-role">Retired, pointing at the kept one</span>
+      {{with .DropEv}}{{template "gardener-mem-evidence" .}}{{else}}<p class="gardener-ev-none">This memory is not here to read.</p>{{end}}
+    </section>
+  </div>
+  {{end}}
+  {{if and .CanAct .Keep .Drop}}
+  <form class="gardener-swap" method="post" action="/console/gardener/{{.ID}}/swap">
+    <input type="hidden" name="keep" value="{{.Drop.ID}}">
+    <button class="btn small" type="submit" title="Keep {{.Drop.Name}} and retire {{.Keep.Name}} instead. Nothing changes until the merge is applied.">{{icon "arrow-up-down"}} Swap: keep {{.Drop.Name}} instead</button>
+  </form>
+  {{end}}
   <div class="proposal-assurance">{{icon "link"}} The superseded memory stays readable and points to the kept memory.</div>
 {{else if eq .Kind "digest"}}
   <div class="proposal-document-head"><span class="proposal-object-icon ok">{{icon "file-text"}}</span><div><span>New note</span><strong>{{.Title}}</strong><small>{{.SessionCount}} session{{if ne .SessionCount 1}}s{{end}} &middot; {{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}} &middot; {{.Month}}</small></div></div>
@@ -521,7 +589,6 @@
     <span class="badge {{planTone .Status}}">{{.Status}}</span>
   </div>
   {{end}}
-  {{if .Reason}}<div class="proposal-reason"><span>Why it was flagged</span><p>{{.Reason}}</p></div>{{end}}
   <div class="proposal-assurance">{{icon "file-text"}} Re-tags the capture as abandoned; the plan note is not deleted.</div>
 {{else if eq .Kind "ship_plan"}}
   {{with .ShipPlan}}
@@ -532,7 +599,6 @@
   </div>
   {{if .Commits}}<div class="proposal-query-list"><span>Commits since the capture that match the plan</span><div>{{range .Commits}}<em>{{.}}</em>{{end}}</div></div>{{end}}
   {{end}}
-  {{if .Reason}}<div class="proposal-reason"><span>Why it was flagged</span><p>{{.Reason}}</p></div>{{end}}
   <div class="proposal-assurance">{{icon "file-text"}} Re-tags the capture as shipped; the plan note is not deleted.</div>
 {{else if eq .Kind "merge_plans"}}
   {{with .MergePlans}}
@@ -546,11 +612,9 @@
     <div><span>Plan it would be folded into</span><a href="/console/plans/{{.IntoSlug}}">{{.IntoTitle}}</a><p>{{.SharedTokens}} shared title word{{if ne .SharedTokens 1}}s{{end}}</p></div>
   </div>
   {{end}}
-  {{if .Reason}}<div class="proposal-reason"><span>Why it was flagged</span><p>{{.Reason}}</p></div>{{end}}
   <div class="proposal-assurance">{{icon "file-text"}} Moves the capture and its agent-cache notes onto the surviving plan's tag and marks the capture merged; nothing is deleted, and undo puts every note back.</div>
 {{else if eq .Kind "memory_wanted"}}
   {{with .MemoryWanted}}
-  <div class="proposal-signal">Agents searched for this and recall returned nothing &mdash; {{.MissCount}} miss{{if ne .MissCount 1}}es{{end}} across {{.SessionCount}} session{{if ne .SessionCount 1}}s{{end}}.</div>
   <div class="proposal-query-list"><span>Searched, not found</span><div>{{range .Queries}}<em>{{.}}</em>{{end}}</div></div>
   <div class="proposal-object outcome">
     <span class="proposal-object-icon pop">{{icon "search"}}</span>
@@ -558,11 +622,9 @@
     <div class="proposal-object-tags"><span>{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}}</span></div>
   </div>
   {{end}}
-  {{if .Reason}}<div class="proposal-reason"><span>Why it was flagged</span><p>{{.Reason}}</p></div>{{end}}
   <div class="proposal-assurance">{{icon "check"}} Opens a task in the queue; nothing is written until someone writes the memory.</div>
 {{else if eq .Kind "tool_error"}}
   {{with .ToolError}}
-  <div class="proposal-signal">Agents keep hitting this error &mdash; {{.ErrorCount}} time{{if ne .ErrorCount 1}}s{{end}}{{if gt .SessionCount 1}} across {{.SessionCount}} sessions{{end}}.</div>
   <div class="proposal-object">
     <span class="proposal-object-icon danger">{{icon "triangle-alert"}}</span>
     <div><span>{{if eq .Surface "hook"}}Hook stage failing fail-open{{else}}Tool returning this error{{end}}</span><strong>{{.Key}}</strong>{{if .Signature}}<p>{{.Signature}}</p>{{end}}</div>
@@ -574,7 +636,6 @@
     <div><span>Task the apply opens</span><strong>Fix recurring error: {{.SuggestedTitle}}</strong></div>
   </div>
   {{end}}
-  {{if .Reason}}<div class="proposal-reason"><span>Why it was flagged</span><p>{{.Reason}}</p></div>{{end}}
   <div class="proposal-assurance">{{icon "check"}} Opens a task in the queue; nothing changes until someone fixes the surface.</div>
 {{else if eq .Kind "split"}}
   {{with .Split}}

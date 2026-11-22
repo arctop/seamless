@@ -7,14 +7,18 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/approval"
+	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/devices"
 	"github.com/arctop/seamless/internal/gardener"
 	"github.com/arctop/seamless/internal/store"
@@ -201,6 +205,49 @@ type proposalCard struct {
 	// MayContain is a digest's provenance line: what the note it writes will
 	// record it may contain content from, "" for none.
 	MayContain string `json:"-"`
+	// Why is why the proposal was raised, as one plain sentence
+	// (proposalWhy). The payload's reason is the pass's own shorthand ("no
+	// activity in 90d"), which ?format=json keeps as it is.
+	Why string `json:"-"`
+	// KeepEv and DropEv (a merge) and ArchiveEv (an archive) are the evidence
+	// to decide on: each memory as it is now, with its body and how agents use
+	// it, read through the request's handle (memoryEvidence). Only the
+	// proposal open in the reader carries them (withEvidence); nil when the
+	// memory is gone or this request may not read it.
+	KeepEv    *memEvidence `json:"-"`
+	DropEv    *memEvidence `json:"-"`
+	ArchiveEv *memEvidence `json:"-"`
+	// BulkBlock says why Apply all may not take this proposal, "" when it may
+	// (applyAllBlock).
+	BulkBlock string `json:"-"`
+}
+
+// memEvidence is one memory as a merge or an archive would leave it: what it
+// says and how agents use it now, so the decision rests on more than a name
+// and a description.
+type memEvidence struct {
+	ID          string
+	Name        string
+	Project     string
+	Kind        string
+	Description string
+	// Status is active, superseded or archived: a memory that left active
+	// context since the proposal makes the proposal moot.
+	Status  string
+	Updated time.Time
+	// Source is who wrote it: the writing session's name (SourceHref its page,
+	// when this request can show it), else the stamp as stored; Model the
+	// model that produced it. Both "" when nothing was recorded.
+	Source     string
+	SourceHref string
+	Model      string
+	// Injects is how many times briefings and recall delivered it, and
+	// LastInjected the latest; Delivered says both in words.
+	Injects      int
+	LastInjected *time.Time
+	Delivered    string
+	Body         template.HTML
+	BodyLoaded   bool
 }
 
 // queueSection is one taxonomy group in the review rail: the pending proposals
@@ -210,6 +257,10 @@ type queueSection struct {
 	Label string         `json:"-"`
 	Icon  string         `json:"-"`
 	Rows  []proposalCard `json:"-"`
+	// ApplyAll offers Apply all: every row can be undone and asks for no
+	// read first (applyAllBlock). A section holding a consolidation never
+	// offers it.
+	ApplyAll bool `json:"-"`
 }
 
 // queueTaxonomy is the single source for how the review queue is grouped: the
@@ -267,6 +318,9 @@ type decisionRow struct {
 	// knowledge gap or an error pattern opened, when this console can show it.
 	Produced []producedLink `json:"produced,omitempty"`
 	CanUndo  bool           `json:"canUndo"`
+	// CanAct mirrors gardenerData's, so a row renders its Undo from the row
+	// alone wherever it is listed.
+	CanAct bool `json:"-"`
 }
 
 // producedLink is one thing an apply made, linked.
@@ -278,11 +332,18 @@ type producedLink struct {
 
 // decisionsView is one page of the decision history (gardenerDecisions).
 type decisionsView struct {
-	Rows    []decisionRow `json:"rows"`
-	Page    int           `json:"page"`
-	Pages   int           `json:"pages"`
-	PerPage int           `json:"perPage"`
-	Total   int           `json:"total"`
+	// Auto is the "Applied automatically" section, on page 1 only: every
+	// proposal automatic apply (gardener.ByAuto) applied that is still
+	// applied, uncapped, each with its Undo. AutoCount is its length on every
+	// page. Rows, Pages and Total page through every other decision, so each
+	// decision is listed once.
+	Auto      []decisionRow `json:"auto,omitempty"`
+	AutoCount int           `json:"autoCount"`
+	Rows      []decisionRow `json:"rows"`
+	Page      int           `json:"page"`
+	Pages     int           `json:"pages"`
+	PerPage   int           `json:"perPage"`
+	Total     int           `json:"total"`
 	// From and To number this page's rows within the whole history.
 	From, To int    `json:"-"`
 	Prev     string `json:"-"`
@@ -429,6 +490,10 @@ type gardenerData struct {
 	// Status is the status line: background passes, last and next.
 	Status *gardenerStatusView `json:"status,omitempty"`
 
+	// Contract is the screen's own sentence: who may apply a proposal, and
+	// which kinds apply automatically (gardenerContract).
+	Contract gardenerContractView `json:"-"`
+
 	// Inbox state for the HTML rail + reader. All json:"-": the CLI reads
 	// Groups/Cards/counts and that shape is fixed.
 	Sections []queueSection `json:"-"`
@@ -493,6 +558,7 @@ func (s *Service) gardenerPageData(w http.ResponseWriter, r *http.Request) (data
 		Cards:           ungroupedRows(sections),
 		Sections:        sections,
 		Status:          s.gardenerStatus(),
+		Contract:        gardenerContract(s.gardenerSwitches(ctx)),
 		Recent:          recent,
 		Decided:         decided,
 		Hidden:          s.hiddenPatterns(ctx),
@@ -524,6 +590,7 @@ func (s *Service) gardenerPage(w http.ResponseWriter, r *http.Request) {
 		if first := firstRow(data); first != nil {
 			first.Selected = true
 			first.Level = s.consoleLevel(r.Context()).Level
+			s.withEvidence(r.Context(), first)
 			data.Selected = first
 			data.SelectedAuto = true
 		}
@@ -570,6 +637,7 @@ func (s *Service) gardenerDetail(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, card)
 		return
 	}
+	s.withEvidence(ctx, card)
 	if r.URL.Query().Get("reader") == "1" {
 		s.renderReader(w, r, "gardener", "gardener-reader", card)
 		return
@@ -718,8 +786,12 @@ func sectionize(cards []proposalCard) []queueSection {
 		if len(rows) == 0 {
 			continue
 		}
+		sec.ApplyAll = true
 		for i := range rows {
 			rows[i].GroupKey, rows[i].GroupLabel = sec.Key, sec.Label
+			if rows[i].BulkBlock != "" {
+				sec.ApplyAll = false
+			}
 		}
 		sec.Rows = rows
 		out = append(out, sec)
@@ -819,6 +891,7 @@ func (s *Service) decisionRows(ctx context.Context, ps []store.Proposal) []decis
 			Status: p.Status, Outcome: outcomeWord(p.Status), ResolvedAt: p.ResolvedAt,
 			Settled: payloadStr(p.Result, "settled"),
 			CanUndo: gardener.CanUndoResolution(p.Status, p.Kind),
+			CanAct:  s.cfg.Gardener != nil,
 		}
 		if row.Settled != "" {
 			row.Outcome = "settled"
@@ -1081,7 +1154,7 @@ func rowSummary(kind string, c proposalCard) (title, detail string) {
 	case store.ProposalDigest:
 		return "Publish digest", c.Title
 	case store.ProposalConsolidate:
-		return fmt.Sprintf("Consolidate %d memories", len(c.Sources)), "→ " + c.NewName
+		return "Consolidate " + plural(len(c.Sources), "memory", "memories"), "→ " + c.NewName
 	case store.ProposalReproject:
 		if c.Reproject != nil {
 			return "Move memory", fmt.Sprintf("%s: %s → %s",
@@ -1340,6 +1413,8 @@ func (s *Service) toProposalCard(ctx context.Context, p store.Proposal) proposal
 	c.CanAct = s.cfg.Gardener != nil
 	c.Fenced = s.fencedTargets(ctx, p)
 	c.MoveWarning = s.moveWarning(ctx, p)
+	c.Why = proposalWhy(p.Kind, p.Payload, c)
+	c.BulkBlock = applyAllBlock(c)
 	return c
 }
 
@@ -1461,6 +1536,312 @@ func briefFrom(m map[string]any) *memBrief {
 	}
 }
 
+// withEvidence loads what the reader needs to decide on a merge or an
+// archive: each memory as it is now (memoryEvidence). Only the proposal the
+// reader shows pays for it: the rail renders every pending proposal and reads
+// none of their bodies.
+func (s *Service) withEvidence(ctx context.Context, c *proposalCard) {
+	switch c.Kind {
+	case store.ProposalMerge:
+		if c.Keep != nil {
+			c.KeepEv = s.memoryEvidence(ctx, c.Keep.ID)
+		}
+		if c.Drop != nil {
+			c.DropEv = s.memoryEvidence(ctx, c.Drop.ID)
+		}
+	case store.ProposalArchive:
+		if c.Archive != nil {
+			c.ArchiveEv = s.memoryEvidence(ctx, c.Archive.ID)
+		}
+	}
+}
+
+// memoryEvidence reads one memory for the reader through the request's
+// handle: its body, who wrote it, when it last changed, and how often agents
+// were given it. A memory the request may not read -- a locked project's,
+// under peer_auth -- does not exist on that handle, so nothing of it is
+// shown; nor is a memory that is gone. Best-effort: a failed read costs the
+// evidence, never the page.
+func (s *Service) memoryEvidence(ctx context.Context, id string) *memEvidence {
+	if id == "" {
+		return nil
+	}
+	m, ok, err := store.MemoryByID(ctx, s.db(ctx), id)
+	if err != nil {
+		s.logger.Warn("console: gardener evidence memory", "id", id, "error", err)
+		return nil
+	}
+	if !ok {
+		return nil
+	}
+	ev := &memEvidence{
+		ID: m.ID, Name: m.Name, Project: m.Project, Kind: string(m.Kind), Description: m.Description,
+		Status: "active", Updated: m.Updated, Model: m.Model, Delivered: "never",
+	}
+	if !m.Active() {
+		ev.Status = "archived"
+		if m.SupersededBy != "" {
+			ev.Status = "superseded"
+		}
+	}
+	if s.cfg.Files != nil {
+		if full, ferr := s.cfg.Files.Store().ReadMemory(m.FilePath); ferr != nil {
+			s.logger.Warn("console: gardener evidence body", "id", m.ID, "error", ferr)
+		} else if strings.TrimSpace(full.Body) != "" {
+			ev.Body = s.renderBody(ctx, full.Body, m.Project)
+			ev.BodyLoaded = true
+		}
+	}
+	if st, found, serr := store.GetRetrievalStat(ctx, s.db(ctx), m.ID); serr != nil {
+		s.logger.Warn("console: gardener evidence stat", "id", m.ID, "error", serr)
+	} else if found {
+		ev.Injects, ev.LastInjected = st.InjectCount, st.LastInjectedAt
+	}
+	switch ev.Injects {
+	case 0:
+	case 1:
+		ev.Delivered = "once"
+	default:
+		ev.Delivered = strconv.Itoa(ev.Injects) + " times"
+	}
+	if m.SourceSession != "" {
+		resolve := s.sourceSessionResolver(ctx)
+		ev.Source = sourceSessionLabel(resolve, m.SourceSession)
+		if sess := resolve(m.SourceSession); sess.ID != "" {
+			ev.SourceHref = "/console/sessions/" + sess.ID
+		}
+	}
+	return ev
+}
+
+// applyAllBlock says why Apply all may not take a proposal, "" when it may.
+// Apply all is for the decisions that cost nothing to take back: an apply
+// that cannot be undone (consolidate, split) is never one of them, and
+// neither is a proposal whose reader asks the owner to read it first -- one
+// touching a project fenced since it was raised, or a move of a stamped
+// memory into a less fenced project. Both marks block nothing on their own;
+// they keep the proposal out of a decision made without opening it.
+func applyAllBlock(c proposalCard) string {
+	switch {
+	case !c.CanUndoApply:
+		return "applying it cannot be undone"
+	case len(c.Fenced) > 0:
+		return "it touches a project fenced since it was proposed"
+	case c.MoveWarning != nil:
+		return "it moves a stamped memory into a less fenced project"
+	}
+	return ""
+}
+
+// gardenerContractView is the Gardener screen's own sentence: what a
+// proposal changes, who may apply one, and which kinds apply on their own,
+// with the way to Settings, where both are chosen.
+type gardenerContractView struct {
+	// Auto is true when some kinds apply automatically; Badge is the pill.
+	Auto  bool
+	Badge string
+	Copy  string
+	Href  string
+}
+
+// gardenerSettingsHref is where the owner chooses who may apply proposals and
+// which kinds apply automatically: Settings, the Gardener controls.
+const gardenerSettingsHref = "/console/settings?s=engine#settings-gardener"
+
+// contractKindWords names an automatically applied kind in the screen's sentence.
+var contractKindWords = map[string]string{
+	store.ProposalMemoryWanted: "missing memories",
+	store.ProposalToolError:    "recurring errors",
+	store.ProposalShipPlan:     "shipped plans",
+	store.ProposalAbandonPlan:  "stale plans",
+}
+
+// gardenerContract says what is true for these switches: whether agents may
+// apply a proposal, and which kinds apply as soon as a pass finds them.
+func gardenerContract(sw gardenerSwitches) gardenerContractView {
+	v := gardenerContractView{Badge: "Proposes only", Href: gardenerSettingsHref}
+	who := "You and your agents may apply one, and the decision history shows who did."
+	if !sw.AgentsMayApply {
+		who = "Only you may apply one; agents are refused, and the decision history shows each decision."
+	}
+	auto := "None applies automatically."
+	if len(sw.AutoApply) > 0 {
+		words := make([]string, 0, len(sw.AutoApply))
+		for _, kind := range sw.AutoApply {
+			w, ok := contractKindWords[kind]
+			if !ok {
+				w = strings.ReplaceAll(kind, "_", " ") + " proposals"
+			}
+			words = append(words, w)
+		}
+		auto = whySentence(approval.JoinAnd(words)) + " apply automatically, as soon as a pass finds them."
+		v.Auto, v.Badge = true, "Some apply automatically"
+	}
+	v.Copy = "A proposal changes nothing until it is applied. " + who + " " + auto
+	return v
+}
+
+// proposalWhy is why a proposal was raised, as one plain sentence. Most
+// passes write their reason as shorthand ("stage with no parsable Status
+// header, no update in 14d"), which plainReason puts into words; a request's
+// reason is the model's own wording, kept; and a kind whose payload carries no
+// reason says why from its own evidence. Every kind says something
+// (TestGtProposalWhy_EveryKindReadsAsASentence).
+func proposalWhy(kind string, p map[string]any, c proposalCard) string {
+	request := c.Source == "request"
+	if r := strings.TrimSpace(payloadStr(p, "reason")); r != "" && (!request || r != "requested") {
+		return plainReason(r)
+	}
+	switch kind {
+	case store.ProposalArchive:
+		if request {
+			return "You asked for it to be archived."
+		}
+		return "A background pass found it no longer used."
+	case store.ProposalMerge:
+		if request {
+			return "You asked for these two to be merged."
+		}
+		return fmt.Sprintf("A background pass found these two memories %d%% alike, so one of them may be enough.", c.ScorePercent)
+	case store.ProposalDigest:
+		return fmt.Sprintf("%s in %s recorded findings during %s.",
+			whySentence(plural(c.SessionCount, "session", "sessions")), projectLabel(c.Project), c.Month)
+	case store.ProposalConsolidate:
+		if request {
+			return "You asked for these memories to be combined into one."
+		}
+		return fmt.Sprintf("These %d memories cover the same ground.", len(c.Sources))
+	case store.ProposalReproject:
+		if c.Plan != "" {
+			return "It is one of the moves in a project split you asked for."
+		}
+		if request {
+			return "You asked for it to move to another project."
+		}
+		return "It looks filed under the wrong project."
+	case store.ProposalRekind:
+		if request {
+			return "You asked for it to be reclassified."
+		}
+		return "It looks filed under the wrong kind."
+	case store.ProposalRelocate:
+		return "It sits outside the fence of the project it belongs to."
+	case store.ProposalSplit:
+		if c.Split != nil && c.Split.Source != "" {
+			return "You asked for " + c.Split.Source + " to be split."
+		}
+		return "You asked for a project to be split."
+	case store.ProposalAbandonPlan, store.ProposalShipPlan, store.ProposalMergePlans:
+		return "Nobody approved this captured plan."
+	case store.ProposalMemoryWanted:
+		if w := c.MemoryWanted; w != nil && w.MissCount > 0 {
+			return fmt.Sprintf("Agents searched for this %s across %s, and recall found nothing.",
+				plural(w.MissCount, "time", "times"), plural(w.SessionCount, "session", "sessions"))
+		}
+		return "Agents searched for this, and recall found nothing."
+	case store.ProposalToolError:
+		if e := c.ToolError; e != nil && e.ErrorCount > 0 && e.Key != "" {
+			return fmt.Sprintf("Agents' calls to %s returned this error %s across %s.",
+				e.Key, plural(e.ErrorCount, "time", "times"), plural(e.SessionCount, "session", "sessions"))
+		}
+		return "Agents keep hitting this error."
+	}
+	return "The gardener raised it for your review."
+}
+
+// reasonShapes are the reasons the background passes write, each with its
+// plain sentence. A reason that matches none -- a request's, a pass's new
+// wording -- is kept, sentence-cased (plainReason): the words are still the
+// pass's own, never a guess.
+var reasonShapes = []struct {
+	re  *regexp.Regexp
+	say func(m []string) string
+}{
+	{regexp.MustCompile(`^no activity in (\d+)d$`), func(m []string) string {
+		return "Nothing has updated, delivered or read it in " + reasonCount(m[1], "day", "days") +
+			", and no other memory links to it."
+	}},
+	{regexp.MustCompile(`^stage with no parsable Status header, no update in (\d+)d$`), func(m []string) string {
+		return "It is a stage with no Status line Seamless can read, so it gates nothing, and it has not changed in " +
+			reasonCount(m[1], "day", "days") + "."
+	}},
+	{regexp.MustCompile(`^stage with status (.+), no update in (\d+)d$`), func(m []string) string {
+		return "It is a stage whose Status line reads " + m[1] + ", so it gates nothing, and it has not changed in " +
+			reasonCount(m[2], "day", "days") + "."
+	}},
+	{regexp.MustCompile(`^dead weight: briefing-injected (\d+)x in (\d+)d, zero recall/prompt/read demand$`), func(m []string) string {
+		return "Briefings gave it to agents " + reasonCount(m[1], "time", "times") + " in " + reasonCount(m[2], "day", "days") +
+			", and not one search, prompt or read asked for it."
+	}},
+	{regexp.MustCompile(`^knowledge gap: recall found nothing (\d+)x across (\d+) sessions? in (\d+)d$`), func(m []string) string {
+		return "Agents searched for this " + reasonCount(m[1], "time", "times") + " across " + reasonCount(m[2], "session", "sessions") +
+			" in " + reasonCount(m[3], "day", "days") + ", and recall found nothing."
+	}},
+	{regexp.MustCompile(`^recurring tool error: (.+) returned this error (\d+)x across (\d+) sessions? in (\d+)d$`), func(m []string) string {
+		return "Agents' calls to " + m[1] + " returned this error " + reasonCount(m[2], "time", "times") + " across " +
+			reasonCount(m[3], "session", "sessions") + " in " + reasonCount(m[4], "day", "days") + "."
+	}},
+	{regexp.MustCompile(`^recurring hook failure: stage "(.+)" failed (\d+)x in (\d+)d, swallowed fail-open$`), func(m []string) string {
+		return "The " + m[1] + " hook stage failed " + reasonCount(m[2], "time", "times") + " in " + reasonCount(m[3], "day", "days") +
+			"; a hook carries on past a failure, so no agent saw it."
+	}},
+	{regexp.MustCompile(`^unapproved for (\d+)d, but (\d+) of (\d+) commit\(s\) since its capture match the plan -- the work appears to have shipped$`), func(m []string) string {
+		return "Nobody approved it in " + reasonCount(m[1], "day", "days") + ", but " + m[2] + " of the " +
+			reasonCount(m[3], "commit", "commits") + " since it was captured match the plan, so the work looks shipped."
+	}},
+	{regexp.MustCompile(`^unapproved for (\d+)d and carries no steps of its own, while plan "(.+)" in the same project holds the steps for what looks like the same work \((\d+) shared title words\)$`), func(m []string) string {
+		return "Nobody approved it in " + reasonCount(m[1], "day", "days") + " and it has no steps of its own, while plan " + m[2] +
+			" in the same project holds the steps for what looks like the same work: their titles share " +
+			reasonCount(m[3], "word", "words") + "."
+	}},
+	{regexp.MustCompile(`^never approved in (\d+)d; repo unchanged since the capture$`), func(m []string) string {
+		return "Nobody approved it in " + reasonCount(m[1], "day", "days") + ", and its repository has not changed since it was captured."
+	}},
+	{regexp.MustCompile(`^never approved in (\d+)d; (\d+) commit\(s\) since the capture, none matching the plan$`), func(m []string) string {
+		return "Nobody approved it in " + reasonCount(m[1], "day", "days") + ", and none of the " +
+			reasonCount(m[2], "commit", "commits") + " since it was captured match the plan."
+	}},
+	{regexp.MustCompile(`^never approved in (\d+)d$`), func(m []string) string {
+		return "Nobody approved it in " + reasonCount(m[1], "day", "days") + "."
+	}},
+	{regexp.MustCompile(`^written by a session bound to (.+), which is now (\S+) -- this memory stayed in the global scope, outside the fence$`), func(m []string) string {
+		return "A session bound to " + m[1] + " wrote it, and " + m[1] + " is now " + m[2] +
+			", but the memory stayed in the global scope, outside the fence."
+	}},
+}
+
+// plainReason puts a pass's reason into a plain sentence (reasonShapes), or
+// keeps one it does not know as a sentence of its own.
+func plainReason(reason string) string {
+	for _, sh := range reasonShapes {
+		if m := sh.re.FindStringSubmatch(reason); m != nil {
+			return sh.say(m)
+		}
+	}
+	out := whySentence(strings.ReplaceAll(reason, " -- ", "; "))
+	if !strings.HasSuffix(out, ".") && !strings.HasSuffix(out, "?") && !strings.HasSuffix(out, "!") {
+		out += "."
+	}
+	return out
+}
+
+// reasonCount is n (a pass's decimal count) with its noun: "1 day", "14 days".
+func reasonCount(n, one, many string) string {
+	if n == "1" {
+		return n + " " + one
+	}
+	return n + " " + many
+}
+
+// whySentence upper-cases the first letter, leaving the rest as written.
+func whySentence(s string) string {
+	r, size := utf8.DecodeRuneInString(s)
+	if r == utf8.RuneError {
+		return s
+	}
+	return string(unicode.ToUpper(r)) + s[size:]
+}
+
 // gardenerApply carries out a proposal and redirects to the next one in the
 // queue, surfacing an error via a flash query param when the effect could not
 // be applied. A failure keeps the decided proposal selected, since it is still
@@ -1573,11 +1954,14 @@ func (s *Service) gardenerUndo(w http.ResponseWriter, r *http.Request) {
 // taxonomy section (?group=) or a split plan (?plan=) -- one at a time, so each
 // keeps its own event and its own row in the decision history and stays
 // individually undoable. It is best-effort: it dismisses what it can and
-// reports how many landed.
+// reports how many landed. src= (you or auto, as the Source filter names them)
+// narrows a section to the rows the filtered rail shows, so "Dismiss all N"
+// dismisses those N and no more.
 //
-// Only Dismiss is offered in bulk. Apply stays per-proposal (a plan's
-// Apply-whole-plan aside): dismissing costs nothing but the suggestion, while
-// applying changes the knowledge agents receive.
+// Dismissing costs nothing but the suggestion, so any group may be dismissed
+// at once. Applying changes the knowledge agents receive: in bulk it is
+// gardenerGroupApply's, for a section whose every proposal can be undone, and
+// a split plan's Apply whole plan.
 func (s *Service) gardenerGroupDismiss(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.Gardener == nil {
 		s.serverError(w, r, errNoGardener)
@@ -1600,6 +1984,14 @@ func (s *Service) gardenerGroupDismiss(w http.ResponseWriter, r *http.Request) {
 		}
 		label = sec.Label
 	}
+	src := strings.TrimSpace(r.PostFormValue("src"))
+	if src == "" {
+		src = "all"
+	}
+	if !slices.Contains(srcFilterKeys, src) {
+		s.badRequest(w, r, fmt.Sprintf("invalid src %q: valid values are %s", src, strings.Join(srcFilterKeys, ", ")))
+		return
+	}
 
 	proposals, err := store.PendingProposals(ctx, s.db(ctx), "")
 	if err != nil {
@@ -1613,6 +2005,10 @@ func (s *Service) gardenerGroupDismiss(w http.ResponseWriter, r *http.Request) {
 			if inPlan == plan {
 				batch = append(batch, p.ID)
 			}
+			continue
+		}
+		asked := payloadStr(p.Payload, "source") == "request"
+		if (src == "you" && !asked) || (src == "auto" && asked) {
 			continue
 		}
 		if inPlan == "" && sectionOfKind[p.Kind] == group {
@@ -1652,6 +2048,188 @@ func taxonomySection(key string) (queueSection, bool) {
 		}
 	}
 	return queueSection{}, false
+}
+
+// gardenerGroupApply applies the proposals one rail section shows, one at a
+// time, so each keeps its own event and its own row in the decision history,
+// where Undo takes it back. The form names the section (group=) and each
+// proposal it showed (id=, repeated): a proposal a pass raised after the page
+// rendered is never applied unseen, and one decided meanwhile in another tab
+// is skipped and counted.
+//
+// Only a section every proposal of which may be applied in bulk offers it
+// (applyAllBlock): applying one that cannot be undone -- consolidate, split --
+// or one whose reader asks to be read first is refused for the whole batch,
+// before anything is applied. Split plans keep Apply whole plan. Past that
+// check it is best-effort, like Apply whole plan: it applies what it can and
+// reports how many landed, leaving any that error pending.
+func (s *Service) gardenerGroupApply(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.Gardener == nil {
+		s.serverError(w, r, errNoGardener)
+		return
+	}
+	ctx := r.Context()
+	group := strings.TrimSpace(r.PostFormValue("group"))
+	sec, ok := taxonomySection(group)
+	if !ok {
+		keys := make([]string, 0, len(queueTaxonomy))
+		for _, t := range queueTaxonomy {
+			keys = append(keys, t.Key)
+		}
+		s.badRequest(w, r, fmt.Sprintf("apply a section by group=<section>: valid values are %s", strings.Join(keys, ", ")))
+		return
+	}
+	var batch []string
+	seen := map[string]bool{}
+	decided := 0
+	for _, raw := range r.PostForm["id"] {
+		id := strings.TrimSpace(raw)
+		if id == "" || seen[id] {
+			continue
+		}
+		seen[id] = true
+		p, found, err := store.ProposalByID(ctx, s.db(ctx), id)
+		if err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		if !found {
+			s.notFound(w, r, "No proposal with id "+id+".")
+			return
+		}
+		if p.Status != store.ProposalPending {
+			decided++
+			continue
+		}
+		if payloadStr(p.Payload, "plan") != "" || sectionOfKind[p.Kind] != group {
+			s.badRequest(w, r, fmt.Sprintf("proposal %s is not in %s", id, sec.Label))
+			return
+		}
+		c := s.toProposalCard(ctx, p)
+		if why := applyAllBlock(c); why != "" {
+			gardenerRedirect(w, r, id, "error", fmt.Sprintf("Nothing was applied: %s (%s) is not applied in bulk, because %s. Open it and decide it on its own.",
+				c.RowTitle, c.RowDetail, why))
+			return
+		}
+		batch = append(batch, id)
+	}
+	if len(seen) == 0 {
+		s.badRequest(w, r, "name each proposal to apply with id=<proposal id>, as the section shows them")
+		return
+	}
+	if len(batch) == 0 {
+		gardenerRedirect(w, r, "", "error", "Every proposal in "+sec.Label+" was already decided.")
+		return
+	}
+	applied, settled, firstErr := 0, 0, ""
+	decide := deciding(r)
+	for _, id := range batch {
+		res, aerr := s.cfg.Gardener.Apply(decide, id)
+		switch {
+		case aerr != nil:
+			if firstErr == "" {
+				firstErr = aerr.Error()
+			}
+		case payloadStr(res, "settled") != "":
+			settled++
+		default:
+			applied++
+		}
+	}
+	if firstErr != "" {
+		gardenerRedirect(w, r, "", "error",
+			fmt.Sprintf("applied %d of %d in %s -- first error: %s", applied, len(batch), sec.Label, firstErr))
+		return
+	}
+	msg := fmt.Sprintf("Applied %s from %s.", plural(applied, "proposal", "proposals"), sec.Label)
+	if settled > 0 {
+		msg += fmt.Sprintf(" Settled %d whose memory had already gone inactive.", settled)
+	}
+	if decided > 0 {
+		msg += fmt.Sprintf(" Skipped %d already decided.", decided)
+	}
+	gardenerRedirect(w, r, "", "notice", msg+" Undo any of them from the decision history.")
+}
+
+// gardenerSwap changes which memory a pending merge keeps. Apply reads the
+// payload's keep and drop (gardener's applyMerge), so the swap rewrites the
+// payload and nothing else changes until the merge is applied. The form names
+// the memory to keep (keep=<id>), one of the two the merge names, rather than
+// toggling: a repeated or crossed post lands on what the owner chose. The
+// merge's key is the pair, whichever way round, so dedup is unchanged. It
+// records a gardener.action event, as every Gardener decision does.
+func (s *Service) gardenerSwap(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.Gardener == nil {
+		s.serverError(w, r, errNoGardener)
+		return
+	}
+	ctx := r.Context()
+	id := r.PathValue("id")
+	if !s.proposalReachable(w, r, id) {
+		return
+	}
+	keepID := strings.TrimSpace(r.PostFormValue("keep"))
+	if keepID == "" {
+		s.badRequest(w, r, "swap a merge by keep=<the id of the memory to keep>")
+		return
+	}
+	p, found, err := store.ProposalByID(ctx, s.db(ctx), id)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	if !found || p.Status != store.ProposalPending {
+		gardenerRedirect(w, r, "", "error", "That proposal was already resolved.")
+		return
+	}
+	if p.Kind != store.ProposalMerge {
+		s.badRequest(w, r, "only a merge proposal can swap which memory it keeps")
+		return
+	}
+	keep, drop := payloadMap(p.Payload, "keep"), payloadMap(p.Payload, "drop")
+	switch keepID {
+	case payloadStr(keep, "id"):
+		gardenerRedirect(w, r, id, "notice", "This merge already keeps "+payloadStr(keep, "name")+".")
+		return
+	case payloadStr(drop, "id"):
+	default:
+		s.badRequest(w, r, fmt.Sprintf("memory %s is not one of the two this merge names", keepID))
+		return
+	}
+	p.Payload["keep"], p.Payload["drop"] = drop, keep
+	if err := store.UpdateProposalPayload(ctx, s.writeDB(), id, p.Payload); err != nil {
+		s.logger.Warn("console: gardener swap", "id", id, "error", err)
+		gardenerRedirect(w, r, id, "error", err.Error())
+		return
+	}
+	s.recordDecision(r, id, map[string]any{"action": "swap", "kind": p.Kind,
+		"keep": payloadStr(drop, "id"), "drop": payloadStr(keep, "id")})
+	gardenerRedirect(w, r, id, "notice", fmt.Sprintf("Swapped. Applying now keeps %s and retires %s.",
+		payloadStr(drop, "name"), payloadStr(keep, "name")))
+}
+
+// recordDecision appends the gardener.action event for a console decision the
+// gardener service does not make itself -- a retarget, a swap -- in the shape
+// the service's own decisions carry (gardener's record): the proposal as the
+// item, the action, and by, who decided. The owner's is "console", as on
+// every console write and as gardener's eventBy writes it; an agent's process
+// is "agent" (consoleActor). Best-effort, as the service's is: the change
+// already landed.
+func (s *Service) recordDecision(r *http.Request, id string, payload map[string]any) {
+	if s.cfg.Events == nil {
+		return
+	}
+	by := consoleActor(r)
+	if by == gardener.ByOwner {
+		by = "console"
+	}
+	payload["by"] = by
+	ctx := r.Context()
+	if _, err := s.eventLog(ctx).Record(ctx, core.Event{
+		Kind: core.EventGardenerAction, ItemID: id, Payload: payload,
+	}); err != nil {
+		s.logger.Warn("console: record gardener decision", "id", id, "action", payload["action"], "error", err)
+	}
 }
 
 // nextSelection reads the queue position a decision form posted back and keeps
@@ -1756,7 +2334,9 @@ func (s *Service) gardenerSplit(w http.ResponseWriter, r *http.Request) {
 
 // gardenerRetarget rewrites a pending reproject proposal's destination project
 // before it is applied, so the owner can correct a mis-classified memory without
-// dismissing and re-asking. It only touches reproject proposals.
+// dismissing and re-asking. It only touches reproject proposals. Like every
+// Gardener decision it records a gardener.action event (recordDecision), with
+// the destination it had (from) and the one it has now (to).
 func (s *Service) gardenerRetarget(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	to := strings.TrimSpace(r.PostFormValue("to"))
@@ -1773,12 +2353,18 @@ func (s *Service) gardenerRetarget(w http.ResponseWriter, r *http.Request) {
 		redirectFlash(w, r, "not a reproject proposal")
 		return
 	}
+	from := payloadStr(p.Payload, "to")
+	if from == to {
+		redirectNotice(w, r, fmt.Sprintf("%s already moves to %s.", payloadStr(p.Payload, "name"), to))
+		return
+	}
 	p.Payload["to"] = to
 	if err := store.UpdateProposalPayload(r.Context(), s.writeDB(), id, p.Payload); err != nil {
 		s.logger.Warn("console: gardener retarget", "id", id, "error", err)
 		redirectFlash(w, r, err.Error())
 		return
 	}
+	s.recordDecision(r, id, map[string]any{"action": "retarget", "kind": p.Kind, "from": from, "to": to})
 	redirectNotice(w, r, fmt.Sprintf("Retargeted %s to %s.", payloadStr(p.Payload, "name"), to))
 }
 
@@ -1893,6 +2479,11 @@ func (s *Service) gardenerRun(w http.ResponseWriter, r *http.Request) {
 // decision first, decisionsPerPage a page (?page=N, from 1), each with its
 // outcome, who decided, what an apply produced, and Undo wherever
 // gardener.CanUndoResolution allows. JSON for a script, the page otherwise.
+//
+// What automatic apply applied comes first, on page 1, as a section of its
+// own: every one still applied, uncapped, each with its Undo, because nobody
+// reviewed it before it landed. The pages below list every other decision, so
+// each decision appears once.
 func (s *Service) gardenerDecisions(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	page := 1
@@ -1904,7 +2495,12 @@ func (s *Service) gardenerDecisions(w http.ResponseWriter, r *http.Request) {
 		}
 		page = n
 	}
-	total, err := store.CountResolvedProposals(ctx, s.db(ctx))
+	auto, err := store.ProposalsAppliedBy(ctx, s.db(ctx), gardener.ByAuto)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	total, err := store.CountResolvedProposalsOmitting(ctx, s.db(ctx), gardener.ByAuto)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
@@ -1914,14 +2510,17 @@ func (s *Service) gardenerDecisions(w http.ResponseWriter, r *http.Request) {
 		s.notFound(w, r, fmt.Sprintf("No page %d: the decision history has %s.", page, plural(pages, "page", "pages")))
 		return
 	}
-	ps, err := store.ResolvedProposals(ctx, s.db(ctx), (page-1)*decisionsPerPage, decisionsPerPage)
+	ps, err := store.ResolvedProposalsOmitting(ctx, s.db(ctx), gardener.ByAuto, (page-1)*decisionsPerPage, decisionsPerPage)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
 	v := &decisionsView{
 		Rows: s.decisionRows(ctx, ps), Page: page, Pages: pages, PerPage: decisionsPerPage, Total: total,
-		CanAct: s.cfg.Gardener != nil,
+		AutoCount: len(auto), CanAct: s.cfg.Gardener != nil,
+	}
+	if page == 1 {
+		v.Auto = s.decisionRows(ctx, auto)
 	}
 	if len(v.Rows) > 0 {
 		v.From = (page-1)*decisionsPerPage + 1
