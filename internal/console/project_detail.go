@@ -370,7 +370,7 @@ func (s *Service) fillProjectTab(r *http.Request, data *projectWorkspaceData, ta
 			// from blocked. The plans are not shown, so not read.
 			return s.readRowBlockers(ctx, data.CameFrom.Tasks)
 		}
-		return s.fillTasksTab(ctx, data, slug)
+		return s.fillTasksTab(ctx, data, slug, now)
 	case "overview":
 		return s.fillOverviewTab(r, data, win, now, pending)
 	case "sessions":

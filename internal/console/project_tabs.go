@@ -75,33 +75,67 @@ type gateLineVM struct {
 	What string
 }
 
-// planTimelineVM is one plan's card on the Plans & tasks tab: the rollup
-// counts, the composition's narrative note (status chip + star), the last few
-// transitions, and the step rows grouped so long done runs fold away.
+// planTimelineVM is one plan's card (templates/plan_shared.html's plan-card):
+// the rollup counts, the composition's narrative note (title, status in
+// words, star, Approve while a capture awaits it), the head's count of its
+// steps by their words, the stalled mark, the last few transitions, and the
+// step rows grouped so long done runs fold away.
 type planTimelineVM struct {
 	Slug         string
+	Project      string // the project whose steps the card shows
+	Title        string // the narrative note's title; the slug without a note
 	Total        int
 	Done         int
 	InFlight     int
 	Open         int
-	Claimable    int
+	Claimable    int // steps an agent could claim now: the rows' own count
 	DonePct      int
 	DoingPct     int
 	LastActivity time.Time
+	// GatesOpen is the rollup's open gates: gate tasks, and steps whose own
+	// gate is open (store.PlanRollup.GatesOpen).
+	GatesOpen int
+
+	// Counts words the unfinished steps for the head, each once by its word
+	// (planCounts): "1 in progress", "2 waiting on owner".
+	Counts []planCountVM
+	// Stalled marks open steps, none held, nothing moved for longer than
+	// planStalledAfter; StalledDays is for how long (planStalled).
+	Stalled     bool
+	StalledDays int
 
 	// The composition's primary note. A plan whose steps exist without one
-	// degrades to no chip and no star rather than to empty ones.
-	HasNote   bool
-	NoteID    string
-	NoteTitle string
-	Status    string
-	Favorite  bool
+	// degrades to its slug as the title and no status, star or narrative link,
+	// rather than to empty ones.
+	HasNote    bool
+	NoteID     string
+	NoteTitle  string
+	Status     string
+	StatusText string // Status in words (planStatusText)
+	Favorite   bool
+	// Capture is a Claude Code plan-mode capture; CanApprove one still
+	// draft or presented, which the card offers to approve.
+	Capture    bool
+	CanApprove bool
+	// NoteOnly is a captured plan with no steps yet: a card with its status
+	// and no rows.
+	NoteOnly bool
+	// Return is where the card's own actions land (the star, Approve): the
+	// surface that shows it, without the card's anchor.
+	Return string
 
 	// Stale marks a plan a pending gardener settlement (ship/abandon) names.
 	Stale bool
 
 	Recent []planLedgerVM
 	Groups []planStepGroup
+}
+
+// planCountVM is one part of a plan head's count: its word's key (a
+// data-count attribute) and what it says ("2 blocked").
+type planCountVM struct {
+	Key  string
+	Text string
 }
 
 // donePlanVM is one line in the completed-plans fold: a finished plan reduced
@@ -152,11 +186,13 @@ type depChipVM struct {
 
 // planStepVM is one step in a plan timeline: its status, claim/lease, and both
 // dependency directions. State is the CSS row modifier (done/doing/blocked/
-// open); it is derived, never stored.
+// waiting/open); it is derived, never stored.
 type planStepVM struct {
 	ID        string
 	Title     string
 	Project   string // the row's own actions post back to this project's tab
+	Plan      string // its plan's slug; "" off-plan
+	Kind      string // core.TaskKind: a step or a gate
 	Account   string // restricted account that created the step ("" = owner)
 	Status    string
 	State     string
@@ -195,6 +231,19 @@ type planStepVM struct {
 
 // LockedIn is the locked projects the step's locked blockers sit in, once each.
 func (st planStepVM) LockedIn() []string { return slices.Compact(slices.Clone(st.LockedBlockers)) }
+
+// HoldsText is a gate row's count of what it holds: "holds 2 steps" for a
+// plan's gate, "holds 1 task" for one outside a plan.
+func (st planStepVM) HoldsText() string {
+	noun := "task"
+	if st.Plan != "" {
+		noun = "step"
+	}
+	if len(st.Unblocks) != 1 {
+		noun += "s"
+	}
+	return "holds " + strconv.Itoa(len(st.Unblocks)) + " " + noun
+}
 
 // planStepCtx is the per-page state every step projection reads: the task cache
 // the dependency walk fills, which ids render on this page, the reverse-edge
@@ -344,24 +393,28 @@ func (s *Service) fillOverviewTab(r *http.Request, data *projectWorkspaceData, w
 // activity lists.
 const projectRecentRows = 8
 
-// fillTasksTab loads the Plans & tasks panel: each active plan's live card
-// (rollup, narrative note, recent-transition ledger, staleness) with its step
-// timeline, the completed plans as rollup lines, and the off-plan card: every
-// task outside a plan, grouped by what is true of it (offPlanRows).
+// fillTasksTab loads the Plans & tasks panel as of now: each active plan's
+// live card (rollup, narrative note, the head's count of its steps by their
+// words, the stalled mark, recent-transition ledger, staleness) with its step
+// timeline, a card for each captured plan with no steps yet (noteOnlyCards),
+// the completed plans as rollup lines, and the off-plan card: every task
+// outside a plan, grouped by what is true of it (offPlanRows).
 //
 // Query budget: one rollup query, one ListTasksForPlan per ACTIVE plan (a
 // completed plan renders from its rollup alone), five for the off-plan tasks
 // (readOffPlan), then exactly one query each for the plan notes, the
-// transition ledger and the pending settlements, and one per off-plan gate
-// for what it holds. No per-step or per-plan lookup beyond the dependency
-// walk's cache misses.
-func (s *Service) fillTasksTab(ctx context.Context, data *projectWorkspaceData, slug string) error {
+// transition ledger and the pending settlements, and one per open gate, a
+// plan's or an off-plan one, for what it holds (gateHolds). No per-step or
+// per-plan lookup beyond the dependency walk's cache misses.
+func (s *Service) fillTasksTab(ctx context.Context, data *projectWorkspaceData, slug string, now time.Time) error {
 	rollups, err := store.PlanRollupsForProject(ctx, s.db(ctx), slug)
 	if err != nil {
 		return err
 	}
 	var active []store.PlanRollup
+	hasSteps := make(map[string]bool, len(rollups))
 	for _, pl := range rollups {
+		hasSteps[pl.Slug] = true
 		if pl.Done < pl.Total {
 			active = append(active, pl)
 			continue
@@ -418,40 +471,190 @@ func (s *Service) fillTasksTab(ctx context.Context, data *projectWorkspaceData, 
 	}
 	stale := s.stalePlanSlugs(ctx, slug)
 
-	pc := planStepCtx{cache: cache, onPage: onPage, unblocks: unblocks, namer: namer, now: time.Now().UTC(), lockedBy: lockedBy}
+	pc := planStepCtx{cache: cache, onPage: onPage, unblocks: unblocks, namer: namer, now: now, lockedBy: lockedBy}
+	ret := "/console/projects/" + slug + "?tab=tasks"
 	inPlans := 0 // the plans' open steps: every one is a row on its card
+	var cards []planTimelineVM
 	for _, pl := range active {
 		tl := planTimelineVM{
-			Slug: pl.Slug, Total: pl.Total, Done: pl.Done, InFlight: pl.InFlight,
-			Open:      pl.Total - pl.Done - pl.InFlight,
-			Claimable: pl.Claimable, LastActivity: pl.LastActivity,
+			Slug: pl.Slug, Project: slug, Title: pl.Slug, Return: ret,
+			Total: pl.Total, Done: pl.Done, InFlight: pl.InFlight,
+			Open:         pl.Total - pl.Done - pl.InFlight,
+			LastActivity: pl.LastActivity, GatesOpen: pl.GatesOpen,
 			DonePct: percent(pl.Done, pl.Total), DoingPct: percent(pl.InFlight, pl.Total),
 			Stale:  stale[pl.Slug],
 			Recent: ledger[pl.Slug],
 		}
 		if n, ok := notes[pl.Slug]; ok {
-			tl.HasNote, tl.NoteID, tl.NoteTitle = true, n.ID, n.Title
-			tl.Status, tl.Favorite = plans.StatusFromTags(n.Tags), n.Favorite
+			tl.withNote(n)
 		}
 		rows := make([]planStepVM, 0, len(steps[pl.Slug]))
 		for _, st := range steps[pl.Slug] {
-			row := s.planStep(ctx, st, pc)
-			// The rollup counted a step a locked project blocks as claimable:
-			// the request's handle holds neither the blocker nor the edge.
-			if len(row.LockedBlockers) > 0 && len(row.Chain) == 0 && tl.Claimable > 0 {
-				tl.Claimable--
-			}
-			rows = append(rows, row)
+			rows = append(rows, s.planStep(ctx, st, pc))
 		}
+		if err := s.gateHolds(ctx, rows, pc); err != nil {
+			return err
+		}
+		// The head counts the rows, not the rollup: a step a locked project
+		// blocks reads as ready on the request's handle, which holds neither
+		// the blocker nor the edge, and its row knows better.
+		tl.Counts = planCounts(rows)
+		held := 0
+		for _, row := range rows {
+			if row.Claimable {
+				tl.Claimable++
+			}
+			if row.Word.Key == wordInProgress {
+				held++
+			}
+		}
+		tl.Stalled, tl.StalledDays = planStalled(pl.LastActivity, now, pl.Total-pl.Done, held)
 		tl.Groups = groupSteps(rows)
-		data.Plans = append(data.Plans, tl)
+		cards = append(cards, tl)
 		inPlans += pl.Total - pl.Done
 	}
+	awaiting, notStarted := noteOnlyCards(notes, hasSteps, slug, ret)
+	data.Plans = append(append(awaiting, cards...), notStarted...)
 
 	if data.OffPlan, err = s.offPlanRows(ctx, off, pc); err != nil {
 		return err
 	}
 	data.OffPlan.InPlans = inPlans
+	return nil
+}
+
+// withNote fills a card's head from its plan's narrative note: the note's
+// title, the status in words, the star, and Approve while a capture is still
+// a draft or presented (the reader's escape hatch, planApprove).
+func (tl *planTimelineVM) withNote(n core.Note) {
+	tl.HasNote, tl.NoteID, tl.NoteTitle = true, n.ID, n.Title
+	if strings.TrimSpace(n.Title) != "" {
+		tl.Title = n.Title
+	}
+	tl.Status, tl.Favorite = plans.StatusFromTags(n.Tags), n.Favorite
+	tl.StatusText = planStatusText(tl.Status)
+	tl.Capture = slices.Contains(n.Tags, plans.TagPlan)
+	tl.CanApprove = tl.Capture && (tl.Status == plans.StatusDraft || tl.Status == plans.StatusPresented)
+}
+
+// planStatusText is a plan status in the owner's words: a presented capture
+// awaits approval; every other status reads as itself (draft, approved).
+func planStatusText(status string) string {
+	if status == plans.StatusPresented {
+		return "awaiting approval"
+	}
+	return status
+}
+
+// noteOnlyCards are the cards of the project's captured plans that have no
+// step in it yet: those still a draft or presented (awaiting, which lead the
+// tab: they wait on the owner) and those approved and not started (which
+// follow the plans in motion). Each carries its status and, while it awaits
+// approval, the Approve action; none has rows. A settled capture (shipped,
+// abandoned, merged) is not a card. Newest note first, by slug on a tie, so a
+// morph never reorders them between two renders of the same data.
+func noteOnlyCards(notes map[string]core.Note, hasSteps map[string]bool, project, ret string) (awaiting, notStarted []planTimelineVM) {
+	for slug, n := range notes {
+		if hasSteps[slug] || !slices.Contains(n.Tags, plans.TagPlan) {
+			continue
+		}
+		tl := planTimelineVM{Slug: slug, Project: project, Title: slug, Return: ret, NoteOnly: true, LastActivity: n.Updated}
+		tl.withNote(n)
+		switch tl.Status {
+		case plans.StatusDraft, plans.StatusPresented:
+			awaiting = append(awaiting, tl)
+		case plans.StatusApproved:
+			notStarted = append(notStarted, tl)
+		}
+	}
+	for _, list := range [][]planTimelineVM{awaiting, notStarted} {
+		slices.SortFunc(list, func(a, b planTimelineVM) int {
+			if c := b.LastActivity.Compare(a.LastActivity); c != 0 {
+				return c
+			}
+			return strings.Compare(a.Slug, b.Slug)
+		})
+	}
+	return awaiting, notStarted
+}
+
+// planCounts words a plan's unfinished steps for its head, each step once by
+// its word (taskwords.go), in reading order: held, then the in-progress steps
+// no live claim holds, what an agent could claim now, what waits on
+// unfinished work, and what waits on people, by who, verbatim and sorted. The
+// closed steps are the head's own "3/5 done".
+func planCounts(rows []planStepVM) []planCountVM {
+	order := []string{wordInProgress, wordLapsed, wordUnclaimed, wordReady, wordBlocked, wordWaiting}
+	type group struct {
+		key, text string
+		n         int
+	}
+	var groups []group
+	for _, r := range rows {
+		if r.Word.Key == wordDone || r.Word.Key == wordDropped {
+			continue
+		}
+		i := slices.IndexFunc(groups, func(g group) bool { return g.key == r.Word.Key && g.text == r.Word.Text })
+		if i < 0 {
+			groups = append(groups, group{key: r.Word.Key, text: r.Word.Text})
+			i = len(groups) - 1
+		}
+		groups[i].n++
+	}
+	rank := func(key string) int {
+		if i := slices.Index(order, key); i >= 0 {
+			return i
+		}
+		return len(order) // a word this list does not know reads last
+	}
+	slices.SortStableFunc(groups, func(a, b group) int {
+		if c := rank(a.key) - rank(b.key); c != 0 {
+			return c
+		}
+		return strings.Compare(a.text, b.text)
+	})
+	out := make([]planCountVM, 0, len(groups))
+	for _, g := range groups {
+		out = append(out, planCountVM{Key: g.key, Text: strconv.Itoa(g.n) + " " + g.text})
+	}
+	return out
+}
+
+// planStalled reports whether a plan's head marks it stalled (the plan note's
+// Stalled state): it has open steps, none held by a live claim, and nothing
+// moved for longer than planStalledAfter, the board's threshold, as of now.
+// days is for how long, in whole days.
+func planStalled(last, now time.Time, open, held int) (stalled bool, days int) {
+	if open == 0 || held > 0 || last.IsZero() || now.Sub(last) <= planStalledAfter {
+		return false, 0
+	}
+	return true, int(now.Sub(last) / (24 * time.Hour))
+}
+
+// gateHolds fills what each unfinished gate among rows holds: the unfinished
+// tasks that depend on it, wherever they are, read through the request's
+// handle, so a dependent in a locked project the request does not read is
+// absent from the read and never counted. One query per open gate.
+func (s *Service) gateHolds(ctx context.Context, rows []planStepVM, pc planStepCtx) error {
+	for i := range rows {
+		if !rows[i].IsGate || rows[i].State == "done" {
+			continue
+		}
+		held, err := store.TasksBlockedBy(ctx, s.db(ctx), rows[i].ID)
+		if err != nil {
+			return err
+		}
+		rows[i].Unblocks, rows[i].UnblocksTitle = nil, ""
+		titles := make([]string, 0, len(held))
+		for _, d := range held {
+			if d.Status.Closed() {
+				continue
+			}
+			rows[i].Unblocks = append(rows[i].Unblocks, depChip(d, pc.onPage[d.ID]))
+			titles = append(titles, d.Title)
+		}
+		rows[i].UnblocksTitle = strings.Join(titles, " · ")
+	}
 	return nil
 }
 
@@ -587,21 +790,8 @@ func (s *Service) offPlanRows(ctx context.Context, off offPlanTasks, pc planStep
 		return strings.Compare(a.ID, b.ID)
 	})
 	gates := rows(blockedTasksOf(off.gates))
-	for i := range gates {
-		held, err := store.TasksBlockedBy(ctx, s.db(ctx), gates[i].ID)
-		if err != nil {
-			return offPlanVM{}, err
-		}
-		gates[i].Unblocks, gates[i].UnblocksTitle = nil, ""
-		titles := make([]string, 0, len(held))
-		for _, d := range held {
-			if d.Status.Closed() {
-				continue
-			}
-			gates[i].Unblocks = append(gates[i].Unblocks, depChip(d, pc.onPage[d.ID]))
-			titles = append(titles, d.Title)
-		}
-		gates[i].UnblocksTitle = strings.Join(titles, " · ")
+	if err := s.gateHolds(ctx, gates, pc); err != nil {
+		return offPlanVM{}, err
 	}
 	inProgress := rows(off.inProgress)
 
@@ -653,7 +843,8 @@ func notHeldNote(rows []planStepVM) string {
 // (holder + remaining lease, live or lapsed) and both dependency directions.
 func (s *Service) planStep(ctx context.Context, t core.Task, pc planStepCtx) planStepVM {
 	step := planStepVM{
-		ID: t.ID, Title: t.Title, Project: t.ProjectSlug, Account: t.Account, Status: string(t.Status),
+		ID: t.ID, Title: t.Title, Project: t.ProjectSlug, Plan: t.PlanSlug, Kind: string(t.Kind),
+		Account: t.Account, Status: string(t.Status),
 		State: taskState(t.Status), Created: t.CreatedAt, IsGate: t.IsGate(),
 	}
 	if t.Status == core.TaskDone || t.Status == core.TaskDropped {
@@ -697,8 +888,12 @@ func (s *Service) planStep(ctx context.Context, t core.Task, pc planStepCtx) pla
 	// never read counts as finished, as the walk does.
 	step.Word = wordFor(factsOf(t, pc.lookup, len(step.LockedBlockers), pc.now))
 	if step.Word.Key == wordWaiting {
-		// A step a gate holds is not claimable, whatever its blockers say.
+		// A step a gate holds is not claimable, whatever its blockers say,
+		// and its row is waiting -- on people, not on unfinished work -- as
+		// is a gate, marked in progress or not. A gate in a locked project
+		// is never read, so a step it holds stays blocked, its gate unnamed.
 		step.Claimable = false
+		step.State = "waiting"
 	}
 	// A closed step's reverse edges are spent: it already unblocked whatever was
 	// waiting, so saying so on the row is noise rather than a cue.
@@ -752,8 +947,9 @@ func (pc planStepCtx) lookup(id string) (core.Task, bool) {
 	return t, ok
 }
 
-// taskState is the CSS row modifier for a task status. "blocked" is not a
-// status: it is derived per row from the dependency walk.
+// taskState is the CSS row modifier for a task status. "blocked" and
+// "waiting" are not statuses: planStep derives them per row, from the
+// dependency walk and the row's word.
 func taskState(status core.TaskStatus) string {
 	switch status {
 	case core.TaskDone, core.TaskDropped:

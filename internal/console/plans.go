@@ -150,7 +150,9 @@ type planTaskRef struct {
 }
 
 // planDetailData is the single-plan payload: the row, the rendered plan body,
-// and the composition's attached notes and tasks.
+// and the composition's attached notes and tasks. NoNote marks a plan whose
+// steps exist with no note tagged plan:<slug> (planDetailFromSteps): no body,
+// no note to link or star, nothing to approve.
 type planDetailData struct {
 	Row        planRow       `json:"plan"`
 	Body       template.HTML `json:"-"`
@@ -159,6 +161,7 @@ type planDetailData struct {
 	Attached   []planNoteRef `json:"attached,omitempty"`
 	Tasks      []planTaskRef `json:"tasks,omitempty"`
 	CanApprove bool          `json:"canApprove"`
+	NoNote     bool          `json:"noNote,omitempty"`
 }
 
 func (s *Service) plansList(w http.ResponseWriter, r *http.Request) {
@@ -338,12 +341,17 @@ func composedPrimaries(notes []core.Note, owned map[string]bool) []core.Note {
 }
 
 // planDetailBySlug assembles a plan's full detail payload: the row, the
-// rendered plan body, and the composition's attached notes and step tasks.
-// found=false means no note carries the plan:<slug> tag.
+// rendered plan body, and the composition's attached notes and step tasks. A
+// plan no note carries the plan:<slug> tag for falls back to its steps
+// (planDetailFromSteps); found=false means neither exists on the request's
+// handle.
 func (s *Service) planDetailBySlug(ctx context.Context, slug string) (planDetailData, bool, error) {
 	planNote, attached, ok, err := s.planComposition(ctx, slug)
-	if err != nil || !ok {
-		return planDetailData{}, ok, err
+	if err != nil {
+		return planDetailData{}, false, err
+	}
+	if !ok {
+		return s.planDetailFromSteps(ctx, slug)
 	}
 	agentCount, err := s.planAgentCounts(ctx)
 	if err != nil {
@@ -382,6 +390,65 @@ func (s *Service) planDetailBySlug(ctx context.Context, slug string) (planDetail
 	if err != nil {
 		return planDetailData{}, false, err
 	}
+	for _, t := range tasks {
+		d.Tasks = append(d.Tasks, planTaskRef{ID: t.ID, Title: t.Title, Status: string(t.Status), Word: words[t.ID]})
+	}
+	return d, true, nil
+}
+
+// planDetailFromSteps is the detail of a plan whose steps exist with no note
+// tagged plan:<slug>: titled by its slug, its steps in their words, and
+// NoNote, so the page says it has no narrative note yet instead of answering
+// "not found". Every read goes through the request's handle, so a plan whose
+// steps sit only in a locked project the request does not read is not found.
+// A slug with steps in several projects opens the most recently active one's
+// (store.AllPlanRollups' order), the project the reader names.
+func (s *Service) planDetailFromSteps(ctx context.Context, slug string) (planDetailData, bool, error) {
+	rollups, err := store.AllPlanRollups(ctx, s.db(ctx))
+	if err != nil {
+		return planDetailData{}, false, err
+	}
+	i := slices.IndexFunc(rollups, func(p store.ProjectPlan) bool { return p.Slug == slug })
+	if i < 0 {
+		return planDetailData{}, false, nil
+	}
+	project := rollups[i].Project
+	tasks, err := store.ListTasksForPlan(ctx, s.db(ctx), project, "", slug)
+	if err != nil {
+		return planDetailData{}, false, err
+	}
+	agentCount, err := s.planAgentCounts(ctx)
+	if err != nil {
+		return planDetailData{}, false, err
+	}
+	tokens, err := store.PlanTokenRollups(ctx, s.db(ctx))
+	if err != nil {
+		return planDetailData{}, false, err
+	}
+	row := planRow{Slug: slug, Source: planSourceComposed, Title: slug, Project: project,
+		Agents: agentCount[slug], TasksTotal: len(tasks)}
+	if tr, ok := tokens[store.PlanRef{Project: project, Slug: slug}]; ok {
+		row.Tokens, row.TokenSessions, row.TokenUnreported, row.TokenShared = tr.Tokens, tr.Sessions, tr.Unreported, tr.Shared
+	}
+	for _, t := range tasks {
+		switch t.Status {
+		case core.TaskDone:
+			row.TasksDone++
+		case core.TaskInProgress:
+			row.TasksWIP++
+		case core.TaskOpen:
+			row.TasksOpen++
+		}
+		if t.UpdatedAt.After(row.Updated) {
+			row.Updated = t.UpdatedAt
+		}
+	}
+	row.Phase = planPhase(row)
+	words, err := s.wordTasks(ctx, tasks, time.Now().UTC())
+	if err != nil {
+		return planDetailData{}, false, err
+	}
+	d := planDetailData{Row: row, NoNote: true}
 	for _, t := range tasks {
 		d.Tasks = append(d.Tasks, planTaskRef{ID: t.ID, Title: t.Title, Status: string(t.Status), Word: words[t.ID]})
 	}

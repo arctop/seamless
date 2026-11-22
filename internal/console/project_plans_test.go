@@ -460,7 +460,9 @@ func TestRwProjectTab_StepRowsWordsAndCopy(t *testing.T) {
 		Status: core.TaskOpen, CreatedAt: now, UpdatedAt: now}))
 
 	body := getHTMLBody(t, mux, "/console/projects/demo?tab=tasks")
-	require.Contains(t, body, `<a class="nm" href="/console/plans/rw-plan">plan:rw-plan</a><button type="button" class="copy-btn" data-copy="plan:rw-plan"`,
+	require.Contains(t, body, `<a class="nm" href="/console/plans/rw-plan">rw-plan</a>`,
+		"a plan with no narrative note is titled by its slug")
+	require.Contains(t, body, `plan:rw-plan<button type="button" class="copy-btn" data-copy="plan:rw-plan"`,
 		"the plan head copies plan:<slug>")
 	step := func(id string) string {
 		at := strings.Index(body, `<details class="step `)

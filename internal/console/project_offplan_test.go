@@ -226,7 +226,7 @@ func TestOpOffPlan_PillEqualsTheOpenRows(t *testing.T) {
 	page := getHTMLBody(t, mux, "/console/projects/demo?tab=tasks")
 	panel := tabPanel(t, page, "tasks")
 	plansPart := panel[:strings.Index(panel, `id="offplan"`)]
-	planOpen := len(regexp.MustCompile(`<details class="step (open|doing|blocked)[^"]*" id=`).FindAllString(plansPart, -1))
+	planOpen := len(regexp.MustCompile(`<details class="step (open|doing|blocked|waiting)[^"]*" id=`).FindAllString(plansPart, -1))
 	offOpen := 0
 	for _, group := range opGroups(t, page) {
 		if group != "closed" {
@@ -310,7 +310,7 @@ func TestOpOffPlan_GatesSayWhatTheyHold(t *testing.T) {
 	require.Contains(t, row, `<span class="edge" data-gate-who="owner" title="waits on owner: sign the release">`)
 	require.Contains(t, row, `<span class="edge ok" data-unblocks title="holds op cut the release · op announce · op mirror the release">`,
 		"what the gate holds, by title, the other project's included and the dropped one not")
-	require.Contains(t, row, "holds 3</span>")
+	require.Contains(t, row, "holds 3 tasks</span>", "counted, in the backlog's word")
 	require.NotContains(t, row, "</svg>unblocks", "a gate holds; it does not unblock")
 
 	require.Equal(t, "waiting", opGroups(t, page)[waiting])
@@ -391,7 +391,7 @@ func TestOpOffPlan_LockedBlockersUnderBlocked(t *testing.T) {
 		require.NotContains(t, row, "data-gate-who", "%s: a locked gate is never named", id)
 	}
 	require.Contains(t, opRow(t, page, both), `href="#`+prep+`" data-jump`, "the readable blocker is still named")
-	require.Contains(t, opRow(t, page, openGate), "holds 1</span>", "the locked project's dependent is not counted")
+	require.Contains(t, opRow(t, page, openGate), "holds 1 task</span>", "the locked project's dependent is not counted")
 	require.Contains(t, page, `data-open-tally>6 open: 0 in plans, 6 off-plan</span>`)
 
 	// A browser that unlocked the project reads the blockers themselves.
@@ -405,5 +405,5 @@ func TestOpOffPlan_LockedBlockersUnderBlocked(t *testing.T) {
 	require.Contains(t, opRow(t, page, waits), `href="/console/tasks/`+lc.taskID+`"`, "a blocker off this page links to its task")
 	require.Equal(t, "waiting", groups[gated])
 	require.Contains(t, opRow(t, page, gated), `data-gate-who="auditor `+lockedSecret+`"`)
-	require.Contains(t, opRow(t, page, openGate), "holds 2</span>")
+	require.Contains(t, opRow(t, page, openGate), "holds 2 tasks</span>")
 }

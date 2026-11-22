@@ -351,7 +351,8 @@ func TestNwNow_PlanCardsLinkToThePlan(t *testing.T) {
 	rr := getPeek(t, f.mux, "/console/plans/"+f.notedPlan)
 	require.Equal(t, http.StatusOK, rr.Code, "the linked plan page opens")
 	rr = getPeek(t, f.mux, "/console/plans/"+f.taskOnlyPlan)
-	require.Equal(t, http.StatusNotFound, rr.Code, "a plan of steps only has no page to link")
+	require.Equal(t, http.StatusOK, rr.Code, "a plan of steps only opens too (UX 05)")
+	require.Contains(t, rr.Body.String(), "No narrative note yet.", "and says it has no narrative note")
 }
 
 // Now reads through the request's handle: a locked project's live agent, its

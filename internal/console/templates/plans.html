@@ -117,11 +117,11 @@
       {{end}}
     </div>
     <h2 class="reader-title">{{.Row.Title}}{{copyBtn .Row.Title}}
-      <form class="star-form" method="post" action="/console/favorites/plan/{{.Row.Slug}}">
+      {{if not .NoNote}}<form class="star-form" method="post" action="/console/favorites/plan/{{.Row.Slug}}">
         <input type="hidden" name="favorite" value="{{if .Row.Favorite}}0{{else}}1{{end}}">
         <input type="hidden" name="next" value="/console/plans/{{.Row.Slug}}">
         <button class="star{{if .Row.Favorite}} on{{end}}" type="submit" aria-pressed="{{if .Row.Favorite}}true{{else}}false{{end}}" title="{{if .Row.Favorite}}Unstar{{else}}Star{{end}} this plan">{{icon "star"}}</button>
-      </form>
+      </form>{{end}}
     </h2>
     <div class="reader-facts">
       <span class="fact">{{if eq .Row.Source "capture"}}CC capture{{if .Row.Basename}} &middot; <span class="mono">{{.Row.Basename}}.md</span>{{end}}{{else}}composed{{end}}</span>
@@ -130,10 +130,10 @@
       {{if .Row.Agents}}<span class="fact">{{.Row.Agents}} agent run{{if ne .Row.Agents 1}}s{{end}}</span>{{end}}
       {{if .Row.TokenSessions}}<span class="fact" title="Cumulative model tokens harvested from the transcripts of the sessions attributed to this plan (moved a step, or captured the plan). Whole-session totals: a session's full burn counts toward every plan it touched, so plan totals must not be summed. Claude Code reports tokens at session end, so a live session stays unreported until it finishes.">{{if .Row.Tokens}}~{{compactNum .Row.Tokens}} model tokens{{else}}model tokens pending{{end}} &middot; {{.Row.TokenSessions}} session{{if ne .Row.TokenSessions 1}}s{{end}}{{if .Row.TokenUnreported}} ({{.Row.TokenUnreported}} unreported){{end}}{{if .Row.TokenShared}} &middot; {{.Row.TokenShared}} shared with other plans{{end}}</span>{{end}}
       <span class="fact">updated {{agoTime .Row.Updated}}</span>
-      <span class="fact"><a href="/console/notes/{{.Row.NoteID}}">{{icon "file-text"}} note</a></span>
+      {{if .NoNote}}<span class="fact" data-no-note>no narrative note</span>{{else}}<span class="fact"><a href="/console/notes/{{.Row.NoteID}}">{{icon "file-text"}} note</a></span>{{end}}
     </div>
   </header>
-  {{if .BodyLoaded}}<div class="prose doc">{{.Body}}</div>{{else}}<div class="peek-note">Body unavailable</div>{{end}}
+  {{if .NoNote}}<div class="peek-note" data-no-note>No narrative note yet. A note tagged <span class="mono">plan:{{.Row.Slug}}</span> becomes this plan's narrative; its steps are below.</div>{{else if .BodyLoaded}}<div class="prose doc">{{.Body}}</div>{{else}}<div class="peek-note">Body unavailable</div>{{end}}
   {{if .Tasks}}
   <section class="reader-links">
     <h3>Steps <span class="count">{{len .Tasks}}</span></h3>

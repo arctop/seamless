@@ -1,0 +1,116 @@
+{{/* The plan card and the step row, shared by the pages that show plans
+     (parsed beside them in render.go): the project workspace's Plans & tasks
+     tab, whose off-plan card reuses the step row too.
+
+     plan-card's dot is a planTimelineVM. Its head says what is true: the
+     narrative note's title (the slug without a note), plan:<slug> to copy,
+     the status in words, Approve while a capture awaits it, the narrative
+     link, the steps counted by their words, and the stalled mark. The card
+     keeps its anchor (plan-<slug>), so Approve and a live morph land on it,
+     and carries its open gates (data-gates-open), which wait on people. Its
+     own actions return to .Return. */}}
+{{define "plan-card"}}
+<div class="plan-card{{if .NoteOnly}} plan-noteonly{{end}}" id="plan-{{.Slug}}"{{if .GatesOpen}} data-gates-open="{{.GatesOpen}}"{{end}}{{if .Stalled}} data-stalled="{{.StalledDays}}"{{end}}>
+  <div class="plan-head">
+    {{icon "git-merge"}}<a class="nm{{if .HasNote}} titled{{end}}" href="/console/plans/{{.Slug}}">{{.Title}}</a>
+    <span class="plan-slug" title="The plan's tag, the form an agent takes: copy it">plan:{{.Slug}}{{copyBtn (printf "plan:%s" .Slug)}}</span>
+    {{with .StatusText}}<span class="kind {{planTone $.Status}}" data-plan-status="{{$.Status}}">{{.}}</span>{{end}}
+    {{if .Stalled}}<span class="kind warn" data-stalled title="Open steps, none in progress, and nothing moved for {{.StalledDays}} days">stalled {{.StalledDays}}d</span>{{if .Claimable}}<span class="plan-stalled-why">ready work, nobody on it</span>{{end}}{{end}}
+    {{if .Stale}}<a class="kind warn" href="/console/gardener" title="A gardener settlement is pending for this plan">stale?</a>{{end}}
+    {{if .NoteID}}<a class="plan-narrative" href="/console/notes/{{.NoteID}}" title="The plan's narrative note">{{icon "file-text"}}narrative</a>{{end}}
+    {{if .HasNote}}
+    <form class="star-form" method="post" action="/console/favorites/plan/{{.Slug}}">
+      <input type="hidden" name="favorite" value="{{if .Favorite}}0{{else}}1{{end}}">
+      <input type="hidden" name="next" value="{{.Return}}">
+      <button class="star{{if .Favorite}} on{{end}}" type="submit" aria-pressed="{{if .Favorite}}true{{else}}false{{end}}" title="{{if .Favorite}}Unstar{{else}}Star{{end}} this plan">{{icon "star"}}</button>
+    </form>
+    {{end}}
+    {{if .CanApprove}}
+    <form class="plan-approve" method="post" action="/console/plans/{{.Slug}}/approve">
+      <input type="hidden" name="next" value="{{.Return}}#plan-{{.Slug}}">
+      <button class="btn small" type="submit" title="Approve the captured plan: flips it to approved and creates its tracking task">{{icon "check"}}Approve</button>
+    </form>
+    {{end}}
+    <span class="prog" data-plan-summary>{{if .NoteOnly}}no steps yet &middot; updated {{agoTime .LastActivity}}{{else}}{{.Done}}/{{.Total}} done{{range .Counts}} &middot; {{if eq .Key "ready"}}<b class="ready-n">{{.Text}}</b>{{else}}<span data-count="{{.Key}}">{{.Text}}</span>{{end}}{{end}} &middot; moved {{agoTime .LastActivity}}{{end}}</span>
+  </div>
+  {{if .NoteOnly}}
+  <div class="plan-nosteps">{{if .CanApprove}}No steps yet. Approving the plan creates its tracking task.{{else}}Approved. No steps yet.{{end}}</div>
+  {{else}}
+  <div class="plan-bar"><span class="done" style="width:{{.DonePct}}%"></span><span class="doing" style="width:{{.DoingPct}}%"></span></div>
+  {{if .Recent}}
+  <div class="plan-ledger">
+    <span class="lbl">recent</span>
+    {{range .Recent}}
+    <span class="led">
+      <span class="vb {{.Tone}}">{{icon .Icon}}{{.Verb}}</span>
+      <a class="st" href="#{{.StepID}}" data-jump title="{{.StepTitle}}">{{.StepTitle}}</a>
+      {{if .Owner}}<span class="who owner" title="an owner action from this console">you</span>{{else if .SessionID}}<a class="who" href="/console/sessions/{{.SessionID}}" title="{{.Session}}">{{.Session}}</a>{{end}}
+      <span class="when">{{agoTime .When}}</span>
+    </span>
+    {{end}}
+  </div>
+  {{end}}
+  {{range .Groups}}
+    {{if .DoneRun}}
+    <details class="step-run" id="run-{{(index .Steps 0).ID}}">
+      <summary>{{len .Steps}} completed steps{{if .LastTitle}} &middot; last: {{.LastTitle}}{{end}}{{if not .LastClosed.IsZero}} &middot; {{agoTime .LastClosed}}{{end}}</summary>
+      {{range .Steps}}{{template "plan-step" .}}{{end}}
+    </details>
+    {{else}}{{range .Steps}}{{template "plan-step" .}}{{end}}{{end}}
+  {{end}}
+  {{end}}
+</div>
+{{end}}
+
+<!-- One step row. A <details> so the dossier expands in place; the summary
+     carries the grid the old div row had, and the state dot replaces the
+     disclosure triangle. The claim strip sits OUTSIDE the details on
+     purpose: a form nested in a summary would toggle the row on every click.
+     The copy button inside the summary does not: the shared copy handler
+     (layout.html) cancels the click's default, and with it the toggle. A
+     gate's row is marked as one, says who must act and what must happen, and
+     what it holds; a step a gate holds is waiting, and says on whom. -->
+{{define "plan-step"}}
+<details class="step {{.State}}{{if .IsGate}} gate{{end}}{{if .Claimable}} ready{{end}}" id="{{.ID}}">
+  <summary class="step-row">
+    <span class="marker"><span class="dot"></span><span class="rail"></span></span>
+    <span class="body">
+      <span class="t">{{.Title}}</span>
+      <span class="meta">
+        <span class="mono">{{shortID .ID}}</span>{{copyBtn .ID}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}
+        {{if .IsGate}}<span class="gate-kind" data-gate title="A gate: a person, or an event outside Seamless, must act before what depends on it goes ahead. Nobody claims a gate.">{{icon "flag"}}Gate</span>{{end}}
+        {{if .ClaimedBy}}<span class="claim" title="The session that holds the claim">{{icon "terminal"}}{{if .ClaimedByID}}<a href="/console/sessions/{{.ClaimedByID}}">{{.ClaimedBy}}</a>{{else}}{{.ClaimedBy}}{{end}}</span>{{end}}
+        {{if .LeaseExp}}<span class="lease{{if .LeaseLapsed}} lease-lapsed{{end}}" data-lease-exp="{{.LeaseExp}}" title="{{if .LeaseLapsed}}The claim's lease ran out{{else}}The claim's lease: time left{{end}}">{{icon "timer"}}<span class="v">{{.LeaseLeft}}</span></span>{{end}}
+        {{range .Waits}}<span class="edge" data-gate-who="{{.Who}}" title="waits on {{.Who}}: {{.What}}">{{icon "flag"}}waits on {{.Who}}: {{.What}}</span>{{end}}
+        {{range .Chain}}<a class="edge" href="{{if .OnPage}}#{{.ID}}{{else}}/console/tasks/{{.ID}}{{end}}"{{if .OnPage}} data-jump{{end}} title="blocked by {{.Title}} &middot; {{.Word.Text}}">{{icon "link"}}{{.Title}}</a>{{end}}{{range .LockedIn}}<span class="edge" data-locked-blocker="{{.}}" title="Unlock {{.}} in the console to see the task">{{icon "lock"}}a task in locked project {{.}} blocks this one</span>{{end}}
+        {{if .Unblocks}}{{if .IsGate}}<span class="edge ok" data-unblocks title="holds {{.UnblocksTitle}}">{{icon "arrow-right"}}{{.HoldsText}}</span>{{else}}<span class="edge ok" data-unblocks title="unblocks {{.UnblocksTitle}}">{{icon "arrow-right"}}unblocks {{len .Unblocks}}</span>{{end}}{{end}}
+      </span>
+    </span>
+    {{taskChip .Word}}
+  </summary>
+  <div class="step-dossier" id="dossier-{{.ID}}" data-live-skip data-dossier="/console/tasks/{{.ID}}"></div>
+</details>
+{{/* The claim strip: a step in progress that nobody's live claim holds,
+     worded in the one task vocabulary. A lapsed claim is released here, with
+     no confirm, unlike the dossier's: the lease is already gone, so any agent
+     can reclaim the step anyway -- there is no live holder to interrupt, only
+     a stale claim to clear. The release lands back on this tab at the row,
+     wherever its group puts it then (the anchor survives the redirect:
+     console-mutation-follow-contract). A claimless step names no holder to
+     release, so its strip opens the step's dossier (the task's peek)
+     instead. */}}
+{{if .LeaseLapsed}}
+<div class="step-alert" data-claim-strip="{{.Alert.Key}}">
+  {{icon "triangle-alert"}}<b>{{.Alert.Text}}</b><span>{{.Alert.Hint}}</span>
+  <form method="post" action="/console/tasks/{{.ID}}/release">
+    <input type="hidden" name="next" value="/console/projects/{{.Project}}?tab=tasks#{{.ID}}">
+    <button class="link-act danger" type="submit" title="Takes the lapsed claim off the step">release claim</button>
+  </form>
+</div>
+{{else if .Claimless}}
+<div class="step-alert" data-claim-strip="{{.Alert.Key}}">
+  {{icon "triangle-alert"}}<b>{{.Alert.Text}}</b><span>{{.Alert.Hint}}</span>
+  <a class="link-act" href="/console/tasks/{{.ID}}" data-open-step="{{.ID}}" title="Opens the task under its row">open the task</a>
+</div>
+{{end}}
+{{end}}

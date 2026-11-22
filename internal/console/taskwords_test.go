@@ -230,7 +230,7 @@ func TestRwTemplatesPrintNoRawTaskStatus(t *testing.T) {
 			require.Contains(t, block, "{{copyBtn .ID}}", "a step copies its whole id")
 		}
 	}
-	for _, name := range []string{"projectdetail"} {
+	for _, name := range []string{"projectdetail", "plan_shared"} {
 		for i, line := range strings.Split(read(name), "\n") {
 			for _, loc := range raw.FindAllStringIndex(line, -1) {
 				before := line[:loc[0]]

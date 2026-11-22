@@ -2231,36 +2231,41 @@
   
   
   
-  <div class="plan-card" id="plan-example-deploy-plan">
-    <div class="plan-head">
-      <svg class="ico ico-git-merge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg><a class="nm" href="/console/plans/example-deploy-plan">plan:example-deploy-plan</a><button type="button" class="copy-btn" data-copy="plan:example-deploy-plan" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
-      <span class="kind ok">approved</span>
-      
-      
-      <form class="star-form" method="post" action="/console/favorites/plan/example-deploy-plan">
-        <input type="hidden" name="favorite" value="1">
-        <input type="hidden" name="next" value="/console/projects/example-open-alpha?tab=tasks">
-        <button class="star" type="submit" aria-pressed="false" title="Star this plan"><svg class="ico ico-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg></button>
-      </form>
-      
-      <span class="prog">0/1 done &middot; <b class="ready-n">1 ready</b> &middot; moved <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
-    </div>
-    <div class="plan-bar"><span class="done" style="width:0%"></span><span class="doing" style="width:0%"></span></div>
-    
-    <div class="plan-ledger">
-      <span class="lbl">recent</span>
-      
-      <span class="led">
-        <span class="vb muted"><svg class="ico ico-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>created</span>
-        <a class="st" href="#<id:30>" data-jump title="Implement plan: Example deploy plan">Implement plan: Example deploy plan</a>
-        <a class="who" href="/console/sessions/<id:27>" title="cc/dg-claud-393af69c59c44e2b">cc/dg-claud-393af69c59c44e2b</a>
-        <span class="when"><time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
-      </span>
-      
-    </div>
+<div class="plan-card" id="plan-example-deploy-plan">
+  <div class="plan-head">
+    <svg class="ico ico-git-merge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg><a class="nm titled" href="/console/plans/example-deploy-plan">Example deploy plan</a>
+    <span class="plan-slug" title="The plan's tag, the form an agent takes: copy it">plan:example-deploy-plan<button type="button" class="copy-btn" data-copy="plan:example-deploy-plan" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></span>
+    <span class="kind ok" data-plan-status="approved">approved</span>
     
     
-      
+    <a class="plan-narrative" href="/console/notes/<id:29>" title="The plan's narrative note"><svg class="ico ico-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>narrative</a>
+    
+    <form class="star-form" method="post" action="/console/favorites/plan/example-deploy-plan">
+      <input type="hidden" name="favorite" value="1">
+      <input type="hidden" name="next" value="/console/projects/example-open-alpha?tab=tasks">
+      <button class="star" type="submit" aria-pressed="false" title="Star this plan"><svg class="ico ico-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg></button>
+    </form>
+    
+    
+    <span class="prog" data-plan-summary>0/1 done &middot; <b class="ready-n">1 ready</b> &middot; moved <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
+  </div>
+  
+  <div class="plan-bar"><span class="done" style="width:0%"></span><span class="doing" style="width:0%"></span></div>
+  
+  <div class="plan-ledger">
+    <span class="lbl">recent</span>
+    
+    <span class="led">
+      <span class="vb muted"><svg class="ico ico-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>created</span>
+      <a class="st" href="#<id:30>" data-jump title="Implement plan: Example deploy plan">Implement plan: Example deploy plan</a>
+      <a class="who" href="/console/sessions/<id:27>" title="cc/dg-claud-393af69c59c44e2b">cc/dg-claud-393af69c59c44e2b</a>
+      <span class="when"><time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
+    </span>
+    
+  </div>
+  
+  
+    
 <details class="step open ready" id="<id:30>">
   <summary class="step-row">
     <span class="marker"><span class="dot"></span><span class="rail"></span></span>
@@ -2268,6 +2273,7 @@
       <span class="t">Implement plan: Example deploy plan</span>
       <span class="meta">
         <span class="mono"><id:30>~8</span><button type="button" class="copy-btn" data-copy="<id:30>" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
+        
         
         
         
@@ -2282,39 +2288,46 @@
 
 
 
+  
+  
+</div>
+
+  
+<div class="plan-card" id="plan-example-rollout">
+  <div class="plan-head">
+    <svg class="ico ico-git-merge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg><a class="nm titled" href="/console/plans/example-rollout">Example rollout narrative</a>
+    <span class="plan-slug" title="The plan's tag, the form an agent takes: copy it">plan:example-rollout<button type="button" class="copy-btn" data-copy="plan:example-rollout" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button></span>
+    
+    
+    
+    <a class="plan-narrative" href="/console/notes/<id:8>" title="The plan's narrative note"><svg class="ico ico-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>narrative</a>
+    
+    <form class="star-form" method="post" action="/console/favorites/plan/example-rollout">
+      <input type="hidden" name="favorite" value="1">
+      <input type="hidden" name="next" value="/console/projects/example-open-alpha?tab=tasks">
+      <button class="star" type="submit" aria-pressed="false" title="Star this plan"><svg class="ico ico-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg></button>
+    </form>
+    
+    
+    <span class="prog" data-plan-summary>0/1 done &middot; <b class="ready-n">1 ready</b> &middot; moved <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
+  </div>
+  
+  <div class="plan-bar"><span class="done" style="width:0%"></span><span class="doing" style="width:0%"></span></div>
+  
+  <div class="plan-ledger">
+    <span class="lbl">recent</span>
+    
+    <span class="led">
+      <span class="vb muted"><svg class="ico ico-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>created</span>
+      <a class="st" href="#<id:12>" data-jump title="Example: wave one">Example: wave one</a>
+      <a class="who" href="/console/sessions/<id:1>" title="<sess:1>"><sess:1></a>
+      <span class="when"><time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
+    </span>
     
   </div>
   
-  <div class="plan-card" id="plan-example-rollout">
-    <div class="plan-head">
-      <svg class="ico ico-git-merge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M6 21V9a9 9 0 0 0 9 9"/></svg><a class="nm" href="/console/plans/example-rollout">plan:example-rollout</a><button type="button" class="copy-btn" data-copy="plan:example-rollout" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
-      
-      
-      
-      <form class="star-form" method="post" action="/console/favorites/plan/example-rollout">
-        <input type="hidden" name="favorite" value="1">
-        <input type="hidden" name="next" value="/console/projects/example-open-alpha?tab=tasks">
-        <button class="star" type="submit" aria-pressed="false" title="Star this plan"><svg class="ico ico-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg></button>
-      </form>
-      
-      <span class="prog">0/1 done &middot; <b class="ready-n">1 ready</b> &middot; moved <time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
-    </div>
-    <div class="plan-bar"><span class="done" style="width:0%"></span><span class="doing" style="width:0%"></span></div>
+  
     
-    <div class="plan-ledger">
-      <span class="lbl">recent</span>
-      
-      <span class="led">
-        <span class="vb muted"><svg class="ico ico-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/></svg>created</span>
-        <a class="st" href="#<id:12>" data-jump title="Example: wave one">Example: wave one</a>
-        <a class="who" href="/console/sessions/<id:1>" title="<sess:1>"><sess:1></a>
-        <span class="when"><time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></span>
-      </span>
-      
-    </div>
-    
-    
-      
 <details class="step open ready" id="<id:12>">
   <summary class="step-row">
     <span class="marker"><span class="dot"></span><span class="rail"></span></span>
@@ -2322,6 +2335,7 @@
       <span class="t">Example: wave one</span>
       <span class="meta">
         <span class="mono"><id:12>~8</span><button type="button" class="copy-btn" data-copy="<id:12>" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
+        
         
         
         
@@ -2336,8 +2350,10 @@
 
 
 
-    
-  </div>
+  
+  
+</div>
+
   
 
   
@@ -2365,6 +2381,7 @@
         
         
         
+        
       </span>
     </span>
     <span class="kind pop" data-word="ready" title="Nothing unfinished before it: an agent can claim it now.">ready</span>
@@ -2387,6 +2404,7 @@
       <span class="t">Example: stage the deploy</span>
       <span class="meta">
         <span class="mono"><id:9>~8</span><button type="button" class="copy-btn" data-copy="<id:9>" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
+        
         
         
         
@@ -3120,6 +3138,7 @@
         
         
         
+        
       </span>
     </span>
     <span class="kind pop" data-word="ready" title="Nothing unfinished before it: an agent can claim it now.">ready</span>
@@ -3136,6 +3155,7 @@
       <span class="t">Example: inbound confidential task</span>
       <span class="meta">
         <span class="mono"><id:24>~8</span><button type="button" class="copy-btn" data-copy="<id:24>" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
+        
         
         
         
