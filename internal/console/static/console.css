@@ -6072,7 +6072,11 @@ a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex]:focus-v
   .mv2-filter-toggle.on { color: var(--brand); border-color: color-mix(in oklab, var(--brand) 50%, transparent); background: var(--brand-soft); }
   .mv2-bar .mv2-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; width: 100%; order: 10; }
   .js .mv2-bar:has(.mv2-controls > :nth-child(2)) .mv2-controls:not([data-open]) { display: none; }
-  .mv2-bar .mv2-controls[data-open] { animation: rise-in var(--dur-slow) var(--ease-out) both; }
+  /* The fold rises in, then lets go: a fill of "both" kept a transform on it
+     for good, a stacking context that trapped its menus (the project
+     switcher, Kind) under the list's sticky header. z-index 2 covers the
+     rise itself. */
+  .mv2-bar .mv2-controls[data-open] { position: relative; z-index: 2; animation: rise-in var(--dur-slow) var(--ease-out) backwards; }
   .mv2-bar h1 { font-size: 26px; }
   .mv2-bar h1 > .ico { width: 32px; height: 32px; padding: 7px; }
 }
