@@ -1952,7 +1952,7 @@ The observability console is `html/template` + vanilla JS + SSE, served by
 `internal/console` -- no node, npm, React, or build step. It is read-mostly: the
 writes are the owner's overrides and curation actions, among them -- archive a
 memory, approve a plan, force-release a task's claim,
-ask/split/apply/dismiss/retarget a gardener proposal, save or reset the
+ask/split/apply/dismiss/retarget a gardener proposal, run a gardener pass now, save or reset the
 briefing settings, switch update checks and automatic updates (or hand both
 back to the config), check for updates now, update now, resume automatic
 updates, save or reset the backup schedule and folder, back up now, delete a

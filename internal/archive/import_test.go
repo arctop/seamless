@@ -861,6 +861,8 @@ func TestImport_MergeAnArchiveFromBefore039(t *testing.T) {
 		`DROP TABLE session_usage`,
 		// What 054 added (the tasks' earlier bodies).
 		`DROP TABLE task_body_revisions`,
+		// What 055 added (who decided a gardener proposal).
+		`ALTER TABLE gardener_proposals DROP COLUMN resolved_by`,
 	} {
 		_, err := db.ExecContext(ctx, q)
 		require.NoError(t, err, q)
@@ -1447,4 +1449,31 @@ func TestImport_FreshEndsRestoredSignIns(t *testing.T) {
 	require.ErrorIs(t, err, store.ErrEnrollmentNotFound, "a passkey that waited in the snapshot cannot be approved after it")
 	_, _, err = store.ApprovePasskeyEnrollment(ctx, dstDB, code, time.Now())
 	require.ErrorIs(t, err, store.ErrEnrollmentNotFound)
+}
+
+// A decided proposal keeps who decided it through a merge: the row pass copies
+// every column, migration 055's included.
+func TestImport_MergeKeepsWhoDecided(t *testing.T) {
+	ctx := context.Background()
+	src := seedIndexed(t, specA)
+	db, err := store.OpenExisting(filepath.Join(src, DBName))
+	require.NoError(t, err)
+	p, err := store.CreateProposal(ctx, db, store.ProposalToolError, map[string]any{"key": "tool_error:merge:who", "project": "example-ops"})
+	require.NoError(t, err)
+	require.NoError(t, store.ResolveProposal(ctx, db, p.ID, store.ProposalDismissed, "cc/merge-worker", time.Now().UTC()))
+	require.NoError(t, db.Close())
+
+	dst := seedIndexed(t, specB)
+	rep, err := Import(ctx, ImportOptions{DataDir: dst, Src: bytes.NewReader(exportOf(t, src))})
+	require.NoError(t, err)
+	require.Equal(t, ModeMerge, rep.Mode)
+	require.Equal(t, 1, rep.Rows["gardener_proposals"])
+	out, err := store.OpenExisting(filepath.Join(dst, DBName))
+	require.NoError(t, err)
+	defer func() { require.NoError(t, out.Close()) }()
+	got, ok, err := store.ProposalByID(ctx, out, p.ID)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, store.ProposalDismissed, got.Status)
+	require.Equal(t, "cc/merge-worker", got.ResolvedBy)
 }

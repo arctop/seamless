@@ -12,6 +12,7 @@ import (
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/files"
+	"github.com/arctop/seamless/internal/gardener"
 	"github.com/arctop/seamless/internal/lifecycle"
 	"github.com/arctop/seamless/internal/store"
 )
@@ -412,7 +413,9 @@ func (s *Service) releaseGardener(ctx context.Context, h store.HeldWrite) (Relea
 	if s.cfg.Gardener == nil {
 		return Released{}, ErrNoApplier
 	}
-	res, err := s.cfg.Gardener.Apply(ctx, h.DetailValue("proposal"))
+	// The owner releases a hold, so the apply is the owner's decision
+	// (gardener_proposals.resolved_by), whoever asked for it.
+	res, err := s.cfg.Gardener.Apply(gardener.WithActor(ctx, gardener.ByOwner), h.DetailValue("proposal"))
 	if err != nil {
 		return Released{}, fmt.Errorf("screening.Release: %w", err)
 	}

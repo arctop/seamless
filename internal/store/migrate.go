@@ -171,10 +171,32 @@ var migration053 string
 //go:embed migrations/054_task_body_revisions.sql
 var migration054 string
 
+//go:embed migrations/055_proposal_resolved_by.sql
+var migration055 string
+
 // Migration is a single numbered schema migration.
 type Migration struct {
 	Version int
 	SQL     string
+	// Present, when set, reports that the migration's change is already in
+	// the schema, so the version is recorded without running SQL that cannot
+	// run twice (ADD COLUMN has no IF NOT EXISTS). That is a database whose
+	// migration record was cut back below the migration while its schema kept
+	// the change: it still migrates forward, as an IF NOT EXISTS migration
+	// does. It runs under the migration's write lock.
+	Present func(ctx context.Context, conn *sql.Conn) (bool, error)
+}
+
+// columnPresent is a Present for a migration that adds one column.
+func columnPresent(table, column string) func(context.Context, *sql.Conn) (bool, error) {
+	return func(ctx context.Context, conn *sql.Conn) (bool, error) {
+		var n int
+		if err := conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?`,
+			table, column).Scan(&n); err != nil {
+			return false, fmt.Errorf("store.migrate: read %s columns: %w", table, err)
+		}
+		return n > 0, nil
+	}
 }
 
 // migrationList returns the ordered migrations. Append new numbered files here
@@ -235,6 +257,7 @@ func migrationList() []Migration {
 		{Version: 52, SQL: migration052},
 		{Version: 53, SQL: migration053},
 		{Version: 54, SQL: migration054},
+		{Version: 55, SQL: migration055, Present: columnPresent("gardener_proposals", "resolved_by")},
 	}
 }
 
@@ -394,8 +417,16 @@ func applyMigration(ctx context.Context, db *sql.DB, m Migration) error {
 		return nil // another process applied it while we waited for the lock
 	}
 
-	if _, err := conn.ExecContext(ctx, m.SQL); err != nil {
-		return fmt.Errorf("store.migrate: apply v%d: %w", m.Version, err)
+	present := false
+	if m.Present != nil {
+		if present, err = m.Present(ctx, conn); err != nil {
+			return fmt.Errorf("store.migrate: v%d: %w", m.Version, err)
+		}
+	}
+	if !present {
+		if _, err := conn.ExecContext(ctx, m.SQL); err != nil {
+			return fmt.Errorf("store.migrate: apply v%d: %w", m.Version, err)
+		}
 	}
 	if _, err := conn.ExecContext(ctx, "INSERT INTO schema_migrations (version) VALUES (?)", m.Version); err != nil {
 		return fmt.Errorf("store.migrate: record v%d: %w", m.Version, err)

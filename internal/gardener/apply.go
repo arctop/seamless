@@ -39,6 +39,9 @@ var Decisions = []string{DecisionApply, DecisionDismiss, DecisionHide}
 // the effect cannot be carried out for another reason (e.g. a referenced memory
 // has since been deleted), the proposal is left pending and an error is
 // returned, so the owner can retry or dismiss.
+//
+// Who applies is ctx's actor (WithActor): it is recorded with the decision
+// (resolved_by) and on its event. A call that names nobody records "".
 func (s *Service) Apply(ctx context.Context, id string) (map[string]any, error) {
 	p, ok, err := store.ProposalByID(ctx, s.db, id)
 	if err != nil {
@@ -100,7 +103,7 @@ func (s *Service) Apply(ctx context.Context, id string) (map[string]any, error) 
 	if err != nil {
 		return nil, err // leave the proposal pending; the effect did not happen
 	}
-	if err := store.ResolveProposal(ctx, s.db, id, store.ProposalApplied, now); err != nil {
+	if err := store.ResolveProposal(ctx, s.db, id, store.ProposalApplied, ActorOf(ctx), now); err != nil {
 		return nil, err
 	}
 	// Persist what the apply produced so Undo can find the artifact again (the
@@ -134,9 +137,9 @@ func (s *Service) Hide(ctx context.Context, id string) error {
 }
 
 // reject resolves a pending proposal into one of the two rejection tiers and
-// records the decision.
+// records the decision, in the name of ctx's actor.
 func (s *Service) reject(ctx context.Context, id, status, action string) error {
-	if err := store.ResolveProposal(ctx, s.db, id, status, s.now().UTC()); err != nil {
+	if err := store.ResolveProposal(ctx, s.db, id, status, ActorOf(ctx), s.now().UTC()); err != nil {
 		return err
 	}
 	s.record(ctx, id, map[string]any{"action": action})
@@ -147,9 +150,10 @@ func (s *Service) reject(ctx context.Context, id, status, action string) error {
 // undo and nothing returns to the queue -- but its key drops to a regular
 // dismissal, so the next pass may raise the pattern again once evidence for it
 // recurs. For a pattern that has stopped occurring, that is nothing at all,
-// which is the honest outcome: unhiding does not manufacture a proposal.
+// which is the honest outcome: unhiding does not manufacture a proposal. The
+// dismissal it leaves stands in the name of ctx's actor.
 func (s *Service) Unhide(ctx context.Context, id string) error {
-	if err := store.UnhideProposal(ctx, s.db, id); err != nil {
+	if err := store.UnhideProposal(ctx, s.db, id, ActorOf(ctx)); err != nil {
 		return err
 	}
 	s.record(ctx, id, map[string]any{"action": "unhide"})

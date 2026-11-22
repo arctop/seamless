@@ -45,7 +45,7 @@ func (s *Service) proposeArchives(ctx context.Context, seen seenKeys) (int, erro
 		// incomplete scan cannot tell "nothing links here" from "the body that
 		// links here was unreadable" -- and proposing on that basis is how a
 		// live, referenced memory gets archived. Fail the pass instead: the
-		// unreadable bodies are logged above, and RunOnce reports staleness as
+		// unreadable bodies are logged above, and Propose reports staleness as
 		// failed rather than as a clean zero.
 		return 0, errProtectionIncomplete
 	}

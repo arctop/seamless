@@ -74,10 +74,10 @@ func (e *p7Env) p7Proposals(kind string) []store.Proposal {
 	return ps
 }
 
-// p7Run runs the whole gardener and requires every pass to finish.
+// p7Run runs every proposal pass and requires each to finish.
 func (e *p7Env) p7Run() PassResult {
 	e.t.Helper()
-	res, err := e.g.RunOnce(e.ctx)
+	res, err := e.g.Propose(e.ctx)
 	require.NoError(e.t, err)
 	require.True(e.t, res.OK(), "failed passes: %v", res.Failed)
 	return res

@@ -190,9 +190,9 @@ that re-queues. A clean `session_end` does the same thing immediately, which is
 the real reason a fleet worker should always end its session rather than just
 exiting.
 
-One caveat that turns a self-healing system into a stuck one: **the reaper runs
-inside the gardener's pass**. With `gardener.enabled` off, nothing reaps idle
-sessions and nothing returns a dead agent's claims. See
+The reaper runs on the gardener's schedule, once every
+`gardener.interval_minutes`, whether or not `gardener.enabled` is on: that key
+turns off the gardener's suggestions, never the reaping. See
 [Troubleshooting](/guides/troubleshooting/).
 
 Nobody wants to wait 45 minutes for an obvious corpse, so there is an owner

@@ -58,9 +58,10 @@ func (s *Service) mootReason(ctx context.Context, p store.Proposal) (string, err
 
 // settleMoot resolves a moot proposal as a dismissal, the weakest resolution.
 // Its key goes on blocking a re-proposal for that memory, as any dismissal's
-// does, and Undo reopens it should the memory come back.
+// does, and Undo reopens it should the memory come back. It stands in the name
+// of ctx's actor: whoever tried to apply it, or the gardener's upkeep.
 func (s *Service) settleMoot(ctx context.Context, p store.Proposal, reason string) error {
-	if err := store.ResolveProposal(ctx, s.db, p.ID, store.ProposalDismissed, s.now().UTC()); err != nil {
+	if err := store.ResolveProposal(ctx, s.db, p.ID, store.ProposalDismissed, ActorOf(ctx), s.now().UTC()); err != nil {
 		return err
 	}
 	if err := store.RecordProposalResult(ctx, s.db, p.ID, map[string]any{"settled": reason}); err != nil {

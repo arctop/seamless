@@ -66,7 +66,10 @@ var ProposalKinds = []string{
 // gardener uses to avoid re-proposing the same thing on a later pass. Result is
 // what applying it produced (the note it wrote, the task it opened, the memory
 // it moved) -- nil until applied, and the handle undo uses to find the artifact
-// again.
+// again. ResolvedBy is who decided it (migration 055; the values are
+// gardener's By* names and a session's name): "" while it is pending, and for
+// a decision made before the column existed or by a release that does not
+// write it.
 type Proposal struct {
 	ID         string         `json:"id"`
 	Kind       string         `json:"kind"`
@@ -74,12 +77,13 @@ type Proposal struct {
 	Status     string         `json:"status"`
 	CreatedAt  time.Time      `json:"createdAt"`
 	ResolvedAt *time.Time     `json:"resolvedAt,omitempty"`
+	ResolvedBy string         `json:"resolvedBy,omitempty"`
 	Result     map[string]any `json:"result,omitempty"`
 }
 
 // proposalCols is the column list every proposal query selects, in the order
 // scanProposals reads them.
-const proposalCols = `id, kind, payload, status, created_at, resolved_at, result`
+const proposalCols = `id, kind, payload, status, created_at, resolved_at, result, resolved_by`
 
 // CreateProposal inserts a pending gardener proposal and returns it. The caller
 // supplies the kind and payload; the id and created_at are stamped here.
@@ -140,17 +144,17 @@ func ProposalByID(ctx context.Context, db *sql.DB, id string) (Proposal, bool, e
 	return ps[0], true, nil
 }
 
-// ResolveProposal marks a proposal applied, dismissed or hidden and stamps
-// resolved_at. It errors if the proposal is missing or already resolved (not
-// pending).
-func ResolveProposal(ctx context.Context, db *sql.DB, id, status string, at time.Time) error {
+// ResolveProposal marks a proposal applied, dismissed or hidden, stamps
+// resolved_at and records who decided (by: "" when nobody can be named). It
+// errors if the proposal is missing or already resolved (not pending).
+func ResolveProposal(ctx context.Context, db *sql.DB, id, status, by string, at time.Time) error {
 	if status != ProposalApplied && status != ProposalDismissed && status != ProposalHidden {
 		return fmt.Errorf("store.ResolveProposal: invalid status %q", status)
 	}
 	res, err := db.ExecContext(ctx, `
-		UPDATE gardener_proposals SET status = ?, resolved_at = ?
+		UPDATE gardener_proposals SET status = ?, resolved_at = ?, resolved_by = ?
 		WHERE id = ? AND status = ?`,
-		status, core.FormatTime(at.UTC()), id, ProposalPending)
+		status, core.FormatTime(at.UTC()), by, id, ProposalPending)
 	if err != nil {
 		return fmt.Errorf("store.ResolveProposal: %w", err)
 	}
@@ -205,7 +209,8 @@ func RecordProposalResult(ctx context.Context, db *sql.DB, id string, result map
 }
 
 // ReopenProposal returns a resolved proposal to the pending queue, clearing the
-// resolution stamp and the apply result. It is the store half of undo: the
+// resolution stamp, who decided, and the apply result. It is the store half of
+// undo: the
 // caller has already inverted the effect (or is undoing a rejection, which had
 // none). It errors if the proposal is missing or still pending, so a double
 // undo cannot resurrect an already-restored proposal.
@@ -215,7 +220,7 @@ func RecordProposalResult(ctx context.Context, db *sql.DB, id string, result map
 // or reopened -- and a pending row blocks just as hard as an applied one.
 func ReopenProposal(ctx context.Context, db *sql.DB, id string) error {
 	res, err := db.ExecContext(ctx, `
-		UPDATE gardener_proposals SET status = ?, resolved_at = NULL, result = NULL
+		UPDATE gardener_proposals SET status = ?, resolved_at = NULL, result = NULL, resolved_by = ''
 		WHERE id = ? AND status IN (?, ?, ?)`,
 		ProposalPending, id, ProposalApplied, ProposalDismissed, ProposalHidden)
 	if err != nil {
@@ -241,10 +246,12 @@ func ReopenProposal(ctx context.Context, db *sql.DB, id string) error {
 // restamped: it is when the owner decided, and it is the instant the recurrence
 // comparison measures from, so a pattern that is still occurring re-raises on
 // the next pass instead of waiting for evidence newer than the unhide.
-func UnhideProposal(ctx context.Context, db *sql.DB, id string) error {
+// resolved_by does move to by: the row now stands as a dismissal, and whoever
+// lifted the block is the one who decided that.
+func UnhideProposal(ctx context.Context, db *sql.DB, id, by string) error {
 	res, err := db.ExecContext(ctx, `
-		UPDATE gardener_proposals SET status = ? WHERE id = ? AND status = ?`,
-		ProposalDismissed, id, ProposalHidden)
+		UPDATE gardener_proposals SET status = ?, resolved_by = ? WHERE id = ? AND status = ?`,
+		ProposalDismissed, by, id, ProposalHidden)
 	if err != nil {
 		return fmt.Errorf("store.UnhideProposal: %w", err)
 	}
@@ -259,9 +266,9 @@ func UnhideProposal(ctx context.Context, db *sql.DB, id string) error {
 }
 
 // HiddenProposals returns every forever-hidden proposal, newest decision first.
-// It backs the console's hidden list, which is the only durable surface naming
-// what the owner has blocked -- "Recently decided" scrolls a hide off within a
-// handful of decisions, and a block nobody can see is a block nobody can lift.
+// It backs the console's hidden list, which is the only surface naming what is
+// blocked as a block: the decision history lists a hide among every other
+// decision, and a block nobody can find is a block nobody can lift.
 func HiddenProposals(ctx context.Context, db *sql.DB) ([]Proposal, error) {
 	rows, err := db.QueryContext(ctx, `SELECT `+proposalCols+`
 		FROM gardener_proposals WHERE status = ?
@@ -273,21 +280,34 @@ func HiddenProposals(ctx context.Context, db *sql.DB) ([]Proposal, error) {
 	return scanProposals(rows)
 }
 
-// RecentResolvedProposals returns the most recently applied or dismissed
-// proposals, newest resolution first, capped at limit. It backs the console's
-// "Recently decided" section, where each row offers an undo.
-func RecentResolvedProposals(ctx context.Context, db *sql.DB, limit int) ([]Proposal, error) {
-	if limit <= 0 {
-		return nil, nil
+// ResolvedProposals returns one page of the decided proposals (applied,
+// dismissed or hidden), newest resolution first: limit rows after skipping
+// offset. It backs the console's decision history and its "Recently decided"
+// rail section, where each row offers an undo. A non-positive limit or a
+// negative offset is a caller bug, not "everything".
+func ResolvedProposals(ctx context.Context, db *sql.DB, offset, limit int) ([]Proposal, error) {
+	if limit <= 0 || offset < 0 {
+		return nil, fmt.Errorf("store.ResolvedProposals: invalid page (offset %d, limit %d)", offset, limit)
 	}
 	rows, err := db.QueryContext(ctx, `SELECT `+proposalCols+`
 		FROM gardener_proposals WHERE status <> ?
-		ORDER BY resolved_at DESC, id DESC LIMIT ?`, ProposalPending, limit)
+		ORDER BY resolved_at DESC, id DESC LIMIT ? OFFSET ?`, ProposalPending, limit, offset)
 	if err != nil {
-		return nil, fmt.Errorf("store.RecentResolvedProposals: %w", err)
+		return nil, fmt.Errorf("store.ResolvedProposals: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 	return scanProposals(rows)
+}
+
+// CountResolvedProposals is how many proposals have been decided: the length
+// of the history ResolvedProposals pages through.
+func CountResolvedProposals(ctx context.Context, db *sql.DB) (int, error) {
+	var n int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM gardener_proposals WHERE status <> ?`,
+		ProposalPending).Scan(&n); err != nil {
+		return 0, fmt.Errorf("store.CountResolvedProposals: %w", err)
+	}
+	return n, nil
 }
 
 // ProposalBlock is why one payload key is suppressed. Hard is the permanent
@@ -364,7 +384,7 @@ func scanProposals(rows *sql.Rows) ([]Proposal, error) {
 			raw, created  string
 			resolved, res sql.NullString
 		)
-		if err := rows.Scan(&p.ID, &p.Kind, &raw, &p.Status, &created, &resolved, &res); err != nil {
+		if err := rows.Scan(&p.ID, &p.Kind, &raw, &p.Status, &created, &resolved, &res, &p.ResolvedBy); err != nil {
 			return nil, fmt.Errorf("store: scan proposal: %w", err)
 		}
 		if err := json.Unmarshal([]byte(raw), &p.Payload); err != nil {

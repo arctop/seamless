@@ -232,10 +232,11 @@ live, so the reap comes on the first pass after the last lease lapses.
 1. Confirm the diagnosis: `seam task list --status in_progress`, or
    `/console/tasks` - a task's detail panel shows its holder and its lease:
    **lease live** with the time left, or **lapsed** and how long ago.
-2. **Check `gardener.enabled`.** The reaper runs inside the gardener's pass. With
-   the gardener off, nothing reaps idle sessions and nothing ever returns a dead
-   agent's claims - they stay stuck forever. `seamlessd doctor` warns when the
-   gardener is disabled.
+2. **Give the reaper its pass.** The reaper runs on the gardener's schedule,
+   once every `gardener.interval_minutes` (60), whether or not
+   `gardener.enabled` is on: that key turns off only the background
+   suggestions. A dead agent's claims return on the first pass after its last
+   lease lapses and its session has been quiet past `session_idle_minutes`.
 3. Do not wait if you do not want to: `seam task release --force <id>`, or the
    **Release claim** button in the console. Both force-release any holder
    regardless of the lease. Neither is on the MCP surface - agents get the

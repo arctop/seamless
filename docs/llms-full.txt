@@ -4612,10 +4612,9 @@ Two consequences worth internalizing:
 
 - The lease is not the recovery mechanism; the reaper is. The lease only decides
   whether a claim *can* be taken.
-- **With `gardener.enabled: false`, that second clock never runs**, and a crashed
-  agent's claims stay `in_progress` indefinitely. Nothing will surface them. If
-  you turn the gardener off, you have also turned off task recovery - release
-  them yourself with `tasks_release`, or from the console.
+- **The reaper runs on the gardener's schedule**, once every
+  `gardener.interval_minutes`, whether or not `gardener.enabled` is on: that key
+  turns off the gardener's suggestions, never task recovery.
 
 A lease is **not a lock on the files**. Nothing physically stops an agent from
 working on a task it did not claim. It is a coordination signal between
@@ -5633,9 +5632,10 @@ URL: https://thereisnospoon.org/docs/concepts/gardener/
 The Seamless gardener is the background pass that keeps an agent-written memory
 store from rotting: it detects near-duplicate memories by embedding similarity,
 memories gone stale, and captured plans left unapproved (including ones whose
-work quietly shipped), and files each finding as a proposal. Nothing is applied
-until you approve it with `gardener_apply` - the gardener has no write path of
-its own.
+work quietly shipped), and files each finding as a proposal. Nothing changes
+until a proposal is applied - by you on the console, or by an agent with
+`gardener_apply` - and every decision records who made it. The gardener has no
+write path of its own.
 
 Any store that agents write to accumulates cruft: two memories saying the same
 thing in different words, a runbook for a system that no longer exists, a plan
@@ -5739,12 +5739,30 @@ bypass the review step - what comes back is still a proposal.
 
 - **The console** - `/console/gardener` is an inbox: one line per proposal in
   the rail, the full evidence and the decision gate in the reader. A whole
-  group can be dismissed at once, and anything you decide lands in **Recently
-  decided**, where Undo puts it back in the queue and reverses what applying it
-  did. Applying a consolidation or a project split is the exception - both
-  create things that immediately accrue content, so they ask for a confirm
-  instead and cannot be undone from the console.
+  group can be dismissed at once. Every decision lands in **Recently decided**
+  and in the **decision history** (`/console/gardener/decisions`), where Undo
+  puts it back in the queue and reverses what applying it did. Applying a
+  consolidation or a project split is the exception - both create things that
+  immediately accrue content, so they ask for a confirm instead and cannot be
+  undone from the console.
 - **`gardener_proposals`** - the same, for an agent.
+
+## Who decided
+
+A proposal is resolved on the console, by an agent through `gardener_apply`, or
+by the gardener itself when the memory it was about has already gone inactive.
+Each decision records who made it, on the proposal and on its `gardener.action`
+event (`by`):
+
+| Recorded | Who |
+|---|---|
+| `owner` | you, on the console (the event says `console`); a held agent apply you release from **Held** counts as yours |
+| a session's name | an agent, through `gardener_apply`; `agent` when no session names the call |
+| `gardener` | the gardener's upkeep, settling a proposal whose memory went inactive |
+| unknown | a decision made before Seamless recorded this, or by an older release |
+
+The decision history shows it on every row, with the outcome and a link to the
+note or task an apply produced.
 
 ## Saying no, twice
 
@@ -5775,8 +5793,24 @@ Both are reversible, and the two exits are not the same:
 `gardener_apply` carries the same two tiers for agents: `action=dismiss` and
 `action=hide`.
 
-The gardener runs every `gardener.interval_minutes` (60) when
-`gardener.enabled` is on. Everything in this page is tunable - see
+## When it runs
+
+Every `gardener.interval_minutes` (60) the gardener does two things. First the
+**upkeep**, which the daemon always needs: it reaps idle sessions and returns
+their claims, prunes old transport events, refreshes the retrieval stats, latches
+utility ranking where a project's demand history has matured, and settles
+proposals whose memory is gone. Then, when `gardener.enabled` is on, the
+**proposal passes** above.
+
+`gardener.enabled: false` turns off only the proposal passes: no background
+pass proposes anything, while the upkeep keeps its schedule and your requests
+still propose. The Gardener screen says which: its status line shows when the
+last pass ran and when the next is due, each pass that was skipped and why
+(dedup without embeddings, digest without a chat model, a pass the config turns
+off), and any that failed. **Run a pass now** runs the proposal passes without
+waiting; it is refused while one runs.
+
+Everything in this page is tunable - see
 [Configuration](/reference/configuration/).
 
 ---
@@ -7253,9 +7287,9 @@ that re-queues. A clean `session_end` does the same thing immediately, which is
 the real reason a fleet worker should always end its session rather than just
 exiting.
 
-One caveat that turns a self-healing system into a stuck one: **the reaper runs
-inside the gardener's pass**. With `gardener.enabled` off, nothing reaps idle
-sessions and nothing returns a dead agent's claims. See
+The reaper runs on the gardener's schedule, once every
+`gardener.interval_minutes`, whether or not `gardener.enabled` is on: that key
+turns off the gardener's suggestions, never the reaping. See
 [Troubleshooting](/guides/troubleshooting/).
 
 Nobody wants to wait 45 minutes for an obvious corpse, so there is an owner
@@ -12224,10 +12258,11 @@ live, so the reap comes on the first pass after the last lease lapses.
 1. Confirm the diagnosis: `seam task list --status in_progress`, or
    `/console/tasks` - a task's detail panel shows its holder and its lease:
    **lease live** with the time left, or **lapsed** and how long ago.
-2. **Check `gardener.enabled`.** The reaper runs inside the gardener's pass. With
-   the gardener off, nothing reaps idle sessions and nothing ever returns a dead
-   agent's claims - they stay stuck forever. `seamlessd doctor` warns when the
-   gardener is disabled.
+2. **Give the reaper its pass.** The reaper runs on the gardener's schedule,
+   once every `gardener.interval_minutes` (60), whether or not
+   `gardener.enabled` is on: that key turns off only the background
+   suggestions. A dead agent's claims return on the first pass after its last
+   lease lapses and its session has been quiet past `session_idle_minutes`.
 3. Do not wait if you do not want to: `seam task release --force <id>`, or the
    **Release claim** button in the console. Both force-release any holder
    regardless of the lease. Neither is on the MCP surface - agents get the
@@ -17704,12 +17739,18 @@ llm:
     # back to OpenAI if its api_key is set, else Ollama.
 
 gardener:
-  # The gardener only ever proposes; it never mutates memory without an explicit
-  # apply. Safe to leave enabled.
+  # Background suggestions. On, each pass looks for duplicates, stale memories,
+  # finished plans, knowledge gaps and recurring errors and files proposals;
+  # nothing changes until a proposal is applied. Off, no background pass
+  # proposes anything (requests on the console or gardener_request still do).
+  # Either way the same schedule runs the upkeep: idle sessions are reaped and
+  # their claims returned, old tool events pruned, retrieval stats refreshed and
+  # proposals whose memory is gone settled. Safe to leave enabled.
   # env: SEAMLESS_GARDENER_ENABLED
   enabled: true
-  # Minutes between full gardener passes (dedup, staleness, stale-stage,
-  # dead-weight, digest, stale-plan, memory-wanted).
+  # Minutes between gardener passes: the upkeep, then, when enabled, the
+  # proposal passes (dedup, staleness, stale-stage, dead-weight, stale-copy,
+  # digest, stale-plan, memory-wanted, tool-error, copy-relocate).
   # env: SEAMLESS_GARDENER_INTERVAL_MINUTES
   interval_minutes: 60
   # Cosine similarity at/above which two active memories are proposed for a merge.
@@ -19388,7 +19429,8 @@ nothing, and their rows say so.
 | Retarget a reproject proposal | `POST /console/gardener/{id}/retarget` | Rewrites a **pending** reproject's destination project before it is applied. Reproject proposals only. |
 | Apply a whole plan batch | `POST /console/gardener/plan/{slug}/apply` | Applies every pending proposal in a plan, split setup first so the child projects exist before the memories move. Best-effort: it applies what it can, reports how many landed, and leaves the rest pending. |
 | Dismiss a whole rail group | `POST /console/gardener/group/dismiss` | Dismisses every pending proposal in one rail section or split plan, one at a time, so each keeps its own event and stays individually undoable. Only Dismiss is offered in bulk. |
-| Undo a decision | `POST /console/gardener/{id}/undo` | Returns a resolved proposal to the queue from **Recently decided**, inverting whatever its apply did, for the kinds whose apply can be inverted. |
+| Undo a decision | `POST /console/gardener/{id}/undo` | Returns a resolved proposal to the queue from **Recently decided** or the **decision history**, inverting whatever its apply did, for the kinds whose apply can be inverted. |
+| Run a gardener pass now | `POST /console/gardener/run` | Runs the background proposal passes now instead of at the next pass, in the background. They only ever propose. Refused while a pass runs, and while `gardener.enabled` is false. |
 | Release a held write | `POST /console/held/{id}/release` | [Write screening](#held): lands a held agent write exactly as the agent sent it, and marks the memory owner-confirmed. Refused when its target changed after it was held. |
 | Discard a held write | `POST /console/held/{id}/discard` | Lands nothing and erases the held text; the row stays as the record. |
 | Clear a session's outside-text mark | `POST /console/held/sessions/{id}/clear` | The only way the mark comes off: the session's changes to binding rules land without a hold again. |
@@ -20799,13 +20841,30 @@ opens a task; nothing is written until someone writes the memory.
 Split batches are grouped by plan and reviewed together, setup card first, with an
 apply-the-whole-plan action.
 
+A status line under the head says what the background passes are doing: when
+the last pass ran and when the next one is due, each check a pass skips and why
+(dedup with no embeddings, digest with no chat model, a pass the config turns
+off), and any check that failed. An empty queue reads "The garden is tidy" only
+after a pass that ran every check; otherwise it says what did not run. **Run a
+pass now** starts the passes without waiting for the next one; it is refused
+while a pass runs. With `gardener.enabled: false` the line reads "Suggestions
+are off", no pass is offered, and the upkeep the same schedule carries (idle
+sessions reaped, old tool events pruned, retrieval stats refreshed) still runs.
+The line carries no counts: a pass spans every project, a locked one included.
+
 The actions are **apply**, **dismiss**, **hide forever**, **retarget**
 (reproject cards only), and **apply plan**. Dismissing answers the evidence in
 front of you - the pattern comes back if it recurs; hiding answers the pattern
-itself. Everything you decide lands in **Recently decided** with an Undo, and a
-hide is additionally listed under **Hidden forever**, where **Unhide** lifts the
-block without returning the proposal to the queue. Above them sits a single
-ask-in-words box, and it only ever
+itself. A proposal changes nothing until it is applied, by you here or by an
+agent with `gardener_apply`, and every decision records who made it. The newest
+ten land in **Recently decided** with an Undo; the **decision history**
+(`/console/gardener/decisions`) pages through all of them, newest first, with
+the outcome, who decided (you, an agent's session, the gardener settling a
+proposal whose memory had gone inactive, or unknown for a decision made before
+this was recorded), the note or task an apply produced, and Undo wherever it
+can be taken back. A hide is additionally listed under **Hidden forever**, where
+**Unhide** lifts the block without returning the proposal to the queue. Above
+them sits a single ask-in-words box, and it only ever
 produces more proposals for this same queue. A request recognized as a project
 split is planned as a split directly - the plan batch appears below like any
 other. When the split's source project cannot be matched, an inline follow-up

@@ -154,7 +154,7 @@
         <div><dt>Agents connected</dt><dd>{{if .Setup.Clients}}{{range $i, $c := .Setup.Clients}}{{if $i}}<span class="faint">&middot;</span>{{end}}<span>{{$c.Name}} <small class="faint">last active {{agoPhrase $c.LastSeen}}</small></span>{{end}}{{else}}None yet &mdash; an agent appears here once it starts a session with the hooks installed.{{end}}</dd></div>
         {{with .Embeddings}}<div><dt>Semantic recall</dt><dd>{{if .Enabled}}<span class="badge ok">on</span><span>with <span class="mono">{{.Model}}</span></span>{{else}}<span class="badge warn">off</span><span>{{if .OverriddenOff}}Switched off in this console. Search and recall use keywords only.{{else if .Misconfigured}}The model settings in the config file have a mistake: <span class="mono">{{.Reason}}</span>{{else}}Search and recall use keywords only. Add an OpenAI key (or point Ollama at a local model) in the config file, then restart.{{end}}</span><a href="https://thereisnospoon.org/docs/guides/troubleshooting/#recall-returns-junk-or-misses-what-you-just-wrote" target="_blank" rel="noopener">What this changes &nearr;</a>{{end}}</dd></div>{{end}}
         {{with .Setup.Backups}}<div><dt>Backups</dt><dd>{{if .Failing}}<span class="badge warn">needs attention</span>{{else if .On}}<span class="badge ok">on</span>{{else}}<span class="badge">off</span>{{end}}<span>{{.Line}}</span><a href="/console/settings?s=backups" data-seam-query>Settings &rsaquo; Backups</a></dd></div>{{end}}
-        <div><dt>Gardener</dt><dd>{{if .Gardener.Enabled}}<span class="badge ok">on</span><span>suggests cleanups every {{.Gardener.IntervalMinutes}} minutes</span>{{else}}<span class="badge">paused</span><span>no cleanup suggestions are made</span>{{end}}</dd></div>
+        <div><dt>Gardener</dt><dd>{{if .Gardener.Enabled}}<span class="badge ok">on</span><span>suggests cleanups every {{.Gardener.IntervalMinutes}} minutes</span>{{else}}<span class="badge">suggestions off</span><span>no background suggestions are made; upkeep still runs every {{.Gardener.IntervalMinutes}} minutes (idle sessions reaped, old tool events pruned, retrieval stats refreshed)</span>{{end}}</dd></div>
       </dl>
       <nav class="setup-docs" aria-label="Documentation">
         <a href="https://thereisnospoon.org/docs/quickstart/" target="_blank" rel="noopener">Quickstart &nearr;</a>
@@ -815,9 +815,9 @@
           <article class="runtime-card gardener-runtime{{if .Gardener.Enabled}} is-live{{end}}">
             <div class="gardener-cadence">
               <span class="runtime-icon ok">{{icon "sprout"}}</span>
-              <div class="gardener-state"><span class="live-dot"></span>{{if .Gardener.Enabled}}Gardener enabled{{else}}Gardener paused{{end}}</div>
-              <strong>{{if .Gardener.Enabled}}every {{.Gardener.IntervalMinutes}}<small>min</small>{{else}}paused{{end}}</strong>
-              <p>{{if .Gardener.Enabled}}Background review runs on this cadence.{{else}}Automated review is disabled in the running profile.{{end}}</p>
+              <div class="gardener-state"><span class="live-dot"></span>{{if .Gardener.Enabled}}Gardener enabled{{else}}Suggestions off{{end}}</div>
+              <strong>every {{.Gardener.IntervalMinutes}}<small>min</small></strong>
+              <p>{{if .Gardener.Enabled}}Background review and upkeep run on this cadence.{{else}}Background review is off (gardener.enabled is false), so no pass proposes anything. Upkeep still runs on this cadence: idle sessions are reaped, old tool events pruned, retrieval stats refreshed.{{end}}</p>
             </div>
             <div class="gardener-rules" aria-label="Gardener policy">
               <div><span>Dedup threshold</span><strong>{{.Gardener.DedupThreshold}}</strong></div>

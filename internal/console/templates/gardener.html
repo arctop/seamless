@@ -1,10 +1,11 @@
 {{define "content"}}
 {{with .Data}}
+{{if .History}}{{template "gardener-decisions" .History}}{{else}}
 {{$sel := .Selected}}
 {{$qs := .QS}}
 <div class="lib-page gardener-page" data-library="gardener">
   <header class="mv2-bar">
-    <h1 id="gardener-review-title">{{icon "sprout"}}Gardener</h1>{{about "Knowledge stewardship: the gardener prepares changes, you decide which ones reach your agents."}}
+    <h1 id="gardener-review-title">{{icon "sprout"}}Gardener</h1>{{about "Knowledge stewardship: the gardener prepares changes, and none reaches your agents until it is applied."}}
     <span class="mv2-count" aria-label="{{.PendingCount}} proposals awaiting your decision">
       <strong>{{.PendingCount}}</strong>pending<small>{{.RequestedCount}} asked by you &middot; {{.BackgroundCount}} background</small>
     </span>
@@ -35,11 +36,27 @@
     </div>
 </header>
 
+  {{with .Status}}{{if .Line}}
+  {{/* The status line: whether background suggestions run, the last pass and
+       the next, and every check a pass skips or failed -- what separates an
+       empty queue from a tidy garden. No counts: a pass spans every project. */}}
+  <section class="gardener-status{{if not .Proposing}} is-off{{end}}" id="gardener-status" aria-label="Background passes">
+    <span class="gst-icon">{{icon "sprout"}}</span>
+    <p class="gst-line">{{range $i, $p := .Line}}{{if $i}}<span class="gst-sep" aria-hidden="true">&middot;</span>{{end}}<span class="gst-piece{{with $p.Tone}} tone-{{.}}{{end}}"{{with $p.Title}} title="{{.}}"{{end}}>{{$p.Text}}</span>{{end}}</p>
+    {{if and .CanRun $.Data.CanAct}}
+    <form class="gst-run" method="post" action="/console/gardener/run">
+      <button class="btn small" type="submit" title="Run the background checks now instead of at the next pass. They only propose: nothing changes until a proposal is applied.">{{icon "refresh-cw"}} Run a pass now</button>
+    </form>
+    {{end}}
+    {{with .Note}}<p class="gst-note">{{.}}</p>{{end}}
+  </section>
+  {{end}}{{end}}
+
   <section class="gardener-composer" aria-labelledby="gardener-ask-title">
     <h2 class="gardener-composer-title" id="gardener-ask-title">Ask for a cleanup</h2>
     <p class="gardener-contract">
       <span class="gardener-contract-badge">{{icon "lock"}} Propose-only by design.</span>
-      <span class="gardener-contract-copy">The gardener can prepare a change, but only you can let it alter the knowledge your agents receive.</span>
+      <span class="gardener-contract-copy">A proposal changes nothing until it is applied, and the decision history shows who applied it.</span>
     </p>
     {{if .CanRequest}}
     <form class="gardener-request-card" method="post" action="/console/gardener/request" id="req-form">
@@ -119,7 +136,7 @@
               <button class="btn small primary" type="submit">{{icon "check"}} Apply whole plan</button>
             </form>
             <form class="gardener-dismiss-all" method="post" action="/console/gardener/group/dismiss"
-              onsubmit="return confirm('Dismiss all {{len .Cards}} proposal{{if ne (len .Cards) 1}}s{{end}} in this plan? They can be restored from Recently decided.');">
+              onsubmit="return confirm('Dismiss all {{len .Cards}} proposal{{if ne (len .Cards) 1}}s{{end}} in this plan? Each can be restored from the decision history.');">
               <input type="hidden" name="plan" value="{{.Slug}}">
               <button class="btn small" type="submit">Dismiss all {{len .Cards}}</button>
             </form>
@@ -136,7 +153,7 @@
           <header class="rail-group-hd"><span class="hd-label">{{icon .Icon}}{{.Label}}</span> <span class="n">{{len .Rows}}</span></header>
           {{if $.Data.CanAct}}
           <form class="gardener-dismiss-all" method="post" action="/console/gardener/group/dismiss"
-            onsubmit="return confirm('Dismiss all {{len .Rows}} proposal{{if ne (len .Rows) 1}}s{{end}} in {{.Label}}? They can be restored from Recently decided.');">
+            onsubmit="return confirm('Dismiss all {{len .Rows}} proposal{{if ne (len .Rows) 1}}s{{end}} in {{.Label}}? Each can be restored from the decision history.');">
             <input type="hidden" name="group" value="{{.Key}}">
             <button class="btn small" type="submit">Dismiss all {{len .Rows}}</button>
           </form>
@@ -151,20 +168,20 @@
           {{if .TotalPending}}
           <div class="rail-none">No proposal matches this filter. <a href="/console/gardener">Clear filters</a></div>
           {{else}}
-          <div class="rail-none">The garden is tidy. Nothing is waiting on you.</div>
+          <div class="rail-none">{{.Status.Empty}}</div>
           {{end}}
         {{end}}
 
         {{if .Recent}}
         <details class="rail-group rail-collapse gardener-recent" id="rg-recent">
-          <summary class="rail-group-hd"><span class="hd-label">{{icon "undo-2"}}Recently decided</span> <span class="n">{{len .Recent}}</span></summary>
+          <summary class="rail-group-hd"><span class="hd-label">{{icon "undo-2"}}Recently decided</span> <span class="n">{{.Decided}}</span></summary>
           <div class="gardener-recent-rows">
             {{range .Recent}}
             <div class="gardener-recent-row tone-{{.Tone}}">
               <span class="grr-icon">{{icon .Icon}}</span>
               <span class="grr-copy">
                 <span class="grr-title">{{.RowTitle}}</span>
-                <span class="grr-meta">{{.Status}} &middot; <time title="{{ts .ResolvedAt}}">{{ago .ResolvedAt}}</time></span>
+                <span class="grr-meta"><span{{with .Settled}} title="{{.}}"{{end}}>{{.Outcome}}</span> by <span{{with .ByTitle}} title="{{.}}"{{end}}>{{.By}}</span> &middot; <time title="{{ts .ResolvedAt}}">{{ago .ResolvedAt}}</time>{{range .Produced}} &middot; <a href="{{.Href}}" title="{{.Title}}">{{.Label}}</a>{{end}}</span>
               </span>
               {{if and $.Data.CanAct .CanUndo}}
               <form method="post" action="/console/gardener/{{.ID}}/undo">
@@ -175,6 +192,7 @@
               {{end}}
             </div>
             {{end}}
+            <a class="gardener-history-link" href="/console/gardener/decisions">{{if gt .Decided (len .Recent)}}All {{.Decided}} decisions{{else}}Decision history{{end}} {{icon "arrow-right"}}</a>
           </div>
         </details>
         {{end}}
@@ -211,18 +229,72 @@
     </nav>
     <section class="lib-reader" id="lib-reader" data-base="/console/gardener" aria-live="polite" aria-label="Proposal">
       {{if $sel}}{{template "gardener-reader" $sel}}{{else}}
-      <div class="reader-empty dotgrid"><span class="empty-ico">{{icon "sprout"}}</span><div>{{if .TotalPending}}Select a proposal to review it here.{{else}}The garden is tidy. No proposed change is waiting on you.{{end}}</div></div>
+      <div class="reader-empty dotgrid"><span class="empty-ico">{{icon "sprout"}}</span><div>{{if .TotalPending}}Select a proposal to review it here.{{else}}{{.Status.Empty}}{{end}}</div></div>
       {{end}}
     </section>
   </div>
   {{else}}
   <div class="empty dotgrid">
     <span class="empty-ico">{{icon "sprout"}}</span>
-    <div>The garden is tidy. No proposed change is waiting on you &mdash; background passes bring drift here, or you can aim the gardener with a request above.</div>
+    <div>{{.Status.Empty}} {{if .Status.Proposing}}Background passes bring drift here, or you can aim the gardener with a request above.{{else}}You can aim the gardener with a request above.{{end}}</div>
   </div>
   {{end}}
 </div><!-- .lib-page -->
 {{end}}
+{{end}}
+{{end}}
+
+{{/* gardener-decisions is the decision history: every decided proposal,
+     newest first, a page at a time -- the outcome, who decided, what an apply
+     produced, and Undo wherever it can be taken back. */}}
+{{define "gardener-decisions"}}
+<div class="lib-page gardener-page gardener-decisions" data-library="gardener">
+  <header class="mv2-bar">
+    <h1 id="gardener-decisions-title">{{icon "history"}}Decision history</h1>{{about "Every decided gardener proposal, newest first: what was decided, by whom, and what it produced."}}
+    <span class="mv2-count" aria-label="{{.Total}} decisions"><strong>{{.Total}}</strong>decided{{if gt .Pages 1}}<small>page {{.Page}} of {{.Pages}}</small>{{end}}</span>
+    <span class="mv2-spacer"></span>
+    <a class="btn small" href="/console/gardener">{{icon "chevron-left"}} Review queue</a>
+  </header>
+  {{if .Rows}}
+  <ol class="gardener-decision-list" start="{{.From}}" aria-labelledby="gardener-decisions-title">
+    {{range .Rows}}
+    <li class="gardener-decision tone-{{.Tone}}" id="gd-{{.ID}}">
+      <span class="grr-icon">{{icon .Icon}}</span>
+      <span class="gdl-copy">
+        <span class="gdl-title">{{.RowTitle}}</span>
+        {{if .RowDetail}}<span class="gdl-detail">{{.RowDetail}}</span>{{end}}
+        <span class="gdl-meta">
+          <span class="gdl-outcome outcome-{{.Status}}"{{with .Settled}} title="{{.}}"{{end}}>{{.Outcome}}</span>
+          <span>by {{if .ByHref}}<a href="{{.ByHref}}" data-peek{{with .ByTitle}} title="{{.}}"{{end}}>{{.By}}</a>{{else}}<span{{with .ByTitle}} title="{{.}}"{{end}}>{{.By}}</span>{{end}}</span>
+          <time title="{{ts .ResolvedAt}}">{{agoPhrase .ResolvedAt}}</time>
+          {{with .Settled}}<span class="gdl-settled">{{.}}</span>{{end}}
+          {{range .Produced}}<a class="gdl-produced" href="{{.Href}}" data-peek title="{{.Title}}">{{if eq .Label "note"}}{{icon "file-text"}}{{else}}{{icon "list-checks"}}{{end}}{{.Label}}: {{.Title}}</a>{{end}}
+        </span>
+      </span>
+      {{if and $.CanAct .CanUndo}}
+      <form method="post" action="/console/gardener/{{.ID}}/undo">
+        <button class="btn small" type="submit" title="Return this proposal to the queue, reversing what applying it did">{{icon "undo-2"}} Undo</button>
+      </form>
+      {{else if not .CanUndo}}
+      <span class="grr-final" title="Applying this created projects or folded memories together, so it cannot be reversed from here">final</span>
+      {{end}}
+    </li>
+    {{end}}
+  </ol>
+  {{if or .Prev .Next}}
+  <nav class="gardener-decision-pager" aria-label="Decision history pages">
+    {{if .Prev}}<a class="btn small" href="{{.Prev}}" rel="prev">{{icon "chevron-left"}} Newer</a>{{end}}
+    <span>{{.From}}&ndash;{{.To}} of {{.Total}}</span>
+    {{if .Next}}<a class="btn small" href="{{.Next}}" rel="next">Older {{icon "chevron-right"}}</a>{{end}}
+  </nav>
+  {{end}}
+  {{else}}
+  <div class="empty dotgrid">
+    <span class="empty-ico">{{icon "history"}}</span>
+    <div>No proposal has been decided yet. Each decision lands here, with who made it.</div>
+  </div>
+  {{end}}
+</div>
 {{end}}
 
 {{/* gardener-row is one line of the review rail: a real link, so library.js

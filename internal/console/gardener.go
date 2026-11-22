@@ -9,9 +9,13 @@ import (
 	"net/url"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/arctop/seamless/internal/access"
+	"github.com/arctop/seamless/internal/approval"
+	"github.com/arctop/seamless/internal/devices"
 	"github.com/arctop/seamless/internal/gardener"
 	"github.com/arctop/seamless/internal/store"
 )
@@ -239,17 +243,75 @@ var sectionOfKind = map[string]string{
 // are their own ordered groups rather than a taxonomy section.
 const planSectionKey = "split"
 
-// recentRow is one entry in the rail's "Recently decided" section: a resolved
-// proposal reduced to what an undo decision needs.
-type recentRow struct {
-	ID         string
-	Kind       string
-	Icon       string
-	Tone       string
-	RowTitle   string
-	Status     string // applied | dismissed | hidden
-	ResolvedAt *time.Time
-	CanUndo    bool
+// decisionRow is one decided proposal: a row of the decision history and of
+// the rail's "Recently decided" section. It says what was decided, the
+// outcome, who decided it, what an apply produced, and whether it can be
+// undone.
+type decisionRow struct {
+	ID         string     `json:"id"`
+	Kind       string     `json:"kind"`
+	Icon       string     `json:"-"`
+	Tone       string     `json:"-"`
+	RowTitle   string     `json:"title"`
+	RowDetail  string     `json:"detail,omitempty"`
+	Status     string     `json:"status"`  // applied | dismissed | hidden
+	Outcome    string     `json:"outcome"` // the status in words; "settled" for a moot proposal
+	Settled    string     `json:"settled,omitempty"`
+	ResolvedAt *time.Time `json:"resolvedAt,omitempty"`
+	// By is who decided, in words (decider); ByHref links the deciding
+	// session when this console can show it.
+	By      string `json:"by"`
+	ByTitle string `json:"-"`
+	ByHref  string `json:"byHref,omitempty"`
+	// Produced links what an apply made: the note a digest wrote, the task a
+	// knowledge gap or an error pattern opened, when this console can show it.
+	Produced []producedLink `json:"produced,omitempty"`
+	CanUndo  bool           `json:"canUndo"`
+}
+
+// producedLink is one thing an apply made, linked.
+type producedLink struct {
+	Label string `json:"label"` // note | task
+	Title string `json:"title"`
+	Href  string `json:"href"`
+}
+
+// decisionsView is one page of the decision history (gardenerDecisions).
+type decisionsView struct {
+	Rows    []decisionRow `json:"rows"`
+	Page    int           `json:"page"`
+	Pages   int           `json:"pages"`
+	PerPage int           `json:"perPage"`
+	Total   int           `json:"total"`
+	// From and To number this page's rows within the whole history.
+	From, To int    `json:"-"`
+	Prev     string `json:"-"`
+	Next     string `json:"-"`
+	CanAct   bool   `json:"-"`
+}
+
+// statusPiece is one phrase of the Gardener's status line.
+type statusPiece struct {
+	Text  string `json:"text"`
+	Title string `json:"title,omitempty"`
+	Tone  string `json:"tone,omitempty"` // "" or "warn"
+}
+
+// gardenerStatusView is the status line under the Gardener's head: whether
+// background suggestions run, the last pass and the next, the checks a pass
+// skips and those that failed, and whether the owner may run one now. It
+// carries no counts: a pass spans every project, a locked one included.
+type gardenerStatusView struct {
+	Proposing bool          `json:"proposing"`
+	Running   bool          `json:"running"`
+	Line      []statusPiece `json:"line"`
+	// Note explains the off state: what still runs, and how to turn it on.
+	Note   string `json:"note,omitempty"`
+	CanRun bool   `json:"canRun"`
+	// Empty is what an empty queue says, and Tidy whether it may call the
+	// garden tidy: only after a pass that ran every check.
+	Empty string `json:"empty"`
+	Tidy  bool   `json:"tidy"`
 }
 
 // hiddenRow is one entry in the rail's "Hidden forever" section: a pattern the
@@ -364,11 +426,20 @@ type gardenerData struct {
 	Notice          string         `json:"notice,omitempty"`   // positive flash
 	Error           string         `json:"error,omitempty"`    // failure flash
 
+	// Status is the status line: background passes, last and next.
+	Status *gardenerStatusView `json:"status,omitempty"`
+
 	// Inbox state for the HTML rail + reader. All json:"-": the CLI reads
 	// Groups/Cards/counts and that shape is fixed.
 	Sections []queueSection `json:"-"`
-	Recent   []recentRow    `json:"-"`
-	Hidden   []hiddenRow    `json:"-"`
+	Recent   []decisionRow  `json:"-"`
+	// Decided is how many proposals have been decided in all: Recent shows
+	// the newest, the decision history pages through the rest.
+	Decided int         `json:"-"`
+	Hidden  []hiddenRow `json:"-"`
+	// History is the decision history page (gardenerDecisions); nil on the
+	// queue.
+	History *decisionsView `json:"-"`
 	// Selected is the proposal open in the reader: the requested one on a
 	// /console/gardener/{id} page, or the first row of the queue on the list URL
 	// (SelectedAuto, which the client pins into the URL).
@@ -416,11 +487,14 @@ func (s *Service) gardenerPageData(w http.ResponseWriter, r *http.Request) (data
 			requested++
 		}
 	}
+	recent, decided := s.recentDecisions(ctx)
 	return gardenerData{
 		Groups:          groups,
 		Cards:           ungroupedRows(sections),
 		Sections:        sections,
-		Recent:          s.recentDecisions(ctx),
+		Status:          s.gardenerStatus(),
+		Recent:          recent,
+		Decided:         decided,
 		Hidden:          s.hiddenPatterns(ctx),
 		PendingCount:    len(visible),
 		RequestedCount:  requested,
@@ -703,43 +777,228 @@ func findCard(groups []planGroup, sections []queueSection, id string) *proposalC
 	return nil
 }
 
-// recentDecisions projects the last handful of resolved proposals into the
-// rail's undo affordance. Best-effort: a query error costs the section, not the
-// page.
-func (s *Service) recentDecisions(ctx context.Context) []recentRow {
-	ps, err := store.RecentResolvedProposals(ctx, s.db(ctx), recentDecisionLimit)
+// recentDecisions projects the newest decided proposals into the rail's undo
+// affordance, and counts every decision for its link to the history.
+// Best-effort: a query error costs the section, not the page.
+func (s *Service) recentDecisions(ctx context.Context) ([]decisionRow, int) {
+	total, err := store.CountResolvedProposals(ctx, s.db(ctx))
+	if err != nil {
+		s.logger.Warn("console: count gardener decisions", "error", err)
+		return nil, 0
+	}
+	if total == 0 {
+		return nil, 0
+	}
+	ps, err := store.ResolvedProposals(ctx, s.db(ctx), 0, recentDecisionLimit)
 	if err != nil {
 		s.logger.Warn("console: recent gardener decisions", "error", err)
-		return nil
+		return nil, 0
 	}
-	out := make([]recentRow, 0, len(ps))
+	return s.decisionRows(ctx, ps), total
+}
+
+// recentDecisionLimit caps the rail's "Recently decided" section, a
+// second-thought affordance; the decision history (decisionsPerPage a page)
+// holds every decision.
+const (
+	recentDecisionLimit = 10
+	decisionsPerPage    = 20
+)
+
+// decisionRows projects decided proposals into history rows, through the
+// request's handle: the session that decided and what an apply produced are
+// named only when this request may read them.
+func (s *Service) decisionRows(ctx context.Context, ps []store.Proposal) []decisionRow {
+	deciders := map[string]decider{}
+	out := make([]decisionRow, 0, len(ps))
 	for _, p := range ps {
 		_, _, iconName, tone := proposalPresentation(p.Kind)
-		title, _ := rowSummary(p.Kind, s.toProposalCard(ctx, p))
-		out = append(out, recentRow{
-			ID: p.ID, Kind: p.Kind, Icon: iconName, Tone: tone, RowTitle: title,
-			Status: p.Status, ResolvedAt: p.ResolvedAt,
+		title, detail := rowSummary(p.Kind, s.toProposalCard(ctx, p))
+		row := decisionRow{
+			ID: p.ID, Kind: p.Kind, Icon: iconName, Tone: tone, RowTitle: title, RowDetail: detail,
+			Status: p.Status, Outcome: outcomeWord(p.Status), ResolvedAt: p.ResolvedAt,
+			Settled: payloadStr(p.Result, "settled"),
 			CanUndo: gardener.CanUndoResolution(p.Status, p.Kind),
-		})
+		}
+		if row.Settled != "" {
+			row.Outcome = "settled"
+		}
+		d, ok := deciders[p.ResolvedBy]
+		if !ok {
+			d = s.decider(ctx, p.ResolvedBy)
+			deciders[p.ResolvedBy] = d
+		}
+		row.By, row.ByTitle, row.ByHref = d.label, d.title, d.href
+		if p.Status == store.ProposalApplied {
+			row.Produced = s.produced(ctx, p.Result)
+		}
+		out = append(out, row)
 	}
 	return out
 }
 
-// recentDecisionLimit caps the "Recently decided" section. Undo is a
-// second-thought affordance, not a history browser: the events feed keeps the
-// full record.
-const recentDecisionLimit = 10
+// outcomeWord is a decided proposal's status in words.
+func outcomeWord(status string) string {
+	switch status {
+	case store.ProposalHidden:
+		return "hidden forever"
+	default:
+		return status
+	}
+}
+
+// decider is who decided a proposal, in words: label for the row, title for
+// its tooltip, href to the deciding session's page.
+type decider struct{ label, title, href string }
+
+// decider turns resolved_by (gardener.By*, or a session's name) into words. A
+// session is named only when it resolves through the request's handle, so a
+// browser that may not read a locked project's sessions never reads their
+// names here either; such a session is "an agent session".
+func (s *Service) decider(ctx context.Context, by string) decider {
+	switch by {
+	case "":
+		return decider{"unknown", "Decided before Seamless recorded who decides, or by a release that does not record it.", ""}
+	case gardener.ByOwner:
+		return decider{"you", "You, on the console.", ""}
+	case gardener.ByGardener:
+		return decider{"the gardener", "Settled by the gardener's upkeep: what it was about had already gone inactive.", ""}
+	case gardener.ByAuto:
+		return decider{"automatic apply", "Applied automatically.", ""}
+	case gardener.ByAgent:
+		return decider{"an agent", "An agent whose call no session named.", ""}
+	}
+	name, ok := gardener.SessionNameOf(by)
+	if !ok {
+		return decider{"unknown", "", ""}
+	}
+	sess, found, err := store.SessionByName(ctx, s.db(ctx), name)
+	if err != nil {
+		s.logger.Warn("console: gardener decider", "error", err)
+	}
+	if err != nil || !found {
+		return decider{"an agent session", "An agent session this console cannot show.", ""}
+	}
+	return decider{name, "An agent, in session " + name + ".", "/console/sessions/" + sess.ID}
+}
+
+// produced links what an apply made, read through the request's handle: the
+// note a digest wrote and the task a knowledge gap or an error pattern opened,
+// each only while it is there to open.
+func (s *Service) produced(ctx context.Context, result map[string]any) []producedLink {
+	var out []producedLink
+	if id := payloadStr(result, "note_id"); id != "" {
+		n, ok, err := store.NoteByID(ctx, s.db(ctx), id)
+		if err != nil {
+			s.logger.Warn("console: gardener produced note", "id", id, "error", err)
+		}
+		if err == nil && ok {
+			out = append(out, producedLink{Label: "note", Title: n.Title, Href: "/console/notes/" + id})
+		}
+	}
+	if id := payloadStr(result, "task_id"); id != "" {
+		t, err := store.TaskByID(ctx, s.db(ctx), id)
+		if err != nil && !errors.Is(err, store.ErrTaskNotFound) {
+			s.logger.Warn("console: gardener produced task", "id", id, "error", err)
+		}
+		if err == nil {
+			out = append(out, producedLink{Label: "task", Title: t.Title, Href: "/console/tasks/" + id})
+		}
+	}
+	return out
+}
+
+// gardenerStatus builds the status line from the gardener's bookkeeping.
+func (s *Service) gardenerStatus() *gardenerStatusView {
+	if s.cfg.Gardener == nil {
+		return &gardenerStatusView{Empty: "The garden is tidy. Nothing is waiting on you.", Tidy: true}
+	}
+	return statusView(s.cfg.Gardener.Status(), time.Now())
+}
+
+// statusView is the status line for st as of now.
+func statusView(st gardener.Status, now time.Time) *gardenerStatusView {
+	v := &gardenerStatusView{Proposing: st.Proposing, Running: st.Running != nil}
+	every := plural(int(st.Interval.Minutes()), "minute", "minutes")
+	if !st.Proposing {
+		v.Line = append(v.Line, statusPiece{Text: "Suggestions are off"})
+		if !st.Housekept.IsZero() {
+			v.Line = append(v.Line, statusPiece{Text: "upkeep ran " + agoPhrase(st.Housekept), Title: ts(st.Housekept)})
+		}
+		v.Note = "gardener.enabled is false in the config, so no background pass looks for duplicates, stale memories " +
+			"or finished plans. Upkeep still runs every " + every + ": idle sessions are reaped and their claims " +
+			"returned, old tool events are pruned, retrieval stats are refreshed, and proposals whose memory is gone " +
+			"are settled. Requests you make here still propose. Set enabled: true under gardener: and restart the " +
+			"daemon to turn suggestions on."
+		v.Empty = "Nothing is waiting on you. Background suggestions are off, so only requests bring proposals here."
+		return v
+	}
+	switch {
+	case st.Running != nil && st.Running.Started.IsZero():
+		v.Line = append(v.Line, statusPiece{Text: "A pass is starting"})
+	case st.Running != nil:
+		v.Line = append(v.Line, statusPiece{Text: "A pass is running", Title: "started " + ts(st.Running.Started)})
+	case st.Last != nil:
+		v.Line = append(v.Line, statusPiece{Text: "Last pass " + agoPhrase(st.Last.Finished), Title: ts(st.Last.Finished)})
+	default:
+		v.Line = append(v.Line, statusPiece{Text: "No pass yet since the daemon started"})
+	}
+	if st.Scheduled && !st.Next.IsZero() {
+		next := "next " + untilPhrase(st.Next, now)
+		if st.Last == nil && st.Running == nil {
+			next = "first pass " + untilPhrase(st.Next, now)
+		}
+		v.Line = append(v.Line, statusPiece{Text: next, Title: "every " + every + "; " + ts(st.Next)})
+	}
+	skips := st.Skips
+	if st.Last != nil {
+		skips = st.Last.Result.Skipped
+	}
+	var skipped []string
+	for _, sk := range skips {
+		v.Line = append(v.Line, statusPiece{Text: sk.Pass + " skipped: " + sk.Reason})
+		skipped = append(skipped, sk.Pass+" ("+sk.Reason+")")
+	}
+	var failed []string
+	if st.Last != nil {
+		failed = st.Last.Result.Failed
+		for _, f := range failed {
+			v.Line = append(v.Line, statusPiece{Text: f + " failed", Tone: "warn", Title: "The daemon log says why."})
+		}
+		if st.Last.Err != "" {
+			v.Line = append(v.Line, statusPiece{Text: "the last pass could not start", Tone: "warn", Title: st.Last.Err})
+		}
+	}
+	v.CanRun = st.Running == nil
+	switch {
+	case st.Running != nil:
+		v.Empty = "Nothing is waiting on you yet: a pass is running now."
+	case st.Last == nil:
+		v.Empty = "Nothing is waiting on you yet: no background pass has run since the daemon started."
+	case st.Last.Err != "":
+		v.Empty = "Nothing is waiting on you, but the last pass could not start."
+	case len(failed) > 0:
+		v.Empty = "Nothing is waiting on you, but the last pass did not finish every check: " +
+			approval.JoinAnd(failed) + " failed."
+	case len(skipped) > 0:
+		v.Empty = "Nothing is waiting on you, though some checks did not run: " + approval.JoinAnd(skipped) + "."
+	default:
+		v.Empty, v.Tidy = "The garden is tidy. Nothing is waiting on you.", true
+	}
+	return v
+}
 
 // hiddenPatterns projects the forever-blocked proposals into the rail's unhide
-// list. It is uncapped on purpose: a hide is an explicit owner decision, so the
-// list is short by construction, and truncating the one surface that says what
-// is being suppressed would leave a block nobody can find to lift. Best-effort:
-// a query error costs the section, not the page.
+// list, read through the request's handle like every console read. It is
+// uncapped on purpose: a hide is an explicit decision, so the list is short by
+// construction, and truncating the one surface that says what is being
+// suppressed would leave a block nobody can find to lift. Best-effort: a query
+// error costs the section, not the page.
 func (s *Service) hiddenPatterns(ctx context.Context) []hiddenRow {
 	if s.cfg.Gardener == nil {
 		return nil
 	}
-	ps, err := s.cfg.Gardener.Hidden(ctx)
+	ps, err := store.HiddenProposals(ctx, s.db(ctx))
 	if err != nil {
 		s.logger.Warn("console: hidden gardener proposals", "error", err)
 		return nil
@@ -1216,7 +1475,7 @@ func (s *Service) gardenerApply(w http.ResponseWriter, r *http.Request) {
 	if !s.proposalReachable(w, r, id) {
 		return
 	}
-	res, err := s.cfg.Gardener.Apply(r.Context(), id)
+	res, err := s.cfg.Gardener.Apply(deciding(r), id)
 	if err != nil {
 		s.logger.Warn("console: gardener apply", "id", id, "error", err)
 		gardenerRedirect(w, r, id, "error", err.Error())
@@ -1239,7 +1498,7 @@ func (s *Service) gardenerDismiss(w http.ResponseWriter, r *http.Request) {
 	if !s.proposalReachable(w, r, id) {
 		return
 	}
-	if err := s.cfg.Gardener.Dismiss(r.Context(), id); err != nil {
+	if err := s.cfg.Gardener.Dismiss(deciding(r), id); err != nil {
 		s.logger.Warn("console: gardener dismiss", "id", id, "error", err)
 		gardenerRedirect(w, r, id, "error", err.Error())
 		return
@@ -1261,7 +1520,7 @@ func (s *Service) gardenerHide(w http.ResponseWriter, r *http.Request) {
 	if !s.proposalReachable(w, r, id) {
 		return
 	}
-	if err := s.cfg.Gardener.Hide(r.Context(), id); err != nil {
+	if err := s.cfg.Gardener.Hide(deciding(r), id); err != nil {
 		s.logger.Warn("console: gardener hide", "id", id, "error", err)
 		gardenerRedirect(w, r, id, "error", err.Error())
 		return
@@ -1282,7 +1541,7 @@ func (s *Service) gardenerUnhide(w http.ResponseWriter, r *http.Request) {
 	if !s.proposalReachable(w, r, id) {
 		return
 	}
-	if err := s.cfg.Gardener.Unhide(r.Context(), id); err != nil {
+	if err := s.cfg.Gardener.Unhide(deciding(r), id); err != nil {
 		s.logger.Warn("console: gardener unhide", "id", id, "error", err)
 		gardenerRedirect(w, r, "", "error", err.Error())
 		return
@@ -1302,7 +1561,7 @@ func (s *Service) gardenerUndo(w http.ResponseWriter, r *http.Request) {
 	if !s.proposalReachable(w, r, id) {
 		return
 	}
-	if err := s.cfg.Gardener.Undo(r.Context(), id); err != nil {
+	if err := s.cfg.Gardener.Undo(deciding(r), id); err != nil {
 		s.logger.Warn("console: gardener undo", "id", id, "error", err)
 		gardenerRedirect(w, r, "", "error", err.Error())
 		return
@@ -1312,7 +1571,7 @@ func (s *Service) gardenerUndo(w http.ResponseWriter, r *http.Request) {
 
 // gardenerGroupDismiss closes every pending proposal in one rail group -- a
 // taxonomy section (?group=) or a split plan (?plan=) -- one at a time, so each
-// keeps its own event and its own row in Recently decided and stays
+// keeps its own event and its own row in the decision history and stays
 // individually undoable. It is best-effort: it dismisses what it can and
 // reports how many landed.
 //
@@ -1365,8 +1624,9 @@ func (s *Service) gardenerGroupDismiss(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dismissed, firstErr := 0, ""
+	decide := deciding(r)
 	for _, id := range batch {
-		if derr := s.cfg.Gardener.Dismiss(ctx, id); derr != nil {
+		if derr := s.cfg.Gardener.Dismiss(decide, id); derr != nil {
 			if firstErr == "" {
 				firstErr = derr.Error()
 			}
@@ -1380,7 +1640,7 @@ func (s *Service) gardenerGroupDismiss(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	gardenerRedirect(w, r, "", "notice",
-		fmt.Sprintf("Dismissed %s from %s. Undo any of them from Recently decided.",
+		fmt.Sprintf("Dismissed %s from %s. Undo any of them from the decision history.",
 			plural(dismissed, "proposal", "proposals"), label))
 }
 
@@ -1432,7 +1692,7 @@ func (s *Service) gardenerRequest(w http.ResponseWriter, r *http.Request) {
 	scope := gardener.RequestScope{Project: r.PostFormValue("project")}
 	scope.AllProjects = scope.Project == ""
 
-	res, err := s.cfg.Gardener.Request(r.Context(), text, scope)
+	res, err := s.cfg.Gardener.Request(deciding(r), text, scope)
 	if err != nil {
 		s.logger.Warn("console: gardener request", "error", err)
 		redirectFlash(w, r, err.Error())
@@ -1442,7 +1702,7 @@ func (s *Service) gardenerRequest(w http.ResponseWriter, r *http.Request) {
 	// both steps only ever create reviewable proposals, so there is nothing to
 	// confirm in between and no reason to make the owner retype the request.
 	if res.SplitSource != "" {
-		sres, err := s.cfg.Gardener.Split(r.Context(), res.SplitSource, text)
+		sres, err := s.cfg.Gardener.Split(deciding(r), res.SplitSource, text)
 		if err != nil {
 			s.logger.Warn("console: gardener request split", "source", res.SplitSource, "error", err)
 			redirectFlash(w, r, err.Error())
@@ -1481,7 +1741,7 @@ func (s *Service) gardenerSplit(w http.ResponseWriter, r *http.Request) {
 		redirectFlash(w, r, "choose a project to split")
 		return
 	}
-	res, err := s.cfg.Gardener.Split(r.Context(), source, r.PostFormValue("instruction"))
+	res, err := s.cfg.Gardener.Split(deciding(r), source, r.PostFormValue("instruction"))
 	if err != nil {
 		s.logger.Warn("console: gardener split", "source", source, "error", err)
 		redirectFlash(w, r, err.Error())
@@ -1554,8 +1814,9 @@ func (s *Service) gardenerApplyPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	applied, settled, firstErr := 0, 0, ""
+	decide := deciding(r)
 	for _, p := range batch {
-		res, aerr := s.cfg.Gardener.Apply(r.Context(), p.ID)
+		res, aerr := s.cfg.Gardener.Apply(decide, p.ID)
 		switch {
 		case aerr != nil:
 			if firstErr == "" {
@@ -1577,6 +1838,118 @@ func (s *Service) gardenerApplyPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	redirectNotice(w, r, fmt.Sprintf("Applied all %d proposal(s) in %s.", applied, slug))
+}
+
+// deciding is the request's context naming who decides a gardener action from
+// the console (consoleActor): it is recorded with the decision and on its
+// event.
+func deciding(r *http.Request) context.Context {
+	return gardener.WithActor(r.Context(), consoleActor(r))
+}
+
+// consoleActor is who a console request decides as: the owner, unless it came
+// from a process an agent started (access.FromAgent) or with a paired device's
+// own credential that is not the owner's hands (refusedFromDevice says when a
+// relay's is). Those are an agent's, unnamed: the console has no session to
+// name it by.
+func consoleActor(r *http.Request) string {
+	ctx := r.Context()
+	if access.FromAgent(ctx) {
+		return gardener.ByAgent
+	}
+	if cred, ok := devices.CredentialOf(ctx); ok && (cred.Kind != devices.KindRelay || !relayOwnerHands(r)) {
+		return gardener.ByAgent
+	}
+	return gardener.ByOwner
+}
+
+// gardenerRun asks for a proposal pass now instead of at the next tick
+// (gardener.Service.RunNow). The pass runs in the background; the page shows
+// it running and, once it ends, when it ran and what it skipped or failed. It
+// is refused, with why, while suggestions are off, while a pass runs, and
+// where the schedule is not running.
+func (s *Service) gardenerRun(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.Gardener == nil {
+		s.serverError(w, r, errNoGardener)
+		return
+	}
+	err := s.cfg.Gardener.RunNow(deciding(r))
+	switch {
+	case errors.Is(err, gardener.ErrProposingOff):
+		redirectFlash(w, r, "No pass runs: background suggestions are off (gardener.enabled is false in the config). "+
+			"Turn them on in the config file and restart the daemon.")
+	case errors.Is(err, gardener.ErrPassRunning):
+		redirectFlash(w, r, "A pass is already running. Its proposals appear here when it finishes.")
+	case errors.Is(err, gardener.ErrNotScheduled):
+		redirectFlash(w, r, "No pass runs: the gardener's schedule is not running on this server.")
+	case err != nil:
+		s.serverError(w, r, err)
+	default:
+		redirectNotice(w, r, "A pass has started. Its proposals appear here when it finishes.")
+	}
+}
+
+// gardenerDecisions is the decision history: every decided proposal, newest
+// decision first, decisionsPerPage a page (?page=N, from 1), each with its
+// outcome, who decided, what an apply produced, and Undo wherever
+// gardener.CanUndoResolution allows. JSON for a script, the page otherwise.
+func (s *Service) gardenerDecisions(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	page := 1
+	if raw := r.URL.Query().Get("page"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 1 {
+			s.badRequest(w, r, fmt.Sprintf("invalid page %q: a page number from 1", raw))
+			return
+		}
+		page = n
+	}
+	total, err := store.CountResolvedProposals(ctx, s.db(ctx))
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	pages := max(1, (total+decisionsPerPage-1)/decisionsPerPage)
+	if page > pages {
+		s.notFound(w, r, fmt.Sprintf("No page %d: the decision history has %s.", page, plural(pages, "page", "pages")))
+		return
+	}
+	ps, err := store.ResolvedProposals(ctx, s.db(ctx), (page-1)*decisionsPerPage, decisionsPerPage)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	v := &decisionsView{
+		Rows: s.decisionRows(ctx, ps), Page: page, Pages: pages, PerPage: decisionsPerPage, Total: total,
+		CanAct: s.cfg.Gardener != nil,
+	}
+	if len(v.Rows) > 0 {
+		v.From = (page-1)*decisionsPerPage + 1
+		v.To = v.From + len(v.Rows) - 1
+	}
+	if page > 1 {
+		v.Prev = decisionsHref(page - 1)
+	}
+	if page < pages {
+		v.Next = decisionsHref(page + 1)
+	}
+	if wantsJSON(r) {
+		writeJSON(w, http.StatusOK, v)
+		return
+	}
+	title := "Gardener decisions"
+	if page > 1 {
+		title += fmt.Sprintf(", page %d", page)
+	}
+	s.render(w, r, "gardener", pageData{Title: title, Active: "gardener", Data: gardenerData{History: v}})
+}
+
+// decisionsHref is the decision history's page n.
+func decisionsHref(n int) string {
+	if n <= 1 {
+		return "/console/gardener/decisions"
+	}
+	return "/console/gardener/decisions?page=" + strconv.Itoa(n)
 }
 
 // gardenerRedirect completes a mutation the PRG way, sending the owner back to

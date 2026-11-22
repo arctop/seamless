@@ -272,7 +272,7 @@ func TestProposeToolError_PerRunCap(t *testing.T) {
 	require.Len(t, pendingToolErrors(t, g), toolErrorMaxPerRun)
 }
 
-func TestRunOnce_WiresToolErrorPass(t *testing.T) {
+func TestPropose_WiresToolErrorPass(t *testing.T) {
 	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
 	g, _, rec := newWantedFixture(t, now)
 
@@ -280,7 +280,7 @@ func TestRunOnce_WiresToolErrorPass(t *testing.T) {
 	recordToolErr(t, rec, now.Add(-24*time.Hour), "S2", "proj", "tasks_add", "tasks_add: title is required")
 	recordToolErr(t, rec, now.Add(-2*time.Hour), "S1", "proj", "tasks_add", "tasks_add: title is required")
 
-	res, err := g.RunOnce(context.Background())
+	res, err := g.Propose(context.Background())
 	require.NoError(t, err)
 	require.True(t, res.OK())
 	require.Equal(t, 1, res.ToolError)

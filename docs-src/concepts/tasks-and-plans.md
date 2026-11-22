@@ -171,10 +171,9 @@ Two consequences worth internalizing:
 
 - The lease is not the recovery mechanism; the reaper is. The lease only decides
   whether a claim *can* be taken.
-- **With `gardener.enabled: false`, that second clock never runs**, and a crashed
-  agent's claims stay `in_progress` indefinitely. Nothing will surface them. If
-  you turn the gardener off, you have also turned off task recovery - release
-  them yourself with `tasks_release`, or from the console.
+- **The reaper runs on the gardener's schedule**, once every
+  `gardener.interval_minutes`, whether or not `gardener.enabled` is on: that key
+  turns off the gardener's suggestions, never task recovery.
 
 A lease is **not a lock on the files**. Nothing physically stops an agent from
 working on a task it did not claim. It is a coordination signal between

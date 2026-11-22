@@ -35,10 +35,10 @@ func memoryID(t *testing.T, g *Service, project, name string) string {
 	return m.ID
 }
 
-// The gardener pass settles a proposal whose memory was archived by another
-// route since it was raised, as a dismissal carrying the reason, and leaves a
-// proposal that still stands pending.
-func TestRunOnce_SettlesMootProposals(t *testing.T) {
+// The gardener's upkeep settles a proposal whose memory was archived by
+// another route since it was raised, as a dismissal carrying the reason and
+// the gardener's name, and leaves a proposal that still stands pending.
+func TestHousekeep_SettlesMootProposals(t *testing.T) {
 	g, mgr, cx := newApplyFixture(t)
 	ctx := cx()
 	now := time.Now().UTC()
@@ -64,14 +64,14 @@ func TestRunOnce_SettlesMootProposals(t *testing.T) {
 	require.NoError(t, err)
 
 	archiveByHand(t, g, mgr, gone)
-	_, err = g.RunOnce(ctx)
-	require.NoError(t, err)
+	g.Housekeep(ctx)
 
 	for _, id := range []string{archive.ID, merge.ID} {
 		got, _, err := store.ProposalByID(ctx, g.db, id)
 		require.NoError(t, err)
 		require.Equal(t, store.ProposalDismissed, got.Status, got.Kind)
 		require.Equal(t, "memory web/retired-by-hand is already inactive", got.Result["settled"])
+		require.Equal(t, ByGardener, got.ResolvedBy, "the gardener's upkeep decided it")
 	}
 	got, _, err := store.ProposalByID(ctx, g.db, standing.ID)
 	require.NoError(t, err)
@@ -83,6 +83,7 @@ func TestRunOnce_SettlesMootProposals(t *testing.T) {
 	for _, e := range evs {
 		if e.Payload["action"] == "settle" {
 			settles++
+			require.Equal(t, ByGardener, e.Payload["by"])
 		}
 	}
 	require.Equal(t, 2, settles)

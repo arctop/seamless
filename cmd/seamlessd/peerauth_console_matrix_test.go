@@ -28,7 +28,10 @@ import (
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/backup"
+	"github.com/arctop/seamless/internal/console"
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/events"
+	"github.com/arctop/seamless/internal/gardener"
 	"github.com/arctop/seamless/internal/mcp"
 	"github.com/arctop/seamless/internal/passkey/passkeytest"
 	"github.com/arctop/seamless/internal/plans"
@@ -182,6 +185,32 @@ func (d *cmDaemon) postCrawl(t *testing.T, c cmCaller, pendingID string) {
 	require.Equal(t, store.ApprovalPending, pending.Status, "%s decided the pending request", c.name)
 }
 
+// plantDecisions files, for each locked project, two decided gardener
+// proposals: one hidden forever that names the locked memory (the Hidden
+// forever list must read it through the request's handle), and one about the
+// owner's open project dismissed by the locked project's session (the
+// decision history must not name a session the caller may not read). The
+// crawl holds every page to both.
+func (d *cmDaemon) plantDecisions(t *testing.T) {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	for _, it := range d.secrets() {
+		hidden, err := store.CreateProposal(ctx, d.db, store.ProposalArchive, map[string]any{
+			"key": "archive:hidden:" + it.memID, "id": it.memID, "project": it.project, "name": it.memName,
+			"reason": it.secret + " hidden",
+		})
+		require.NoError(t, err)
+		require.NoError(t, store.ResolveProposal(ctx, d.db, hidden.ID, store.ProposalHidden, it.sessName, now))
+		open, err := store.CreateProposal(ctx, d.db, store.ProposalToolError, map[string]any{
+			"key": "tool_error:" + cmOpen + ":" + it.project, "project": cmOpen, "surface": "tool",
+			"name": "tasks_add", "error_count": 3.0, "suggested_title": "tasks_add: an open error",
+		})
+		require.NoError(t, err)
+		require.NoError(t, store.ResolveProposal(ctx, d.db, open.ID, store.ProposalDismissed, it.sessName, now))
+	}
+}
+
 // pendingID is the stranger tree's pending request.
 func (d *cmDaemon) pendingID(t *testing.T) string {
 	t.Helper()
@@ -274,6 +303,7 @@ func TestPeerAuthMatrix_Console(t *testing.T) {
 	d.fin = d.plant(t, agentMCP, cmFinance, cmFinSecret, "fin")
 	d.legal = d.plant(t, agentMCP, cmLegal, cmLegalSecret, "legal")
 	d.plantOpen(t)
+	d.plantDecisions(t)
 	d.plantBackup(t)
 
 	// Another tree of the owner's asks too: its request waits, pending. Its
@@ -399,6 +429,18 @@ func TestPeerAuthMatrix_Console(t *testing.T) {
 	t.Run("the TCP key: every GET and POST route", func(t *testing.T) {
 		d.crawl(t, tcpKey, targets)
 		d.postCrawl(t, tcpKey, pendingID)
+	})
+
+	// The decided proposals plantDecisions filed: the open one is listed to the
+	// locked browser without its decider's name, the hidden one not at all.
+	t.Run("a locked browser: the gardener's history names no locked session", func(t *testing.T) {
+		for _, target := range []string{"/console/gardener", "/console/gardener/decisions"} {
+			_, body, _ := browserA.do(t, http.MethodGet, target, nil, false)
+			require.Contains(t, body, "an agent session", "%s lists the open decision, its session unnamed", target)
+			d.noLockedContent(t, body, "", "the locked browser's "+target)
+		}
+		_, body, _ := leased.do(t, http.MethodGet, "/console/gardener/decisions", nil, false)
+		require.Contains(t, body, d.fin.sessName, "the leased tree reads the locked session's name")
 	})
 
 	t.Run("an unleased tree on the socket: every GET and POST route", func(t *testing.T) {
@@ -812,4 +854,82 @@ func cmUnlockPage(t *testing.T, c cmCaller, project string) cmUnlockData {
 	var d cmUnlockData
 	require.NoError(t, json.Unmarshal([]byte(body), &d), body)
 	return d
+}
+
+// Run a pass now under peer_auth, on a daemon whose gardener proposes: the TCP
+// key and the owner's browser, locked projects and all, start the passes (a
+// pass reads every project as the daemon, whoever asked, and shows nobody
+// anything), one at a time; an agent's tree on the socket is recorded as an
+// agent, not the owner; and the status line the browser reads after carries
+// nothing of a locked project. With the matrix's own gardener (suggestions
+// off) every caller is refused, which the crawls above cover.
+func TestPeerAuthMatrix_ConsoleGardenerRun(t *testing.T) {
+	ctx := context.Background()
+	var garden *gardener.Service
+	d := cmNewDaemon(t, access.Account{UID: cmUIDOwner, Name: cmOwnerName, Home: "/Users/" + cmOwnerName}, nil,
+		func(c *console.Config) {
+			garden = gardener.New(c.WriteDB, c.Files, nil, nil, events.NewRecorder(c.WriteDB),
+				gardener.Config{Propose: true, StalePlanDays: 14, StaleStageDays: 14}, nil)
+			runCtx, cancel := context.WithCancel(ctx)
+			garden.Start(runCtx)
+			t.Cleanup(func() { cancel(); garden.Wait() })
+			c.Gardener = garden
+		})
+	finished := func(n int) {
+		t.Helper()
+		require.Eventually(t, func() bool {
+			st := garden.Status()
+			return st.Running == nil && st.Last != nil && countRuns(t, d) >= n
+		}, 20*time.Second, 20*time.Millisecond)
+	}
+
+	browserA := d.newBrowser(t, "browser A")
+	for i, c := range []cmCaller{d.bearer(), browserA} {
+		status, _, hdr := c.do(t, http.MethodPost, "/console/gardener/run", url.Values{}, false)
+		require.Equal(t, http.StatusSeeOther, status, c.name)
+		require.Contains(t, hdr.Get("Location"), "notice=", "%s starts a pass", c.name)
+		finished(i + 1)
+	}
+	_, body, _ := browserA.do(t, http.MethodGet, "/console/gardener", nil, false)
+	require.Contains(t, body, "Last pass just now")
+	require.Contains(t, body, "dedup skipped: no embeddings")
+
+	var bys []string
+	rows, err := d.db.QueryContext(ctx, `SELECT json_extract(payload, '$.by') FROM events
+		WHERE kind = 'gardener.action' AND json_extract(payload, '$.action') = 'run_now' ORDER BY ts`)
+	require.NoError(t, err)
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var by string
+		require.NoError(t, rows.Scan(&by))
+		bys = append(bys, by)
+	}
+	require.NoError(t, rows.Err())
+	require.Equal(t, []string{"console", "console"}, bys, "the TCP key's and the browser's runs are the owner's")
+
+	// On the socket, an agent's process asks as an agent, never the owner;
+	// the owner's own terminal asks as the owner.
+	for i, c := range []struct {
+		caller cmCaller
+		want   string
+	}{
+		{cmSocketCaller("an agent's process", d.socketHops(t, cmUIDOwner, hdAgentHops()...)), gardener.ByAgent},
+		{cmSocketCaller("the owner's own terminal", d.socketHops(t, cmUIDOwner, hdTerminalHops()...)), gardener.ByOwner},
+	} {
+		status, _, hdr := c.caller.do(t, http.MethodPost, "/console/gardener/run", url.Values{}, false)
+		require.Equal(t, http.StatusSeeOther, status, c.caller.name)
+		require.Contains(t, hdr.Get("Location"), "notice=", c.caller.name)
+		finished(3 + i)
+		require.Equal(t, c.want, garden.Status().Last.By, c.caller.name)
+	}
+}
+
+// countRuns is how many owner-asked passes have finished (their run_now
+// events).
+func countRuns(t *testing.T, d *cmDaemon) int {
+	t.Helper()
+	var n int
+	require.NoError(t, d.db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM events
+		WHERE kind = 'gardener.action' AND json_extract(payload, '$.action') = 'run_now'`).Scan(&n))
+	return n
 }

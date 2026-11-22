@@ -1363,11 +1363,14 @@ func featureSkillsCheck(db *sql.DB, cfg config.Config) check {
 		strings.Join(stale, "; "))}
 }
 
-// gardenerCheck reports the gardener ticker configuration.
+// gardenerCheck reports the gardener's schedule. Its upkeep always runs;
+// gardener.enabled turns the background suggestions on and off.
 func gardenerCheck(cfg config.Config) check {
 	g := cfg.Gardener
 	if !g.Enabled {
-		return check{statusWarn, "gardener", "disabled (set gardener.enabled: true to run maintenance passes)"}
+		return check{statusInfo, "gardener", fmt.Sprintf(
+			"suggestions off; upkeep still runs every %dm (set gardener.enabled: true for background suggestions)",
+			g.IntervalMinutes)}
 	}
 	return check{statusOK, "gardener", fmt.Sprintf(
 		"enabled (every %dm; dedup>=%.2f, staleness %dd, digest %dd)",

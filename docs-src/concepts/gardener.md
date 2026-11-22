@@ -6,9 +6,10 @@ description: The background pass that finds duplicates, staleness, and drift - a
 The Seamless gardener is the background pass that keeps an agent-written memory
 store from rotting: it detects near-duplicate memories by embedding similarity,
 memories gone stale, and captured plans left unapproved (including ones whose
-work quietly shipped), and files each finding as a proposal. Nothing is applied
-until you approve it with `gardener_apply` - the gardener has no write path of
-its own.
+work quietly shipped), and files each finding as a proposal. Nothing changes
+until a proposal is applied - by you on the console, or by an agent with
+`gardener_apply` - and every decision records who made it. The gardener has no
+write path of its own.
 
 Any store that agents write to accumulates cruft: two memories saying the same
 thing in different words, a runbook for a system that no longer exists, a plan
@@ -112,12 +113,30 @@ bypass the review step - what comes back is still a proposal.
 
 - **The console** - `/console/gardener` is an inbox: one line per proposal in
   the rail, the full evidence and the decision gate in the reader. A whole
-  group can be dismissed at once, and anything you decide lands in **Recently
-  decided**, where Undo puts it back in the queue and reverses what applying it
-  did. Applying a consolidation or a project split is the exception - both
-  create things that immediately accrue content, so they ask for a confirm
-  instead and cannot be undone from the console.
+  group can be dismissed at once. Every decision lands in **Recently decided**
+  and in the **decision history** (`/console/gardener/decisions`), where Undo
+  puts it back in the queue and reverses what applying it did. Applying a
+  consolidation or a project split is the exception - both create things that
+  immediately accrue content, so they ask for a confirm instead and cannot be
+  undone from the console.
 - **`gardener_proposals`** - the same, for an agent.
+
+## Who decided
+
+A proposal is resolved on the console, by an agent through `gardener_apply`, or
+by the gardener itself when the memory it was about has already gone inactive.
+Each decision records who made it, on the proposal and on its `gardener.action`
+event (`by`):
+
+| Recorded | Who |
+|---|---|
+| `owner` | you, on the console (the event says `console`); a held agent apply you release from **Held** counts as yours |
+| a session's name | an agent, through `gardener_apply`; `agent` when no session names the call |
+| `gardener` | the gardener's upkeep, settling a proposal whose memory went inactive |
+| unknown | a decision made before Seamless recorded this, or by an older release |
+
+The decision history shows it on every row, with the outcome and a link to the
+note or task an apply produced.
 
 ## Saying no, twice
 
@@ -148,6 +167,22 @@ Both are reversible, and the two exits are not the same:
 `gardener_apply` carries the same two tiers for agents: `action=dismiss` and
 `action=hide`.
 
-The gardener runs every `gardener.interval_minutes` (60) when
-`gardener.enabled` is on. Everything in this page is tunable - see
+## When it runs
+
+Every `gardener.interval_minutes` (60) the gardener does two things. First the
+**upkeep**, which the daemon always needs: it reaps idle sessions and returns
+their claims, prunes old transport events, refreshes the retrieval stats, latches
+utility ranking where a project's demand history has matured, and settles
+proposals whose memory is gone. Then, when `gardener.enabled` is on, the
+**proposal passes** above.
+
+`gardener.enabled: false` turns off only the proposal passes: no background
+pass proposes anything, while the upkeep keeps its schedule and your requests
+still propose. The Gardener screen says which: its status line shows when the
+last pass ran and when the next is due, each pass that was skipped and why
+(dedup without embeddings, digest without a chat model, a pass the config turns
+off), and any that failed. **Run a pass now** runs the proposal passes without
+waiting; it is refused while one runs.
+
+Everything in this page is tunable - see
 [Configuration](/reference/configuration/).

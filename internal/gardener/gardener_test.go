@@ -298,7 +298,7 @@ func TestReapStaleSessions_ALiveClaimKeepsTheSessionUntilItLapses(t *testing.T) 
 	require.Equal(t, 1, ended, "reaped once")
 }
 
-func TestRunOnce_ProducesAllThreeProposalKinds(t *testing.T) {
+func TestPropose_ProducesAllThreeProposalKinds(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
@@ -338,7 +338,7 @@ func TestRunOnce_ProducesAllThreeProposalKinds(t *testing.T) {
 	g := New(db, mgr, fakeEmbedder{}, fakeChat{out: "## Digest\n- did things"}, rec,
 		Config{DedupThreshold: 0.88, StalenessDays: 90, DigestDays: 30}, slog.Default())
 
-	res, err := g.RunOnce(ctx)
+	res, err := g.Propose(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 1, res.Merges, "one duplicate pair")
 	require.Equal(t, 1, res.Archives, "one stale unreferenced memory")
@@ -358,7 +358,7 @@ func TestRunOnce_ProducesAllThreeProposalKinds(t *testing.T) {
 	require.Equal(t, "proj-x", digests[0].Payload["project"])
 
 	// Idempotent: a second pass re-proposes nothing (all keys already exist).
-	res2, err := g.RunOnce(ctx)
+	res2, err := g.Propose(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 0, res2.Total(), "already-proposed items are not raised again")
 }
@@ -369,7 +369,7 @@ func TestRunOnce_ProducesAllThreeProposalKinds(t *testing.T) {
 // would propose retiring a live, referenced memory. The pass must refuse and
 // report itself failed instead. Regression for F17: before, the unreadable body
 // was warned and skipped, and "referenced-old" was proposed for archive.
-func TestRunOnce_UnreadableBodyBlocksArchivesRatherThanFalselyProposing(t *testing.T) {
+func TestPropose_UnreadableBodyBlocksArchivesRatherThanFalselyProposing(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
@@ -391,7 +391,7 @@ func TestRunOnce_UnreadableBodyBlocksArchivesRatherThanFalselyProposing(t *testi
 
 	g := New(db, mgr, nil, nil, events.NewRecorder(db), Config{StalenessDays: 90, DigestDays: 30}, slog.Default())
 
-	res, err := g.RunOnce(ctx)
+	res, err := g.Propose(ctx)
 	require.NoError(t, err, "one failing pass must not abort the run")
 
 	archives, err := store.PendingProposals(ctx, db, store.ProposalArchive)
@@ -405,7 +405,7 @@ func TestRunOnce_UnreadableBodyBlocksArchivesRatherThanFalselyProposing(t *testi
 }
 
 // The counts are only trustworthy when every pass ran; a healthy run says so.
-func TestRunOnce_OKWhenEveryPassRuns(t *testing.T) {
+func TestPropose_OKWhenEveryPassRuns(t *testing.T) {
 	dir := t.TempDir()
 	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
 	require.NoError(t, err)
@@ -419,14 +419,14 @@ func TestRunOnce_OKWhenEveryPassRuns(t *testing.T) {
 
 	g := New(db, mgr, nil, nil, events.NewRecorder(db), Config{StalenessDays: 90, DigestDays: 30}, slog.Default())
 
-	res, err := g.RunOnce(context.Background())
+	res, err := g.Propose(context.Background())
 	require.NoError(t, err)
 	require.True(t, res.OK())
 	require.Empty(t, res.Failed)
 	require.Equal(t, 0, res.Total(), "a genuine nothing-to-propose zero")
 }
 
-func TestRunOnce_DegradesWithoutEmbedderOrChat(t *testing.T) {
+func TestPropose_DegradesWithoutEmbedderOrChat(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
@@ -441,10 +441,27 @@ func TestRunOnce_DegradesWithoutEmbedderOrChat(t *testing.T) {
 	mgr.SetEmbedder(fakeEmbedder{})
 	writeMem(t, mgr, "ancient", "", "2", core.KindGotcha, now.Add(-120*24*time.Hour), "old")
 
-	g := New(db, mgr, nil, nil, nil, Config{}, slog.Default())
-	res, err := g.RunOnce(ctx)
+	g := New(db, mgr, nil, nil, nil, Config{StalePlanDays: 14, StaleStageDays: 14}, slog.Default())
+	res, err := g.Propose(ctx)
 	require.NoError(t, err)
 	require.Equal(t, 0, res.Merges)
 	require.Equal(t, 0, res.Digests)
 	require.Equal(t, 1, res.Archives)
+	// The two zeros are no findings: the run names them as skipped, with why,
+	// and so does the service before any pass has run.
+	want := []SkippedPass{{Pass: PassDedup, Reason: "no embeddings"}, {Pass: PassDigest, Reason: "no chat model"}}
+	require.Equal(t, want, res.Skipped)
+	require.True(t, res.OK(), "a skipped pass is not a failed one")
+	require.Equal(t, want, g.Skips())
+}
+
+// A pass the config turns off is skipped with that reason, in run order.
+func TestSkips_ConfigOffPasses(t *testing.T) {
+	g := New(nil, nil, fakeEmbedder{}, fakeChat{}, nil, Config{StalePlanDays: 0, StaleStageDays: 0}, slog.Default())
+	require.Equal(t, []SkippedPass{
+		{Pass: PassStaleStage, Reason: "off in the config"},
+		{Pass: PassStalePlan, Reason: "off in the config"},
+	}, g.Skips())
+	g = New(nil, nil, fakeEmbedder{}, fakeChat{}, nil, Config{StalePlanDays: 14, StaleStageDays: 14}, slog.Default())
+	require.Empty(t, g.Skips())
 }

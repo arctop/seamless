@@ -97,7 +97,10 @@ internal/diary/    the Diary's day model: one local day as threads (plans,
 internal/gardener/ the propose-only passes (dedup, staleness, stale-stage,
                    dead-weight, stale-copy, digest, stale-plan, memory-wanted,
                    tool-error, copy-relocate -- the canonical list is
-                   RunOnce), plus the request- and split-driven proposals  [P4]
+                   Propose), plus the request- and split-driven proposals,
+                   and the daemon's upkeep (Housekeep: session reaping, event
+                   pruning, retrieval stats) on the same schedule, which runs
+                   whatever gardener.enabled says                          [P4]
 internal/plans/    captured CC plan vocabulary: tags, statuses, tracking task
 internal/mcp/      MCP tools (streamable HTTP, static bearer key or the peer_auth
                    socket); see ToolCount [P2+]

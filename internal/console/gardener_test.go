@@ -3,6 +3,8 @@ package console
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -524,4 +526,353 @@ func TestGardenerApplyPlan_AppliesSetupThenMoves(t *testing.T) {
 	pending, err := store.PendingProposals(ctx, db, "")
 	require.NoError(t, err)
 	require.Empty(t, pending)
+}
+
+// gdBlockingChat stands in for the digest summarizer and holds the pass open
+// until released: entered says the pass reached it.
+type gdBlockingChat struct {
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (c *gdBlockingChat) Model() string { return "gd-blocking-chat" }
+func (c *gdBlockingChat) Complete(ctx context.Context, _, _ string) (string, error) {
+	select {
+	case c.entered <- struct{}{}:
+	default:
+	}
+	select {
+	case <-c.release:
+	case <-ctx.Done():
+		return "", ctx.Err()
+	}
+	return "## Digest\n- did the work", nil
+}
+
+// gdConsole wires a console over a gardener built with cfg and chat; start
+// runs the gardener's schedule (its first tick is 20 seconds out, past any
+// test here) for the test's life.
+func gdConsole(t *testing.T, cfg gardener.Config, chat llm.Chat, start bool) (context.Context, *sql.DB, *gardener.Service, *http.ServeMux) {
+	t.Helper()
+	dir := t.TempDir()
+	db, err := storetest.OpenFresh(t, filepath.Join(dir, "seam.db"))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	dataDir := filepath.Join(dir, "data")
+	mgr, err := files.NewManager(dataDir, db, slog.Default())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mgr.Close() })
+	rec := events.NewRecorder(db)
+	garden := gardener.New(db, mgr, nil, chat, rec, cfg, slog.Default())
+	if start {
+		runCtx, cancel := context.WithCancel(context.Background())
+		garden.Start(runCtx)
+		t.Cleanup(func() { cancel(); garden.Wait() })
+	}
+	svc, err := New(Config{DB: db, Files: mgr, Gardener: garden, Events: rec, DataDir: dataDir, APIKey: testKey, Level: "advanced",
+		GardenerCfg: config.Gardener{Enabled: cfg.Propose, IntervalMinutes: 60}})
+	require.NoError(t, err)
+	mux := http.NewServeMux()
+	svc.Register(mux)
+	return context.Background(), db, garden, mux
+}
+
+// gdFlash is the message a redirect carries (?notice= or ?error=).
+func gdFlash(t *testing.T, rr *httptest.ResponseRecorder) (param, msg string) {
+	t.Helper()
+	require.Equal(t, http.StatusSeeOther, rr.Code, rr.Body.String())
+	u, err := url.Parse(rr.Header().Get("Location"))
+	require.NoError(t, err)
+	if m := u.Query().Get("error"); m != "" {
+		return "error", m
+	}
+	return "notice", u.Query().Get("notice")
+}
+
+// The status line says what the background passes do, as plain words, and
+// the empty queue claims a tidy garden only once a pass ran every check.
+func TestGdStatusView_Words(t *testing.T) {
+	now := time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC)
+	ago12 := time.Now().Add(-12 * time.Minute)
+	skips := []gardener.SkippedPass{{Pass: "dedup", Reason: "no embeddings"}, {Pass: "digest", Reason: "no chat model"}}
+	texts := func(v *gardenerStatusView) []string {
+		var out []string
+		for _, p := range v.Line {
+			out = append(out, p.Text)
+		}
+		return out
+	}
+
+	off := statusView(gardener.Status{Proposing: false, Interval: time.Hour, Scheduled: true, Housekept: ago12}, now)
+	require.Equal(t, []string{"Suggestions are off", "upkeep ran 12m ago"}, texts(off))
+	require.Contains(t, off.Note, "Upkeep still runs every 60 minutes: idle sessions are reaped")
+	require.False(t, off.CanRun, "no pass is offered while suggestions are off")
+	require.False(t, off.Tidy)
+
+	first := statusView(gardener.Status{Proposing: true, Interval: time.Hour, Scheduled: true,
+		Next: now.Add(20 * time.Second), Skips: skips}, now)
+	require.Equal(t, []string{"No pass yet since the daemon started", "first pass within a minute",
+		"dedup skipped: no embeddings", "digest skipped: no chat model"}, texts(first))
+	require.True(t, first.CanRun)
+	require.False(t, first.Tidy)
+	require.Contains(t, first.Empty, "no background pass has run")
+
+	last := &gardener.Run{Trigger: gardener.TriggerSchedule, Finished: ago12, Result: gardener.PassResult{Skipped: skips}}
+	ran := statusView(gardener.Status{Proposing: true, Interval: time.Hour, Scheduled: true,
+		Next: now.Add(48 * time.Minute), Last: last, Skips: skips}, now)
+	require.Equal(t, []string{"Last pass 12m ago", "next in 48m",
+		"dedup skipped: no embeddings", "digest skipped: no chat model"}, texts(ran))
+	require.False(t, ran.Tidy, "a skipped check is no finding")
+	require.Equal(t, "Nothing is waiting on you, though some checks did not run: dedup (no embeddings) and digest (no chat model).", ran.Empty)
+
+	failed := *last
+	failed.Result = gardener.PassResult{Failed: []string{"staleness"}}
+	f := statusView(gardener.Status{Proposing: true, Interval: time.Hour, Last: &failed}, now)
+	require.Equal(t, []string{"Last pass 12m ago", "staleness failed"}, texts(f))
+	require.Equal(t, "warn", f.Line[1].Tone)
+	require.Contains(t, f.Empty, "staleness failed")
+
+	tidy := statusView(gardener.Status{Proposing: true, Interval: time.Hour, Last: &gardener.Run{Finished: ago12}}, now)
+	require.True(t, tidy.Tidy)
+	require.Equal(t, "The garden is tidy. Nothing is waiting on you.", tidy.Empty)
+
+	running := statusView(gardener.Status{Proposing: true, Interval: time.Hour,
+		Running: &gardener.Run{Started: ago12}, Last: &gardener.Run{Finished: ago12}}, now)
+	require.Equal(t, "A pass is running", running.Line[0].Text)
+	require.False(t, running.CanRun, "one pass at a time")
+}
+
+// The Gardener page says what off means, and offers no pass while it is off;
+// on, it names the checks a pass will skip and offers one.
+func TestGdGardenerPage_StatusLine(t *testing.T) {
+	_, _, _, offMux := gdConsole(t, gardener.Config{}, nil, false)
+	off := getPeek(t, offMux, "/console/gardener").Body.String()
+	require.Contains(t, off, `id="gardener-status"`)
+	require.Contains(t, off, "Suggestions are off")
+	require.Contains(t, off, "gardener.enabled is false in the config")
+	require.Contains(t, off, "Upkeep still runs every 60 minutes")
+	require.NotContains(t, off, `action="/console/gardener/run"`)
+	require.Contains(t, off, "Background suggestions are off, so only requests bring proposals here.")
+
+	_, _, _, onMux := gdConsole(t, gardener.Config{Propose: true, StalePlanDays: 14, StaleStageDays: 14}, nil, true)
+	on := getPeek(t, onMux, "/console/gardener").Body.String()
+	require.Contains(t, on, "dedup skipped: no embeddings")
+	require.Contains(t, on, "digest skipped: no chat model")
+	require.Contains(t, on, `action="/console/gardener/run"`)
+	require.Contains(t, on, "Run a pass now")
+	require.NotContains(t, on, "The garden is tidy.", "no pass has run yet")
+
+	// The sentence the owner reads is true whoever applies.
+	require.Contains(t, on, "A proposal changes nothing until it is applied, and the decision history shows who applied it.")
+	require.NotContains(t, on, "only you can")
+
+	var model struct {
+		Status struct {
+			Proposing bool `json:"proposing"`
+			CanRun    bool `json:"canRun"`
+			Tidy      bool `json:"tidy"`
+		} `json:"status"`
+	}
+	require.NoError(t, json.Unmarshal(getPeek(t, onMux, "/console/gardener?format=json").Body.Bytes(), &model))
+	require.True(t, model.Status.Proposing)
+	require.True(t, model.Status.CanRun)
+	require.False(t, model.Status.Tidy)
+}
+
+// Run a pass now starts the passes in the background and refuses a second
+// one while the first runs; the page shows the pass running, then when it
+// ran; the owner's run is recorded as a console write; and with suggestions
+// off it is refused with why.
+func TestGdRunNow_RunsAndRefusesAnOverlap(t *testing.T) {
+	chat := &gdBlockingChat{entered: make(chan struct{}, 1), release: make(chan struct{})}
+	ctx, db, garden, mux := gdConsole(t, gardener.Config{Propose: true, DigestDays: 30}, chat, true)
+	// Two sessions with findings: the digest pass asks the (held) chat model.
+	now := time.Now().UTC()
+	for _, name := range []string{"cc/gd-1", "cc/gd-2"} {
+		id, err := core.NewID()
+		require.NoError(t, err)
+		require.NoError(t, store.CreateSession(ctx, db, core.Session{
+			ID: id, Name: name, ProjectSlug: "example-ops", Status: core.SessionCompleted,
+			Findings: "found " + name, CreatedAt: now, UpdatedAt: now,
+		}))
+	}
+
+	param, msg := gdFlash(t, post(mux, "/console/gardener/run"))
+	require.Equal(t, "notice", param)
+	require.Equal(t, "A pass has started. Its proposals appear here when it finishes.", msg)
+	select {
+	case <-chat.entered:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the pass never reached the digest")
+	}
+	page := getPeek(t, mux, "/console/gardener").Body.String()
+	require.Contains(t, page, "A pass is running")
+	require.NotContains(t, page, `action="/console/gardener/run"`, "not offered while one runs")
+
+	param, msg = gdFlash(t, post(mux, "/console/gardener/run"))
+	require.Equal(t, "error", param, "the overlap is refused")
+	require.Equal(t, "A pass is already running. Its proposals appear here when it finishes.", msg)
+
+	close(chat.release)
+	require.Eventually(t, func() bool { return garden.Status().Last != nil }, 10*time.Second, 10*time.Millisecond)
+	page = getPeek(t, mux, "/console/gardener").Body.String()
+	require.Contains(t, page, "Last pass just now")
+	digests, err := store.PendingProposals(ctx, db, store.ProposalDigest)
+	require.NoError(t, err)
+	require.Len(t, digests, 1, "the pass ran: the digest is proposed")
+	var by string
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT json_extract(payload, '$.by') FROM events
+		WHERE kind = 'gardener.action' AND json_extract(payload, '$.action') = 'run_now'`).Scan(&by))
+	require.Equal(t, "console", by)
+
+	param, _ = gdFlash(t, post(mux, "/console/gardener/run"))
+	require.Equal(t, "notice", param, "after the pass, another is accepted")
+
+	_, _, _, offMux := gdConsole(t, gardener.Config{}, nil, true)
+	param, msg = gdFlash(t, post(offMux, "/console/gardener/run"))
+	require.Equal(t, "error", param)
+	require.Contains(t, msg, "background suggestions are off (gardener.enabled is false in the config)")
+}
+
+// gdDecide resolves a fresh tool_error proposal as by (gardener's own
+// decisions), at a minute apart from the last, and returns it.
+func gdDecide(t *testing.T, ctx context.Context, g *gardener.Service, db *sql.DB, i int, by, action string) store.Proposal {
+	t.Helper()
+	p, err := store.CreateProposal(ctx, db, store.ProposalToolError, map[string]any{
+		"key": fmt.Sprintf("tool_error:example-ops:%03d", i), "project": "example-ops", "surface": "tool",
+		"name": "tasks_add", "error_count": 3.0, "suggested_title": fmt.Sprintf("tasks_add: error %03d", i),
+	})
+	require.NoError(t, err)
+	actor := gardener.WithActor(ctx, by)
+	switch action {
+	case "apply":
+		_, err = g.Apply(actor, p.ID)
+	case "hide":
+		err = g.Hide(actor, p.ID)
+	default:
+		err = g.Dismiss(actor, p.ID)
+	}
+	require.NoError(t, err)
+	return p
+}
+
+// The decision history pages past the rail's ten, newest first; each row says
+// who decided -- the owner, an agent's session (linked), an agent no session
+// named, a session this console cannot show, or unknown -- and links the task
+// an apply opened; Undo works from page 2; a page that cannot exist is refused.
+func TestGdDecisionHistory_PagesWhoDecidedAndUndo(t *testing.T) {
+	ctx, db, garden, mux := gdConsole(t, gardener.Config{}, nil, false)
+	sessID, err := core.NewID()
+	require.NoError(t, err)
+	now := time.Now().UTC()
+	require.NoError(t, store.CreateSession(ctx, db, core.Session{ID: sessID, Name: "cc/gd-worker", ProjectSlug: "example-ops",
+		Status: core.SessionActive, CreatedAt: now, UpdatedAt: now}))
+
+	// The oldest five land on page 2.
+	var oldest []store.Proposal
+	for i := range 25 {
+		by, action := gardener.ByOwner, "dismiss"
+		switch i {
+		case 0:
+			by = gardener.AgentActor("cc/gd-worker") // an MCP call, by its session
+		case 1:
+			by = gardener.AgentActor("cc/gd-gone") // a session this console cannot show
+		case 2:
+			by = gardener.AgentActor("") // an agent no session named
+		case 3:
+			by = "" // before the column
+		case 24:
+			action = "apply" // the newest: it opens a task
+		}
+		p := gdDecide(t, ctx, garden, db, i, by, action)
+		if i < 5 {
+			oldest = append(oldest, p)
+		}
+	}
+
+	// The rail keeps ten, and links the history with the total.
+	queue := getPeek(t, mux, "/console/gardener").Body.String()
+	require.Contains(t, queue, `href="/console/gardener/decisions"`)
+	require.Contains(t, queue, "All 25 decisions")
+	require.Contains(t, queue, "applied</span> by <span", "a rail row says who decided")
+
+	page1 := getPeek(t, mux, "/console/gardener/decisions").Body.String()
+	require.Contains(t, page1, "Decision history")
+	require.Equal(t, 20, strings.Count(page1, `class="gardener-decision tone-`))
+	require.Contains(t, page1, `href="/console/gardener/decisions?page=2"`)
+	task, err := store.ListTasks(ctx, db, "example-ops", core.TaskOpen)
+	require.NoError(t, err)
+	require.Len(t, task, 1, "the apply opened a task")
+	require.Contains(t, page1, `href="/console/tasks/`+task[0].ID+`"`, "the row links what the apply produced")
+	require.Contains(t, page1, "by <span")
+
+	page2 := getPeek(t, mux, "/console/gardener/decisions?page=2").Body.String()
+	require.Equal(t, 5, strings.Count(page2, `class="gardener-decision tone-`))
+	require.Contains(t, page2, `href="/console/sessions/`+sessID+`"`, "the deciding session links its page")
+	require.Contains(t, page2, ">cc/gd-worker</a>")
+	require.Contains(t, page2, "an agent session")
+	require.NotContains(t, page2, "cc/gd-gone", "a session this console cannot show is not named")
+	require.Contains(t, page2, ">an agent</span>")
+	require.Contains(t, page2, ">unknown</span>")
+	require.Contains(t, page2, `href="/console/gardener/decisions"`, "Newer leads back to page 1")
+
+	var model struct {
+		Rows []struct {
+			ID      string `json:"id"`
+			By      string `json:"by"`
+			ByHref  string `json:"byHref"`
+			CanUndo bool   `json:"canUndo"`
+		} `json:"rows"`
+		Page, Pages, Total int
+	}
+	require.NoError(t, json.Unmarshal(getPeek(t, mux, "/console/gardener/decisions?page=2&format=json").Body.Bytes(), &model))
+	require.Equal(t, 2, model.Page)
+	require.Equal(t, 2, model.Pages)
+	require.Equal(t, 25, model.Total)
+	require.Len(t, model.Rows, 5)
+	require.Equal(t, oldest[0].ID, model.Rows[4].ID, "newest first: the oldest decision is the last row")
+	require.Equal(t, "cc/gd-worker", model.Rows[4].By)
+	require.Equal(t, "/console/sessions/"+sessID, model.Rows[4].ByHref)
+
+	// Undo from page 2: the proposal is back in the queue, selected.
+	target := oldest[4]
+	require.Contains(t, page2, `action="/console/gardener/`+target.ID+`/undo"`)
+	rr := post(mux, "/console/gardener/"+target.ID+"/undo")
+	require.Equal(t, http.StatusSeeOther, rr.Code)
+	require.True(t, strings.HasPrefix(rr.Header().Get("Location"), "/console/gardener/"+target.ID+"?notice="))
+	got, _, err := store.ProposalByID(ctx, db, target.ID)
+	require.NoError(t, err)
+	require.Equal(t, store.ProposalPending, got.Status)
+	require.Empty(t, got.ResolvedBy)
+
+	require.Equal(t, http.StatusBadRequest, getPeek(t, mux, "/console/gardener/decisions?page=0").Code)
+	require.Equal(t, http.StatusBadRequest, getPeek(t, mux, "/console/gardener/decisions?page=two").Code)
+	require.Equal(t, http.StatusNotFound, getPeek(t, mux, "/console/gardener/decisions?page=3").Code)
+}
+
+// A console decision is the owner's, on the proposal and on its event; the
+// bulk-dismiss confirm points at the history, where each can be restored.
+func TestGdConsoleDecisions_AreTheOwners(t *testing.T) {
+	ctx, db, _, mux := newConsoleWithGardener(t)
+	seeded := seedQueue(t, ctx, db)
+	toolErr, archive := seeded[store.ProposalToolError], seeded[store.ProposalArchive]
+
+	page := getPeek(t, mux, "/console/gardener").Body.String()
+	require.Contains(t, page, "Each can be restored from the decision history.")
+	require.NotContains(t, page, "They can be restored from Recently decided.")
+
+	require.Equal(t, http.StatusSeeOther, post(mux, "/console/gardener/"+toolErr.ID+"/apply").Code)
+	require.Equal(t, http.StatusSeeOther, post(mux, "/console/gardener/"+archive.ID+"/hide").Code)
+	for _, id := range []string{toolErr.ID, archive.ID} {
+		p, _, err := store.ProposalByID(ctx, db, id)
+		require.NoError(t, err)
+		require.Equal(t, gardener.ByOwner, p.ResolvedBy, p.Kind)
+		var by string
+		require.NoError(t, db.QueryRowContext(ctx, `SELECT json_extract(payload, '$.by') FROM events
+			WHERE kind = 'gardener.action' AND item_id = ? AND json_extract(payload, '$.action') IN ('apply', 'hide')`, id).Scan(&by))
+		require.Equal(t, "console", by, "a console write records by: console")
+	}
+	history := getPeek(t, mux, "/console/gardener/decisions").Body.String()
+	require.Equal(t, 2, strings.Count(history, ">you</span>"))
+	require.Contains(t, history, "hidden forever")
 }

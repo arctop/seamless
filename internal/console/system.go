@@ -23,6 +23,7 @@ import (
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/features"
+	"github.com/arctop/seamless/internal/gardener"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -113,6 +114,42 @@ type systemPart struct {
 	// first; SparkLabel says what it counts.
 	Spark      []int  `json:"spark,omitempty"`
 	SparkLabel string `json:"sparkLabel,omitempty"`
+}
+
+// gardenerFacts are the gardener's last and next pass and the checks a pass
+// skips, as the System readout says them. No counts: a pass spans every
+// project, a locked one included.
+func gardenerFacts(g *gardener.Service, now time.Time) []systemFact {
+	if g == nil {
+		return nil
+	}
+	st := g.Status()
+	var out []systemFact
+	switch {
+	case !st.Proposing:
+		if !st.Housekept.IsZero() {
+			out = append(out, systemFact{"Upkeep last ran", agoPhrase(st.Housekept)})
+		}
+		return out
+	case st.Running != nil:
+		out = append(out, systemFact{"Pass", "running now"})
+	case st.Last != nil:
+		out = append(out, systemFact{"Last pass", agoPhrase(st.Last.Finished)})
+	}
+	if st.Scheduled && !st.Next.IsZero() {
+		out = append(out, systemFact{"Next pass", untilPhrase(st.Next, now)})
+	}
+	skips := st.Skips
+	if st.Last != nil {
+		skips = st.Last.Result.Skipped
+	}
+	for _, sk := range skips {
+		out = append(out, systemFact{"Skips " + sk.Pass, sk.Reason})
+	}
+	if st.Last != nil && len(st.Last.Result.Failed) > 0 {
+		out = append(out, systemFact{"Failed last time", strings.Join(st.Last.Result.Failed, ", ")})
+	}
+	return out
 }
 
 // StateWord is the state as the readout says it.
@@ -593,17 +630,20 @@ func (s *Service) systemData(ctx context.Context, now time.Time) systemData {
 	gard := systemPart{
 		ID: "gardener", Label: "Gardener", Ring: ringWork, State: running("gardener"), Count: intPtr(min(nav.PendingProposals, 5)),
 		Role:       "Tidies knowledge, but only proposes.",
-		What:       "On a schedule it looks for duplicates, stale memories, dead weight and finished plans, and files proposals. Nothing changes until you apply one.",
+		What:       "On a schedule it looks for duplicates, stale memories, dead weight and finished plans, and files proposals. Nothing changes until one is applied. The same schedule runs the upkeep: it reaps idle sessions, prunes old tool events and refreshes retrieval stats.",
 		Hero:       systemStat{Value: countWord(nav.PendingProposals), Label: "proposals waiting for you"},
 		SparkLabel: "Gardener actions per minute",
 		Metrics:    []systemStat{{Label: "Runs every", Value: fmt.Sprint(s.cfg.GardenerCfg.IntervalMinutes), Unit: "min"}},
+		Facts:      gardenerFacts(s.cfg.Gardener, now),
 		Talks:      []string{"memories", "a2a"},
 		Href:       "/console/gardener", HrefLabel: "Open Gardener",
 	}
 	if !s.cfg.GardenerCfg.Enabled {
-		gard.State, gard.Count, gard.Metrics = partOff, nil, nil
-		gard.Hero = systemStat{Value: "Off", Label: "the gardener is switched off"}
-		gard.TurnOn = &systemHow{Text: "Switch it on in the config file and restart the daemon.", Code: "gardener:\n  enabled: true"}
+		// Off is the suggestions only: the upkeep keeps its cadence.
+		gard.State, gard.Count = partOff, nil
+		gard.Metrics = []systemStat{{Label: "Upkeep every", Value: fmt.Sprint(s.cfg.GardenerCfg.IntervalMinutes), Unit: "min"}}
+		gard.Hero = systemStat{Value: "Off", Label: "suggestions are switched off; upkeep still runs"}
+		gard.TurnOn = &systemHow{Text: "Switch suggestions on in the config file and restart the daemon.", Code: "gardener:\n  enabled: true"}
 	}
 	add(gard)
 

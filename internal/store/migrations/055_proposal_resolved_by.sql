@@ -1,0 +1,22 @@
+-- Who decided a gardener proposal (store/gardener.go, gardener/actor.go).
+--
+-- A proposal is resolved from the console, by an agent through gardener_apply,
+-- or by the gardener's own upkeep (a proposal whose memory went inactive is
+-- settled). Until now none of them was recorded: the history could say what was
+-- decided and when, never by whom.
+--
+--   resolved_by   'owner'      the owner, on the console (a held agent apply
+--                              the owner released counts as the owner's);
+--                 a session's name, for an agent's gardener_apply ('agent'
+--                              when no session names the call);
+--                 'gardener'   the gardener's upkeep settled it;
+--                 'auto'       reserved for automatic apply, written by
+--                              nothing yet;
+--                 ''           unknown: decided before this column existed,
+--                              by a release that does not write it, or still
+--                              pending. An undo clears it with the resolution.
+--
+-- Additive only: a plain ADD COLUMN with a default. The previous release names
+-- its columns in every INSERT and SELECT, so it runs on this schema unchanged;
+-- a proposal it resolves keeps '' and reads as unknown.
+ALTER TABLE gardener_proposals ADD COLUMN resolved_by TEXT NOT NULL DEFAULT '';

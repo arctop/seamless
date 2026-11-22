@@ -1475,12 +1475,18 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="w">    </span><span class="c"># back to OpenAI if its api_key is set, else Ollama.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">gardener</span><span class="p">:</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># The gardener only ever proposes; it never mutates memory without an explicit</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># apply. Safe to leave enabled.</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Background suggestions. On, each pass looks for duplicates, stale memories,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># finished plans, knowledge gaps and recurring errors and files proposals;</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># nothing changes until a proposal is applied. Off, no background pass</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># proposes anything (requests on the console or gardener_request still do).</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Either way the same schedule runs the upkeep: idle sessions are reaped and</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># their claims returned, old tool events pruned, retrieval stats refreshed and</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># proposals whose memory is gone settled. Safe to leave enabled.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_GARDENER_ENABLED</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Minutes between full gardener passes (dedup, staleness, stale-stage,</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># dead-weight, digest, stale-plan, memory-wanted).</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Minutes between gardener passes: the upkeep, then, when enabled, the</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># proposal passes (dedup, staleness, stale-stage, dead-weight, stale-copy,</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># digest, stale-plan, memory-wanted, tool-error, copy-relocate).</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_GARDENER_INTERVAL_MINUTES</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">interval_minutes</span><span class="p">:</span><span class="w"> </span><span class="m">60</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Cosine similarity at/above which two active memories are proposed for a merge.</span><span class="w">

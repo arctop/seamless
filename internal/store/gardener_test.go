@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/arctop/seamless/internal/core"
 )
 
 func TestProposalLifecycle(t *testing.T) {
@@ -34,7 +36,7 @@ func TestProposalLifecycle(t *testing.T) {
 	require.True(t, keys["archive:m1"].Hard)
 
 	// Resolve moves it out of pending and stamps resolved_at.
-	require.NoError(t, ResolveProposal(ctx, db, p.ID, ProposalApplied, time.Now().UTC()))
+	require.NoError(t, ResolveProposal(ctx, db, p.ID, ProposalApplied, "owner", time.Now().UTC()))
 	require.Empty(t, mustPending(t, db, ""))
 
 	got, ok, err := ProposalByID(ctx, db, p.ID)
@@ -42,6 +44,7 @@ func TestProposalLifecycle(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, ProposalApplied, got.Status)
 	require.NotNil(t, got.ResolvedAt)
+	require.Equal(t, "owner", got.ResolvedBy, "who decided is recorded with the decision")
 
 	// The key is still known after resolution (never re-proposed).
 	keys, err = ProposalKeyBlocks(ctx, db)
@@ -49,9 +52,9 @@ func TestProposalLifecycle(t *testing.T) {
 	require.True(t, keys["archive:m1"].Hard)
 
 	// Resolving an already-resolved proposal is an error.
-	require.Error(t, ResolveProposal(ctx, db, p.ID, ProposalDismissed, time.Now().UTC()))
+	require.Error(t, ResolveProposal(ctx, db, p.ID, ProposalDismissed, "owner", time.Now().UTC()))
 	// Invalid status is rejected.
-	require.Error(t, ResolveProposal(ctx, db, p.ID, "bogus", time.Now().UTC()))
+	require.Error(t, ResolveProposal(ctx, db, p.ID, "bogus", "owner", time.Now().UTC()))
 }
 
 // The apply result round-trips through the result column, and ReopenProposal
@@ -68,7 +71,7 @@ func TestProposalResultAndReopen(t *testing.T) {
 	// A pending proposal cannot be reopened -- only a resolved one.
 	require.Error(t, ReopenProposal(ctx, db, p.ID))
 
-	require.NoError(t, ResolveProposal(ctx, db, p.ID, ProposalApplied, time.Now().UTC()))
+	require.NoError(t, ResolveProposal(ctx, db, p.ID, ProposalApplied, "owner", time.Now().UTC()))
 	require.NoError(t, RecordProposalResult(ctx, db, p.ID, map[string]any{
 		"note_id": "01NOTE", "title": "seamless digest 2026-07",
 	}))
@@ -83,6 +86,7 @@ func TestProposalResultAndReopen(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, ProposalPending, got.Status)
 	require.Nil(t, got.ResolvedAt, "reopening clears the resolution stamp")
+	require.Empty(t, got.ResolvedBy, "and who decided: a pending proposal has no decider")
 	require.Nil(t, got.Result, "reopening clears the stale apply result")
 	require.Len(t, mustPending(t, db, ""), 1, "the proposal is back in the queue")
 
@@ -97,10 +101,10 @@ func TestProposalResultAndReopen(t *testing.T) {
 	require.Error(t, ReopenProposal(ctx, db, "01NOSUCHPROPOSAL"))
 }
 
-// RecentResolvedProposals lists only resolved proposals, newest resolution
-// first, capped at the limit -- the ordering the console's "Recently decided"
-// section relies on.
-func TestRecentResolvedProposals_OrdersByResolution(t *testing.T) {
+// ResolvedProposals pages the decided proposals, newest resolution first --
+// the order the console's decision history relies on -- and
+// CountResolvedProposals counts the same rows. Each row says who decided it.
+func TestResolvedProposals_PagesByResolution(t *testing.T) {
 	db := openTestDB(t)
 	ctx := context.Background()
 	base := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
@@ -113,25 +117,61 @@ func TestRecentResolvedProposals_OrdersByResolution(t *testing.T) {
 		require.NoError(t, err)
 		ids = append(ids, p.ID)
 	}
-	require.NoError(t, ResolveProposal(ctx, db, ids[0], ProposalApplied, base))
-	require.NoError(t, ResolveProposal(ctx, db, ids[1], ProposalDismissed, base.Add(time.Minute)))
-	require.NoError(t, ResolveProposal(ctx, db, ids[2], ProposalApplied, base.Add(2*time.Minute)))
+	require.NoError(t, ResolveProposal(ctx, db, ids[0], ProposalApplied, "owner", base))
+	require.NoError(t, ResolveProposal(ctx, db, ids[1], ProposalDismissed, "cc/agent-1", base.Add(time.Minute)))
+	require.NoError(t, ResolveProposal(ctx, db, ids[2], ProposalApplied, "", base.Add(2*time.Minute)))
 	// ids[3] stays pending.
 
-	recent, err := RecentResolvedProposals(ctx, db, 10)
+	recent, err := ResolvedProposals(ctx, db, 0, 10)
 	require.NoError(t, err)
-	require.Len(t, recent, 3, "the pending proposal is not 'recently decided'")
+	require.Len(t, recent, 3, "the pending proposal is not decided")
 	require.Equal(t, []string{ids[2], ids[1], ids[0]}, []string{recent[0].ID, recent[1].ID, recent[2].ID})
 	require.Equal(t, ProposalDismissed, recent[1].Status)
+	require.Equal(t, []string{"", "cc/agent-1", "owner"},
+		[]string{recent[0].ResolvedBy, recent[1].ResolvedBy, recent[2].ResolvedBy})
 
-	capped, err := RecentResolvedProposals(ctx, db, 2)
+	n, err := CountResolvedProposals(ctx, db)
 	require.NoError(t, err)
-	require.Len(t, capped, 2)
-	require.Equal(t, ids[2], capped[0].ID)
+	require.Equal(t, 3, n)
 
-	none, err := RecentResolvedProposals(ctx, db, 0)
+	first, err := ResolvedProposals(ctx, db, 0, 2)
 	require.NoError(t, err)
-	require.Empty(t, none)
+	require.Len(t, first, 2)
+	require.Equal(t, ids[2], first[0].ID)
+	second, err := ResolvedProposals(ctx, db, 2, 2)
+	require.NoError(t, err)
+	require.Len(t, second, 1, "the second page holds what the first left")
+	require.Equal(t, ids[0], second[0].ID)
+	past, err := ResolvedProposals(ctx, db, 4, 2)
+	require.NoError(t, err)
+	require.Empty(t, past)
+
+	// A page that cannot exist is the caller's bug, not "everything".
+	_, err = ResolvedProposals(ctx, db, 0, 0)
+	require.Error(t, err)
+	_, err = ResolvedProposals(ctx, db, -1, 10)
+	require.Error(t, err)
+}
+
+// The column is migration 055's: a row an older release wrote (no column in
+// its INSERT) reads as unknown, and so does one it resolved (its UPDATE does
+// not name the column).
+func TestProposalResolvedBy_OlderReleaseRowsReadUnknown(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	at := core.FormatTime(time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC))
+	// The previous release's own statements, verbatim in shape.
+	_, err := db.ExecContext(ctx, `INSERT INTO gardener_proposals (id, kind, payload, status, created_at)
+		VALUES (?, ?, ?, ?, ?)`, "01OLDRELEASEPROPOSAL000000", ProposalArchive, `{"key":"archive:old"}`, ProposalPending, at)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `UPDATE gardener_proposals SET status = ?, resolved_at = ?
+		WHERE id = ? AND status = ?`, ProposalDismissed, at, "01OLDRELEASEPROPOSAL000000", ProposalPending)
+	require.NoError(t, err)
+	got, ok, err := ProposalByID(ctx, db, "01OLDRELEASEPROPOSAL000000")
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, ProposalDismissed, got.Status)
+	require.Empty(t, got.ResolvedBy)
 }
 
 // A rejection has two strengths, and the store is where they differ: a
@@ -146,8 +186,8 @@ func TestProposalKeyBlocks_RejectionTiers(t *testing.T) {
 	require.NoError(t, err)
 	hidden, err := CreateProposal(ctx, db, ProposalToolError, map[string]any{"key": "err:b"})
 	require.NoError(t, err)
-	require.NoError(t, ResolveProposal(ctx, db, dismissed.ID, ProposalDismissed, at))
-	require.NoError(t, ResolveProposal(ctx, db, hidden.ID, ProposalHidden, at))
+	require.NoError(t, ResolveProposal(ctx, db, dismissed.ID, ProposalDismissed, "owner", at))
+	require.NoError(t, ResolveProposal(ctx, db, hidden.ID, ProposalHidden, "owner", at))
 
 	blocks, err := ProposalKeyBlocks(ctx, db)
 	require.NoError(t, err)
@@ -165,7 +205,7 @@ func TestProposalKeyBlocks_RejectionTiers(t *testing.T) {
 
 	// Dismissing that one too leaves the key soft again, at the LATER stamp.
 	later := at.Add(48 * time.Hour)
-	require.NoError(t, ResolveProposal(ctx, db, reraised.ID, ProposalDismissed, later))
+	require.NoError(t, ResolveProposal(ctx, db, reraised.ID, ProposalDismissed, "owner", later))
 	blocks, err = ProposalKeyBlocks(ctx, db)
 	require.NoError(t, err)
 	require.False(t, blocks["err:a"].Hard)
@@ -182,7 +222,7 @@ func TestHiddenProposals_UnhideAndReopen(t *testing.T) {
 
 	p, err := CreateProposal(ctx, db, ProposalToolError, map[string]any{"key": "err:a"})
 	require.NoError(t, err)
-	require.NoError(t, ResolveProposal(ctx, db, p.ID, ProposalHidden, at))
+	require.NoError(t, ResolveProposal(ctx, db, p.ID, ProposalHidden, "owner", at))
 
 	hidden, err := HiddenProposals(ctx, db)
 	require.NoError(t, err)
@@ -192,12 +232,13 @@ func TestHiddenProposals_UnhideAndReopen(t *testing.T) {
 
 	// Unhide demotes to a regular dismissal, keeping the moment of the decision
 	// -- that stamp is what a recurrence is measured against.
-	require.NoError(t, UnhideProposal(ctx, db, p.ID))
+	require.NoError(t, UnhideProposal(ctx, db, p.ID, "owner"))
 	got, ok, err := ProposalByID(ctx, db, p.ID)
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, ProposalDismissed, got.Status)
 	require.True(t, at.Equal(*got.ResolvedAt), "unhide does not restamp the decision")
+	require.Equal(t, "owner", got.ResolvedBy, "whoever lifted the block decided the dismissal")
 	require.Empty(t, mustPending(t, db, ""), "and does not return it to the queue")
 
 	empty, err := HiddenProposals(ctx, db)
@@ -205,14 +246,14 @@ func TestHiddenProposals_UnhideAndReopen(t *testing.T) {
 	require.Empty(t, empty)
 
 	// Unhiding something that is not hidden is an error, not a silent no-op.
-	require.Error(t, UnhideProposal(ctx, db, p.ID))
+	require.Error(t, UnhideProposal(ctx, db, p.ID, "owner"))
 
 	// A hide is undoable like any other rejection: reopening returns it. (The
 	// proposal is dismissed by now, so it goes back through the queue first --
 	// only a pending proposal can be resolved into a tier.)
 	require.NoError(t, ReopenProposal(ctx, db, p.ID))
-	require.NoError(t, ResolveProposal(ctx, db, p.ID, ProposalHidden, at))
-	require.Error(t, ResolveProposal(ctx, db, p.ID, ProposalHidden, at), "already resolved")
+	require.NoError(t, ResolveProposal(ctx, db, p.ID, ProposalHidden, "owner", at))
+	require.Error(t, ResolveProposal(ctx, db, p.ID, ProposalHidden, "owner", at), "already resolved")
 	require.NoError(t, ReopenProposal(ctx, db, p.ID))
 	require.Len(t, mustPending(t, db, ""), 1)
 }

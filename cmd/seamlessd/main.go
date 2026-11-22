@@ -484,8 +484,9 @@ func runServe(args []string) error {
 	}, logger)
 
 	// Gardener: propose-only maintenance, exposed to the gardener_apply MCP tool
-	// and run on a ticker. The chat client (for digests) is best-effort; without
-	// it the digest pass simply no-ops.
+	// and run on a schedule that also carries the daemon's upkeep. The chat
+	// client (for digests) is best-effort; without it the digest pass is
+	// skipped, and the Gardener screen says so.
 	var chat llm.Chat
 	if c, cerr := llm.NewChatClient(cfg.LLM); cerr != nil {
 		if errors.Is(cerr, llm.ErrConfig) {
@@ -780,12 +781,16 @@ func runServe(args []string) error {
 		return fmt.Errorf("seamlessd.serve: console: %w", err)
 	}
 
+	// The gardener's schedule always runs: its upkeep (session reaping, tool
+	// event pruning, retrieval stats, moot proposals) is the daemon's, and
+	// gardener.enabled turns off only the proposal passes.
+	garden.Start(ctx)
 	if cfg.Gardener.Enabled {
-		garden.Start(ctx)
-		slog.Info("gardener enabled", "interval", time.Duration(cfg.Gardener.IntervalMinutes)*time.Minute,
+		slog.Info("gardener enabled: upkeep and suggestions", "interval", time.Duration(cfg.Gardener.IntervalMinutes)*time.Minute,
 			"dedup_threshold", cfg.Gardener.DedupThreshold, "staleness_days", cfg.Gardener.StalenessDays)
 	} else {
-		slog.Info("gardener disabled")
+		slog.Info("gardener suggestions off (gardener.enabled: false); upkeep still runs",
+			"interval", time.Duration(cfg.Gardener.IntervalMinutes)*time.Minute)
 	}
 
 	mux := daemonRoutes{

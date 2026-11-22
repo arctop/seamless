@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/gardener"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -263,9 +264,12 @@ func TestGardenerGroupDismiss_PlanBatch(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, pending)
 
-	recent, err := store.RecentResolvedProposals(ctx, db, 10)
+	recent, err := store.ResolvedProposals(ctx, db, 0, 10)
 	require.NoError(t, err)
 	require.Len(t, recent, 3, "each step is separately undoable")
+	for _, p := range recent {
+		require.Equal(t, gardener.ByOwner, p.ResolvedBy, "a console dismissal is the owner's")
+	}
 }
 
 // Undoing a dismissal returns the proposal to the queue and selects it, so the
@@ -390,7 +394,8 @@ func TestGardenerHidden_RendersWithAnEmptyQueue(t *testing.T) {
 	body := getPeek(t, mux, "/console/gardener").Body.String()
 	require.Contains(t, body, `id="rg-hidden"`)
 	require.Contains(t, body, "/console/gardener/"+p.ID+"/unhide")
-	require.Contains(t, body, "The garden is tidy.", "the queue is still honestly empty")
+	require.Contains(t, body, "Nothing is waiting on you.", "the queue is still honestly empty")
+	require.NotContains(t, body, "The garden is tidy.", "no pass ran here, so nothing vouches for a tidy garden")
 }
 
 // The confirm policy is a projection, not a per-template judgement call: only

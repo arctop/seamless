@@ -4700,9 +4700,10 @@
 
 
 
+
 <div class="lib-page gardener-page" data-library="gardener">
   <header class="mv2-bar">
-    <h1 id="gardener-review-title"><svg class="ico ico-sprout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/></svg>Gardener</h1><details class="page-about"><summary aria-label="About this page" title="About this page"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary><p class="page-about-pop" role="note">Knowledge stewardship: the gardener prepares changes, you decide which ones reach your agents.</p></details>
+    <h1 id="gardener-review-title"><svg class="ico ico-sprout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/></svg>Gardener</h1><details class="page-about"><summary aria-label="About this page" title="About this page"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary><p class="page-about-pop" role="note">Knowledge stewardship: the gardener prepares changes, and none reaches your agents until it is applied.</p></details>
     <span class="mv2-count" aria-label="0 proposals awaiting your decision">
       <strong>0</strong>pending<small>0 asked by you &middot; 0 background</small>
     </span>
@@ -4713,11 +4714,25 @@
     </div>
 </header>
 
+  
+  
+  <section class="gardener-status" id="gardener-status" aria-label="Background passes">
+    <span class="gst-icon"><svg class="ico ico-sprout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/></svg></span>
+    <p class="gst-line"><span class="gst-piece">No pass yet since the daemon started</span><span class="gst-sep" aria-hidden="true">&middot;</span><span class="gst-piece">dedup skipped: no embeddings</span><span class="gst-sep" aria-hidden="true">&middot;</span><span class="gst-piece">digest skipped: no chat model</span></p>
+    
+    <form class="gst-run" method="post" action="/console/gardener/run">
+      <button class="btn small" type="submit" title="Run the background checks now instead of at the next pass. They only propose: nothing changes until a proposal is applied."><svg class="ico ico-refresh-cw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg> Run a pass now</button>
+    </form>
+    
+    
+  </section>
+  
+
   <section class="gardener-composer" aria-labelledby="gardener-ask-title">
     <h2 class="gardener-composer-title" id="gardener-ask-title">Ask for a cleanup</h2>
     <p class="gardener-contract">
       <span class="gardener-contract-badge"><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Propose-only by design.</span>
-      <span class="gardener-contract-copy">The gardener can prepare a change, but only you can let it alter the knowledge your agents receive.</span>
+      <span class="gardener-contract-copy">A proposal changes nothing until it is applied, and the decision history shows who applied it.</span>
     </p>
     
     <article class="gardener-request-card gardener-request-unavailable">
@@ -4731,10 +4746,11 @@
   
   <div class="empty dotgrid">
     <span class="empty-ico"><svg class="ico ico-sprout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 20h10"/><path d="M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z"/><path d="M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z"/></svg></span>
-    <div>The garden is tidy. No proposed change is waiting on you &mdash; background passes bring drift here, or you can aim the gardener with a request above.</div>
+    <div>Nothing is waiting on you yet: no background pass has run since the daemon started. Background passes bring drift here, or you can aim the gardener with a request above.</div>
   </div>
   
 </div>
+
 
 
   </main>

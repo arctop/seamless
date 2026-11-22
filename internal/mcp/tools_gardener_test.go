@@ -65,6 +65,43 @@ func TestGardenerProposalsAndApply(t *testing.T) {
 	}})
 	require.NoError(t, err)
 	require.True(t, res.IsError)
+
+	// No session names this connection, so both decisions are an agent's.
+	for _, id := range []string{arch.ID, dig.ID} {
+		p, ok, err := store.ProposalByID(ctx, db, id)
+		require.NoError(t, err)
+		require.True(t, ok)
+		require.Equal(t, "agent", p.ResolvedBy, p.Kind)
+	}
+}
+
+// An agent's decision is recorded in its session's name, on the proposal and
+// on the decision's event, whichever tier it took.
+func TestGardenerApply_RecordsTheSessionsName(t *testing.T) {
+	ctx := context.Background()
+	url, db := newServer(t)
+	cli := dialClient(t, ctx, url, testKey)
+	started := callJSON(t, ctx, cli, "session_start", map[string]any{"cwd": "/work/demo"})
+	name, _ := started["name"].(string)
+	require.NotEmpty(t, name)
+
+	for _, action := range []string{"apply", "dismiss", "hide"} {
+		p, err := store.CreateProposal(ctx, db, store.ProposalDigest, map[string]any{
+			"key": "digest:demo:" + action, "project": "demo",
+			"title": "Session digest -- " + action, "body": "- did work",
+		})
+		require.NoError(t, err)
+		callJSON(t, ctx, cli, "gardener_apply", map[string]any{"id": p.ID, "action": action})
+		got, ok, err := store.ProposalByID(ctx, db, p.ID)
+		require.NoError(t, err)
+		require.True(t, ok)
+		require.Equal(t, name, got.ResolvedBy, action)
+		var by string
+		require.NoError(t, db.QueryRowContext(ctx, `SELECT json_extract(payload, '$.by') FROM events
+			WHERE kind = 'gardener.action' AND item_id = ? AND json_extract(payload, '$.action') = ?`,
+			p.ID, action).Scan(&by))
+		require.Equal(t, name, by, action)
+	}
 }
 
 // The agent surface carries both rejection tiers, and they resolve to different

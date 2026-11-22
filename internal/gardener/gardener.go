@@ -9,14 +9,20 @@
 // or whose sources all lie in one other project (copy-relocate; both in
 // copies.go), and rolls recent sessions into a monthly digest. Every pass
 // only ever writes a gardener_proposals row for the owner to apply or dismiss
-// -- it never mutates a memory on its own. The passes run on a ticker and are
-// also invokable on demand (RunOnce).
+// -- it never mutates a memory on its own.
+//
+// The same schedule also does the daemon's upkeep (Housekeep): it refreshes
+// retrieval stats, latches utility ranking, prunes old tool events, reaps idle
+// sessions and settles moot proposals. Upkeep runs whatever gardener.enabled
+// says; the proposal passes (Propose) run only while it is on, on the schedule
+// or when the owner asks for one (RunNow).
 package gardener
 
 import (
 	"context"
 	"database/sql"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/arctop/seamless/internal/config"
@@ -40,6 +46,9 @@ const (
 
 // Config parameterizes the gardener passes.
 type Config struct {
+	// Propose runs the proposal passes on the schedule (gardener.enabled).
+	// Upkeep (Housekeep) runs on the same schedule either way.
+	Propose        bool
 	DedupThreshold float64
 	StalenessDays  int
 	DigestDays     int
@@ -92,6 +101,7 @@ func (c Config) withDefaults() Config {
 // FromConfig adapts the server config's gardener block to the pass Config.
 func FromConfig(g config.Gardener) Config {
 	return Config{
+		Propose:                g.Enabled,
 		DedupThreshold:         g.DedupThreshold,
 		StalenessDays:          g.StalenessDays,
 		DigestDays:             g.DigestDays,
@@ -118,6 +128,27 @@ type Service struct {
 	// transcripts settles flagged sessions' transcript copies after the
 	// reaper's pass (SetTranscripts); nil settles none.
 	transcripts TranscriptKeeper
+
+	// The schedule (ticker.go). firstDelay is the wait before the first tick
+	// (initialDelay; tests shorten it); kick carries the owner's RunNow to the
+	// loop, nil until Start; scheduled is whether the loop is running (under
+	// mu).
+	firstDelay time.Duration
+	kick       chan runRequest
+	scheduled  bool
+	// beforePasses runs at the start of every proposal pass (tests hold a pass
+	// open with it); nil in production.
+	beforePasses func(context.Context)
+
+	// mu guards the pass bookkeeping the status line reads (Status).
+	mu sync.Mutex
+	// pass is the proposal pass running or queued now, nil when none is.
+	pass *Run
+	// last is the latest proposal pass to finish, nil before the first.
+	last *Run
+	// next is when the schedule's next tick is due; housekept is when upkeep
+	// last finished. Both zero until the loop gets there.
+	next, housekept time.Time
 }
 
 // TranscriptKeeper is what the reaper needs of the session flag's transcript
@@ -142,11 +173,79 @@ func New(db *sql.DB, mgr *files.Manager, embedder llm.Embedder, chat llm.Chat, r
 	}
 	return &Service{
 		db: db, files: mgr, embedder: embedder, chat: chat, events: rec,
-		cfg: cfg.withDefaults(), logger: logger, now: time.Now,
+		cfg: cfg.withDefaults(), logger: logger, now: time.Now, firstDelay: initialDelay,
 	}
 }
 
-// PassResult counts what a single RunOnce produced.
+// Proposing reports whether the proposal passes run on the schedule
+// (gardener.enabled). Upkeep runs either way.
+func (s *Service) Proposing() bool { return s.cfg.Propose }
+
+// Interval is the schedule's period: upkeep, and the proposal passes when they
+// are on, run this often.
+func (s *Service) Interval() time.Duration { return s.cfg.Interval }
+
+// Pass names, as PassResult.Failed and PassResult.Skipped spell them.
+const (
+	PassDedup        = "dedup"
+	PassStaleness    = "staleness"
+	PassStaleStage   = "stale-stage"
+	PassDeadWeight   = "dead-weight"
+	PassStaleCopy    = "stale-copy"
+	PassDigest       = "digest"
+	PassStalePlan    = "stale-plan"
+	PassMemoryWanted = "memory-wanted"
+	PassToolError    = "tool-error"
+	PassCopyRelocate = "copy-relocate"
+)
+
+// SkippedPass is a pass that did not run, and why, in the owner's words.
+type SkippedPass struct {
+	Pass   string `json:"pass"`
+	Reason string `json:"reason"`
+}
+
+// Skips lists the passes this service cannot run, or was told not to, in run
+// order: dedup without an embedder, digest without a chat model, and a pass
+// its config turns off. A skipped pass proposes nothing, which looks exactly
+// like a pass that found nothing; this is what tells them apart before a pass
+// has run.
+func (s *Service) Skips() []SkippedPass {
+	var out []SkippedPass
+	for _, name := range []string{PassDedup, PassStaleStage, PassDigest, PassStalePlan} {
+		if why := s.skipReason(name); why != "" {
+			out = append(out, SkippedPass{Pass: name, Reason: why})
+		}
+	}
+	return out
+}
+
+// skipReason is why the named pass cannot run, "" when it can. Each pass also
+// guards itself (a pass called directly finds nothing); this is the reason
+// the run records.
+func (s *Service) skipReason(name string) string {
+	switch name {
+	case PassDedup:
+		if s.embedder == nil {
+			return "no embeddings"
+		}
+	case PassDigest:
+		if s.chat == nil {
+			return "no chat model"
+		}
+	case PassStalePlan:
+		if s.cfg.StalePlanDays <= 0 {
+			return "off in the config"
+		}
+	case PassStaleStage:
+		if s.cfg.StaleStageDays <= 0 {
+			return "off in the config"
+		}
+	}
+	return ""
+}
+
+// PassResult counts what a single proposal pass (Propose) produced.
 type PassResult struct {
 	Merges       int `json:"merges"`
 	Archives     int `json:"archives"`
@@ -161,6 +260,9 @@ type PassResult struct {
 	// its count at 0, which is shaped exactly like "nothing to propose"; this is
 	// the only thing that tells the two apart. Read it before trusting a zero.
 	Failed []string `json:"failed,omitempty"`
+	// Skipped names the passes that did not run, and why (Skips), in run
+	// order. A skipped pass's zero is no finding either.
+	Skipped []SkippedPass `json:"skipped,omitempty"`
 }
 
 // Total is the number of proposals created across all passes.
@@ -172,23 +274,25 @@ func (r PassResult) Total() int {
 // to propose" only when OK is true.
 func (r PassResult) OK() bool { return len(r.Failed) == 0 }
 
-// RunOnce refreshes retrieval stats, then runs the propose-only passes and
-// returns what each created. A pass that fails is logged and skipped; a single
-// failing pass never aborts the others.
-func (s *Service) RunOnce(ctx context.Context) (PassResult, error) {
+// Housekeep is the daemon's upkeep, run on the schedule whether or not the
+// proposal passes are on: it refreshes retrieval stats, latches utility
+// ranking, prunes old tool events, reaps idle sessions and settles the pending
+// proposals that went moot. Each step is best-effort: a failure is logged and
+// the next step runs.
+func (s *Service) Housekeep(ctx context.Context) {
 	// Staleness reads last-injected/last-read from retrieval_stats, a projection
-	// of the event log; refresh it first so this pass sees current activity.
-	if err := store.RebuildRetrievalStats(ctx, s.db); err != nil {
-		s.logger.Warn("gardener: rebuild retrieval stats", "error", err)
-	}
+	// of the event log, and so do the console and usage_summary; refresh it
+	// first so the latch below and a proposal pass after it see current
+	// activity.
+	s.refreshStats(ctx)
 
 	// Latch utility ranking on for projects whose demand history just matured;
 	// runs against the same event state the stats above were built from.
 	s.evaluateUtilityActivation(ctx)
 
 	// Bound the event log: prune transport-level Interactions events past the
-	// retention window. Runs before the stat-independent passes and never touches
-	// domain events, so retrieval stats (built above) are unaffected.
+	// retention window. It never touches domain events, so retrieval stats
+	// (built above) are unaffected.
 	s.pruneToolEvents(ctx)
 
 	// Reap sessions that went idle without a graceful session_end (crashed agents,
@@ -198,8 +302,36 @@ func (s *Service) RunOnce(ctx context.Context) (PassResult, error) {
 
 	// Settle the pending proposals whose memory went inactive by another route
 	// since they were raised, so the queue only holds what can still be applied.
-	s.settleMootProposals(ctx)
+	// The gardener decides these itself.
+	s.settleMootProposals(WithActor(ctx, ByGardener))
 
+	s.mu.Lock()
+	s.housekept = s.now().UTC()
+	s.mu.Unlock()
+}
+
+// refreshStats rebuilds retrieval_stats from the event log, best-effort.
+func (s *Service) refreshStats(ctx context.Context) {
+	if err := store.RebuildRetrievalStats(ctx, s.db); err != nil {
+		s.logger.Warn("gardener: rebuild retrieval stats", "error", err)
+	}
+}
+
+// Propose refreshes retrieval stats, then runs the proposal passes and returns
+// what each created. A pass that fails is logged and named in Failed, one that
+// cannot run is named in Skipped; neither aborts the others. It is the pass
+// itself, with no bookkeeping: the schedule and RunNow run it through runPass,
+// which records it for Status.
+func (s *Service) Propose(ctx context.Context) (PassResult, error) {
+	s.refreshStats(ctx)
+	return s.propose(ctx)
+}
+
+// propose runs the proposal passes over stats a caller just refreshed.
+func (s *Service) propose(ctx context.Context) (PassResult, error) {
+	if s.beforePasses != nil {
+		s.beforePasses(ctx)
+	}
 	existing, err := loadSeen(ctx, s.db)
 	if err != nil {
 		return PassResult{}, err
@@ -207,8 +339,12 @@ func (s *Service) RunOnce(ctx context.Context) (PassResult, error) {
 
 	var res PassResult
 	// run records a failing pass by name instead of letting its zero count pass
-	// for "nothing to propose".
+	// for "nothing to propose", and a pass that cannot run by name and reason.
 	run := func(name string, pass func(context.Context, seenKeys) (int, error)) int {
+		if why := s.skipReason(name); why != "" {
+			res.Skipped = append(res.Skipped, SkippedPass{Pass: name, Reason: why})
+			return 0
+		}
 		n, err := pass(ctx, existing)
 		if err != nil {
 			s.logger.Warn("gardener: "+name+" pass", "error", err)
@@ -217,23 +353,23 @@ func (s *Service) RunOnce(ctx context.Context) (PassResult, error) {
 		}
 		return n
 	}
-	res.Merges = run("dedup", s.proposeMerges)
-	res.Archives = run("staleness", s.proposeArchives)
+	res.Merges = run(PassDedup, s.proposeMerges)
+	res.Archives = run(PassStaleness, s.proposeArchives)
 	// Stale-stage and dead-weight proposals are archive proposals too (same
 	// kind, same key namespace, so the passes never double-propose one memory);
 	// they fold into the Archives count and are told apart in Failed by name.
-	res.Archives += run("stale-stage", s.proposeStaleStages)
-	res.Archives += run("dead-weight", s.proposeDeadWeight)
+	res.Archives += run(PassStaleStage, s.proposeStaleStages)
+	res.Archives += run(PassDeadWeight, s.proposeDeadWeight)
 	// A stale copy's proposal is an archive proposal too, after the other
 	// archive passes so a memory they asked about this run is not asked about
 	// twice. It and copy-relocate read only memories that carry a provenance
 	// stamp (isolation.requests): with no stamps they find nothing.
-	res.Archives += run("stale-copy", s.proposeStaleCopies)
-	res.Digests = run("digest", s.proposeDigests)
-	res.StalePlans = run("stale-plan", s.proposeStalePlans)
-	res.MemoryWanted = run("memory-wanted", s.proposeMemoryWanted)
-	res.ToolError = run("tool-error", s.proposeToolError)
-	res.Relocations = run("copy-relocate", s.proposeSourceRelocations)
+	res.Archives += run(PassStaleCopy, s.proposeStaleCopies)
+	res.Digests = run(PassDigest, s.proposeDigests)
+	res.StalePlans = run(PassStalePlan, s.proposeStalePlans)
+	res.MemoryWanted = run(PassMemoryWanted, s.proposeMemoryWanted)
+	res.ToolError = run(PassToolError, s.proposeToolError)
+	res.Relocations = run(PassCopyRelocate, s.proposeSourceRelocations)
 
 	switch {
 	case !res.OK():
@@ -386,10 +522,14 @@ func (s *Service) createProposal(ctx context.Context, kind, key string, payload 
 	return p.ID, nil
 }
 
-// record appends a gardener.action event best-effort.
+// record appends a gardener.action event best-effort. When ctx names who is
+// deciding (WithActor), the payload carries it as by (eventBy).
 func (s *Service) record(ctx context.Context, itemID string, payload map[string]any) {
 	if s.events == nil {
 		return
+	}
+	if by := ActorOf(ctx); by != "" {
+		payload["by"] = eventBy(by)
 	}
 	if _, err := s.events.Record(ctx, core.Event{
 		Kind: core.EventGardenerAction, ItemID: itemID, Payload: payload,

@@ -822,12 +822,18 @@ llm:
     # back to OpenAI if its api_key is set, else Ollama.
 
 gardener:
-  # The gardener only ever proposes; it never mutates memory without an explicit
-  # apply. Safe to leave enabled.
+  # Background suggestions. On, each pass looks for duplicates, stale memories,
+  # finished plans, knowledge gaps and recurring errors and files proposals;
+  # nothing changes until a proposal is applied. Off, no background pass
+  # proposes anything (requests on the console or gardener_request still do).
+  # Either way the same schedule runs the upkeep: idle sessions are reaped and
+  # their claims returned, old tool events pruned, retrieval stats refreshed and
+  # proposals whose memory is gone settled. Safe to leave enabled.
   # env: SEAMLESS_GARDENER_ENABLED
   enabled: true
-  # Minutes between full gardener passes (dedup, staleness, stale-stage,
-  # dead-weight, digest, stale-plan, memory-wanted).
+  # Minutes between gardener passes: the upkeep, then, when enabled, the
+  # proposal passes (dedup, staleness, stale-stage, dead-weight, stale-copy,
+  # digest, stale-plan, memory-wanted, tool-error, copy-relocate).
   # env: SEAMLESS_GARDENER_INTERVAL_MINUTES
   interval_minutes: 60
   # Cosine similarity at/above which two active memories are proposed for a merge.

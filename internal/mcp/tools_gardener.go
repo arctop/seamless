@@ -71,7 +71,7 @@ func (s *Server) handleGardenerRequest(ctx context.Context, req mcp.CallToolRequ
 	if err != nil {
 		return errResult("gardener_request", err)
 	}
-	res, err := s.cfg.Gardener.Request(ctx, text, scope)
+	res, err := s.cfg.Gardener.Request(s.gardenerActor(ctx), text, scope)
 	if err != nil {
 		return errResult("gardener_request", err)
 	}
@@ -150,7 +150,7 @@ func (s *Server) handleGardenerSplit(ctx context.Context, req mcp.CallToolReques
 	if !access.Visible(ctx, source) || !access.Writable(ctx, source) {
 		return errResult("gardener_split", access.Refusal(ctx, source))
 	}
-	res, err := s.cfg.Gardener.Split(ctx, source, argString(req, "instruction"))
+	res, err := s.cfg.Gardener.Split(s.gardenerActor(ctx), source, argString(req, "instruction"))
 	if err != nil {
 		return errResult("gardener_split", err)
 	}
@@ -194,6 +194,9 @@ func (s *Server) handleGardenerApply(ctx context.Context, req mcp.CallToolReques
 	if err := s.fenceProposal(ctx, p); err != nil {
 		return errResult("gardener_apply", err)
 	}
+	// Who decides is recorded with the decision (resolved_by) and on its
+	// event: this call's session, by name.
+	ctx = s.gardenerActor(ctx)
 	action := argString(req, "action")
 	if action == "" {
 		action = gardener.DecisionApply
@@ -246,6 +249,14 @@ func (s *Server) handleGardenerApply(ctx context.Context, req mcp.CallToolReques
 		return errResult("gardener_apply", fmt.Errorf("invalid action %q: valid values are %s",
 			action, strings.Join(gardener.Decisions, ", ")))
 	}
+}
+
+// gardenerActor names this call's session as the one deciding
+// (gardener.AgentActor): the bound session's name, the single ambient one's
+// when no binding names it (the same best-effort attribution a memory's
+// source_session gets), or "agent" when neither does.
+func (s *Server) gardenerActor(ctx context.Context) context.Context {
+	return gardener.WithActor(ctx, gardener.AgentActor(s.boundSessionName(ctx)))
 }
 
 // gardenerItemKind is the corpus kind a content-landing proposal writes.

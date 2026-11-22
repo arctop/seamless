@@ -429,9 +429,9 @@ re-queues it, because nothing is scanning for it.</p>
 that re-queues. A clean <code>session_end</code> does the same thing immediately, which is
 the real reason a fleet worker should always end its session rather than just
 exiting.</p>
-<p>One caveat that turns a self-healing system into a stuck one: <strong>the reaper runs
-inside the gardener's pass</strong>. With <code>gardener.enabled</code> off, nothing reaps idle
-sessions and nothing returns a dead agent's claims. See
+<p>The reaper runs on the gardener's schedule, once every
+<code>gardener.interval_minutes</code>, whether or not <code>gardener.enabled</code> is on: that key
+turns off the gardener's suggestions, never the reaping. See
 <a href="../../guides/troubleshooting/">Troubleshooting</a>.</p>
 <p>Nobody wants to wait 45 minutes for an obvious corpse, so there is an owner
 override - the console's <strong>Release claim</strong> button, or <code>seam task release --force &lt;id&gt;</code>. It force-releases any holder's claim regardless of the lease, and it is

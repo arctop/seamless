@@ -401,7 +401,7 @@ func TestStRetrievalRows_LinkTheWaitingProposal(t *testing.T) {
 	propose(store.ProposalMerge, map[string]any{"keep": map[string]any{"id": keep.ID}, "drop": map[string]any{"id": archived.ID}, "key": "merge:a"})
 	merge := propose(store.ProposalMerge, map[string]any{"keep": map[string]any{"id": keep.ID}, "drop": map[string]any{"id": merged.ID}, "key": "merge:b"})
 	gone := propose(store.ProposalArchive, map[string]any{"id": decided.ID, "key": "archive:" + decided.ID})
-	require.NoError(t, store.ResolveProposal(ctx, db, gone.ID, store.ProposalDismissed, time.Now().UTC()))
+	require.NoError(t, store.ResolveProposal(ctx, db, gone.ID, store.ProposalDismissed, "owner", time.Now().UTC()))
 
 	var ret retrievalData
 	getJSON(t, mux, "/console/retrieval?format=json", &ret)

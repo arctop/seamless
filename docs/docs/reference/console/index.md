@@ -32,7 +32,8 @@ nothing, and their rows say so.
 | Retarget a reproject proposal | `POST /console/gardener/{id}/retarget` | Rewrites a **pending** reproject's destination project before it is applied. Reproject proposals only. |
 | Apply a whole plan batch | `POST /console/gardener/plan/{slug}/apply` | Applies every pending proposal in a plan, split setup first so the child projects exist before the memories move. Best-effort: it applies what it can, reports how many landed, and leaves the rest pending. |
 | Dismiss a whole rail group | `POST /console/gardener/group/dismiss` | Dismisses every pending proposal in one rail section or split plan, one at a time, so each keeps its own event and stays individually undoable. Only Dismiss is offered in bulk. |
-| Undo a decision | `POST /console/gardener/{id}/undo` | Returns a resolved proposal to the queue from **Recently decided**, inverting whatever its apply did, for the kinds whose apply can be inverted. |
+| Undo a decision | `POST /console/gardener/{id}/undo` | Returns a resolved proposal to the queue from **Recently decided** or the **decision history**, inverting whatever its apply did, for the kinds whose apply can be inverted. |
+| Run a gardener pass now | `POST /console/gardener/run` | Runs the background proposal passes now instead of at the next pass, in the background. They only ever propose. Refused while a pass runs, and while `gardener.enabled` is false. |
 | Release a held write | `POST /console/held/{id}/release` | [Write screening](#held): lands a held agent write exactly as the agent sent it, and marks the memory owner-confirmed. Refused when its target changed after it was held. |
 | Discard a held write | `POST /console/held/{id}/discard` | Lands nothing and erases the held text; the row stays as the record. |
 | Clear a session's outside-text mark | `POST /console/held/sessions/{id}/clear` | The only way the mark comes off: the session's changes to binding rules land without a hold again. |
@@ -1443,13 +1444,30 @@ opens a task; nothing is written until someone writes the memory.
 Split batches are grouped by plan and reviewed together, setup card first, with an
 apply-the-whole-plan action.
 
+A status line under the head says what the background passes are doing: when
+the last pass ran and when the next one is due, each check a pass skips and why
+(dedup with no embeddings, digest with no chat model, a pass the config turns
+off), and any check that failed. An empty queue reads "The garden is tidy" only
+after a pass that ran every check; otherwise it says what did not run. **Run a
+pass now** starts the passes without waiting for the next one; it is refused
+while a pass runs. With `gardener.enabled: false` the line reads "Suggestions
+are off", no pass is offered, and the upkeep the same schedule carries (idle
+sessions reaped, old tool events pruned, retrieval stats refreshed) still runs.
+The line carries no counts: a pass spans every project, a locked one included.
+
 The actions are **apply**, **dismiss**, **hide forever**, **retarget**
 (reproject cards only), and **apply plan**. Dismissing answers the evidence in
 front of you - the pattern comes back if it recurs; hiding answers the pattern
-itself. Everything you decide lands in **Recently decided** with an Undo, and a
-hide is additionally listed under **Hidden forever**, where **Unhide** lifts the
-block without returning the proposal to the queue. Above them sits a single
-ask-in-words box, and it only ever
+itself. A proposal changes nothing until it is applied, by you here or by an
+agent with `gardener_apply`, and every decision records who made it. The newest
+ten land in **Recently decided** with an Undo; the **decision history**
+(`/console/gardener/decisions`) pages through all of them, newest first, with
+the outcome, who decided (you, an agent's session, the gardener settling a
+proposal whose memory had gone inactive, or unknown for a decision made before
+this was recorded), the note or task an apply produced, and Undo wherever it
+can be taken back. A hide is additionally listed under **Hidden forever**, where
+**Unhide** lifts the block without returning the proposal to the queue. Above
+them sits a single ask-in-words box, and it only ever
 produces more proposals for this same queue. A request recognized as a project
 split is planned as a split directly - the plan batch appears below like any
 other. When the split's source project cannot be matched, an inline follow-up
