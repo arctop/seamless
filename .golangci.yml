@@ -9,7 +9,12 @@
 version: "2"
 
 run:
-  timeout: 5m
+  # 10m, not 5m: CI's static job loads packages with a cold build cache while
+  # build, vet, cross-check, docs-check and vulncheck compile beside it, and
+  # its cache is saved only from a green run. On 2026-11-22 a cold run timed
+  # out at 5m loading packages, so no cache was saved and the next cold run
+  # would have timed out the same way. Warm, lint takes seconds.
+  timeout: 10m
   tests: true
 
 linters:
