@@ -3,55 +3,87 @@
 {{$sel := .Selected}}
 {{$qs := .QS}}
 <div class="lib-page" data-library="memories">
-{{$base := "/console/memories"}}{{if .Selected}}{{$base = printf "/console/memories/%s" .Selected.ID}}{{end}}
 <header class="mv2-bar">
   <h1>{{icon "database"}}Memories</h1>{{about "Constraints, decisions, runbooks, and context that agents carry between sessions."}}
+  {{if .Filtered}}
+  <span class="mv2-count" aria-label="{{.ActiveCount}} of {{.Total}} active memories match{{if .InactiveCount}}, and {{.InactiveCount}} archived and superseded{{end}}">
+    <strong>{{.ActiveCount}}</strong>of {{.Total}} active{{if .InactiveCount}}<small>{{.InactiveCount}} archived &amp; superseded</small>{{end}}
+  </span>
+  <a class="lib-clear" href="{{.ClearHref}}" data-seam-query title="Show every memory again">{{icon "x"}}Clear</a>
+  {{else}}
   <span class="mv2-count" aria-label="{{.ActiveCount}} active memories{{if .InactiveCount}}, {{.InactiveCount}} archived and superseded{{end}}">
     <strong>{{.ActiveCount}}</strong>active{{if .InactiveCount}}<small>{{.InactiveCount}} archived &amp; superseded</small>{{end}}
   </span>
+  {{end}}
   <form class="search lib-query" method="get" action="/console/memories" data-seam-query>
     {{icon "search"}}
-    <input name="q" aria-label="Filter memories by name, description, kind, or tag" placeholder="Filter names, descriptions, kinds, and tags&hellip;" value="{{.Query}}">
-    {{if ne .Sort "recent"}}<input type="hidden" name="sort" value="{{.Sort}}">{{end}}
+    <input name="q" aria-label="Filter memories by name, description, kind, tag, or project" placeholder="Filter names, descriptions, kinds, tags, and projects&hellip;" value="{{.Query}}">
+    {{range .Keep}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">{{end}}
   </form>
   <button type="button" class="mv2-filter-toggle" data-filters-toggle aria-expanded="false" aria-controls="mv2-controls">{{icon "sliders"}}<span>Filters</span></button>
   <span class="mv2-spacer"></span>
   <div class="mv2-controls" id="mv2-controls">
+  <details class="menu lib-filter-menu">
+    <summary class="menu-btn" aria-label="Kind: {{.KindLabel}}">{{icon "flag"}}<span class="menu-k">Kind</span><strong>{{.KindLabel}}</strong>{{icon "chevron-down"}}</summary>
+    <div class="menu-list" data-seam-query>
+      {{range .KindMenu}}<a class="{{if .On}}on{{end}}" href="{{.Href}}"{{with .Title}} title="{{.}}"{{end}}>{{.Label}}{{with .Count}}<span class="n">{{.}}</span>{{end}}</a>{{end}}
+    </div>
+  </details>
+  <details class="menu lib-filter-menu">
+    <summary class="menu-btn" aria-label="Project: {{.ProjectLabel}}">{{icon "folder-tree"}}<span class="menu-k">Project</span><strong>{{.ProjectLabel}}</strong>{{icon "chevron-down"}}</summary>
+    <div class="menu-list" data-seam-query>
+      {{range .Projects}}<a class="{{if .On}}on{{end}}" href="{{.Href}}"{{with .Title}} title="{{.}}"{{end}}>{{.Label}}{{with .Count}}<span class="n">{{.}}</span>{{end}}</a>{{end}}
+    </div>
+  </details>
+  <div class="lib-flags" data-seam-query>
+    <a class="lib-flag{{if .FavLink.On}} on{{end}}" href="{{.FavLink.Href}}" title="{{if .FavLink.On}}Show every memory again{{else}}Show only starred memories{{end}}">{{icon "star"}}Starred{{with .FavLink.Count}}<span class="n">{{.}}</span>{{end}}</a>
+    {{if $.Level.AtLeast "standard"}}<a class="lib-flag{{if .NeverLink.On}} on{{end}}" href="{{.NeverLink.Href}}" title="{{if .NeverLink.On}}Show every memory again{{else}}Show only memories that have never reached an agent's context{{end}}">{{icon "eye-off"}}Never surfaced{{with .NeverLink.Count}}<span class="n">{{.}}</span>{{end}}</a>{{end}}
+  </div>
+  {{if not .AlwaysTree}}
+  <div class="lib-group" role="group" aria-label="Group">
+    <span class="lib-group-k">Group</span>
+    <div class="seg" data-seam-query>
+      <a class="{{if .Flat}}on{{end}}" href="{{.GroupNone}}" data-lib-here title="One list in the sort's order, each memory with its project and kind">None</a>
+      <a class="{{if not .Flat}}on{{end}}" href="{{.GroupProject}}" data-lib-here title="Grouped by project, then kind">Project</a>
+    </div>
+  </div>
+  {{end}}
   <details class="menu sort-menu">
     <summary class="menu-btn" aria-label="Sort: {{sortLabel .Sort}}">{{icon "arrow-up-down"}}<span class="menu-k">Sort</span><strong>{{sortLabel .Sort}}</strong>{{icon "chevron-down"}}</summary>
     <div class="menu-list" data-seam-query>
-      <a class="{{if eq .Sort "recent"}}on{{end}}" href="{{$base}}?sort=recent&amp;q={{.Query}}">Recent</a>
-      <a class="{{if eq .Sort "name"}}on{{end}}" href="{{$base}}?sort=name&amp;q={{.Query}}">Name</a>
+      <a class="{{if eq .Sort "recent"}}on{{end}}" href="{{index .Sorts "recent"}}" data-lib-here>Recent</a>
+      <a class="{{if eq .Sort "name"}}on{{end}}" href="{{index .Sorts "name"}}" data-lib-here title="A to Z, grouped by project and kind">Name</a>
       {{if $.Level.AtLeast "standard"}}
-      <a class="{{if eq .Sort "reach"}}on{{end}}" href="{{$base}}?sort=reach&amp;q={{.Query}}">Reach</a>
-      <a class="{{if eq .Sort "utility"}}on{{end}}" href="{{$base}}?sort=utility&amp;q={{.Query}}" title="Time-decayed demand score: recall hits, prompt matches, explicit reads">Utility</a>
+      <a class="{{if eq .Sort "reach"}}on{{end}}" href="{{index .Sorts "reach"}}" data-lib-here title="How often each memory surfaced to an agent">Reach</a>
+      <a class="{{if eq .Sort "utility"}}on{{end}}" href="{{index .Sorts "utility"}}" data-lib-here title="Time-decayed demand score: recall hits, prompt matches, explicit reads">Utility</a>
       {{end}}
-      <a class="{{if eq .Sort "favorites"}}on{{end}}" href="{{$base}}?sort=favorites&amp;q={{.Query}}">Starred</a>
+      <a class="{{if eq .Sort "favorites"}}on{{end}}" href="{{index .Sorts "favorites"}}" data-lib-here>Starred</a>
     </div>
   </details>
   </div>
 </header>
 
-{{if or .Groups .Inactive .Query}}
+{{if or .Rail .Inactive .Filtered}}
 <div class="lib-layout"{{if and .Selected .SelectedAuto}} data-auto-url="/console/memories/{{.Selected.ID}}{{$qs}}"{{end}}>
   <nav class="lib-rail" aria-label="Memories">
-    <div class="rail-overview"><span>Memory map</span><span>Project &rarr; kind &rarr; memory</span></div>
+    <div class="rail-overview"><span>Memory map</span><span>{{if .Flat}}{{.OrderHint}}{{else}}Project &rarr; kind &rarr; memory{{end}}</span></div>
     <div class="rail-scroll">
-    {{if or .Groups .Inactive}}
+    {{if or .Rail .Inactive}}
     <div class="rail-groups">
-      {{range .Groups}}
-      <section class="rail-group" id="rg-{{if .Project}}{{.Project}}{{else}}global{{end}}">
-        <header class="rail-group-hd"><span class="hd-label">{{if .Project}}{{icon "folder-tree"}}{{.Project}}{{else}}{{icon "share-2"}}Shared globally{{end}}</span> <span class="n">{{.Count}}</span></header>
+      {{range $g := .Rail}}
+      <section class="rail-group" id="rg-{{if $g.All}}active{{else if $g.Project}}{{$g.Project}}{{else}}global{{end}}">
+        <header class="rail-group-hd"><span class="hd-label">{{if $g.All}}{{icon "arrow-up-down"}}Active memories{{else if $g.Project}}{{icon "folder-tree"}}{{$g.Project}}{{else}}{{icon "share-2"}}Shared globally{{end}}</span> <span class="n">{{$g.Count}}</span></header>
         <div class="rail-subgroups">
-          {{range .Kinds}}
-          <section class="rail-subgroup" data-memory-kind="{{.Kind}}">
-          <header class="rail-subgroup-hd"><span><i class="kdot" data-kind="{{.Kind}}"></i>{{.Kind}}</span><span class="n">{{len .Memories}}</span></header>
+          {{range $g.Kinds}}
+          <section class="rail-subgroup"{{with .Kind}} data-memory-kind="{{.}}"{{end}}>
+          {{if .Kind}}<header class="rail-subgroup-hd"><span><i class="kdot" data-kind="{{.Kind}}"></i>{{.Kind}}</span><span class="n">{{len .Memories}}</span></header>
+          <p class="rail-subgroup-gloss" title="{{.Gloss}}">{{.Gloss}}</p>{{end}}
           <div class="rail-items">
           {{range .Memories}}
-          <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/memories/{{.ID}}{{$qs}}" data-title="{{.Name}}" data-context="{{if .Project}}{{.Project}}{{else}}Shared globally{{end}} / {{.Kind}}" data-memory-kind="{{.Kind}}"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
+          <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/memories/{{.ID}}{{$qs}}" data-title="{{.Name}}" data-context="{{.ScopeLabel}} / {{.Kind}}" data-memory-kind="{{.Kind}}"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
             <span class="ri-title mono">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Name}}</span>
             {{if .Description}}<span class="ri-desc">{{.Description}}</span>{{end}}
-            <span class="ri-meta"><span title="{{ts .Updated}}">updated {{ago .Updated}}</span>{{if $.Level.AtLeast "standard"}}{{if .Injects}} &middot; surfaced {{.Injects}}&times;{{else}} &middot; never surfaced{{end}}{{end}}{{with agentPill .Harness .Model}} {{.}}{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
+            <span class="ri-meta">{{if $g.All}}<span class="ri-chip">{{.ScopeLabel}}</span> <span class="ri-chip ri-kind" data-kind="{{.Kind}}" title="{{.KindGloss}}">{{.Kind}}</span> {{end}}<span title="{{ts .Updated}}">updated {{ago .Updated}}</span>{{if $.Level.AtLeast "standard"}}{{if .Injects}} &middot; surfaced {{.Injects}}&times;{{else}} &middot; never surfaced{{end}}{{end}}{{with agentPill .Harness .Model}} {{.}}{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
           </a>
           {{end}}
           </div>
@@ -66,7 +98,7 @@
         <div class="rail-items">
           {{range .Inactive}}
           <a class="rail-item dim{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/memories/{{.ID}}{{$qs}}" data-title="{{.Name}}" data-context="Historical / {{.Kind}}" data-memory-kind="{{.Kind}}"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
-            <span class="ri-title mono"><i class="kdot" data-kind="{{.Kind}}" title="{{.Kind}}"></i>{{.Name}}</span>
+            <span class="ri-title mono"><i class="kdot" data-kind="{{.Kind}}" title="{{.Kind}}: {{.KindGloss}}"></i>{{.Name}}</span>
             <span class="ri-meta">{{.Status}}{{if .ReplacedBy}} by {{.ReplacedBy}}{{end}} &middot; <span title="{{ts .Updated}}">{{ago .Updated}}</span>{{with agentPill .Harness .Model}} {{.}}{{end}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
           </a>
           {{end}}
@@ -75,7 +107,10 @@
       {{end}}
     </div>
     {{else}}
-    <div class="rail-none">No memories match &ldquo;{{.Query}}&rdquo;.</div>
+    <div class="rail-none lib-none">
+      <p>{{if .Query}}No memories match &ldquo;{{.Query}}&rdquo;{{if .Narrowed}} with these filters{{end}}.{{else}}No memories match these filters.{{end}}</p>
+      <p class="lib-none-acts"><a href="{{.ClearHref}}" data-seam-query>{{icon "x"}}Clear</a>{{with .SearchHref}}<a href="{{.}}">{{icon "search"}}Search everything for &ldquo;{{$.Data.Query}}&rdquo;</a>{{end}}</p>
+    </div>
     {{end}}
     </div><!-- .rail-scroll -->
   </nav>
@@ -97,12 +132,12 @@
   {{if ne .Status "active"}}
   <aside class="reader-status-banner {{if eq .Status "superseded"}}warn{{else}}muted{{end}}" role="note">
     {{icon "archive"}}
-    <div><strong>This memory is {{.Status}}.</strong>{{if .ReplacedByID}} It is historical; continue with <a href="/console/memories/{{.ReplacedByID}}">{{.ReplacedBy}}</a>.{{else}} It no longer enters agent context.{{end}}</div>
+    <div><strong>This memory is {{.Status}}.</strong>{{if .ReplacedByID}} It is historical; continue with <a href="/console/memories/{{.ReplacedByID}}{{.QS}}">{{.ReplacedBy}}</a>.{{else}} It no longer enters agent context.{{end}}</div>
   </aside>
   {{end}}
   <header class="reader-head">
     <div class="reader-eyebrow">
-      <span class="kind">{{.Kind}}</span>
+      <span class="kind" title="{{.KindGloss}}">{{.Kind}}</span>
       <span class="badge {{if eq .Status "active"}}ok{{else if eq .Status "superseded"}}warn{{end}}">{{.Status}}</span>
       {{agentPill .Harness .Model}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{with .MayContain}} <span class="kind faint" data-may-contain title="Provenance stamp: the agent that wrote this held content from these confidential or sealed projects. It names projects and approvals, never content.">{{mayContain .}}</span>{{end}}
       {{if .Project}}<a class="chip-parent" href="/console/projects/{{.Project}}">{{icon "git-branch"}}{{.Project}}</a>{{else}}<span class="chip-parent">{{icon "share-2"}}Shared globally</span>{{end}}
@@ -112,6 +147,7 @@
         <a class="ract" href="{{.EditURL}}" title="Open {{.AbsPath}}">{{icon "pencil"}}Edit in editor</a>
         {{if .CanArchive}}
         <form method="post" action="/console/memories/{{.ID}}/archive" onsubmit="return confirm('Archive {{.Name}}? It leaves every index; the file stays on disk with a tombstone.');">
+          <input type="hidden" name="next" value="/console/memories{{.QS}}">
           <button class="ract danger" type="submit">{{icon "archive"}}Archive</button>
         </form>
         {{end}}
@@ -120,22 +156,29 @@
     <h2 class="reader-title mono-title">{{.Name}}{{copyBtn .Name}}
       <form class="star-form" method="post" action="/console/favorites/memory/{{.ID}}">
         <input type="hidden" name="favorite" value="{{if .Favorite}}0{{else}}1{{end}}">
-        <input type="hidden" name="next" value="/console/memories/{{.ID}}">
+        <input type="hidden" name="next" value="/console/memories/{{.ID}}{{.QS}}" data-lib-next>
         <button class="star{{if .Favorite}} on{{end}}" type="submit" aria-pressed="{{if .Favorite}}true{{else}}false{{end}}" title="{{if .Favorite}}Unstar{{else}}Star{{end}} this memory">{{icon "star"}}</button>
       </form>
     </h2>
     {{if .Description}}<p class="reader-desc">{{.Description}}</p>{{end}}
     <div class="mv2-facts">
       {{if $.Level.AtLeast "standard"}}<span class="mv2-fact-hi" title="Time-decayed demand score in [0,1): recall hits, prompt matches, explicit reads. Feeds briefing ordering and recall ranking.{{with .UtilityParts}} Breakdown &mdash; read {{printf "%.1f" .Read}} &middot; recall {{printf "%.1f" .Recall}} &middot; prompt {{printf "%.1f" .Prompt}}{{end}}">{{printf "%.2f" .Utility}}<span>utility</span></span>{{end}}
-      <span class="mv2-fact-hi"{{if .SurfacedTone}} data-tone="{{.SurfacedTone}}"{{end}} title="{{if .LastInjected}}Last entered agent context {{ts .LastInjected}}{{else}}Has never entered an agent context{{end}}">{{.SurfacedAge}}<span>since surfaced</span></span>
+      <span class="mv2-fact-hi"{{if .SurfacedTone}} data-tone="{{.SurfacedTone}}"{{end}} title="{{if .LastInjected}}Last entered agent context {{ts .LastInjected}}{{else}}Has never entered an agent context{{end}}">{{if .LastInjected}}{{.SurfacedAge}}<span>since surfaced</span>{{else}}never<span>surfaced</span>{{end}}</span>
       <span class="mv2-facts-rest">
-        <span>injected {{.Injects}}&times;</span>
-        <span title="Explicit memory_read lookups. Near-zero by design: briefings inject the body (counted under injected), so agents rarely re-read a memory they already have.">read {{.Reads}}&times;</span>
+        {{if .Injects}}<span title="How many times this memory entered an agent's context: briefings, prompt-matched recall, recall answers">surfaced {{.Injects}}&times;</span>{{end}}
+        <span title="Explicit memory_read lookups. Near-zero by design: a briefing already carries the body (counted under surfaced), so agents rarely read a memory again that they already have.">read {{.Reads}}&times;</span>
         {{if .Source}}<span>source {{if .SourceID}}<a href="/console/sessions/{{.SourceID}}">{{.Source}}</a>{{else}}{{.Source}}{{end}}</span>{{end}}
         <span title="{{ts .Updated}}">updated {{ago .Updated}}</span>
         <span title="{{ts .Created}}">created {{ago .Created}}</span>
       </span>
     </div>
+    {{with .SurfacedTo}}
+    <div class="lib-surfaced-to" id="surfaced-to">
+      <span class="lib-surfaced-k">Surfaced to</span>
+      {{range .Latest}}{{template "memory-surfaced-session" .}} {{end}}
+      {{if .More}}<details class="lib-surfaced-all"><summary>all {{.Total}}</summary><span class="lib-surfaced-more">{{range .More}}{{template "memory-surfaced-session" .}} {{end}}{{if .Earlier}}<span class="faint">and {{.Earlier}} earlier</span>{{end}}</span></details>{{else if .Earlier}}<span class="faint">and {{.Earlier}} earlier</span>{{end}}
+    </div>
+    {{end}}
   </header>
   {{if not .BodyLoaded}}<div class="peek-note">Body unavailable</div>
   {{else if .BodyIsEcho}}
@@ -147,14 +190,14 @@
   {{if .ReplacedByID}}
   <section class="reader-links">
     <h3>Superseded by</h3>
-    <ul class="peek-refs"><li><a href="/console/memories/{{.ReplacedByID}}">{{.ReplacedBy}}</a></li></ul>
+    <ul class="peek-refs"><li><a href="/console/memories/{{.ReplacedByID}}{{.QS}}">{{.ReplacedBy}}</a></li></ul>
   </section>
   {{end}}
   {{if .Supersedes}}
   <section class="reader-links">
     <h3>Supersedes <span class="count">{{len .Supersedes}}</span></h3>
     <ul class="peek-refs">
-      {{range .Supersedes}}<li><a href="/console/memories/{{.ID}}">{{.Name}}</a> <span class="kind">{{.Kind}}</span></li>{{end}}
+      {{range .Supersedes}}<li><a href="/console/memories/{{.ID}}{{$.QS}}">{{.Name}}</a> <span class="kind" title="{{.KindGloss}}">{{.Kind}}</span></li>{{end}}
     </ul>
   </section>
   {{end}}
@@ -163,3 +206,5 @@
   </footer>
 </article>
 {{end}}
+
+{{define "memory-surfaced-session"}}{{if .ID}}<a class="mono" href="/console/sessions/{{.ID}}" title="Surfaced {{.Times}}&times;, last {{ts .Last}}">{{.Name}}</a>{{else}}<span class="faint" title="Surfaced {{.Times}}&times; outside any session, last {{ts .Last}}">no session</span>{{end}}{{end}}

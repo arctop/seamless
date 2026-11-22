@@ -207,21 +207,9 @@ func (s *Service) memoryDetail(w http.ResponseWriter, r *http.Request) {
 		s.renderFragment(w, r, "memory", d)
 		return
 	}
-	if r.URL.Query().Get("reader") == "1" {
-		s.renderReader(w, r, "memories", "memory-reader", d)
-		return
-	}
-	sortKey, query, ok2 := s.parseSortQuery(w, r, memorySortKeys, "recent")
-	if !ok2 {
-		return
-	}
-	data, err := s.memoriesPage(ctx, sortKey, query)
-	if err != nil {
-		s.serverError(w, r, err)
-		return
-	}
-	data.Selected = &d
-	s.render(w, r, "memories", pageData{Title: "Memory " + m.Name, Active: "memories", Data: data})
+	// The reader fragment (?reader=1) and the Memories screen read the
+	// library's state from the URL (memories.go).
+	s.memoryLibraryPage(w, r, d)
 }
 
 // noteDetail is the payload for a single note's peek/detail.
@@ -305,21 +293,9 @@ func (s *Service) noteDetail(w http.ResponseWriter, r *http.Request) {
 		s.renderFragment(w, r, "note", d)
 		return
 	}
-	if r.URL.Query().Get("reader") == "1" {
-		s.renderReader(w, r, "notes", "note-reader", d)
-		return
-	}
-	sortKey, query, ok2 := s.parseSortQuery(w, r, noteSortKeys, "recent")
-	if !ok2 {
-		return
-	}
-	data, err := s.notesPage(ctx, sortKey, query)
-	if err != nil {
-		s.serverError(w, r, err)
-		return
-	}
-	data.Selected = &d
-	s.render(w, r, "notes", pageData{Title: "Note " + n.Title, Active: "notes", Data: data})
+	// The reader fragment (?reader=1) and the Notes screen read the
+	// library's state from the URL (notes.go).
+	s.noteLibraryPage(w, r, d)
 }
 
 // taskRef is a compact pointer to a related task (a dependency or a dependent).

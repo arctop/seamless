@@ -194,7 +194,7 @@ func TestMemoryReader_RanksFactsAndRefusesToEchoTheDescription(t *testing.T) {
 	body := page.Body.String()
 	require.Contains(t, body, `class="mv2-facts"`)
 	require.Contains(t, body, "<span>utility</span>")
-	require.Contains(t, body, "<span>since surfaced</span>")
+	require.Contains(t, body, "never<span>surfaced</span>", "a memory that never surfaced says so")
 	require.Contains(t, body, `class="mv2-facts-rest"`)
 	require.NotContains(t, body, `class="reader-facts"`, "the memory reader no longer uses the flat fact row")
 	require.Contains(t, body, "body of has-body")

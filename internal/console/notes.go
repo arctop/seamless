@@ -10,11 +10,330 @@ import (
 	"strings"
 	"time"
 
+	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/plans"
 	"github.com/arctop/seamless/internal/store"
+	"github.com/arctop/seamless/internal/validate"
 )
 
 // noteSortKeys are the accepted ?sort values on the notes list.
 var noteSortKeys = []string{"recent", "name", "favorites"}
+
+// libDefaultSort is both library screens' default ?sort.
+const libDefaultSort = "recent"
+
+// libQuery is a library screen's state as its URL carries it: the sort, the
+// text filter, the grouping and the filters. Every link the page draws -- a
+// rail item, a sort, a filter, the star's and the archive's way back -- is
+// this state with at most one part changed, so no choice drops another.
+type libQuery struct {
+	Sort string // a sort key the screen accepts
+	Q    string // the text filter, trimmed, as typed
+	// Group is "project" for the project tree, "" for one list in the sort's
+	// order (the default). Sorting by name always draws the tree.
+	Group string
+	// Kind is a core memory kind, "" for every kind (Memories only).
+	Kind string
+	// Project is "", "global" (the shared scope), or a project slug.
+	Project string
+	// Fav keeps only starred items.
+	Fav bool
+	// Surfaced is "never" to keep only memories that never reached an
+	// agent, "" for all (Memories only).
+	Surfaced string
+}
+
+// parseLibQuery reads a library screen's state from its URL. Every part is
+// strict, as ?sort always was: a value the screen cannot read is an error
+// naming the values it takes, never a quiet default. memories adds the two
+// filters only the Memories screen has (kind, surfaced); Notes ignores them.
+func parseLibQuery(v url.Values, sortKeys []string, memories bool) (libQuery, error) {
+	q := libQuery{Sort: v.Get("sort"), Q: strings.TrimSpace(v.Get("q"))}
+	if q.Sort == "" {
+		q.Sort = libDefaultSort
+	}
+	if !slices.Contains(sortKeys, q.Sort) {
+		return q, fmt.Errorf("invalid sort %q: valid values are %s", q.Sort, strings.Join(sortKeys, ", "))
+	}
+	switch g := v.Get("group"); g {
+	case "", "none":
+	case "project":
+		q.Group = g
+	default:
+		return q, fmt.Errorf("invalid group %q: valid values are none, project", g)
+	}
+	if p := strings.TrimSpace(v.Get("project")); p != "" {
+		slug, err := validate.Project(p)
+		if err != nil {
+			return q, fmt.Errorf("invalid project %q: name a project's slug, or global for the global scope", p)
+		}
+		q.Project = slug
+		if slug == "" {
+			q.Project = validate.GlobalProject
+		}
+	}
+	switch f := v.Get("fav"); f {
+	case "":
+	case "1":
+		q.Fav = true
+	default:
+		return q, fmt.Errorf("invalid fav %q: valid values are 1 (or omit)", f)
+	}
+	if !memories {
+		return q, nil
+	}
+	if k := v.Get("kind"); k != "" {
+		if !core.MemoryKind(k).Valid() {
+			kinds := make([]string, 0, len(core.MemoryKinds))
+			for _, mk := range core.MemoryKinds {
+				kinds = append(kinds, string(mk))
+			}
+			return q, fmt.Errorf("invalid kind %q: valid values are %s", k, strings.Join(kinds, ", "))
+		}
+		q.Kind = k
+	}
+	switch sf := v.Get("surfaced"); sf {
+	case "":
+	case "never":
+		q.Surfaced = sf
+	default:
+		return q, fmt.Errorf("invalid surfaced %q: valid values are never (or omit)", sf)
+	}
+	return q, nil
+}
+
+// parseLibRequest is parseLibQuery for a request; ok=false means the 400 was
+// already written.
+func (s *Service) parseLibRequest(w http.ResponseWriter, r *http.Request, sortKeys []string, memories bool) (libQuery, bool) {
+	q, err := parseLibQuery(r.URL.Query(), sortKeys, memories)
+	if err != nil {
+		s.badRequest(w, r, err.Error())
+		return libQuery{}, false
+	}
+	return q, true
+}
+
+// values is the state's non-default parts; forceSort names the sort even at
+// its default (the sort menu's links say which sort they are).
+func (q libQuery) values(forceSort bool) url.Values {
+	v := url.Values{}
+	if q.Q != "" {
+		v.Set("q", q.Q)
+	}
+	if forceSort || q.Sort != libDefaultSort {
+		v.Set("sort", q.Sort)
+	}
+	if q.Group != "" {
+		v.Set("group", q.Group)
+	}
+	if q.Kind != "" {
+		v.Set("kind", q.Kind)
+	}
+	if q.Project != "" {
+		v.Set("project", q.Project)
+	}
+	if q.Fav {
+		v.Set("fav", "1")
+	}
+	if q.Surfaced != "" {
+		v.Set("surfaced", q.Surfaced)
+	}
+	return v
+}
+
+// QS is the state as a ?query suffix, "" when every part is at its default.
+func (q libQuery) QS() string { return encodeQS(q.values(false)) }
+
+// href is path with the state's query.
+func (q libQuery) href(path string) string { return path + q.QS() }
+
+func encodeQS(v url.Values) string {
+	if len(v) == 0 {
+		return ""
+	}
+	return "?" + v.Encode()
+}
+
+// tree reports whether the rail groups by project: asked for, or the Name
+// sort, whose A to Z reads best inside each project.
+func (q libQuery) tree() bool { return q.Sort == "name" || q.Group == "project" }
+
+// narrowed reports a filter beyond the text one.
+func (q libQuery) narrowed() bool {
+	return q.Kind != "" || q.Project != "" || q.Fav || q.Surfaced != ""
+}
+
+// inScope reports whether an item in project passes the Project filter.
+func (q libQuery) inScope(project string) bool {
+	switch q.Project {
+	case "":
+		return true
+	case validate.GlobalProject:
+		return project == ""
+	default:
+		return project == q.Project
+	}
+}
+
+// libLink is one choice a library control offers: a menu entry, a toggle.
+type libLink struct {
+	Label string
+	Href  string
+	Title string
+	Count int
+	On    bool
+}
+
+// libField is one hidden input the text filter's form carries, so typing
+// keeps every other part of the state.
+type libField struct{ Name, Value string }
+
+// libView is what a library page draws beyond its list: its controls' links,
+// the Project menu, and the words its header and rail use. HTML only.
+type libView struct {
+	// Flat is one list in the sort's order; else the project tree.
+	Flat bool
+	// AlwaysTree is the Name sort, which keeps the tree whatever the
+	// grouping, so the Group control is not offered.
+	AlwaysTree bool
+	// Filtered is any filter, the text one included; Narrowed one beyond it.
+	Filtered, Narrowed bool
+	// OrderHint names the one list's order ("Newest first").
+	OrderHint string
+	// Sorts maps each sort key to its link, on the reader the page shows.
+	Sorts map[string]string
+	// GroupNone and GroupProject are the Group control's two links.
+	GroupNone, GroupProject string
+	// Projects is the Project menu, ProjectLabel its current choice.
+	Projects     []libLink
+	ProjectLabel string
+	// FavLink is the Starred toggle.
+	FavLink libLink
+	// ClearHref drops every filter and keeps the sort and the grouping;
+	// SearchHref looks for the text across everything, on Search.
+	ClearHref, SearchHref string
+	// Keep is the text filter's hidden inputs.
+	Keep []libField
+}
+
+// libOrderHints name a flat rail's order, by sort key.
+var libOrderHints = map[string]string{
+	"recent": "Newest first", "reach": "Most surfaced first", "utility": "Highest utility first",
+	"favorites": "Starred first",
+}
+
+// newLibView draws the controls for state q on a page whose list lives at
+// list and whose reader shows base (list itself when nothing is open). A
+// choice that changes what the list holds (a filter, Clear) goes to the list,
+// which opens its first match; a choice that only reorders it (a sort, the
+// grouping) stays on the item being read.
+func newLibView(q libQuery, list, base string, sortKeys []string) libView {
+	v := libView{
+		Flat: !q.tree(), AlwaysTree: q.Sort == "name",
+		Filtered: q.Q != "" || q.narrowed(), Narrowed: q.narrowed(),
+		OrderHint: libOrderHints[q.Sort], Sorts: map[string]string{},
+	}
+	for _, key := range sortKeys {
+		o := q
+		o.Sort = key
+		v.Sorts[key] = base + encodeQS(o.values(true))
+	}
+	none, proj := q, q
+	none.Group, proj.Group = "", "project"
+	v.GroupNone, v.GroupProject = none.href(base), proj.href(base)
+	fav := q
+	fav.Fav = !q.Fav
+	v.FavLink = libLink{Label: "Starred", Href: fav.href(list), On: q.Fav}
+	v.ClearHref = libQuery{Sort: q.Sort, Group: q.Group}.href(list)
+	if q.Q != "" {
+		v.SearchHref = "/console/search?q=" + url.QueryEscape(q.Q)
+	}
+	keep := q.values(false)
+	keep.Del("q")
+	names := make([]string, 0, len(keep))
+	for name := range keep {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		v.Keep = append(v.Keep, libField{Name: name, Value: keep.Get(name)})
+	}
+	return v
+}
+
+// libProjectMenu lists the Project filter's choices: every project, then each
+// scope the screen holds (global first), with how many items match the other
+// filters there. The chosen scope stays listed when nothing matches in it, so
+// the menu always names the current choice. It returns the menu and that
+// choice's label.
+func libProjectMenu(q libQuery, counts map[string]int, names map[string]string, list, globalLabel string) ([]libLink, string) {
+	all := q
+	all.Project = ""
+	menu := []libLink{{Label: "All projects", Href: all.href(list), On: q.Project == ""}}
+	label := "All"
+	chosen := q.Project
+	if chosen == validate.GlobalProject {
+		chosen = ""
+	}
+	scopes := make([]string, 0, len(counts)+1)
+	for p := range counts {
+		scopes = append(scopes, p)
+	}
+	if q.Project != "" && !slices.Contains(scopes, chosen) {
+		scopes = append(scopes, chosen)
+	}
+	sortScopes(scopes)
+	for _, p := range scopes {
+		o := q
+		o.Project = p
+		lbl, title := p, names[p]
+		if p == "" {
+			o.Project, lbl, title = validate.GlobalProject, globalLabel, ""
+		}
+		if title == p {
+			title = ""
+		}
+		on := q.Project != "" && p == chosen
+		if on {
+			label = lbl
+		}
+		menu = append(menu, libLink{Label: lbl, Href: o.href(list), Title: title, Count: counts[p], On: on})
+	}
+	return menu, label
+}
+
+// sortScopes orders project scopes: global ("") first, then by slug.
+func sortScopes(scopes []string) {
+	sort.Slice(scopes, func(i, j int) bool {
+		if (scopes[i] == "") != (scopes[j] == "") {
+			return scopes[i] == ""
+		}
+		return scopes[i] < scopes[j]
+	})
+}
+
+// projectNames maps each project slug the request reads to its display name,
+// for the text filter: typing a project's name narrows to it.
+func (s *Service) projectNames(ctx context.Context) (map[string]string, error) {
+	projects, err := store.ListProjects(ctx, s.db(ctx))
+	if err != nil {
+		return nil, err
+	}
+	names := make(map[string]string, len(projects))
+	for _, p := range projects {
+		names[p.Slug] = p.Name
+	}
+	return names, nil
+}
+
+// scopeMatches reports whether a lowercased text filter names an item's
+// project: its slug, its display name, or "global" for the shared scope.
+func scopeMatches(project, name, q string) bool {
+	if project == "" {
+		return strings.Contains(validate.GlobalProject, q)
+	}
+	return strings.Contains(strings.ToLower(project), q) || (name != "" && strings.Contains(strings.ToLower(name), q))
+}
 
 // noteRow is a display projection of a note for the browser.
 type noteRow struct {
@@ -29,119 +348,177 @@ type noteRow struct {
 	Updated     time.Time `json:"updated"`
 }
 
+// ScopeLabel names the row's scope as the rail does.
+func (n noteRow) ScopeLabel() string {
+	if n.Project == "" {
+		return "Global inbox"
+	}
+	return n.Project
+}
+
 // noteProjectGroup is one project's notes, for the grouped browser (project ""
 // is global).
 type noteProjectGroup struct {
 	Project string    `json:"project"`
 	Count   int       `json:"count"`
 	Notes   []noteRow `json:"notes"`
+	// All marks the one list the HTML rail draws when it does not group.
+	All bool `json:"-"`
 }
 
-// notesData is the payload for the Notes library screen. The Selected/QS
-// fields drive the HTML reader pane only; JSON list callers get the same lean
-// payload as before.
+// notesData is the payload for the Notes library screen. The JSON answer
+// keeps its project groups whatever the rail draws; Rail, the Selected/QS
+// fields and the libView drive the HTML page only.
 type notesData struct {
 	Groups []noteProjectGroup `json:"groups"`
 	Count  int                `json:"count"`
-	Query  string             `json:"query,omitempty"`
-	Sort   string             `json:"sort"`
+	// Total is every note the request reads, whatever the filters: the
+	// header's "3 of 718".
+	Total int    `json:"total"`
+	Query string `json:"query,omitempty"`
+	Sort  string `json:"sort"`
+	// The other filters, as the URL gave them (absent at their defaults).
+	Group   string `json:"group,omitempty"`
+	Project string `json:"project,omitempty"`
+	Fav     bool   `json:"fav,omitempty"`
+	// Rail is what the HTML rail draws: Groups, or one list.
+	Rail []noteProjectGroup `json:"-"`
 	// Selected is the note open in the reader: the requested one on a
-	// /console/notes/{id} page, or the newest match on the list URL
+	// /console/notes/{id} page, or the first match on the list URL
 	// (SelectedAuto, which the client pins into the URL).
-	Selected     *noteDetail `json:"-"`
+	Selected     *noteReader `json:"-"`
 	SelectedAuto bool        `json:"-"`
-	// QS is the ?q=&sort= suffix rail links carry so the active filter
-	// survives a selection change ("" when both are at their defaults).
-	QS string `json:"-"`
+	// QS is the library state rail links carry, so a selection change keeps
+	// every filter ("" when all are at their defaults).
+	QS      string `json:"-"`
+	libView `json:"-"`
 }
 
-// parseSortQuery validates ?sort against keys (empty -> def) and returns the
-// trimmed ?q. ok=false means the 400 response was already written.
-func (s *Service) parseSortQuery(w http.ResponseWriter, r *http.Request, keys []string, def string) (sortKey, query string, ok bool) {
-	sortKey = r.URL.Query().Get("sort")
-	if sortKey == "" {
-		sortKey = def
-	}
-	if !slices.Contains(keys, sortKey) {
-		s.badRequest(w, r, fmt.Sprintf("invalid sort %q: valid values are %s", sortKey, strings.Join(keys, ", ")))
-		return "", "", false
-	}
-	return sortKey, strings.TrimSpace(r.URL.Query().Get("q")), true
-}
-
-// listQS renders the ?q=&sort= suffix for library rail links ("" when both are
-// at their defaults), so changing the selection keeps the active filter.
-func listQS(query, sortKey, defSort string) string {
-	v := url.Values{}
-	if query != "" {
-		v.Set("q", query)
-	}
-	if sortKey != defSort {
-		v.Set("sort", sortKey)
-	}
-	if len(v) == 0 {
-		return ""
-	}
-	return "?" + v.Encode()
-}
-
-// notesPage assembles the grouped notes list for the given sort + filter.
-func (s *Service) notesPage(ctx context.Context, sortKey, query string) (notesData, error) {
-	q := strings.ToLower(query)
+// notesPage assembles the notes list for the given library state.
+func (s *Service) notesPage(ctx context.Context, lq libQuery) (notesData, error) {
+	q := strings.ToLower(lq.Q)
 	notes, err := store.ListNotes(ctx, s.db(ctx))
 	if err != nil {
 		return notesData{}, err
 	}
+	names, err := s.projectNames(ctx)
+	if err != nil {
+		return notesData{}, err
+	}
 	byProject := map[string][]noteRow{}
-	matched := 0
+	var flat []noteRow
+	projectCounts := map[string]int{}
+	favs := 0
 	for _, n := range notes {
 		row := noteRow{
 			ID: n.ID, Title: n.Title, Description: n.Description,
 			Project: n.Project, Tags: n.Tags, Model: n.Model, Account: n.Account, Favorite: n.Favorite,
 			Updated: n.Updated,
 		}
-		if !noteMatches(row, q) {
+		// Each menu counts what its own choice would show: the other
+		// filters applied, its own left open.
+		text, scope, fav := noteMatches(row, q, names[n.Project]), lq.inScope(n.Project), !lq.Fav || n.Favorite
+		if text && fav {
+			projectCounts[n.Project]++
+		}
+		if text && scope && n.Favorite {
+			favs++
+		}
+		if !text || !scope || !fav {
 			continue
 		}
 		byProject[n.Project] = append(byProject[n.Project], row)
-		matched++
+		flat = append(flat, row)
 	}
-	return notesData{
-		Groups: buildNoteGroups(byProject, sortKey), Count: matched,
-		Query: query, Sort: sortKey, QS: listQS(query, sortKey, "recent"),
-	}, nil
+	data := notesData{
+		Groups: buildNoteGroups(byProject, lq.Sort), Count: len(flat), Total: len(notes),
+		Query: lq.Q, Sort: lq.Sort, Group: lq.Group, Project: lq.Project, Fav: lq.Fav,
+		QS: lq.QS(),
+	}
+	data.Rail = data.Groups
+	if !lq.tree() {
+		data.Rail = nil
+		if len(flat) > 0 {
+			sortNoteRows(flat, lq.Sort)
+			data.Rail = []noteProjectGroup{{Count: len(flat), Notes: flat, All: true}}
+		}
+	}
+	data.libView = newLibView(lq, "/console/notes", "/console/notes", noteSortKeys)
+	data.Projects, data.ProjectLabel = libProjectMenu(lq, projectCounts, names, "/console/notes", "Global inbox")
+	data.FavLink.Count = favs
+	return data, nil
+}
+
+// selectReader opens sel in the reader (auto: the list URL chose it) and
+// redraws the controls that stay on the item being read.
+func (d *notesData) selectReader(sel *noteReader, auto bool, lq libQuery) {
+	d.Selected, d.SelectedAuto = sel, auto
+	v := newLibView(lq, "/console/notes", "/console/notes/"+sel.ID, noteSortKeys)
+	d.Sorts, d.GroupNone, d.GroupProject = v.Sorts, v.GroupNone, v.GroupProject
 }
 
 func (s *Service) notesList(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	sortKey, query, ok := s.parseSortQuery(w, r, noteSortKeys, "recent")
+	lq, ok := s.parseLibRequest(w, r, noteSortKeys, false)
 	if !ok {
 		return
 	}
-	data, err := s.notesPage(ctx, sortKey, query)
+	data, err := s.notesPage(ctx, lq)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	// The HTML library auto-opens the newest match in the reader.
+	// The HTML library auto-opens the first match in the reader.
 	if !wantsJSON(r) {
-		if id := newestNoteID(data.Groups); id != "" {
+		if id := firstNoteID(data); id != "" {
 			d, found, derr := s.noteDetailByID(ctx, id)
 			if derr != nil {
 				s.serverError(w, r, derr)
 				return
 			}
 			if found {
-				data.Selected = &d
-				data.SelectedAuto = true
+				data.selectReader(s.noteReaderOf(ctx, d, lq), true, lq)
 			}
 		}
 	}
 	s.render(w, r, "notes", pageData{Title: "Notes", Active: "notes", Data: data})
 }
 
-// newestNoteID picks the reader's default selection on the list URL: the most
-// recently updated note across every group ("" when the list is empty).
+// noteLibraryPage answers a note's own URL in HTML: the reader fragment for
+// the in-place swap (?reader=1), or the Notes screen with the note open, the
+// library's state read from the URL either way.
+func (s *Service) noteLibraryPage(w http.ResponseWriter, r *http.Request, d noteDetail) {
+	ctx := r.Context()
+	lq, ok := s.parseLibRequest(w, r, noteSortKeys, false)
+	if !ok {
+		return
+	}
+	sel := s.noteReaderOf(ctx, d, lq)
+	if r.URL.Query().Get("reader") == "1" {
+		s.renderReader(w, r, "notes", "note-reader", sel)
+		return
+	}
+	data, err := s.notesPage(ctx, lq)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	data.selectReader(sel, false, lq)
+	s.render(w, r, "notes", pageData{Title: "Note " + d.Title, Active: "notes", Data: data})
+}
+
+// firstNoteID picks the reader's default selection on the list URL: the one
+// list's first row, or in the tree the most recently updated note ("" when
+// nothing matched).
+func firstNoteID(data notesData) string {
+	if len(data.Rail) == 1 && data.Rail[0].All {
+		return data.Rail[0].Notes[0].ID
+	}
+	return newestNoteID(data.Groups)
+}
+
+// newestNoteID is the most recently updated note across every group ("" when
+// the list is empty).
 func newestNoteID(groups []noteProjectGroup) string {
 	var id string
 	var newest time.Time
@@ -156,8 +533,9 @@ func newestNoteID(groups []noteProjectGroup) string {
 }
 
 // noteMatches reports whether a note row satisfies the ?q text filter (empty q
-// matches all): a case-insensitive substring of title, description, or any tag.
-func noteMatches(row noteRow, q string) bool {
+// matches all): a case-insensitive substring of title, description, any tag,
+// or its project's slug or name (projectName).
+func noteMatches(row noteRow, q, projectName string) bool {
 	if q == "" {
 		return true
 	}
@@ -170,46 +548,146 @@ func noteMatches(row noteRow, q string) bool {
 			return true
 		}
 	}
-	return false
+	return scopeMatches(row.Project, projectName, q)
 }
 
 // buildNoteGroups orders the project->notes map: global ("") first, then
-// projects alphabetically. Within a group notes sort newest-updated first for
-// sort=recent, by title for sort=name, or float starred rows (keeping
-// newest-first within each partition) for sort=favorites.
+// projects alphabetically, each group's notes in sortNoteRows' order.
 func buildNoteGroups(byProject map[string][]noteRow, sortKey string) []noteProjectGroup {
 	projects := make([]string, 0, len(byProject))
 	for p := range byProject {
 		projects = append(projects, p)
 	}
-	sort.Slice(projects, func(i, j int) bool {
-		if (projects[i] == "") != (projects[j] == "") {
-			return projects[i] == "" // global first
-		}
-		return projects[i] < projects[j]
-	})
+	sortScopes(projects)
 	groups := make([]noteProjectGroup, 0, len(projects))
 	for _, p := range projects {
 		rows := byProject[p]
-		// Establish recency explicitly rather than relying on a store query's
-		// incidental input order. The other modes are stable overrides of it.
-		sort.SliceStable(rows, func(i, j int) bool {
-			if !rows[i].Updated.Equal(rows[j].Updated) {
-				return rows[i].Updated.After(rows[j].Updated)
-			}
-			return rows[i].ID > rows[j].ID
-		})
-		switch sortKey {
-		case "name":
-			sort.SliceStable(rows, func(i, j int) bool {
-				return strings.ToLower(rows[i].Title) < strings.ToLower(rows[j].Title)
-			})
-		case "favorites":
-			sort.SliceStable(rows, func(i, j int) bool {
-				return rows[i].Favorite && !rows[j].Favorite
-			})
-		}
+		sortNoteRows(rows, sortKey)
 		groups = append(groups, noteProjectGroup{Project: p, Count: len(rows), Notes: rows})
 	}
 	return groups
+}
+
+// sortNoteRows orders notes newest-updated first for sort=recent, by title for
+// sort=name, or floats starred rows (keeping newest-first within each
+// partition) for sort=favorites.
+func sortNoteRows(rows []noteRow, sortKey string) {
+	// Establish recency explicitly rather than relying on a store query's
+	// incidental input order. The other modes are stable overrides of it.
+	sort.SliceStable(rows, func(i, j int) bool {
+		if !rows[i].Updated.Equal(rows[j].Updated) {
+			return rows[i].Updated.After(rows[j].Updated)
+		}
+		return rows[i].ID > rows[j].ID
+	})
+	switch sortKey {
+	case "name":
+		sort.SliceStable(rows, func(i, j int) bool {
+			return strings.ToLower(rows[i].Title) < strings.ToLower(rows[j].Title)
+		})
+	case "favorites":
+		sort.SliceStable(rows, func(i, j int) bool {
+			return rows[i].Favorite && !rows[j].Favorite
+		})
+	}
+}
+
+// noteReader is the reader pane's view of one note: its detail plus what only
+// the library draws -- its tags as a person reads them, each plan it belongs
+// to linked with the plan's status, and the page state its star returns to.
+type noteReader struct {
+	noteDetail
+	Tagged noteTags
+	// QS is the library state the star carries back.
+	QS string
+}
+
+// noteReaderOf builds the reader for d under library state lq.
+func (s *Service) noteReaderOf(ctx context.Context, d noteDetail, lq libQuery) *noteReader {
+	tagged := d.TagView()
+	for i := range tagged.Plans {
+		s.planStatusOf(ctx, &tagged.Plans[i])
+	}
+	return &noteReader{noteDetail: d, Tagged: tagged, QS: lq.QS()}
+}
+
+// noteTags is a note's tags as a person reads them: the plans it belongs to
+// (plan:<slug>, each a link to the plan), the tags written for people, and
+// the ones agents and hooks stamp for software, which fold behind "+N".
+type noteTags struct {
+	Plans   []notePlan
+	Tags    []string
+	Machine []string
+}
+
+// notePlan is one plan:<slug> tag as a link to the plan, with the plan's
+// status when the reader looked it up ("" in a peek, which does not).
+type notePlan struct {
+	Slug   string
+	Href   string
+	Status string
+	Tone   string
+	Title  string
+}
+
+// machineTag reports a tag written for software rather than for a person:
+// the provenance stamp every agent write carries (created-by:*), and a
+// captured plan's lifecycle and marker tags (internal/plans).
+func machineTag(tag string) bool {
+	return strings.HasPrefix(tag, "created-by:") || plans.StatusFromTags([]string{tag}) != "" ||
+		tag == plans.TagPlan || tag == plans.TagAgent
+}
+
+// TagView splits the note's tags for display (see noteTags). Pure, so the
+// peek fragment can call it from its template.
+func (d noteDetail) TagView() noteTags {
+	var out noteTags
+	for _, t := range d.Tags {
+		if slug := plans.SlugFromTags([]string{t}); slug != "" {
+			out.Plans = append(out.Plans, notePlan{Slug: slug, Href: "/console/plans/" + url.PathEscape(slug)})
+			continue
+		}
+		if machineTag(t) {
+			out.Machine = append(out.Machine, t)
+			continue
+		}
+		out.Tags = append(out.Tags, t)
+	}
+	return out
+}
+
+// planPhaseWords name a plan's phase where it has no status of its own (a
+// composed plan; a captured one carries plan-status:<v>).
+var planPhaseWords = map[string]string{
+	planPhaseInProgress: "in progress", planPhaseReady: "ready", planPhaseDone: "done",
+}
+
+// planStatusOf fills in a plan link's status the way the Plans screen reads
+// it: a captured plan's own status, else its phase from its steps. A plan the
+// request cannot resolve keeps its bare link.
+func (s *Service) planStatusOf(ctx context.Context, p *notePlan) {
+	primary, _, ok, err := plans.Composition(ctx, s.db(ctx), p.Slug)
+	if err != nil {
+		s.logger.Warn("console: note plan status", "slug", p.Slug, "error", err)
+		return
+	}
+	if !ok {
+		return
+	}
+	row := s.planRow(ctx, primary, nil, nil, time.Time{})
+	p.Title = row.Title
+	if row.TasksTotal > 0 {
+		p.Title = fmt.Sprintf("%s: %d of %d steps done", row.Title, row.TasksDone, row.TasksTotal)
+	}
+	if row.Status != "" {
+		p.Status, p.Tone = row.Status, planTone(row.Status)
+		return
+	}
+	p.Status = planPhaseWords[row.Phase]
+	switch row.Phase {
+	case planPhaseDone:
+		p.Tone = "ok"
+	case planPhaseInProgress:
+		p.Tone = "accent"
+	}
 }

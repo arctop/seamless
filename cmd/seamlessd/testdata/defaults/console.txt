@@ -3833,27 +3833,53 @@
 
 
 <div class="lib-page" data-library="memories">
-
 <header class="mv2-bar">
   <h1><svg class="ico ico-database" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>Memories</h1><details class="page-about"><summary aria-label="About this page" title="About this page"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary><p class="page-about-pop" role="note">Constraints, decisions, runbooks, and context that agents carry between sessions.</p></details>
+  
   <span class="mv2-count" aria-label="6 active memories, 1 archived and superseded">
     <strong>6</strong>active<small>1 archived &amp; superseded</small>
   </span>
+  
   <form class="search lib-query" method="get" action="/console/memories" data-seam-query>
     <svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-    <input name="q" aria-label="Filter memories by name, description, kind, or tag" placeholder="Filter names, descriptions, kinds, and tags&hellip;" value="">
+    <input name="q" aria-label="Filter memories by name, description, kind, tag, or project" placeholder="Filter names, descriptions, kinds, tags, and projects&hellip;" value="">
     
   </form>
   <button type="button" class="mv2-filter-toggle" data-filters-toggle aria-expanded="false" aria-controls="mv2-controls"><svg class="ico ico-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg><span>Filters</span></button>
   <span class="mv2-spacer"></span>
   <div class="mv2-controls" id="mv2-controls">
+  <details class="menu lib-filter-menu">
+    <summary class="menu-btn" aria-label="Kind: All"><svg class="ico ico-flag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" x2="4" y1="22" y2="15"/></svg><span class="menu-k">Kind</span><strong>All</strong><svg class="ico ico-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+    <div class="menu-list" data-seam-query>
+      <a class="on" href="/console/memories">All kinds</a><a class="" href="/console/memories?kind=constraint" title="A rule any agent must follow, whatever the task. Briefings never drop it.">constraint<span class="n">1</span></a><a class="" href="/console/memories?kind=convention" title="A project&#39;s own choice or layout fact: naming, branding, where things live.">convention<span class="n">1</span></a><a class="" href="/console/memories?kind=gotcha" title="A trap and how to avoid it, led by its symptom.">gotcha<span class="n">2</span></a><a class="" href="/console/memories?kind=reference" title="A pointer to something outside Seamless, and what is there.">reference<span class="n">1</span></a><a class="" href="/console/memories?kind=stage" title="Where a piece of work across sessions stands: its status and what it waits on.">stage<span class="n">1</span></a>
+    </div>
+  </details>
+  <details class="menu lib-filter-menu">
+    <summary class="menu-btn" aria-label="Project: All"><svg class="ico ico-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg><span class="menu-k">Project</span><strong>All</strong><svg class="ico ico-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+    <div class="menu-list" data-seam-query>
+      <a class="on" href="/console/memories">All projects</a><a class="" href="/console/memories?project=global">Shared globally<span class="n">1</span></a><a class="" href="/console/memories?project=example-confidential">example-confidential<span class="n">1</span></a><a class="" href="/console/memories?project=example-open-alpha">example-open-alpha<span class="n">3</span></a><a class="" href="/console/memories?project=example-sealed">example-sealed<span class="n">1</span></a>
+    </div>
+  </details>
+  <div class="lib-flags" data-seam-query>
+    <a class="lib-flag" href="/console/memories?fav=1" title="Show only starred memories"><svg class="ico ico-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg>Starred</a>
+    
+  </div>
+  
+  <div class="lib-group" role="group" aria-label="Group">
+    <span class="lib-group-k">Group</span>
+    <div class="seg" data-seam-query>
+      <a class="on" href="/console/memories/<id:26>" data-lib-here title="One list in the sort's order, each memory with its project and kind">None</a>
+      <a class="" href="/console/memories/<id:26>?group=project" data-lib-here title="Grouped by project, then kind">Project</a>
+    </div>
+  </div>
+  
   <details class="menu sort-menu">
     <summary class="menu-btn" aria-label="Sort: Recent"><svg class="ico ico-arrow-up-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></svg><span class="menu-k">Sort</span><strong>Recent</strong><svg class="ico ico-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
     <div class="menu-list" data-seam-query>
-      <a class="on" href="/console/memories/<id:26>?sort=recent&amp;q=">Recent</a>
-      <a class="" href="/console/memories/<id:26>?sort=name&amp;q=">Name</a>
+      <a class="on" href="/console/memories/<id:26>?sort=recent" data-lib-here>Recent</a>
+      <a class="" href="/console/memories/<id:26>?sort=name" data-lib-here title="A to Z, grouped by project and kind">Name</a>
       
-      <a class="" href="/console/memories/<id:26>?sort=favorites&amp;q=">Starred</a>
+      <a class="" href="/console/memories/<id:26>?sort=favorites" data-lib-here>Starred</a>
     </div>
   </details>
   </div>
@@ -3862,109 +3888,53 @@
 
 <div class="lib-layout" data-auto-url="/console/memories/<id:26>">
   <nav class="lib-rail" aria-label="Memories">
-    <div class="rail-overview"><span>Memory map</span><span>Project &rarr; kind &rarr; memory</span></div>
+    <div class="rail-overview"><span>Memory map</span><span>Newest first</span></div>
     <div class="rail-scroll">
     
     <div class="rail-groups">
       
-      <section class="rail-group" id="rg-global">
-        <header class="rail-group-hd"><span class="hd-label"><svg class="ico ico-share-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>Shared globally</span> <span class="n">1</span></header>
+      <section class="rail-group" id="rg-active">
+        <header class="rail-group-hd"><span class="hd-label"><svg class="ico ico-arrow-up-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></svg>Active memories</span> <span class="n">6</span></header>
         <div class="rail-subgroups">
           
-          <section class="rail-subgroup" data-memory-kind="reference">
-          <header class="rail-subgroup-hd"><span><i class="kdot" data-kind="reference"></i>reference</span><span class="n">1</span></header>
-          <div class="rail-items">
+          <section class="rail-subgroup">
           
-          <a class="rail-item" id="ri-<id:6>" href="/console/memories/<id:6>" data-title="example-style-reference" data-context="Shared globally / reference" data-memory-kind="reference">
-            <span class="ri-title mono">example-style-reference</span>
-            <span class="ri-desc">Where the shared example style guide lives</span>
-            <span class="ri-meta"><span title="<time> UTC">updated <age></span> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
-          </a>
-          
-          </div>
-          </section>
-          
-        </div>
-      </section>
-      
-      <section class="rail-group" id="rg-example-confidential">
-        <header class="rail-group-hd"><span class="hd-label"><svg class="ico ico-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>example-confidential</span> <span class="n">1</span></header>
-        <div class="rail-subgroups">
-          
-          <section class="rail-subgroup" data-memory-kind="gotcha">
-          <header class="rail-subgroup-hd"><span><i class="kdot" data-kind="gotcha"></i>gotcha</span><span class="n">1</span></header>
-          <div class="rail-items">
-          
-          <a class="rail-item" id="ri-<id:21>" href="/console/memories/<id:21>" data-title="example-confidential-gotcha" data-context="example-confidential / gotcha" data-memory-kind="gotcha">
-            <span class="ri-title mono">example-confidential-gotcha</span>
-            <span class="ri-desc">The confidential example ledger closes on the fifth</span>
-            <span class="ri-meta"><span title="<time> UTC">updated <age></span></span>
-          </a>
-          
-          </div>
-          </section>
-          
-        </div>
-      </section>
-      
-      <section class="rail-group" id="rg-example-open-alpha">
-        <header class="rail-group-hd"><span class="hd-label"><svg class="ico ico-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>example-open-alpha</span> <span class="n">3</span></header>
-        <div class="rail-subgroups">
-          
-          <section class="rail-subgroup" data-memory-kind="constraint">
-          <header class="rail-subgroup-hd"><span><i class="kdot" data-kind="constraint"></i>constraint</span><span class="n">1</span></header>
-          <div class="rail-items">
-          
-          <a class="rail-item" id="ri-<id:2>" href="/console/memories/<id:2>" data-title="example-deploy-gate" data-context="example-open-alpha / constraint" data-memory-kind="constraint">
-            <span class="ri-title mono">example-deploy-gate</span>
-            <span class="ri-desc">Every example deploy goes through the staging gate first</span>
-            <span class="ri-meta"><span title="<time> UTC">updated <age></span> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
-          </a>
-          
-          </div>
-          </section>
-          
-          <section class="rail-subgroup" data-memory-kind="convention">
-          <header class="rail-subgroup-hd"><span><i class="kdot" data-kind="convention"></i>convention</span><span class="n">1</span></header>
-          <div class="rail-items">
-          
-          <a class="rail-item" id="ri-<id:3>" href="/console/memories/<id:3>" data-title="example-layout-convention" data-context="example-open-alpha / convention" data-memory-kind="convention">
-            <span class="ri-title mono">example-layout-convention</span>
-            <span class="ri-desc">Example services keep their configs under deploy/example</span>
-            <span class="ri-meta"><span title="<time> UTC">updated <age></span> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
-          </a>
-          
-          </div>
-          </section>
-          
-          <section class="rail-subgroup" data-memory-kind="stage">
-          <header class="rail-subgroup-hd"><span><i class="kdot" data-kind="stage"></i>stage</span><span class="n">1</span></header>
-          <div class="rail-items">
-          
-          <a class="rail-item" id="ri-<id:4>" href="/console/memories/<id:4>" data-title="example-migration-stage" data-context="example-open-alpha / stage" data-memory-kind="stage">
-            <span class="ri-title mono">example-migration-stage</span>
-            <span class="ri-desc">The example data migration waits on the owner&#39;s sign-off</span>
-            <span class="ri-meta"><span title="<time> UTC">updated <age></span> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
-          </a>
-          
-          </div>
-          </section>
-          
-        </div>
-      </section>
-      
-      <section class="rail-group" id="rg-example-sealed">
-        <header class="rail-group-hd"><span class="hd-label"><svg class="ico ico-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>example-sealed</span> <span class="n">1</span></header>
-        <div class="rail-subgroups">
-          
-          <section class="rail-subgroup" data-memory-kind="gotcha">
-          <header class="rail-subgroup-hd"><span><i class="kdot" data-kind="gotcha"></i>gotcha</span><span class="n">1</span></header>
           <div class="rail-items">
           
           <a class="rail-item selected" id="ri-<id:26>" href="/console/memories/<id:26>" data-title="example-sealed-rule" data-context="example-sealed / gotcha" data-memory-kind="gotcha" aria-current="page">
             <span class="ri-title mono">example-sealed-rule</span>
             <span class="ri-desc">The sealed example vault rotates keys weekly</span>
-            <span class="ri-meta"><span title="<time> UTC">updated <age></span></span>
+            <span class="ri-meta"><span class="ri-chip">example-sealed</span> <span class="ri-chip ri-kind" data-kind="gotcha" title="A trap and how to avoid it, led by its symptom.">gotcha</span> <span title="<time> UTC">updated <age></span></span>
+          </a>
+          
+          <a class="rail-item" id="ri-<id:21>" href="/console/memories/<id:21>" data-title="example-confidential-gotcha" data-context="example-confidential / gotcha" data-memory-kind="gotcha">
+            <span class="ri-title mono">example-confidential-gotcha</span>
+            <span class="ri-desc">The confidential example ledger closes on the fifth</span>
+            <span class="ri-meta"><span class="ri-chip">example-confidential</span> <span class="ri-chip ri-kind" data-kind="gotcha" title="A trap and how to avoid it, led by its symptom.">gotcha</span> <span title="<time> UTC">updated <age></span></span>
+          </a>
+          
+          <a class="rail-item" id="ri-<id:3>" href="/console/memories/<id:3>" data-title="example-layout-convention" data-context="example-open-alpha / convention" data-memory-kind="convention">
+            <span class="ri-title mono">example-layout-convention</span>
+            <span class="ri-desc">Example services keep their configs under deploy/example</span>
+            <span class="ri-meta"><span class="ri-chip">example-open-alpha</span> <span class="ri-chip ri-kind" data-kind="convention" title="A project&#39;s own choice or layout fact: naming, branding, where things live.">convention</span> <span title="<time> UTC">updated <age></span> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
+          </a>
+          
+          <a class="rail-item" id="ri-<id:4>" href="/console/memories/<id:4>" data-title="example-migration-stage" data-context="example-open-alpha / stage" data-memory-kind="stage">
+            <span class="ri-title mono">example-migration-stage</span>
+            <span class="ri-desc">The example data migration waits on the owner&#39;s sign-off</span>
+            <span class="ri-meta"><span class="ri-chip">example-open-alpha</span> <span class="ri-chip ri-kind" data-kind="stage" title="Where a piece of work across sessions stands: its status and what it waits on.">stage</span> <span title="<time> UTC">updated <age></span> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
+          </a>
+          
+          <a class="rail-item" id="ri-<id:6>" href="/console/memories/<id:6>" data-title="example-style-reference" data-context="Shared globally / reference" data-memory-kind="reference">
+            <span class="ri-title mono">example-style-reference</span>
+            <span class="ri-desc">Where the shared example style guide lives</span>
+            <span class="ri-meta"><span class="ri-chip">Shared globally</span> <span class="ri-chip ri-kind" data-kind="reference" title="A pointer to something outside Seamless, and what is there.">reference</span> <span title="<time> UTC">updated <age></span> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
+          </a>
+          
+          <a class="rail-item" id="ri-<id:2>" href="/console/memories/<id:2>" data-title="example-deploy-gate" data-context="example-open-alpha / constraint" data-memory-kind="constraint">
+            <span class="ri-title mono">example-deploy-gate</span>
+            <span class="ri-desc">Every example deploy goes through the staging gate first</span>
+            <span class="ri-meta"><span class="ri-chip">example-open-alpha</span> <span class="ri-chip ri-kind" data-kind="constraint" title="A rule any agent must follow, whatever the task. Briefings never drop it.">constraint</span> <span title="<time> UTC">updated <age></span> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
           </a>
           
           </div>
@@ -3979,7 +3949,7 @@
         <div class="rail-items">
           
           <a class="rail-item dim" id="ri-<id:5>" href="/console/memories/<id:5>" data-title="example-cache-gotcha" data-context="Historical / gotcha" data-memory-kind="gotcha">
-            <span class="ri-title mono"><i class="kdot" data-kind="gotcha" title="gotcha"></i>example-cache-gotcha</span>
+            <span class="ri-title mono"><i class="kdot" data-kind="gotcha" title="gotcha: A trap and how to avoid it, led by its symptom."></i>example-cache-gotcha</span>
             <span class="ri-meta">superseded &middot; <span title="<time> UTC"><age></span> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
           </a>
           
@@ -3996,7 +3966,7 @@
   
   <header class="reader-head">
     <div class="reader-eyebrow">
-      <span class="kind">gotcha</span>
+      <span class="kind" title="A trap and how to avoid it, led by its symptom.">gotcha</span>
       <span class="badge ok">active</span>
       
       <a class="chip-parent" href="/console/projects/example-sealed"><svg class="ico ico-git-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>example-sealed</a>
@@ -4006,6 +3976,7 @@
         <a class="ract" href="vscode://file<data-dir>/memory/example-sealed/example-sealed-rule.md" title="Open <data-dir>/memory/example-sealed/example-sealed-rule.md"><svg class="ico ico-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>Edit in editor</a>
         
         <form method="post" action="/console/memories/<id:26>/archive" onsubmit="return confirm('Archive example-sealed-rule? It leaves every index; the file stays on disk with a tombstone.');">
+          <input type="hidden" name="next" value="/console/memories">
           <button class="ract danger" type="submit"><svg class="ico ico-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>Archive</button>
         </form>
         
@@ -4014,22 +3985,23 @@
     <h2 class="reader-title mono-title">example-sealed-rule<button type="button" class="copy-btn" data-copy="example-sealed-rule" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
       <form class="star-form" method="post" action="/console/favorites/memory/<id:26>">
         <input type="hidden" name="favorite" value="1">
-        <input type="hidden" name="next" value="/console/memories/<id:26>">
+        <input type="hidden" name="next" value="/console/memories/<id:26>" data-lib-next>
         <button class="star" type="submit" aria-pressed="false" title="Star this memory"><svg class="ico ico-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg></button>
       </form>
     </h2>
     <p class="reader-desc">The sealed example vault rotates keys weekly</p>
     <div class="mv2-facts">
       
-      <span class="mv2-fact-hi" title="Has never entered an agent context">never<span>since surfaced</span></span>
+      <span class="mv2-fact-hi" title="Has never entered an agent context">never<span>surfaced</span></span>
       <span class="mv2-facts-rest">
-        <span>injected 0&times;</span>
-        <span title="Explicit memory_read lookups. Near-zero by design: briefings inject the body (counted under injected), so agents rarely re-read a memory they already have.">read 0&times;</span>
+        
+        <span title="Explicit memory_read lookups. Near-zero by design: a briefing already carries the body (counted under surfaced), so agents rarely read a memory again that they already have.">read 0&times;</span>
         <span>source <a href="/console/sessions/<id:25>"><sess:3></a></span>
         <span title="<time> UTC">updated <age></span>
         <span title="<time> UTC">created <age></span>
       </span>
     </div>
+    
   </header>
   <div class="prose doc"><p>The sealed example vault rotates its keys every week.</p>
 </div>
@@ -4067,26 +4039,45 @@
 
 
 <div class="lib-page" data-library="notes">
-
 <header class="mv2-bar">
   <h1><svg class="ico ico-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>Notes</h1><details class="page-about"><summary aria-label="About this page" title="About this page"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary><p class="page-about-pop" role="note">Research, meeting context, plans, and long-form artifacts kept for later work.</p></details>
+  
   <span class="mv2-count" aria-label="3 notes">
     <strong>3</strong>notes<small>across 2 scopes</small>
   </span>
+  
   <form class="search lib-query" method="get" action="/console/notes" data-seam-query>
     <svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-    <input name="q" aria-label="Filter notes by title, description, or tag" placeholder="Filter titles, descriptions, and tags&hellip;" value="">
+    <input name="q" aria-label="Filter notes by title, description, tag, or project" placeholder="Filter titles, descriptions, tags, and projects&hellip;" value="">
     
   </form>
   <button type="button" class="mv2-filter-toggle" data-filters-toggle aria-expanded="false" aria-controls="mv2-controls"><svg class="ico ico-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg><span>Filters</span></button>
   <span class="mv2-spacer"></span>
   <div class="mv2-controls" id="mv2-controls">
+  <details class="menu lib-filter-menu">
+    <summary class="menu-btn" aria-label="Project: All"><svg class="ico ico-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg><span class="menu-k">Project</span><strong>All</strong><svg class="ico ico-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+    <div class="menu-list" data-seam-query>
+      <a class="on" href="/console/notes">All projects</a><a class="" href="/console/notes?project=example-confidential">example-confidential<span class="n">1</span></a><a class="" href="/console/notes?project=example-open-alpha">example-open-alpha<span class="n">2</span></a>
+    </div>
+  </details>
+  <div class="lib-flags" data-seam-query>
+    <a class="lib-flag" href="/console/notes?fav=1" title="Show only starred notes"><svg class="ico ico-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg>Starred</a>
+  </div>
+  
+  <div class="lib-group" role="group" aria-label="Group">
+    <span class="lib-group-k">Group</span>
+    <div class="seg" data-seam-query>
+      <a class="on" href="/console/notes/<id:29>" data-lib-here title="One list in the sort's order, each note with its project">None</a>
+      <a class="" href="/console/notes/<id:29>?group=project" data-lib-here title="Grouped by project">Project</a>
+    </div>
+  </div>
+  
   <details class="menu sort-menu">
     <summary class="menu-btn" aria-label="Sort: Recent"><svg class="ico ico-arrow-up-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></svg><span class="menu-k">Sort</span><strong>Recent</strong><svg class="ico ico-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
     <div class="menu-list" data-seam-query>
-      <a class="on" href="/console/notes/<id:29>?sort=recent&amp;q=">Recent</a>
-      <a class="" href="/console/notes/<id:29>?sort=name&amp;q=">Name</a>
-      <a class="" href="/console/notes/<id:29>?sort=favorites&amp;q=">Starred</a>
+      <a class="on" href="/console/notes/<id:29>?sort=recent" data-lib-here>Recent</a>
+      <a class="" href="/console/notes/<id:29>?sort=name" data-lib-here title="A to Z, grouped by project">Name</a>
+      <a class="" href="/console/notes/<id:29>?sort=favorites" data-lib-here>Starred</a>
     </div>
   </details>
   </div>
@@ -4095,38 +4086,31 @@
 
 <div class="lib-layout" data-auto-url="/console/notes/<id:29>">
   <nav class="lib-rail" aria-label="Notes">
-    <div class="rail-overview"><span>Note map</span><span>Scope &rarr; note</span></div>
+    <div class="rail-overview"><span>Note map</span><span>Newest first</span></div>
     <div class="rail-scroll">
     
     <div class="rail-groups">
       
-      <section class="rail-group" id="rg-example-confidential">
-        <header class="rail-group-hd"><span class="hd-label"><svg class="ico ico-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>example-confidential</span> <span class="n">1</span></header>
-        <div class="rail-items">
-          
-          <a class="rail-item" id="ri-<id:22>" href="/console/notes/<id:22>" data-title="Confidential example ledger notes" data-context="example-confidential">
-            <span class="ri-title">Confidential example ledger notes</span>
-            <span class="ri-desc">Inbound description</span>
-            <span class="ri-meta"><span title="<time> UTC">updated <age></span></span>
-          </a>
-          
-        </div>
-      </section>
-      
-      <section class="rail-group" id="rg-example-open-alpha">
-        <header class="rail-group-hd"><span class="hd-label"><svg class="ico ico-folder-tree" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/></svg>example-open-alpha</span> <span class="n">2</span></header>
+      <section class="rail-group" id="rg-all">
+        <header class="rail-group-hd"><span class="hd-label"><svg class="ico ico-arrow-up-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></svg>All notes</span> <span class="n">3</span></header>
         <div class="rail-items">
           
           <a class="rail-item selected" id="ri-<id:29>" href="/console/notes/<id:29>" data-title="Example deploy plan" data-context="example-open-alpha" aria-current="page">
             <span class="ri-title">Example deploy plan</span>
             <span class="ri-desc">Captured Claude Code plan example-deploy-plan.md (iteration 1, approved)</span>
-            <span class="ri-meta"><span title="<time> UTC">updated <age></span></span>
+            <span class="ri-meta"><span class="ri-chip">example-open-alpha</span> <span title="<time> UTC">updated <age></span></span>
+          </a>
+          
+          <a class="rail-item" id="ri-<id:22>" href="/console/notes/<id:22>" data-title="Confidential example ledger notes" data-context="example-confidential">
+            <span class="ri-title">Confidential example ledger notes</span>
+            <span class="ri-desc">Inbound description</span>
+            <span class="ri-meta"><span class="ri-chip">example-confidential</span> <span title="<time> UTC">updated <age></span></span>
           </a>
           
           <a class="rail-item" id="ri-<id:8>" href="/console/notes/<id:8>" data-title="Example rollout narrative" data-context="example-open-alpha">
             <span class="ri-title">Example rollout narrative</span>
             <span class="ri-desc">How the example rollout goes</span>
-            <span class="ri-meta"><span title="<time> UTC">updated <age></span> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
+            <span class="ri-meta"><span class="ri-chip">example-open-alpha</span> <span title="<time> UTC">updated <age></span> <span class="agent-pill" title="example-model-1">example-model-1</span></span>
           </a>
           
         </div>
@@ -4144,7 +4128,7 @@
       <span class="kind">note</span>
       
       <a class="chip-parent" href="/console/projects/example-open-alpha"><svg class="ico ico-git-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>example-open-alpha</a>
-      <span class="badge">plan:example-deploy-plan</span><span class="badge">cc-plan</span><span class="badge">created-by:agent</span><span class="badge">plan-status:approved</span>
+      <a class="lib-plan-chip" href="/console/plans/example-deploy-plan" title="Example deploy plan: 0 of 1 steps done"><svg class="ico ico-map" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/></svg><span class="mono">plan:example-deploy-plan</span> <span class="badge ok">approved</span></a><details class="lib-tag-fold"><summary class="badge" title="Tags agents and hooks add for software">+3</summary><span class="badge faint">cc-plan</span><span class="badge faint">created-by:agent</span><span class="badge faint">plan-status:approved</span></details>
       <span class="reader-actions">
         <a class="ract" href="vscode://file<data-dir>/notes/example-open-alpha/cc-plan-example-deploy-plan.md" title="Open <data-dir>/notes/example-open-alpha/cc-plan-example-deploy-plan.md"><svg class="ico ico-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>Edit in editor</a>
       </span>
@@ -4152,7 +4136,7 @@
     <h2 class="reader-title">Example deploy plan<button type="button" class="copy-btn" data-copy="Example deploy plan" aria-label="Copy" title="Copy"><svg class="ico ico-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg><svg class="ico ico-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
       <form class="star-form" method="post" action="/console/favorites/note/<id:29>">
         <input type="hidden" name="favorite" value="1">
-        <input type="hidden" name="next" value="/console/notes/<id:29>">
+        <input type="hidden" name="next" value="/console/notes/<id:29>" data-lib-next>
         <button class="star" type="submit" aria-pressed="false" title="Star this note"><svg class="ico ico-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></svg></button>
       </form>
     </h2>
@@ -5348,7 +5332,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
           <header class="level-card-head"><h3>Standard</h3></header>
           <p class="level-card-line">Curate knowledge and follow the work.</p>
           <div class="level-card-items"><span class="level-card-lead">Adds</span><ul><li>Now</li><li>Projects</li><li>Plans</li><li>Tasks</li><li>Labs</li><li>Trials</li><li>System</li><li>Privacy</li><li>Settings: Briefing and Workspaces</li></ul>
-            <ul class="level-card-details"><li>Overview: the observation window, the vitals, and the workspaces table and the knowledge rail</li><li>Memories: the Reach and Utility sorts, how often each memory surfaced, and the utility score in the reader</li><li>Gardener: the Type and Source filters, the project-split example, the Hidden forever list, Retarget on a proposal, and Hide forever on a proposal</li><li>Sessions: the Retained filter, the Sort menu, and a session&#39;s review signals</li><li>Search: the Updated window and the Sort control</li><li>Settings › Features: the precedence line and the agent tool names</li></ul></div>
+            <ul class="level-card-details"><li>Overview: the observation window, the vitals, and the workspaces table and the knowledge rail</li><li>Memories: the Reach and Utility sorts, how often each memory surfaced, the Never surfaced filter, and the utility score in the reader</li><li>Gardener: the Type and Source filters, the project-split example, the Hidden forever list, Retarget on a proposal, and Hide forever on a proposal</li><li>Sessions: the Retained filter, the Sort menu, and a session&#39;s review signals</li><li>Search: the Updated window and the Sort control</li><li>Settings › Features: the precedence line and the agent tool names</li></ul></div>
           <button class="btn small primary" type="submit">Use Standard</button>
         </form>
         

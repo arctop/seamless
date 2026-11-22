@@ -17,10 +17,13 @@ import (
 )
 
 // memorySortKeys are the accepted ?sort values on the memories list. recent is
-// the default (newest-updated within each kind group); name orders A-Z, reach by
-// injection count, utility by the decayed demand score, and favorites floats
+// the default (newest-updated first); name orders A-Z, reach by how often a
+// memory surfaced, utility by the decayed demand score, and favorites floats
 // starred rows first.
 var memorySortKeys = []string{"recent", "name", "reach", "utility", "favorites"}
+
+// memoriesListPath is the Memories screen's list URL.
+const memoriesListPath = "/console/memories"
 
 // errNoFiles is returned when a write action needs the files subsystem but the
 // console was built without it (should not happen in serve).
@@ -50,6 +53,14 @@ type memoryRow struct {
 	EditURL      template.URL `json:"-"` // vscode://file link; template.URL so it survives sanitization
 }
 
+// ScopeLabel names the row's scope as the rail does.
+func (m memoryRow) ScopeLabel() string {
+	if m.Project == "" {
+		return "Shared globally"
+	}
+	return m.Project
+}
+
 type kindGroup struct {
 	Kind     string      `json:"kind"`
 	Memories []memoryRow `json:"memories"`
@@ -59,32 +70,52 @@ type projectGroup struct {
 	Project string      `json:"project"`
 	Count   int         `json:"count"`
 	Kinds   []kindGroup `json:"kinds"`
+	// All marks the one list the HTML rail draws when it does not group: a
+	// single kindless group holding every row in the sort's order.
+	All bool `json:"-"`
 }
 
-// memoriesData is the payload for the Memories library screen. The Selected/QS
-// fields drive the HTML reader pane only; JSON list callers get the same lean
-// payload as before.
+// memoriesData is the payload for the Memories library screen. The JSON
+// answer keeps its project and kind groups whatever the rail draws; Rail, the
+// Selected/QS fields and the libView drive the HTML page only.
 type memoriesData struct {
 	Groups        []projectGroup `json:"groups"`
 	Inactive      []memoryRow    `json:"inactive"`
 	ActiveCount   int            `json:"activeCount"`
 	InactiveCount int            `json:"inactiveCount"`
-	Query         string         `json:"query,omitempty"`
-	Sort          string         `json:"sort"`
-	CanArchive    bool           `json:"-"`
+	// Total is every active memory the request reads, whatever the
+	// filters: the header's "3 of 128".
+	Total int    `json:"total"`
+	Query string `json:"query,omitempty"`
+	Sort  string `json:"sort"`
+	// The other filters, as the URL gave them (absent at their defaults).
+	Group      string `json:"group,omitempty"`
+	Kind       string `json:"kind,omitempty"`
+	Project    string `json:"project,omitempty"`
+	Fav        bool   `json:"fav,omitempty"`
+	Surfaced   string `json:"surfaced,omitempty"`
+	CanArchive bool   `json:"-"`
+	// Rail is what the HTML rail draws: Groups, or one list.
+	Rail []projectGroup `json:"-"`
+	// KindMenu is the Kind filter, KindLabel its current choice, and
+	// NeverLink the Never surfaced toggle.
+	KindMenu  []libLink `json:"-"`
+	KindLabel string    `json:"-"`
+	NeverLink libLink   `json:"-"`
 	// Selected is the memory open in the reader: the requested one on a
-	// /console/memories/{id} page, or the newest match on the list URL
+	// /console/memories/{id} page, or the first match on the list URL
 	// (SelectedAuto, which the client pins into the URL).
-	Selected     *memoryDetail `json:"-"`
+	Selected     *memoryReader `json:"-"`
 	SelectedAuto bool          `json:"-"`
-	// QS is the ?q=&sort= suffix rail links carry so the active filter
-	// survives a selection change ("" when both are at their defaults).
-	QS string `json:"-"`
+	// QS is the library state rail links carry, so a selection change keeps
+	// every filter ("" when all are at their defaults).
+	QS      string `json:"-"`
+	libView `json:"-"`
 }
 
-// memoriesPage assembles the grouped memories list for the given sort + filter.
-func (s *Service) memoriesPage(ctx context.Context, sortKey, query string) (memoriesData, error) {
-	q := strings.ToLower(query)
+// memoriesPage assembles the memories list for the given library state.
+func (s *Service) memoriesPage(ctx context.Context, lq libQuery) (memoriesData, error) {
+	q := strings.ToLower(lq.Q)
 	s.freshRetrievalStats(ctx)
 	mems, err := store.AllMemoriesIncludingInvalid(ctx, s.db(ctx))
 	if err != nil {
@@ -94,79 +125,192 @@ func (s *Service) memoriesPage(ctx context.Context, sortKey, query string) (memo
 	if err != nil {
 		return memoriesData{}, err
 	}
+	names, err := s.projectNames(ctx)
+	if err != nil {
+		return memoriesData{}, err
+	}
 
 	nameByID := make(map[string]string, len(mems))
 	for _, m := range mems {
 		nameByID[m.ID] = m.Name
 	}
 
-	// project -> kind -> rows (active only); inactive collected separately. The
-	// ?q filter applies to both sets.
+	// project -> kind -> rows (active only), and the same rows as one list;
+	// inactive rows collected separately. Every filter applies to both sets.
 	resolve := s.sourceSessionResolver(ctx)
 	active := map[string]map[string][]memoryRow{}
-	var inactive []memoryRow
-	activeCount := 0
+	var flat, inactive []memoryRow
+	total, favs, nevers := 0, 0, 0
+	kindCounts, projectCounts := map[string]int{}, map[string]int{}
 	for _, m := range mems {
-		if !memoryMatches(m, q) {
+		st := stats[m.ID]
+		text := memoryMatches(m, q, names[m.Project])
+		kind := lq.Kind == "" || string(m.Kind) == lq.Kind
+		scope := lq.inScope(m.Project)
+		fav := !lq.Fav || m.Favorite
+		never := lq.Surfaced == "" || st.InjectCount == 0
+		if m.Active() {
+			total++
+			// Each menu counts what its own choice would show: the other
+			// filters applied, its own left open.
+			if text && scope && fav && never {
+				kindCounts[string(m.Kind)]++
+			}
+			if text && kind && fav && never {
+				projectCounts[m.Project]++
+			}
+			if text && kind && scope && never && m.Favorite {
+				favs++
+			}
+			if text && kind && scope && fav && st.InjectCount == 0 {
+				nevers++
+			}
+		}
+		if !text || !kind || !scope || !fav || !never {
 			continue
 		}
-		row := toMemoryRow(m, stats[m.ID], nameByID, s.cfg.DataDir)
+		row := toMemoryRow(m, st, nameByID, s.cfg.DataDir)
 		row.Harness = harnessOfSource(resolve, m.SourceSession)
-		if m.Active() {
-			activeCount++
-			if active[m.Project] == nil {
-				active[m.Project] = map[string][]memoryRow{}
-			}
-			active[m.Project][string(m.Kind)] = append(active[m.Project][string(m.Kind)], row)
-		} else {
+		if !m.Active() {
 			inactive = append(inactive, row)
+			continue
 		}
+		if active[m.Project] == nil {
+			active[m.Project] = map[string][]memoryRow{}
+		}
+		active[m.Project][string(m.Kind)] = append(active[m.Project][string(m.Kind)], row)
+		flat = append(flat, row)
 	}
 
-	sortMemoryRows(inactive, sortKey)
-	return memoriesData{
-		Groups:        buildGroups(active, sortKey),
+	sortMemoryRows(inactive, lq.Sort)
+	data := memoriesData{
+		Groups:        buildGroups(active, lq.Sort),
 		Inactive:      inactive,
-		ActiveCount:   activeCount,
+		ActiveCount:   len(flat),
 		InactiveCount: len(inactive),
-		Query:         query,
-		Sort:          sortKey,
-		CanArchive:    s.cfg.Files != nil,
-		QS:            listQS(query, sortKey, "recent"),
-	}, nil
+		Total:         total,
+		Query:         lq.Q,
+		Sort:          lq.Sort,
+		Group:         lq.Group, Kind: lq.Kind, Project: lq.Project, Fav: lq.Fav, Surfaced: lq.Surfaced,
+		CanArchive: s.cfg.Files != nil,
+		QS:         lq.QS(),
+	}
+	data.Rail = data.Groups
+	if !lq.tree() {
+		data.Rail = nil
+		if len(flat) > 0 {
+			sortMemoryRows(flat, lq.Sort)
+			data.Rail = []projectGroup{{Count: len(flat), Kinds: []kindGroup{{Memories: flat}}, All: true}}
+		}
+	}
+	data.libView = newLibView(lq, memoriesListPath, memoriesListPath, memorySortKeys)
+	data.Projects, data.ProjectLabel = libProjectMenu(lq, projectCounts, names, memoriesListPath, "Shared globally")
+	data.FavLink.Count = favs
+	data.KindMenu, data.KindLabel = memoryKindMenu(lq, kindCounts)
+	never := lq
+	never.Surfaced = ""
+	if lq.Surfaced == "" {
+		never.Surfaced = "never"
+	}
+	data.NeverLink = libLink{Label: "Never surfaced", Href: never.href(memoriesListPath), Count: nevers, On: lq.Surfaced != ""}
+	return data, nil
+}
+
+// memoryKindMenu lists the Kind filter's choices: every kind, then each kind
+// in canonical order with how many memories match the other filters there,
+// its glossary line as the title. The chosen kind stays listed when nothing
+// matches in it. It returns the menu and that choice's label.
+func memoryKindMenu(lq libQuery, counts map[string]int) ([]libLink, string) {
+	all := lq
+	all.Kind = ""
+	menu := []libLink{{Label: "All kinds", Href: all.href(memoriesListPath), On: lq.Kind == ""}}
+	label := "All"
+	for _, k := range core.MemoryKinds {
+		kind := string(k)
+		if counts[kind] == 0 && kind != lq.Kind {
+			continue
+		}
+		o := lq
+		o.Kind = kind
+		on := kind == lq.Kind
+		if on {
+			label = kind
+		}
+		menu = append(menu, libLink{Label: kind, Href: o.href(memoriesListPath), Title: kindGloss(kind), Count: counts[kind], On: on})
+	}
+	return menu, label
+}
+
+// selectReader opens sel in the reader (auto: the list URL chose it) and
+// redraws the controls that stay on the item being read.
+func (d *memoriesData) selectReader(sel *memoryReader, auto bool, lq libQuery) {
+	d.Selected, d.SelectedAuto = sel, auto
+	v := newLibView(lq, memoriesListPath, memoriesListPath+"/"+sel.ID, memorySortKeys)
+	d.Sorts, d.GroupNone, d.GroupProject = v.Sorts, v.GroupNone, v.GroupProject
 }
 
 func (s *Service) memoriesList(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	sortKey, query, ok := s.parseSortQuery(w, r, memorySortKeys, "recent")
+	lq, ok := s.parseLibRequest(w, r, memorySortKeys, true)
 	if !ok {
 		return
 	}
-	data, err := s.memoriesPage(ctx, sortKey, query)
+	data, err := s.memoriesPage(ctx, lq)
 	if err != nil {
 		s.serverError(w, r, err)
 		return
 	}
-	// The HTML library auto-opens the most relevant match in the reader.
+	// The HTML library auto-opens the first match in the reader.
 	if !wantsJSON(r) {
-		if id := defaultMemoryID(data); id != "" {
+		if id := firstMemoryID(data); id != "" {
 			d, found, derr := s.memoryDetailByID(ctx, id)
 			if derr != nil {
 				s.serverError(w, r, derr)
 				return
 			}
 			if found {
-				data.Selected = &d
-				data.SelectedAuto = true
+				data.selectReader(s.memoryReaderOf(ctx, d, lq), true, lq)
 			}
 		}
 	}
 	s.render(w, r, "memories", pageData{Title: "Memories", Active: "memories", Data: data})
 }
 
-// defaultMemoryID picks the reader's default selection on the list URL: the
-// most recently updated active match, falling back to the newest inactive one
-// ("" when nothing matched).
+// memoryLibraryPage answers a memory's own URL in HTML: the reader fragment
+// for the in-place swap (?reader=1), or the Memories screen with the memory
+// open, the library's state read from the URL either way.
+func (s *Service) memoryLibraryPage(w http.ResponseWriter, r *http.Request, d memoryDetail) {
+	ctx := r.Context()
+	lq, ok := s.parseLibRequest(w, r, memorySortKeys, true)
+	if !ok {
+		return
+	}
+	sel := s.memoryReaderOf(ctx, d, lq)
+	if r.URL.Query().Get("reader") == "1" {
+		s.renderReader(w, r, "memories", "memory-reader", sel)
+		return
+	}
+	data, err := s.memoriesPage(ctx, lq)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	data.selectReader(sel, false, lq)
+	s.render(w, r, "memories", pageData{Title: "Memory " + d.Name, Active: "memories", Data: data})
+}
+
+// firstMemoryID picks the reader's default selection on the list URL: the
+// one list's first row, or in the tree the most recently updated active
+// match, falling back to the newest inactive one ("" when nothing matched).
+func firstMemoryID(data memoriesData) string {
+	if len(data.Rail) == 1 && data.Rail[0].All {
+		return data.Rail[0].Kinds[0].Memories[0].ID
+	}
+	return defaultMemoryID(data)
+}
+
+// defaultMemoryID is the most recently updated active match, falling back to
+// the newest inactive one ("" when nothing matched).
 func defaultMemoryID(data memoriesData) string {
 	var id string
 	var newest time.Time
@@ -191,9 +335,9 @@ func defaultMemoryID(data memoriesData) string {
 }
 
 // memoryMatches reports whether a memory satisfies the ?q text filter (empty q
-// matches all): a case-insensitive substring of name, description, kind, or any
-// tag.
-func memoryMatches(m core.Memory, q string) bool {
+// matches all): a case-insensitive substring of name, description, kind, any
+// tag, or its project's slug or name (projectName).
+func memoryMatches(m core.Memory, q, projectName string) bool {
 	if q == "" {
 		return true
 	}
@@ -207,7 +351,7 @@ func memoryMatches(m core.Memory, q string) bool {
 			return true
 		}
 	}
-	return false
+	return scopeMatches(m.Project, projectName, q)
 }
 
 func toMemoryRow(m core.Memory, stat store.RetrievalStat, nameByID map[string]string, dataDir string) memoryRow {
@@ -252,12 +396,7 @@ func buildGroups(active map[string]map[string][]memoryRow, sortKey string) []pro
 	for p := range active {
 		projects = append(projects, p)
 	}
-	sort.Slice(projects, func(i, j int) bool {
-		if (projects[i] == "") != (projects[j] == "") {
-			return projects[i] == "" // global first
-		}
-		return projects[i] < projects[j]
-	})
+	sortScopes(projects)
 
 	var groups []projectGroup
 	for _, p := range projects {
@@ -278,10 +417,10 @@ func buildGroups(active map[string]map[string][]memoryRow, sortKey string) []pro
 	return groups
 }
 
-// sortMemoryRows orders the rows within a kind group per the ?sort key: recent
-// (newest-updated first, the default), name (A-Z), reach (most-injected
-// first), utility (highest decayed demand first), or favorites (starred first).
-// Ties fall back to name for a stable, readable order.
+// sortMemoryRows orders rows per the ?sort key: recent (newest-updated first,
+// the default), name (A-Z), reach (most surfaced first), utility (highest
+// decayed demand first), or favorites (starred first). Ties fall back to name
+// for a stable, readable order.
 func sortMemoryRows(rows []memoryRow, sortKey string) {
 	switch sortKey {
 	case "name":
@@ -317,14 +456,91 @@ func sortMemoryRows(rows []memoryRow, sortKey string) {
 	}
 }
 
+// memoryReader is the reader pane's view of one memory: its detail plus what
+// only the library draws -- the sessions it surfaced to, and the page state
+// its star, its archive and its supersession links carry back.
+type memoryReader struct {
+	memoryDetail
+	SurfacedTo *surfacedTo
+	// QS is the library state (?q=&sort=&...) the reader's links carry.
+	QS string
+}
+
+// memoryReaderOf builds the reader for d under library state lq.
+func (s *Service) memoryReaderOf(ctx context.Context, d memoryDetail, lq libQuery) *memoryReader {
+	return &memoryReader{memoryDetail: d, SurfacedTo: s.surfacedToOf(ctx, d.ID), QS: lq.QS()}
+}
+
+// The reader names the latest sessions a memory surfaced to, and lists more
+// on request, up to surfacedToListed; past that it says how many are older.
+const (
+	surfacedToLatest = 5
+	surfacedToListed = 50
+)
+
+// surfacedTo is the sessions a memory surfaced to, most recent first:
+// Latest inline, More behind "all N", Earlier the ones past the list.
+type surfacedTo struct {
+	Latest  []surfacedSession
+	More    []surfacedSession
+	Total   int
+	Earlier int
+}
+
+// surfacedSession is one session a memory surfaced to. ID "" is an injection
+// that ran in no session.
+type surfacedSession struct {
+	ID    string
+	Name  string
+	Times int
+	Last  time.Time
+}
+
+// surfacedToOf reads the sessions memory id surfaced to, through the
+// request's handle: a locked project's sessions are absent from the read. nil
+// when it never surfaced (or the read failed, which the log records).
+func (s *Service) surfacedToOf(ctx context.Context, id string) *surfacedTo {
+	rows, err := store.InjectedSessions(ctx, s.db(ctx), id, surfacedToListed)
+	if err != nil {
+		s.logger.Warn("console: memory surfaced to", "id", id, "error", err)
+		return nil
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	out := &surfacedTo{Total: len(rows)}
+	if len(rows) == surfacedToListed {
+		if n, err := store.CountInjectedSessions(ctx, s.db(ctx), id); err != nil {
+			s.logger.Warn("console: memory surfaced count", "id", id, "error", err)
+		} else {
+			out.Total = n
+		}
+	}
+	for i, x := range rows {
+		ss := surfacedSession{ID: x.SessionID, Name: x.Name, Times: x.Times, Last: x.Last}
+		if ss.Name == "" && ss.ID != "" {
+			ss.Name = shortID(ss.ID)
+		}
+		if i < surfacedToLatest {
+			out.Latest = append(out.Latest, ss)
+		} else {
+			out.More = append(out.More, ss)
+		}
+	}
+	out.Earlier = out.Total - len(rows)
+	return out
+}
+
 // memoryArchive retires an active memory (the console's one write to memory
-// state), then redirects back to the browser.
+// state), then redirects back to the browser: to the Memories list the form
+// names in next, its filters kept, else the plain list.
 func (s *Service) memoryArchive(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if s.cfg.Files == nil {
 		s.serverError(w, r, errNoFiles)
 		return
 	}
+	back := archiveBack(r.PostFormValue("next"))
 	id := r.PathValue("id")
 	idx, ok, err := store.MemoryByID(ctx, s.db(ctx), id)
 	if err != nil {
@@ -337,7 +553,7 @@ func (s *Service) memoryArchive(w http.ResponseWriter, r *http.Request) {
 	}
 	if idx.InvalidAt != nil {
 		// Already inactive; nothing to do.
-		http.Redirect(w, r, "/console/memories", http.StatusSeeOther)
+		http.Redirect(w, r, back.RequestURI(), http.StatusSeeOther)
 		return
 	}
 	// The read that feeds the tombstone write happens under the file's lock
@@ -366,7 +582,7 @@ func (s *Service) memoryArchive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if already {
-		http.Redirect(w, r, "/console/memories", http.StatusSeeOther)
+		http.Redirect(w, r, back.RequestURI(), http.StatusSeeOther)
 		return
 	}
 	if s.cfg.Events != nil {
@@ -377,5 +593,20 @@ func (s *Service) memoryArchive(w http.ResponseWriter, r *http.Request) {
 			s.logger.Warn("console: record archive event", "error", err)
 		}
 	}
-	http.Redirect(w, r, "/console/memories?notice="+url.QueryEscape("Archived "+updated.Name+"."), http.StatusSeeOther)
+	http.Redirect(w, r, withNotice(back, "Archived "+updated.Name+"."), http.StatusSeeOther)
+}
+
+// archiveBack is where an archive returns: next when it is the Memories list
+// with its library state, else the plain list. Only the list: the archived
+// memory's own page would open it again, and any other page is not where the
+// owner archived from.
+func archiveBack(next string) *url.URL {
+	u, err := url.Parse(next)
+	if err != nil || u.Path != memoriesListPath || u.Host != "" || u.Scheme != "" || u.User != nil {
+		return &url.URL{Path: memoriesListPath}
+	}
+	v := u.Query()
+	v.Del("notice")
+	v.Del("error")
+	return &url.URL{Path: memoriesListPath, RawQuery: v.Encode()}
 }

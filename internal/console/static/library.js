@@ -130,6 +130,20 @@
     if (next < 0 || next >= list.length) return;
     load(list[next].getAttribute('href'), true);
   }
+  // The page draws its sort and grouping links (data-lib-here) for the item
+  // open when it loaded. After a swap they follow the item now in the reader,
+  // each keeping its own query, so a sort never snaps the reader back; the
+  // star's way back (data-lib-next) is the URL the reader is on, filters and
+  // all. A later live refresh draws the same links from the server.
+  function followReader(href) {
+    var here;
+    try { here = new URL(href, location.origin); } catch (e) { return; }
+    document.querySelectorAll('.lib-page a[data-lib-here]').forEach(function (a) {
+      try { a.setAttribute('href', here.pathname + new URL(a.getAttribute('href'), location.origin).search); } catch (e) {}
+    });
+    var el = readerEl();
+    if (el) el.querySelectorAll('input[data-lib-next]').forEach(function (input) { input.value = here.pathname + here.search; });
+  }
   function load(href, push) {
     var url = href + (href.indexOf('?') >= 0 ? '&' : '?') + 'reader=1';
     fetch(url, { credentials: 'same-origin' })
@@ -140,6 +154,7 @@
         el.innerHTML = html;
         if (window.IX && window.IX.enhance) { try { window.IX.enhance(el); } catch (e) {} }
         if (push) { try { history.pushState({ lib: 1 }, '', href); } catch (e) {} }
+        followReader(href);
         var sel = mark(href);
         if (sel) {
           var t = sel.getAttribute('data-title');
@@ -165,7 +180,9 @@
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button === 1) return;
     var a = e.target.closest ? e.target.closest('a[href]') : null;
     if (!a) return;
-    if (a.closest('.copy-btn')) return;
+    // A copy button inside a row copies; it does not open the row. The button
+    // sits inside the anchor, so ask the click's target, not the anchor.
+    if (e.target.closest('.copy-btn')) return;
     var inRail = !!a.closest('.lib-rail') && a.classList.contains('rail-item');
     // Inside the reader, links to siblings of the same entity (e.g. a
     // supersession neighbor) swap in place too; everything else navigates.

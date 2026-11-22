@@ -99,26 +99,31 @@ func absent(t *testing.T, body string, markers ...string) {
 	}
 }
 
-// Memories at Basic: no Reach or Utility sort, no surfaced counts, no utility
-// score in the reader -- and the hidden sort still works by URL.
+// Memories at Basic: no Reach or Utility sort, no surfaced counts, no Never
+// surfaced filter, no utility score in the reader -- and the hidden sort and
+// filter still work by URL. The reader's staleness chip stays at every level;
+// for a memory that never surfaced it says so.
 func TestLevelGates_Memories(t *testing.T) {
 	db, mgr, mux := newConsoleWithFiles(t)
 	mem := writeMemory(t, mgr, core.KindGotcha, "seamless", "boot-race", "the boot race")
 
 	setLevel(t, db, "basic")
 	list := getPeek(t, mux, "/console/memories").Body.String()
-	absent(t, list, "sort=reach", "sort=utility", "never surfaced")
+	absent(t, list, "sort=reach", "sort=utility", "never surfaced", "surfaced=never")
 	present(t, list, "sort=recent", "sort=name", "sort=favorites")
 	reader := getPeek(t, mux, "/console/memories/"+mem.ID+"?reader=1").Body.String()
 	absent(t, reader, "<span>utility</span>")
-	present(t, reader, "since surfaced")
+	present(t, reader, "never<span>surfaced</span>")
 	rr := getPeek(t, mux, "/console/memories?sort=utility")
 	require.Equal(t, http.StatusOK, rr.Code, "a hidden sort still works by URL")
 	require.Contains(t, rr.Body.String(), `aria-label="Sort: Utility"`)
+	rr = getPeek(t, mux, "/console/memories?surfaced=never")
+	require.Equal(t, http.StatusOK, rr.Code, "a hidden filter still works by URL")
+	require.Contains(t, rr.Body.String(), "of 1 active")
 
 	setLevel(t, db, "standard")
 	list = getPeek(t, mux, "/console/memories").Body.String()
-	present(t, list, "sort=reach", "sort=utility", "never surfaced")
+	present(t, list, "sort=reach", "sort=utility", "never surfaced", "surfaced=never")
 	present(t, getPeek(t, mux, "/console/memories/"+mem.ID+"?reader=1").Body.String(), "<span>utility</span>")
 }
 

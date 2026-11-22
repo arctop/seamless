@@ -271,7 +271,7 @@ nothing, and their rows say so.</p>
 <tr>
 <td>Archive a memory</td>
 <td><code>POST /console/memories/{id}/archive</code></td>
-<td>Routes through <code>lifecycle.Archive</code>: the memory is stamped invalid and leaves every index, its file stays on disk with a tombstone.</td>
+<td>Routes through <code>lifecycle.Archive</code>: the memory is stamped invalid and leaves every index, its file stays on disk with a tombstone. Returns to the Memories list <code>next=</code> names, its filters kept; any other <code>next</code> returns to the plain list.</td>
 </tr>
 <tr>
 <td>Force-release a task claim</td>
@@ -1244,6 +1244,12 @@ there. See <a href="../../reference/configuration/">Configuration</a>.</p>
 <td>shown</td>
 </tr>
 <tr>
+<td><strong>Memories: the Never surfaced filter</strong></td>
+<td>-</td>
+<td>shown</td>
+<td>shown</td>
+</tr>
+<tr>
 <td><strong>Memories: the utility score in the reader</strong></td>
 <td>-</td>
 <td>shown</td>
@@ -2092,33 +2098,65 @@ filters select), <code>mishaps</code> (each with <code>type</code>, <code>text</
 out. The list holds the newest 200.</p>
 <h2 id="memories">Memories</h2>
 <p><code>/console/memories</code>, <code>/console/memories/{id}</code></p>
-<p>A two-pane library: a rail of memories grouped by project (global first, kinds
-in canonical order, each dot colored by kind) beside a full-height reader.
-Sortable by name, recency, reach, utility, or starred; filterable by a substring
-of name, description, kind, or tag. Inactive memories collapse into an
-archived-and-superseded group at the rail's end, each carrying its status and,
-when superseded, what replaced it.</p>
+<p>A two-pane library: a rail of memories beside a full-height reader. Under the
+default sort, <strong>Recent</strong>, the rail is one list, newest first, each row
+carrying its project and its kind, so what changed last is at the top.
+<strong>Group: Project</strong> turns it into a tree - global first, then projects A to Z,
+kinds in canonical order within each, every kind group with a one-line
+subtitle saying what that kind holds - and the <strong>Name</strong> sort always draws the
+tree. The other sorts are reach (how often a memory surfaced), utility, and
+starred. Inactive memories collapse into an archived-and-superseded group at
+the rail's end, each carrying its status and, when superseded, what replaced
+it.</p>
+<p>Filters narrow the rail and combine: <strong>Kind</strong>, <strong>Project</strong> (a project, or the
+shared global scope), <strong>Starred</strong>, and <strong>Never surfaced</strong> - memories that have
+never reached an agent's context. Each menu entry and toggle counts what
+choosing it would show. The text box matches a substring of the name, the
+description, the kind, a tag, or the project's slug or name. While anything
+is filtered the header reads &quot;3 of 128 active&quot; beside a <strong>Clear</strong> link; when
+nothing matches, the rail says so and offers Clear and <strong>Search everything</strong>
+for the same text on <a href="#search">Search</a>.</p>
+<p>The whole state is in the URL - <code>?sort=</code>, <code>?group=project</code>, <code>?kind=</code>,
+<code>?project=</code> (a slug, or <code>global</code>), <code>?fav=1</code>, <code>?surfaced=never</code> and <code>?q=</code> - and
+it survives what you do on the page: opening another memory, changing the sort
+(the memory you are reading stays open), starring, and archiving (you land on
+the same filtered list). A value the screen cannot read is a 400 naming the
+values it takes.</p>
+<p>What reaches an agent's context is <strong>surfaced</strong> here, the word the Overview
+and the knowledge sky use: a rail row reads &quot;surfaced 43×&quot; or &quot;never
+surfaced&quot;, and the reader leads with how long since the memory last surfaced,
+or says it never has. A kind chip's tooltip is the same one-line meaning its
+kind group shows.</p>
 <p>The reader renders the body uncapped (through the markdown layer, with raw HTML
 disabled and a sanitizer on the output), the metadata - kind, project, tags,
-timestamps, the session that produced it - its reach counts, its
+timestamps, the session that produced it - how often it surfaced and was read,
+the sessions it surfaced to (the five latest, each linked, the rest behind
+<strong>all N</strong>), its
 <a href="../../concepts/recall/#the-utility-nudge">utility score</a> with the per-signal
 demand breakdown behind it, the <code>vscode://</code> link straight to the file, and its
 supersession neighbors in <strong>both</strong> directions: what replaced it, and what it
 replaced. The actions here are
 <strong>star</strong> - the flag that pins it into briefings and boosts recall - and
 <strong>archive</strong>.</p>
-<p>Opening <code>/console/memories</code> auto-opens the most recently updated match; a
-memory's own URL opens the same screen with it selected. Clicking rail items
-swaps the reader in place (real URLs, browser Back works), and <code>j</code> / <code>k</code> step
-through the rail.</p>
+<p>Opening <code>/console/memories</code> auto-opens the first match (in the tree, the most
+recently updated one); a memory's own URL opens the same screen with it
+selected. Clicking rail items swaps the reader in place (real URLs, browser
+Back works), and <code>j</code> / <code>k</code> step through the rail.</p>
 <h2 id="notes">Notes</h2>
 <p><code>/console/notes</code>, <code>/console/notes/{id}</code></p>
-<p>The same library shape for notes: a project-grouped rail (global <code>&quot;&quot;</code> first),
-sortable by recency, title, or starred, filterable by title, description, or
-tag. The
+<p>The same library shape for notes: under <strong>Recent</strong> the rail is one list,
+newest first, each row carrying its project; <strong>Group: Project</strong> groups it by
+project (global <code>&quot;&quot;</code> first), and sorting by title always does. Sortable by
+recency, title, or starred; filterable by <strong>Project</strong> and <strong>Starred</strong> and by a
+substring of the title, the description, a tag, or the project's slug or name,
+with the same &quot;N of M&quot; header, Clear, Search fallback and URL state as
+Memories. The
 reader renders the note as a document - uncapped body in a measured reading
 column, description, tags, word count, source URL, and the file path with an
-editor link.</p>
+editor link. A <code>plan:&lt;slug&gt;</code> tag is a link to <a href="#plans">the plan</a> with its
+status: a captured plan's own, otherwise in progress, ready or done from its
+steps. The tags software adds - <code>created-by:*</code>, <code>plan-status:*</code>, <code>cc-plan</code> and
+<code>agent-cache</code> - fold behind a <strong>+N</strong> chip.</p>
 <h2 id="tasks">Tasks</h2>
 <p><code>/console/tasks</code>, <code>/console/tasks/{id}</code></p>
 <p>The same library shape, with the rail grouped into four buckets: <strong>ready</strong> (no

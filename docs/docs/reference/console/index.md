@@ -16,7 +16,7 @@ nothing, and their rows say so.
 
 | Action | Route | Effect |
 |---|---|---|
-| Archive a memory | `POST /console/memories/{id}/archive` | Routes through `lifecycle.Archive`: the memory is stamped invalid and leaves every index, its file stays on disk with a tombstone. |
+| Archive a memory | `POST /console/memories/{id}/archive` | Routes through `lifecycle.Archive`: the memory is stamped invalid and leaves every index, its file stays on disk with a tombstone. Returns to the Memories list `next=` names, its filters kept; any other `next` returns to the plain list. |
 | Force-release a task claim | `POST /console/tasks/{id}/release` | The owner override, **Release claim** on a task: takes the task's claim from whoever holds it, reopening it for any agent. Not reachable from the agent MCP tools. |
 | Force-release a repo lock | `POST /console/locks/{id}/release` | [Repo locks](#locks): ends the hold a lock carries, live or lapsed, whoever holds it; the lock stays declared. What `seam lock release --force` sends. Refused when nobody holds it (409), from an agent's process on the peer_auth socket, and from a paired device. |
 | Approve a lock declaration | `POST /console/locks/{id}/approve` | Makes a restricted account's waiting declaration an active lock, which agents may then hold. Refused for a lock already active (409), from an agent's process on the peer_auth socket, and from a paired device. |
@@ -462,6 +462,7 @@ What each level shows, generated from the console's own registries:
 | **Overview: the workspaces table and the knowledge rail** | - | shown | shown |
 | **Memories: the Reach and Utility sorts** | - | shown | shown |
 | **Memories: how often each memory surfaced** | - | shown | shown |
+| **Memories: the Never surfaced filter** | - | shown | shown |
 | **Memories: the utility score in the reader** | - | shown | shown |
 | **Gardener: the Type and Source filters** | - | shown | shown |
 | **Gardener: the project-split example** | - | shown | shown |
@@ -1144,16 +1145,44 @@ out. The list holds the newest 200.
 
 `/console/memories`, `/console/memories/{id}`
 
-A two-pane library: a rail of memories grouped by project (global first, kinds
-in canonical order, each dot colored by kind) beside a full-height reader.
-Sortable by name, recency, reach, utility, or starred; filterable by a substring
-of name, description, kind, or tag. Inactive memories collapse into an
-archived-and-superseded group at the rail's end, each carrying its status and,
-when superseded, what replaced it.
+A two-pane library: a rail of memories beside a full-height reader. Under the
+default sort, **Recent**, the rail is one list, newest first, each row
+carrying its project and its kind, so what changed last is at the top.
+**Group: Project** turns it into a tree - global first, then projects A to Z,
+kinds in canonical order within each, every kind group with a one-line
+subtitle saying what that kind holds - and the **Name** sort always draws the
+tree. The other sorts are reach (how often a memory surfaced), utility, and
+starred. Inactive memories collapse into an archived-and-superseded group at
+the rail's end, each carrying its status and, when superseded, what replaced
+it.
+
+Filters narrow the rail and combine: **Kind**, **Project** (a project, or the
+shared global scope), **Starred**, and **Never surfaced** - memories that have
+never reached an agent's context. Each menu entry and toggle counts what
+choosing it would show. The text box matches a substring of the name, the
+description, the kind, a tag, or the project's slug or name. While anything
+is filtered the header reads "3 of 128 active" beside a **Clear** link; when
+nothing matches, the rail says so and offers Clear and **Search everything**
+for the same text on [Search](#search).
+
+The whole state is in the URL - `?sort=`, `?group=project`, `?kind=`,
+`?project=` (a slug, or `global`), `?fav=1`, `?surfaced=never` and `?q=` - and
+it survives what you do on the page: opening another memory, changing the sort
+(the memory you are reading stays open), starring, and archiving (you land on
+the same filtered list). A value the screen cannot read is a 400 naming the
+values it takes.
+
+What reaches an agent's context is **surfaced** here, the word the Overview
+and the knowledge sky use: a rail row reads "surfaced 43×" or "never
+surfaced", and the reader leads with how long since the memory last surfaced,
+or says it never has. A kind chip's tooltip is the same one-line meaning its
+kind group shows.
 
 The reader renders the body uncapped (through the markdown layer, with raw HTML
 disabled and a sanitizer on the output), the metadata - kind, project, tags,
-timestamps, the session that produced it - its reach counts, its
+timestamps, the session that produced it - how often it surfaced and was read,
+the sessions it surfaced to (the five latest, each linked, the rest behind
+**all N**), its
 [utility score](https://thereisnospoon.org/docs/concepts/recall/#the-utility-nudge) with the per-signal
 demand breakdown behind it, the `vscode://` link straight to the file, and its
 supersession neighbors in **both** directions: what replaced it, and what it
@@ -1161,21 +1190,28 @@ replaced. The actions here are
 **star** - the flag that pins it into briefings and boosts recall - and
 **archive**.
 
-Opening `/console/memories` auto-opens the most recently updated match; a
-memory's own URL opens the same screen with it selected. Clicking rail items
-swaps the reader in place (real URLs, browser Back works), and `j` / `k` step
-through the rail.
+Opening `/console/memories` auto-opens the first match (in the tree, the most
+recently updated one); a memory's own URL opens the same screen with it
+selected. Clicking rail items swaps the reader in place (real URLs, browser
+Back works), and `j` / `k` step through the rail.
 
 ## Notes
 
 `/console/notes`, `/console/notes/{id}`
 
-The same library shape for notes: a project-grouped rail (global `""` first),
-sortable by recency, title, or starred, filterable by title, description, or
-tag. The
+The same library shape for notes: under **Recent** the rail is one list,
+newest first, each row carrying its project; **Group: Project** groups it by
+project (global `""` first), and sorting by title always does. Sortable by
+recency, title, or starred; filterable by **Project** and **Starred** and by a
+substring of the title, the description, a tag, or the project's slug or name,
+with the same "N of M" header, Clear, Search fallback and URL state as
+Memories. The
 reader renders the note as a document - uncapped body in a measured reading
 column, description, tags, word count, source URL, and the file path with an
-editor link.
+editor link. A `plan:<slug>` tag is a link to [the plan](#plans) with its
+status: a captured plan's own, otherwise in progress, ready or done from its
+steps. The tags software adds - `created-by:*`, `plan-status:*`, `cc-plan` and
+`agent-cache` - fold behind a **+N** chip.
 
 ## Tasks
 

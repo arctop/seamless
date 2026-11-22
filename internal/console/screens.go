@@ -335,6 +335,7 @@ var surfaces = []surface{
 	{Where: "Overview", Template: "overview.html", Label: "the workspaces table and the knowledge rail", Min: levelStandard},
 	{Where: "Memories", Template: "memories.html", Label: "the Reach and Utility sorts", Min: levelStandard},
 	{Where: "Memories", Template: "memories.html", Label: "how often each memory surfaced", Min: levelStandard},
+	{Where: "Memories", Template: "memories.html", Label: "the Never surfaced filter", Min: levelStandard},
 	{Where: "Memories", Template: "memories.html", Label: "the utility score in the reader", Min: levelStandard},
 	{Where: "Gardener", Template: "gardener.html", Label: "the Type and Source filters", Min: levelStandard},
 	{Where: "Gardener", Template: "gardener.html", Label: "the project-split example", Min: levelStandard},

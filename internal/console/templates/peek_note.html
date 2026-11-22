@@ -12,7 +12,8 @@
 
   <dl class="peek-kv">
     <dt>Project</dt><dd>{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}inbox{{end}}</dd>
-    {{if .Tags}}<dt>Tags</dt><dd class="peek-tags">{{range .Tags}}<span class="badge">{{.}}</span> {{end}}</dd>{{end}}
+    {{with .TagView}}{{if .Plans}}<dt>{{if eq (len .Plans) 1}}Plan{{else}}Plans{{end}}</dt><dd class="peek-tags">{{range .Plans}}<a class="lib-plan-chip" href="{{.Href}}">{{icon "map"}}<span class="mono">plan:{{.Slug}}</span></a> {{end}}</dd>{{end}}
+    {{if or .Tags .Machine}}<dt>Tags</dt><dd class="peek-tags">{{range .Tags}}<span class="badge">{{.}}</span> {{end}}{{with .Machine}}<details class="lib-tag-fold"><summary class="badge" title="Tags agents and hooks add for software">+{{len .}}</summary>{{range .}}<span class="badge faint">{{.}}</span> {{end}}</details>{{end}}</dd>{{end}}{{end}}
     {{if .SourceURL}}<dt>Source</dt><dd><a href="{{.SourceURL}}" rel="noopener noreferrer" target="_blank">{{.SourceURL}}</a></dd>{{end}}
     {{if .Model}}<dt title="Model that produced this content">Model</dt><dd class="mono">{{.Model}}</dd>{{end}}
     <dt>Created</dt><dd title="{{ts .Created}}">{{ago .Created}}</dd>

@@ -7928,6 +7928,94 @@ body:has(.build-notice-card:not([hidden])) .main { padding-bottom: calc(112px + 
   .mishap-mem-scope { display: none; }
 }
 
+/* UX 17: library */
+/* The Memories and Notes bars: the Kind and Project menus, the Starred and
+   Never surfaced toggles, the Group control, and Clear while a filter is on.
+   Menu and toggle counts are what that choice would show. */
+.lib-clear {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: var(--radius-pill);
+  color: var(--lib-accent); font-size: var(--text-xs); font-weight: 650; white-space: nowrap;
+}
+.lib-clear .ico { width: 12px; height: 12px; }
+.lib-clear:hover { background: color-mix(in oklab, var(--lib-accent) 10%, var(--surface)); text-decoration: none; }
+.lib-filter-menu .menu-list { max-height: min(60vh, 420px); overflow-y: auto; }
+.lib-filter-menu .menu-list a .n, .lib-flag .n {
+  margin-left: auto; padding-left: 10px; color: var(--faint); font-size: var(--text-2xs); font-variant-numeric: tabular-nums;
+}
+.lib-filter-menu .menu-list a.on .n { color: inherit; }
+.lib-flags { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.lib-flag {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 5px 10px;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface);
+  color: var(--muted); font-size: var(--text-xs); font-weight: 600; white-space: nowrap;
+  transition: border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.lib-flag .ico { width: 13px; height: 13px; }
+.lib-flag .n { padding-left: 2px; }
+.lib-flag:hover { color: var(--ink); border-color: var(--lib-accent); text-decoration: none; }
+.lib-flag:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+.lib-flag.on {
+  color: var(--lib-accent); border-color: color-mix(in oklab, var(--lib-accent) 45%, var(--border));
+  background: color-mix(in oklab, var(--lib-accent) 10%, var(--surface));
+}
+.lib-flag.on .n { color: inherit; }
+.lib-group { display: inline-flex; align-items: center; gap: 7px; flex: none; }
+.lib-group-k {
+  color: var(--faint); font-size: var(--text-2xs); font-weight: 700; letter-spacing: var(--tracking-wide); text-transform: uppercase;
+}
+
+/* The rail: a kind group's glossary line under its header, and the project
+   and kind each row of the one list carries. */
+.rail-subgroup-gloss {
+  margin: -1px 0 3px; padding: 0 10px 0 26px; color: var(--faint); font-size: var(--text-2xs); line-height: 1.35;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ri-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border: 1px solid var(--border);
+  border-radius: var(--radius-pill); color: var(--muted); font-family: var(--font-mono); line-height: 1.5;
+}
+.ri-chip.ri-kind { color: var(--lib-item-accent); }
+.ri-chip.ri-kind::before { content: ""; width: 5px; height: 5px; border-radius: 2px; background: currentColor; }
+
+/* Nothing matches: say so, then the way out and the wider search. */
+.lib-none p { margin: 0 0 8px; }
+.lib-none-acts { display: flex; flex-wrap: wrap; gap: 6px; font-style: normal; }
+.lib-none-acts a {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill); background: var(--surface); color: var(--ink-2); font-size: var(--text-xs); font-weight: 600;
+}
+.lib-none-acts a .ico { width: 12px; height: 12px; }
+.lib-none-acts a:hover { color: var(--lib-accent); border-color: var(--lib-accent); text-decoration: none; }
+
+/* The memory reader: the sessions it surfaced to, the latest inline and the
+   rest behind "all N". */
+.lib-surfaced-to {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-top: 10px;
+  color: var(--faint); font-size: var(--text-xs);
+}
+.lib-surfaced-k { color: var(--muted); font-weight: 600; }
+.lib-surfaced-to a { color: var(--ink-2); }
+.lib-surfaced-to a:hover { color: var(--brand); }
+.lib-surfaced-all[open] { flex-basis: 100%; }
+.lib-surfaced-all > summary { display: inline; cursor: pointer; color: var(--lib-accent); font-weight: 600; list-style: none; }
+.lib-surfaced-all > summary::-webkit-details-marker { display: none; }
+.lib-surfaced-more { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 6px; }
+
+/* Notes: a plan tag links to its plan with the plan's status, and the tags
+   software stamps fold behind +N. */
+.lib-plan-chip {
+  display: inline-flex; align-items: center; gap: 5px; padding: 1px 4px 1px 8px; border: 1px solid var(--border);
+  border-radius: var(--radius-pill); background: var(--surface-2); color: var(--ink-2); font-size: var(--text-2xs); white-space: nowrap;
+}
+.lib-plan-chip .ico { width: 11px; height: 11px; color: var(--lib-accent); }
+.lib-plan-chip .badge { padding: 0 7px; }
+.lib-plan-chip:hover { border-color: var(--border-strong); color: var(--brand); text-decoration: none; }
+.lib-tag-fold { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.lib-tag-fold > summary { cursor: pointer; list-style: none; }
+.lib-tag-fold > summary::-webkit-details-marker { display: none; }
+.lib-tag-fold[open] > summary { color: var(--ink-2); }
+.lib-tag-fold .badge.faint { color: var(--faint); background: transparent; box-shadow: inset 0 0 0 1px var(--border); }
+
 /* UX 19: search */
 /* A cut kind's count reads "20+", with its Show more inside the breakdown chip;
    a kind still cut after Show more says so under the results. */
