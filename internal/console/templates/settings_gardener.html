@@ -1,0 +1,57 @@
+{{/* Settings > the gardener's two switches (settings_gardener.go builds
+     .GardenerSwitches), drawn inside Knowledge engine. Parsed with the
+     settings page (render.go), whose dispatch calls it with the page's
+     data, so $ reads as it does there ($.Level, $.Features, $.Data). */}}
+{{define "settings-gardener-switches"}}{{with .Data}}
+      {{/* The gardener's two switches (settings_gardener.go): who may apply its
+           proposals, and which kinds apply by themselves. Each form carries
+           only its own control's fields, so saving one keeps the other's
+           source. The Gardener screen links here (#settings-gardener). */}}
+      {{with .GardenerSwitches}}
+      <section class="engine-group gardener-switches" id="settings-gardener" aria-labelledby="engine-gardener-title">
+        <header class="engine-group-head">
+          <h3 id="engine-gardener-title">Gardener</h3>
+          <p>Who may apply the gardener&rsquo;s proposals, and which kinds apply by themselves. A change applies at once, with no restart.</p>
+          {{template "source-chip" (sourceChip .ChipSource .ChipNote "gardener-reset")}}
+        </header>
+        {{if .ReadFailed}}<p class="updates-alert" role="alert">{{icon "triangle-alert"}}<span><strong>The stored choices could not be read.</strong> This shows the config file&rsquo;s values, and the Gardener&rsquo;s writes refuse an agent&rsquo;s process until they can be read again.</span></p>{{end}}
+        {{if .Unreadable}}<p class="updates-note">{{icon "info"}}<span>The stored choice was unreadable, so the config file decides. Saving here replaces it.</span></p>{{end}}
+
+        <form method="post" action="/console/settings/gardener" aria-labelledby="gardener-agents-title">
+          <h4 id="gardener-agents-title">Agents may apply proposals</h4>
+          <dl class="setup-facts">
+            <div><dt>Now</dt><dd>{{if .AgentsMayApply}}<span class="badge ok">on</span><span>Agents may apply, dismiss and hide proposals with gardener_apply, and through the Gardener screen.</span>{{else}}<span class="badge">off</span><span>Only you decide: gardener_apply refuses agents, and so do the Gardener&rsquo;s writes from an agent&rsquo;s process. Agents still see the proposals.</span>{{end}}</dd></div>
+          </dl>
+          <div class="updates-actions">
+            {{if .AgentsMayApply}}<input type="hidden" name="agents" value="off">
+            <button class="btn small" type="submit">Turn agents&rsquo; applying off</button>
+            {{else}}<input type="hidden" name="agents" value="on">
+            <button class="btn small primary" type="submit"{{if .AgentsLocked}} disabled{{end}}>Let agents apply proposals</button>{{end}}
+            {{/* agents_may_apply: false decides this one switch: the chip sits
+                 beside it, once, and the group's chip says where the rest
+                 comes from. */}}
+            {{with .LockedNote}}{{template "source-chip" (sourceChip "locked" . "")}}{{end}}
+          </div>
+        </form>
+
+        <form method="post" action="/console/settings/gardener" aria-labelledby="gardener-auto-title">
+          <input type="hidden" name="auto_set" value="1">
+          <h4 id="gardener-auto-title">Apply automatically</h4>
+          <p class="gardener-source">A new proposal of a kind you check is applied by the pass that raises it, recorded as applied automatically, and listed in the decision history with Undo. It waits for you instead while lockdown is on, when write screening would hold it, and for a locked or fenced project. Every other kind always waits for you.</p>
+          <div class="brief-toggles">
+            {{range .Kinds}}
+            <label class="brief-toggle" data-auto-kind="{{.Kind}}">
+              <input type="checkbox" name="auto" value="{{.Kind}}"{{if .On}} checked{{end}}>
+              <span class="brief-switch" aria-hidden="true"></span>
+              <span><strong>{{.Label}}</strong><small>{{.Sentence}}</small></span>
+            </label>
+            {{end}}
+          </div>
+          <div class="updates-actions">
+            <button class="btn small primary" type="submit">{{icon "check"}} Save automatic apply</button>
+          </div>
+        </form>
+        {{if .Overridden}}<form id="gardener-reset" method="post" action="/console/settings/gardener/reset"></form>{{end}}
+      </section>
+      {{end}}
+{{end}}{{end}}

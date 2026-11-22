@@ -1,0 +1,48 @@
+{{/* Settings > Features: the optional features' switches. Parsed with the
+     settings page (render.go), whose dispatch calls it with the page's
+     data, so $ reads as it does there ($.Level, $.Features, $.Data). */}}
+{{define "settings-features"}}{{with .Data}}
+    <section class="settings-zone settings-section" id="features">
+      <header class="settings-section-head">
+        <div>
+          <h2>Features{{hintFor "Features" "Optional features are off until you turn them on. Each switch turns a feature's screens and its agent tools on or off together, so an agent never sees a tool for a screen you turned off. Turning one off hides it, and nothing is ever deleted. Console changes apply immediately; agents pick the change up on their next session."}}</h2>
+          <p>Optional parts of Seamless, for you and your agents alike.</p>
+        </div>
+        {{if $.Level.AtLeast "standard"}}{{if .FeaturesOverridden}}{{template "source-chip" (sourceChip "override" "Stored in this console, by a save here or by the upgrade that kept the features already in use: these switches win over the config file and its environment variables until you reset them." "features-reset" "Clear the stored override and go back to the file/env configuration? No data is deleted.")}}{{else}}{{template "source-chip" (sourceChip "file" "From the config file and its environment variables. Saving here stores your choice, which wins until you reset it." "")}}{{end}}{{end}}
+      </header>
+
+      <article class="features-workbench">
+        <form method="post" action="/console/settings/features" data-features-form>
+          <div class="features-grid">
+            {{range .Features}}
+            <section class="feature-card{{if .Enabled}} is-on{{end}}" data-feature="{{.Key}}">
+              <header class="feature-card-head">
+                <h4>{{.Label}}</h4>
+                <span class="badge {{if .Enabled}}ok{{end}} feature-state-pill">{{if .Enabled}}Enabled{{else}}Disabled{{end}}</span>
+              </header>
+              <p class="feature-blurb">{{.Blurb}}</p>
+              <label class="brief-toggle feature-toggle">
+                <input type="checkbox" name="{{.Field}}" value="1"{{if .Enabled}} checked{{end}}>
+                <span class="brief-switch" aria-hidden="true"></span>
+                <span><strong>Available in the console and to agents</strong><small>{{if $.Level.AtLeast "standard"}}{{.WhenOff}}{{else}}{{.WhenOffPlain}}{{end}}</small></span>
+              </label>
+              {{if .DataKept}}<p class="feature-data">{{icon "database"}}<span>{{.DataKept}}</span></p>{{end}}
+            </section>
+            {{end}}
+          </div>
+
+          <footer class="brief-actions settings-savebar">
+            <div class="brief-state" id="features-state" role="status" aria-live="polite">
+              <span class="state-dot"></span>
+              <span>Saving applies in the console now and to agents from their next session.</span>
+            </div>
+            <div class="btn-row">
+              <button class="btn" type="button" data-form-discard>Discard</button>
+              <button class="btn primary" type="submit">{{icon "check"}} Save features</button>
+            </div>
+          </footer>
+        </form>
+        {{if .FeaturesOverridden}}<form id="features-reset" method="post" action="/console/settings/features/reset"></form>{{end}}
+      </article>
+    </section>
+{{end}}{{end}}

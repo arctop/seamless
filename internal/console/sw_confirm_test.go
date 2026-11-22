@@ -54,9 +54,13 @@ func TestSwConfirmsMovedOntoTheirButtons(t *testing.T) {
 		// Features' and Briefing's Reset ask through the source chip's
 		// button (kit_shared.html), so they are not in this template's own
 		// tags: TestSsResetConfirmsRideTheSourceChip renders them.
-		"settings.html": {
+		"settings_updates.html": {
 			"Install {{.Target}} now? The daemon restarts to finish, so agent sessions lose Seamless for a moment. This skips the soak and does not wait for agents to go idle.",
+		},
+		"settings_workspaces.html": {
 			"Delete this project family? Projects and their knowledge will not be deleted.",
+		},
+		"settings_engine.html": {
 			"Switch embeddings off? Recall and search degrade to lexical-only after the next restart.",
 			"Re-embed every memory and note with the active model? This calls the embedding provider once per item.",
 		},

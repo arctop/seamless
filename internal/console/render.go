@@ -577,6 +577,20 @@ func evtIcon(kind string) string {
 // the one mapping).
 func taskTone(status string) string { return statusWord(status).Tone }
 
+// settingsPartials are the Settings page's sections, one file each, parsed
+// with templates/settings.html, which dispatches to them.
+var settingsPartials = []string{
+	"templates/settings_experience.html",
+	"templates/settings_features.html",
+	"templates/settings_setup.html",
+	"templates/settings_updates.html",
+	"templates/settings_backups.html",
+	"templates/settings_briefing.html",
+	"templates/settings_workspaces.html",
+	"templates/settings_engine.html",
+	"templates/settings_gardener.html",
+}
+
 // parseTemplates parses the layout + every page into its own template set (an
 // entity page also parses its peek_<name>.html companion so its content block
 // can compose the shared "detail-body"), plus a standalone body fragment per
@@ -593,7 +607,7 @@ func parseTemplates() (pages, fragments map[string]*template.Template, err error
 			files = append(files, "templates/plan_shared.html")
 		}
 		if name == "settings" {
-			files = append(files, "templates/settings_backups.html")
+			files = append(files, settingsPartials...)
 		}
 		if name == "tasks" {
 			files = append(files, "templates/task_shared.html")

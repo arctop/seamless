@@ -1,0 +1,49 @@
+{{/* Settings > Experience: the console level, the theme and the keyboard. Parsed with the
+     settings page (render.go), whose dispatch calls it with the page's
+     data, so $ reads as it does there ($.Level, $.Features, $.Data). */}}
+{{define "settings-experience"}}{{with .Data}}
+    <section class="settings-zone settings-section" id="experience">
+      {{/* Each section's head: its title with a hint holding the why, one
+           sentence, and the source chip where values can be set (kit.go
+           sourceChip, kit_shared.html "source-chip"). */ -}}
+      <header class="settings-section-head">
+        <div>
+          <h2>Experience{{hintFor "Experience" "A level changes what this console shows, never what your agents receive, and a screen a level hides still opens from any link."}}</h2>
+          <p>How much of the console you see.</p>
+        </div>
+        {{if not .ConsoleLevelOverridden}}{{template "source-chip" (sourceChip "file" "From the config file or its environment variables (console.level). Choosing a level here stores it, and it wins until you reset it." "")}}{{else if eq .ConsoleLevelSource "seeded"}}{{template "source-chip" (sourceChip "override" "Set by the upgrade: this installation was in use before levels existed, so it kept every screen. Reset hands the level back to the config file." "level-reset")}}{{else}}{{template "source-chip" (sourceChip "override" "Chosen in this console, so it wins over the config file and its environment variables until you reset it." "level-reset")}}{{end}}
+      </header>
+
+      <div class="level-cards">
+        {{range .LevelCards}}
+        <form class="level-card{{if .Current}} is-current{{end}}" method="post" action="/console/settings/level" data-level-card="{{.Level}}">
+          <input type="hidden" name="level" value="{{.Level}}">
+          <input type="hidden" name="return" value="/console/settings?s=experience">
+          <header class="level-card-head"><h3>{{.Level.Label}}</h3>{{if .Current}}<span class="badge ok">Current</span>{{end}}</header>
+          <p class="level-card-line">{{.Line}}</p>
+          <div class="level-card-items"><span class="level-card-lead">{{.Lead}}</span><ul>{{range .Items}}<li>{{.}}</li>{{end}}</ul>
+            {{with .Details}}<ul class="level-card-details">{{range .}}<li>{{.}}</li>{{end}}</ul>{{end}}</div>
+          {{if .Current}}<button class="btn small" type="button" disabled>In use</button>{{else}}<button class="btn small primary" type="submit">Use {{.Level.Label}}</button>{{end}}
+        </form>
+        {{end}}
+      </div>
+      {{if .ConsoleLevelOverridden}}<form id="level-reset" method="post" action="/console/settings/level/reset"><input type="hidden" name="return" value="/console/settings?s=experience"></form>{{end}}
+
+      <div class="experience-extras">
+        <section class="experience-group" aria-labelledby="experience-theme-title">
+          <h3 id="experience-theme-title">Theme</h3>
+          <div class="seg theme-choice" role="radiogroup" aria-labelledby="experience-theme-title" data-theme-choice>
+            <label><input type="radio" name="theme" value="system"><span>System</span></label>
+            <label><input type="radio" name="theme" value="light"><span>Light</span></label>
+            <label><input type="radio" name="theme" value="dark"><span>Dark</span></label>
+          </div>
+          <p>System follows your computer&rsquo;s light or dark appearance. Kept in this browser only; the sidebar&rsquo;s sun and moon pick Light or Dark.</p>
+        </section>
+        <section class="experience-group" aria-labelledby="experience-keys-title">
+          <h3 id="experience-keys-title">Keyboard</h3>
+          <p>Press <kbd>?</kbd> anywhere for every shortcut, <kbd>&#8984;</kbd><kbd>K</kbd> to search or jump.</p>
+          <button class="btn small" type="button" data-keys-open>{{icon "keyboard"}} Show shortcuts</button>
+        </section>
+      </div>
+    </section>
+{{end}}{{end}}

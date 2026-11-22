@@ -1,0 +1,222 @@
+{{/* Settings > Knowledge engine: recall, ranking and storage. Parsed with the
+     settings page (render.go), whose dispatch calls it with the page's
+     data, so $ reads as it does there ($.Level, $.Features, $.Data). */}}
+{{define "settings-engine"}}{{with .Data}}
+    <section class="settings-zone settings-section" id="knowledge-engine">
+      <header class="settings-section-head">
+        <div>
+          <h2>Knowledge engine{{hintFor "Knowledge engine" "Values with a lock are read only: they change through the config file or environment, then a restart."}}</h2>
+          <p>How recall finds knowledge, how the briefing ranks it, and where it all lives.</p>
+        </div>
+      </header>
+
+      <section class="engine-group" id="semantic-index" aria-labelledby="engine-recall-title">
+        <header class="engine-group-head">
+          <h3 id="engine-recall-title">Recall</h3>
+          <p>Embeddings power the semantic half of recall and search; lexical search keeps working without them. The switch and a model change apply at the next daemon restart.</p>
+        </header>
+        <div class="runtime-grid semantic-grid">
+          {{with .Embeddings}}
+          <article class="runtime-card embedder-card">
+            <header class="runtime-card-head">
+              <span class="runtime-icon {{if .Enabled}}ok{{else if .Misconfigured}}pop{{else}}brand{{end}}">{{icon "activity"}}</span>
+              <div><span>Embedder</span><h3>{{if .Enabled}}Embeddings on{{else}}Embeddings off{{end}}</h3></div>
+              {{if .Enabled}}<span class="badge ok">active</span>{{else if .Misconfigured}}<span class="badge danger">misconfigured</span>{{else}}<span class="badge">disabled</span>{{end}}
+            </header>
+            <div class="embedder-facts">
+              <div><span>Provider</span><strong class="mono">{{if .Provider}}{{.Provider}}{{else}}&mdash;{{end}}</strong></div>
+              <div><span>Embedding model</span><strong class="mono">{{if .Model}}{{.Model}}{{else}}&mdash;{{end}}</strong></div>
+            </div>
+            {{if not .Enabled}}
+            <p class="embedder-reason{{if .Misconfigured}} is-error{{end}}">
+              {{icon "triangle-alert"}}
+              {{if .OverriddenOff}}Switched off from this console; agents fall back to lexical-only recall.{{else if .Misconfigured}}The LLM configuration is broken and needs a fix in the config file: <span class="mono">{{.Reason}}</span>{{else}}{{template "embed-off-fix"}}{{end}}
+            </p>
+            {{end}}
+            {{if .RestartNeeded}}
+            <p class="embedder-restart">{{icon "timer"}} The stored switch differs from the running state &mdash; restart the daemon to apply it.</p>
+            {{end}}
+            {{/* Switch off is offered only while there is something to switch
+                 off: embeddings running, or a cleared switch still waiting for
+                 the restart. Off for want of a key, the card says what to do
+                 instead. */}}
+            {{if .ModeOff}}
+            <form method="post" action="/console/settings/embeddings/mode" class="embedder-toggle-form">
+              <input type="hidden" name="mode" value="auto">
+              <button class="btn small primary" type="submit">Enable embeddings</button>
+            </form>
+            {{else if or .Enabled .OverriddenOff}}
+            <form method="post" action="/console/settings/embeddings/mode" class="embedder-toggle-form">
+              <input type="hidden" name="mode" value="off">
+              <button class="btn small" type="submit" data-confirm="Switch embeddings off? Recall and search degrade to lexical-only after the next restart." data-confirm-label="Switch it off">Switch off</button>
+            </form>
+            {{end}}
+          </article>
+
+          <article class="runtime-card vectors-card" data-vectors-card{{if .Reembed.Running}} data-reembed-running{{end}}>
+            <header class="runtime-card-head">
+              <span class="runtime-icon brand">{{icon "database"}}</span>
+              <div><span>Stored vectors</span><h3>Embedding corpus</h3></div>
+            </header>
+            <div class="budget-grid">
+              <div class="budget-stat brand"><strong>{{.Total}}</strong><span>vectors</span><small>stored</small></div>
+              <div class="budget-stat {{if .Missing}}warn{{else}}ok{{end}}"><strong>{{.Missing}}</strong><span>items</span><small>not embedded</small></div>
+              <div class="budget-stat {{if .Stale}}warn{{else}}ok{{end}}"><strong>{{.Stale}}</strong><span>vectors</span><small>stale model</small></div>
+            </div>
+            {{if .Models}}
+            <table class="embedding-models-table">
+              <thead><tr><th>Model</th><th>Dims</th><th>Memories</th><th>Notes</th><th>Last written</th></tr></thead>
+              <tbody>
+                {{range .Models}}
+                <tr>
+                  <td><span class="mono">{{.Model}}</span>{{if .Stale}} <span class="badge warn" title="Not the active model; invisible to semantic search until re-embedded">stale</span>{{end}}</td>
+                  <td>{{.Dims}}</td>
+                  <td>{{.Memories}}</td>
+                  <td>{{.Notes}}</td>
+                  <td>{{if .Updated.IsZero}}&mdash;{{else}}{{ago .Updated}}{{end}}</td>
+                </tr>
+                {{end}}
+              </tbody>
+            </table>
+            {{else}}
+            <p class="embedder-empty">No vectors stored yet.{{if .Enabled}} They are written as memories and notes are indexed.{{end}}</p>
+            {{end}}
+            <div class="reembed-row">
+              {{if .Reembed.Running}}
+              <span class="badge pop" role="status"><span class="live-dot"></span> re-embedding {{.Reembed.Done}}/{{.Reembed.Total}}{{if .Reembed.Failed}} ({{.Reembed.Failed}} failed){{end}}</span>
+              <small>The count follows the pass while this page is open.</small>
+              {{else}}
+              <form method="post" action="/console/settings/embeddings/reembed">
+                <button class="btn small" type="submit"{{if not .Enabled}} disabled title="Embeddings are disabled"{{end}} data-confirm="Re-embed every memory and note with the active model? This calls the embedding provider once per item." data-confirm-label="Re-embed all">{{icon "loader"}} Re-embed everything</button>
+              </form>
+              {{if not .Reembed.StartedAt.IsZero}}<small>Last pass {{ago .Reembed.FinishedAt}}: {{.Reembed.Done}}/{{.Reembed.Total}} items{{if .Reembed.Failed}}, {{.Reembed.Failed}} failed{{end}}.</small>{{end}}
+              <small>Use after changing the embedding model &mdash; vectors from different models cannot be compared.</small>
+              {{end}}
+            </div>
+          </article>
+          {{end}}
+        </div>
+      </section>
+
+      <section class="engine-group" id="utility-activation" aria-labelledby="engine-ranking-title">
+        <header class="engine-group-head">
+          <h3 id="engine-ranking-title">Ranking</h3>
+          <p>Where each scope stands on utility-blended ordering. The weight and the activation mode are briefing knobs, set in Briefing.</p>
+        </header>
+      {{if .UtilityRows}}
+      <div class="utility-scopes">
+        <h5 id="utility-activation-title">Utility activation by scope</h5>
+        <p>In auto mode a scope&rsquo;s briefing switches to utility-blended ordering once its demand history matures: first demand &ge;{{index .UtilityReady 2}}d old, &ge;{{index .UtilityReady 0}} demand events and &ge;{{index .UtilityReady 1}} memories touched in 30d. The gardener latches it on its next pass; force overrides both ways.</p>
+        {{if ne .Briefing.UtilityMode "auto"}}<p class="utility-mode-note">{{icon "triangle-alert"}} Activation is currently <strong>{{.Briefing.UtilityMode}}</strong> everywhere, so the per-scope state below is dormant &mdash; it takes over when the mode returns to auto.</p>{{end}}
+        <div class="utility-scopes-table">
+          <table class="utility-activation-table">
+            <thead><tr><th>Scope</th><th>Status</th><th>Demand (30d)</th><th>History</th><th>Override</th></tr></thead>
+            <tbody>
+              {{$ready := .UtilityReady}}
+              {{range $i, $row := .UtilityRows}}
+              <tr>
+                <td>{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}<strong>Global context</strong>{{end}}</td>
+                <td><span class="badge utility-status-{{.Status}}">{{.Status}}{{if .Forced}} (forced){{end}}</span>{{if .ReadyAt}}{{if $.Features.Momentum}} <small class="mom-unlocked">{{timeAs .ReadyAt (print "unlocked " (day .ReadyAt))}}</small>{{else}} <small>armed {{agoTime .ReadyAt}}</small>{{end}}{{end}}</td>
+                <td>
+                  <span class="utility-gate{{if .EventsOK}} met{{end}}">{{.RecentEvents}}<i>/{{index $ready 0}}</i> events</span> &middot;
+                  <span class="utility-gate{{if .MemoriesOK}} met{{end}}">{{.RecentMemories}}<i>/{{index $ready 1}}</i> memories</span>
+                </td>
+                <td>
+                  {{if .AgeDays}}<span class="utility-gate{{if .AgeOK}} met{{end}}">{{.AgeDays}}<i>/{{index $ready 2}}</i>d of demand</span>{{else}}<span class="utility-gate">no demand yet</span>{{end}}
+                  {{if .Remaining}}<small class="utility-remaining">{{.Remaining}}</small>{{end}}
+                </td>
+                <td>
+                  <span class="utility-force-group">
+                    {{if ne .Forced "on"}}<button class="btn small" type="submit" form="utility-force-{{$i}}" name="force" value="on">Force on</button>{{end}}
+                    {{if ne .Forced "off"}}<button class="btn small" type="submit" form="utility-force-{{$i}}" name="force" value="off">Force off</button>{{end}}
+                    {{if .Forced}}<button class="btn small" type="submit" form="utility-force-{{$i}}" name="force" value="auto">Auto</button>{{end}}
+                  </span>
+                </td>
+              </tr>
+              {{end}}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {{end}}
+        {{if not .UtilityRows}}<p class="embedder-empty">No scopes have demand history yet.</p>{{end}}
+        {{range $i, $row := .UtilityRows}}<form id="utility-force-{{$i}}" method="post" action="/console/settings/utility"><input type="hidden" name="project" value="{{$row.Project}}"></form>{{end}}
+      </section>
+
+      <section class="engine-group" id="runtime-profile" aria-labelledby="engine-storage-title">
+        <header class="engine-group-head">
+          <h3 id="engine-storage-title"><span class="settings-readonly" role="img" aria-label="Read only" title="Read only">{{icon "lock"}}</span>Storage &amp; policy</h3>
+          <p>Values loaded by the daemon. Change these through the config file or environment, then restart.</p>
+        </header>
+        <div class="runtime-grid">
+          <article class="runtime-card storage-card">
+            <header class="runtime-card-head">
+              <span class="runtime-icon brand">{{icon "database"}}</span>
+              <div><span>Storage</span><h3>Local data home</h3></div>
+              <span class="badge brand">source of truth</span>
+            </header>
+            <div class="storage-path">
+              <span class="mono">{{.DataDir}}</span>{{copyBtn .DataDir}}
+            </div>
+            <p>Durable files and the rebuildable local index share this root.</p>
+          </article>
+
+          <article class="runtime-card budgets-card">
+            <header class="runtime-card-head">
+              <span class="runtime-icon pop">{{icon "gauge"}}</span>
+              <div><span>Guardrails</span><h3>Context budgets</h3></div>
+            </header>
+            <div class="budget-grid">
+              <div class="budget-stat brand">
+                <strong>{{.Budgets.MaxBriefingTokens}}</strong><span>tokens</span>
+                <small>max briefing</small>
+              </div>
+              <div class="budget-stat ok">
+                <strong>{{.Budgets.RecallBudgetTokens}}</strong><span>tokens</span>
+                <small>recall response</small>
+              </div>
+              <div class="budget-stat pop">
+                <strong>{{if .Budgets.ToolEventMaxChars}}{{.Budgets.ToolEventMaxChars}}{{else}}&infin;{{end}}</strong><span>{{if .Budgets.ToolEventMaxChars}}chars{{else}}no cap{{end}}</span>
+                <small>tool event body</small>
+              </div>
+            </div>
+          </article>
+
+          <article class="runtime-card sqlite-card">
+            {{with .Database}}
+            <header class="runtime-card-head">
+              <span class="runtime-icon pop">{{icon "server"}}</span>
+              <div><span>SQLite</span><h3>Local database</h3></div>
+              <span class="badge brand">rebuildable index</span>
+            </header>
+            <div class="storage-path"><span class="mono">{{.Path}}</span>{{copyBtn .Path}}</div>
+            <div class="embedder-facts">
+              <div><span>Size on disk</span><strong>{{.SizeHuman}}</strong>{{if .WalBytes}}<small>includes WAL</small>{{end}}</div>
+              <div><span>Schema version</span><strong>{{.SchemaVersion}}</strong></div>
+            </div>
+            <p>Sessions, tasks, events, and the vector index live here; durable knowledge stays in markdown files and this database can be rebuilt from them.</p>
+            {{end}}
+          </article>
+
+          <article class="runtime-card gardener-runtime{{if .Gardener.Enabled}} is-live{{end}}">
+            <div class="gardener-cadence">
+              <span class="runtime-icon ok">{{icon "sprout"}}</span>
+              <div class="gardener-state"><span class="live-dot"></span>{{if .Gardener.Enabled}}Gardener enabled{{else}}Suggestions off{{end}}</div>
+              <strong>every {{.Gardener.IntervalMinutes}}<small>min</small></strong>
+              <p>{{if .Gardener.Enabled}}Background review and upkeep run on this cadence.{{else}}Background review is off (gardener.enabled is false), so no pass proposes anything. Upkeep still runs on this cadence: idle sessions are reaped, old tool events pruned, retrieval stats refreshed.{{end}}</p>
+            </div>
+            <div class="gardener-rules" aria-label="Gardener policy">
+              <div><span>Dedup threshold</span><strong>{{.Gardener.DedupThreshold}}</strong></div>
+              <div><span>Memory staleness</span><strong>{{.Gardener.StalenessDays}}d</strong></div>
+              <div><span>Digest window</span><strong>{{.Gardener.DigestDays}}d</strong></div>
+              <div><span>Tool event retention</span><strong>{{if .Gardener.ToolEventRetentionDays}}{{.Gardener.ToolEventRetentionDays}}d{{else}}off{{end}}</strong></div>
+              <div><span>Stale plan cutoff</span><strong>{{if .Gardener.StalePlanDays}}{{.Gardener.StalePlanDays}}d{{else}}off{{end}}</strong></div>
+              <div><span>Session idle TTL</span><strong>{{if .Gardener.SessionIdleMinutes}}{{.Gardener.SessionIdleMinutes}}m{{else}}45m{{end}}</strong></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      {{template "settings-gardener-switches" $}}
+    </section>
+{{end}}{{end}}

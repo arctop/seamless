@@ -794,8 +794,7 @@ func TestSettingsSections_EveryPostReturnsToItsSection(t *testing.T) {
 // its server-rendered baseline, and without script the bar simply stays. Old
 // #anchor bookmarks map to their section in place.
 func TestSettingsSections_SaveBarAndLegacyAnchors(t *testing.T) {
-	source, err := templateFS.ReadFile("templates/settings.html")
-	require.NoError(t, err)
+	source := settingsPageSource(t)
 	page := string(source)
 	require.Equal(t, 2, strings.Count(page, `class="brief-actions settings-savebar"`), "one bar per editable form")
 	require.Equal(t, 2, strings.Count(page, `type="button" data-form-discard`))
@@ -886,8 +885,7 @@ func TestBriefingSection_PresetsAndCustomize(t *testing.T) {
 	page = getPeek(t, mux, "/console/settings?s=briefing").Body.String()
 	require.Contains(t, page, `<details class="brief-customize" open>`)
 
-	source, err := templateFS.ReadFile("templates/settings.html")
-	require.NoError(t, err)
+	source := settingsPageSource(t)
 	require.Contains(t, string(source), "function syncPresets()", "an edit re-marks the matching preset")
 	require.Contains(t, string(source), `<form id="briefing-preset-picker" hidden></form>`,
 		"the radios never submit with the briefing form")

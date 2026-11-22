@@ -1,0 +1,71 @@
+{{/* Settings > Updates (settings_updates.go builds .Updates). Parsed with the
+     settings page (render.go), whose dispatch calls it with the page's
+     data, so $ reads as it does there ($.Level, $.Features, $.Data). */}}
+{{define "settings-updates"}}{{with .Data}}
+    {{/* Every version and link below is a parsed version or the constant
+         release URL (settings_updates.go, updates_auto.go). The free text is
+         this daemon's own: the check's last error, and the last update
+         attempt's error, which appears in this section and nowhere else. The
+         forms ride the shared no-reload POST path. */}}
+    <section class="settings-zone settings-section" id="updates">
+      <header class="settings-section-head">
+        <div>
+          <h2>Updates{{hintFor "Updates" "Seamless asks GitHub whether a newer release exists and tells you: here, on the Overview, and in your agents’ briefings. An install the curl or PowerShell installer made also installs new releases by itself, at a quiet moment; anywhere else, updating stays your call."}}</h2>
+          <p>New releases, and whether this install takes them by itself.</p>
+        </div>
+        {{with .Updates}}{{if .Running}}{{template "source-chip" (sourceChip .ChipSource .SourceNote "updates-reset")}}{{end}}{{end}}
+      </header>
+      {{with .Updates}}{{if .Running}}
+      {{if .Stopped}}<p class="updates-alert" role="alert">{{icon "triangle-alert"}}<span><strong>The update checker stopped after an internal error.</strong> The daemon keeps serving; restart it to revive the check.</span></p>{{end}}
+
+      <dl class="setup-facts updates-facts">
+        <div><dt>Mode</dt><dd>{{if and .Checking (not .Stopped)}}<span class="badge ok">{{.Mode}}</span>{{else}}<span class="badge">{{.Mode}}</span>{{end}}<span>{{.ModeReason}}</span></dd></div>
+        {{if .SelfUpdating}}<div><dt>Automatic updates</dt><dd>{{if .Auto.On}}<span class="badge ok">on</span>{{else}}<span class="badge">off</span>{{end}}<span>{{.Auto.Words}}</span></dd></div>{{end}}
+        <div><dt>What a check sends</dt><dd>{{if .Checking}}<span>One anonymous request to <span class="mono">api.github.com</span> every {{.Interval}}. Nothing about this install is sent: no version, host, or identifier.</span>{{else}}<span>Nothing: with checks off, this install makes no update request at all.</span>{{end}}</dd></div>
+        {{with .Signers}}<div><dt>Owner-signed releases</dt><dd><span class="badge ok">required</span><span>A release installs only once its <span class="mono">checksums.txt.sshsig</span> verifies against a key in <span class="mono">{{.Path}}</span> (update.release_signers), by itself or by hand.</span>{{with .Refused}}<small class="updates-error">{{icon "triangle-alert"}}<span>Last refused: <span class="mono">{{.Version}}</span>: {{.Words}}. <span class="faint">{{timeAs .At (agoPhrase .At)}}</span></span></small>{{end}}</dd></div>{{end}}
+        <div><dt>Installed</dt><dd><span class="mono">{{.Version}}</span><span class="faint">{{.Build}}</span>{{with .InstallReason}}<small class="faint">{{.}}</small>{{end}}</dd></div>
+        <div><dt>{{if .SelfUpdating}}To update by hand{{else}}To update{{end}}</dt><dd><span class="mono">{{.Hint}}</span>{{copyBtn .Hint}}</dd></div>
+        <div><dt>Newest release</dt><dd>{{if .Newest}}<strong class="mono">{{.Newest}}</strong><span class="faint">{{timeAs .NewestPublished (print "published " (day .NewestPublished))}}</span>{{if .Available}}<span class="badge warn">update available</span>{{else if .Comparable}}<span class="badge ok">up to date</span>{{end}}<a href="{{.NewestURL}}" target="_blank" rel="noopener">Release notes &nearr;</a>{{else if .CheckedAt.IsZero}}<span>Not checked yet</span>{{else}}<span>No installable release found</span>{{end}}</dd></div>
+        <div><dt>Last check</dt><dd>{{if not .CheckedAt.IsZero}}{{timeAs .CheckedAt (agoPhrase .CheckedAt)}}{{else if .Error}}<span>No check has succeeded yet</span>{{else}}<span>Not checked yet</span>{{end}}{{if .NextCheck}}<span class="faint">{{timeAs .NextCheckAt (print "next check " .NextCheck)}}</span>{{end}}{{with .Error}}<small class="updates-error">{{icon "triangle-alert"}}<span>{{timeAs .Since .Line}}: <span class="mono">{{.Message}}</span></span></small>{{end}}</dd></div>
+        {{with .Next}}<div><dt>Next update</dt><dd><strong class="mono">{{.Version}}</strong><span>{{.Line}}</span>{{if not .SoakEnds.IsZero}}<small class="faint">soak ends around {{clockDate .SoakEnds}}</small>{{end}}{{if not .Pending.IsZero}}<small class="faint">{{timeAs .Pending (print "pending since " (agoPhrase .Pending))}} &middot; {{if .DeadlineIn}}{{timeAs .Deadline (print "deadline " .DeadlineIn)}}{{else}}{{timeAs .Deadline "past its deadline"}}{{end}}</small>{{end}}</dd></div>{{end}}
+        {{with .Applying}}<div><dt>Updating now</dt><dd>{{if .Confirming}}<span class="badge ok">confirming</span>{{else}}<span class="badge accent">in progress</span>{{end}}<span class="mono">{{.From}} &rarr; {{.To}}</span><span>{{.Stage}}</span>{{with .Why}}<span class="faint">{{.}}</span>{{end}}{{if not .Since.IsZero}}<small class="faint">{{timeAs .Since (print "started " (agoPhrase .Since))}}</small>{{else if not .Heard.IsZero}}<small class="faint">{{timeAs .Heard (print "last heard from " (agoPhrase .Heard))}}</small>{{end}}</dd></div>{{end}}
+        {{with .LastAttempt}}<div><dt>Last attempt</dt><dd><span class="badge{{with .Tone}} {{.}}{{end}}">{{.Outcome}}</span><span class="mono">{{.From}} &rarr; {{.To}}</span>{{with .Why}}<span class="faint">{{.}}</span>{{end}}<span class="faint">{{timeAs .At (agoPhrase .At)}}</span>{{with .Detail}}<small>{{.}}</small>{{end}}{{if .Rewire}}<small>Run <span class="mono">seamlessd install-hooks</span>{{copyBtn "seamlessd install-hooks"}} to re-wire your agents.</small>{{end}}{{with .Error}}<small class="updates-error updates-attempt-error">{{icon "triangle-alert"}}<span class="mono">{{.}}</span></small>{{end}}{{with .LogPath}}<small class="faint">Log: <span class="mono">{{.}}</span>{{copyBtn .}}</small>{{end}}</dd></div>{{end}}
+        {{with .Paused}}<div><dt>Paused</dt><dd><span class="badge {{if .Danger}}danger{{else}}warn{{end}}">paused</span><span>Automatic updates paused themselves: {{.Reason}}{{with .Versions}} ({{.}}){{end}}.</span><span class="faint">{{timeAs .At (agoPhrase .At)}}</span><small>Nothing installs by itself until you resume them. Update now still works.</small></dd></div>{{end}}
+        {{with .Hold}}<div><dt>Held back</dt><dd><span>Releases up to <span class="mono">{{.Through}}</span> are skipped: this install went back from <span class="mono">{{.From}}</span>.</span><span class="faint">{{timeAs .At (agoPhrase .At)}}</span><small>Resume lets automatic updates take them again; Update now lifts the hold too.</small></dd></div>{{end}}
+        {{with .Blocked}}<div><dt>Skipped releases</dt><dd>{{range .}}<span class="updates-line"><span class="mono">{{.Version}}</span>: {{.Reason}} <span class="faint">{{timeAs .At (agoPhrase .At)}}</span></span>{{end}}<small>Automatic updates skip these releases until a newer one is out; Resume does not clear them, and Update now does not skip them.</small></dd></div>{{end}}
+        {{with .Backoff}}<div><dt>Next try</dt><dd><span>{{.Line}}; automatic updates try again {{timeAs .Until .In}}.</span></dd></div>{{end}}
+      </dl>
+
+      <div class="updates-actions">
+        <form method="post" action="/console/settings/updates" aria-label="Check for updates">
+          {{if .Checking}}<input type="hidden" name="check" value="off">
+          <button class="btn small" type="submit">Turn update checks off</button>
+          {{else}}<input type="hidden" name="check" value="on">
+          <button class="btn small primary" type="submit"{{if .Locked}} disabled{{end}}>Turn update checks on</button>{{end}}
+        </form>
+        <form method="post" action="/console/settings/updates/check">
+          <button class="btn small" type="submit"{{with .CheckNowBlocked}} disabled title="{{.}}"{{end}}>{{icon "refresh-cw"}} Check now</button>
+        </form>
+        {{if .Auto.Switch}}<form method="post" action="/console/settings/updates/auto" aria-label="Automatic updates">
+          {{if .Auto.On}}<input type="hidden" name="auto" value="off">
+          <button class="btn small" type="submit">Turn automatic updates off</button>
+          {{else}}<input type="hidden" name="auto" value="on">
+          <button class="btn small primary" type="submit"{{if .Auto.Locked}} disabled{{end}}>Turn automatic updates on</button>{{end}}
+          {{/* update.auto: false decides this one switch, so the chip sits
+               beside it; update.check: false decides the whole section, and
+               the head's chip says so. Either way it is said once. */}}
+          {{if .Auto.Locked}}{{template "source-chip" (sourceChip "locked" .Auto.LockedNote "")}}{{end}}
+        </form>{{end}}
+        {{with .UpdateNow}}{{if .Offered}}<form method="post" action="/console/settings/updates/apply">
+          <button class="btn small" type="submit"{{with .Blocked}} disabled title="{{.}}"{{else}} data-confirm="Install {{.Target}} now? The daemon restarts to finish, so agent sessions lose Seamless for a moment. This skips the soak and does not wait for agents to go idle." data-confirm-label="Install now"{{end}}>{{icon "arrow-down-to-line"}} {{if .Target}}Update to {{.Target}} now{{else}}Update now{{end}}</button>
+        </form>{{end}}{{end}}
+        {{with .Resume}}{{if .Offered}}<form method="post" action="/console/settings/updates/resume">
+          <button class="btn small primary" type="submit"{{with .Blocked}} disabled title="{{.}}"{{end}}>{{icon "power"}} Resume automatic updates</button>
+        </form>{{end}}{{end}}
+      </div>
+      {{if .Overridden}}<form id="updates-reset" method="post" action="/console/settings/updates/reset"></form>{{end}}
+      {{else}}
+      <p class="updates-note">{{icon "info"}}<span>The update check is not running in this process, so there is nothing to show or change here.</span></p>
+      {{end}}{{end}}
+    </section>
+{{end}}{{end}}

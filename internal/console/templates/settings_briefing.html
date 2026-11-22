@@ -1,0 +1,208 @@
+{{/* Settings > Briefing: the presets, the knobs and the preview. Parsed with the
+     settings page (render.go), whose dispatch calls it with the page's
+     data, so $ reads as it does there ($.Level, $.Features, $.Data). */}}
+{{define "settings-briefing"}}{{with .Data}}
+    <section class="settings-zone settings-section" id="briefing-recipe">
+      <header class="settings-section-head">
+        <div>
+          <h2>Briefing{{hintFor "Briefing" "Pick a preset, or customize every knob, to choose the context packed into <seam-briefing> at the start of a session. It applies from the next session start with no restart. Saving stores a layer in the database and never rewrites your config file, where the token budget stays."}}</h2>
+          <p>What every new agent session starts with.</p>
+        </div>
+        {{if .BriefingOverridden}}{{template "source-chip" (sourceChip "override" "Saved in this console: new sessions use these values, not the config file and its environment variables, until you reset them." "brief-reset" "Clear the console override and go back to the file/env configuration?")}}{{else}}{{template "source-chip" (sourceChip "file" "From the config file and its environment variables. Saving here stores your values, which win until you reset them." "")}}{{end}}
+      </header>
+
+      <article class="briefing-workbench">
+
+        {{/* The preset radios belong to this never-submitted form, so picking one
+             only fills the fields below: the briefing form still submits the whole
+             struct through its one route, validation unchanged. */}}
+        <form id="briefing-preset-picker" hidden></form>
+        <form id="briefing-preview-picker" hidden></form>
+        <form method="post" action="/console/settings/briefing" data-briefing-form>
+          <fieldset class="brief-presets" data-brief-presets>
+            <legend>Presets</legend>
+            <div class="brief-preset-grid">
+              {{range .BriefingPresets}}
+              <label class="brief-preset">
+                <input type="radio" name="briefing-preset" value="{{.Key}}" form="briefing-preset-picker" data-preset-values="{{.Values}}"{{if .Selected}} checked{{end}}>
+                <span class="brief-preset-name">{{.Label}}</span>
+                <span class="brief-preset-intent">{{.Intent}}</span>
+                <span class="brief-preset-summary">{{.Summary}}</span>
+              </label>
+              {{end}}
+            </div>
+            <p class="brief-preset-custom" data-preset-custom{{range .BriefingPresets}}{{if .Selected}} hidden{{end}}{{end}}>{{icon "sliders"}}<span><strong>Custom</strong> &mdash; these values match no preset. Pick one to replace them, or keep your own.</span></p>
+          </fieldset>
+
+          {{/* The preview sits inside the form only for layout: its project
+               select belongs to the never-submitted picker form, so a save
+               never carries it. Script fills the body from
+               /console/settings/briefing/preview; without script it stays hidden. */}}
+          <section class="brief-preview" data-brief-preview aria-labelledby="brief-preview-title">
+            <header class="brief-preview-head">
+              <div>
+                <span class="brief-preview-kicker">{{icon "eye"}}Preview</span>
+                <h4 id="brief-preview-title">What a new session starts with</h4>
+              </div>
+              {{if .PreviewProjects}}
+              <label class="brief-preview-project">
+                <span>in</span>
+                <select name="project" form="briefing-preview-picker" data-brief-preview-project aria-label="Project to preview">
+                  {{range .PreviewProjects}}<option value="{{.}}"{{if eq . $.Data.PreviewProject}} selected{{end}}>{{.}}</option>{{end}}
+                </select>
+              </label>
+              {{end}}
+            </header>
+            {{if .PreviewProjects}}
+            <div class="brief-preview-body" data-brief-preview-body aria-live="polite" aria-busy="true">
+              <p class="brief-preview-wait">Assembling the briefing&hellip;</p>
+            </div>
+            <p class="brief-preview-note">Follows the values above as you change them, saved or not. A preview saves nothing and no agent receives it.</p>
+            {{else}}
+            <p class="brief-preview-empty">No projects yet. The preview appears once an agent has worked in a mapped repo.</p>
+            {{end}}
+          </section>
+
+          <details class="brief-customize"{{if .CustomizeOpen}} open{{end}}>
+            <summary>{{icon "sliders"}}<span>Customize</span><small>every knob, grouped by what it shapes</small></summary>
+          <div class="briefing-groups">
+            <section class="brief-group memory-group">
+              <header><span class="brief-group-icon">{{icon "database"}}</span><div><span>Durable context</span><h4>Memory index</h4></div></header>
+              <p>Choose how many constraints and conventions render in full, then shape the compact memory directory.</p>
+              <div class="brief-fields three">
+                <label class="brief-field" for="constraint-max-full">
+                  <span>Full constraint lines</span>
+                  <span class="brief-number"><input id="constraint-max-full" type="number" name="constraint_max_full" min="0" value="{{.Briefing.ConstraintMaxFull}}" aria-describedby="constraint-max-full-help" title="the rest share one compact line; 0 keeps every constraint full"><i>lines</i></span>
+                  <small id="constraint-max-full-help">the rest share one compact line; 0 keeps every constraint full</small>
+                </label>
+                <label class="brief-field" for="convention-max-full">
+                  <span>Full convention lines</span>
+                  <span class="brief-number"><input id="convention-max-full" type="number" name="convention_max_full" min="0" value="{{.Briefing.ConventionMaxFull}}" aria-describedby="convention-max-full-help" title="the rest hide behind the count line; 0 keeps every convention full"><i>lines</i></span>
+                  <small id="convention-max-full-help">the rest hide behind the count line; 0 keeps every convention full</small>
+                </label>
+                <label class="brief-field" for="memory-max-items">
+                  <span>Maximum lines</span>
+                  <span class="brief-number"><input id="memory-max-items" type="number" name="memory_max_items" min="0" value="{{.Briefing.MemoryMaxItems}}" aria-describedby="memory-max-items-help" title="0 uses the token budget only"><i>items</i></span>
+                  <small id="memory-max-items-help">0 uses the token budget only</small>
+                </label>
+                <label class="brief-field" for="memory-max-age">
+                  <span>Recency window</span>
+                  <span class="brief-number"><input id="memory-max-age" type="number" name="memory_max_age_days" min="0" value="{{.Briefing.MemoryMaxAgeDays}}" aria-describedby="memory-max-age-help" title="0 keeps memories of every age"><i>days</i></span>
+                  <small id="memory-max-age-help">0 keeps memories of every age</small>
+                </label>
+              </div>
+            </section>
+
+            <section class="brief-group activity-group">
+              <header><span class="brief-group-icon">{{icon "activity"}}</span><div><span>Fresh signal</span><h4>Recent work</h4></div></header>
+              <p>Control the short operational tail that tells an agent what just happened.</p>
+              <div class="brief-fields three">
+                <label class="brief-field" for="findings-count">
+                  <span>Recent findings</span>
+                  <span class="brief-number"><input id="findings-count" type="number" name="findings_count" min="0" value="{{.Briefing.FindingsCount}}" aria-describedby="findings-count-help" title="0 hides the section"><i>items</i></span>
+                  <small id="findings-count-help">0 hides the section</small>
+                </label>
+                <label class="brief-field" for="findings-max-age">
+                  <span>Finding window</span>
+                  <span class="brief-number"><input id="findings-max-age" type="number" name="findings_max_age_days" min="0" value="{{.Briefing.FindingsMaxAgeDays}}" aria-describedby="findings-max-age-help" title="0 has no age filter"><i>days</i></span>
+                  <small id="findings-max-age-help">0 has no age filter</small>
+                </label>
+                <label class="brief-field" for="ready-tasks-shown">
+                  <span>Ready task titles</span>
+                  <span class="brief-number"><input id="ready-tasks-shown" type="number" name="ready_tasks_shown" min="0" value="{{.Briefing.ReadyTasksShown}}" aria-describedby="ready-tasks-shown-help" title="0 hides the ready line"><i>titles</i></span>
+                  <small id="ready-tasks-shown-help">0 hides the ready line</small>
+                </label>
+              </div>
+            </section>
+
+            <section class="brief-group planning-group">
+              <header><span class="brief-group-icon">{{icon "map"}}</span><div><span>Open loops</span><h4>Planning horizon</h4></div></header>
+              <p>Keep current plans and stages visible without carrying stale work forever.</p>
+              <div class="brief-fields two">
+                <label class="brief-field" for="pending-plan-window">
+                  <span>Pending plan window</span>
+                  <span class="brief-number"><input id="pending-plan-window" type="number" name="pending_plan_max_days" min="0" value="{{.Briefing.PendingPlanMaxDays}}" aria-describedby="pending-plan-window-help" title="0 keeps every awaiting plan"><i>days</i></span>
+                  <small id="pending-plan-window-help">0 keeps every awaiting plan</small>
+                </label>
+                <label class="brief-field" for="stage-unknown-window">
+                  <span>Gateless stage window</span>
+                  <span class="brief-number"><input id="stage-unknown-window" type="number" name="stage_unknown_max_age_days" min="0" value="{{.Briefing.StageUnknownMaxAgeDays}}" aria-describedby="stage-unknown-window-help" title="0 pins them forever"><i>days</i></span>
+                  <small id="stage-unknown-window-help">0 pins them forever</small>
+                </label>
+              </div>
+            </section>
+
+            <section class="brief-group family-group">
+              <header><span class="brief-group-icon">{{icon "git-fork"}}</span><div><span>Shared lineage</span><h4>Project family</h4></div></header>
+              <p>Let related projects contribute lower-priority context to the current project.</p>
+              <div class="brief-fields family-fields">
+                <label class="brief-field" for="sibling-findings-count">
+                  <span>Sibling findings</span>
+                  <span class="brief-number"><input id="sibling-findings-count" type="number" name="sibling_findings_count" min="0" value="{{.Briefing.SiblingFindingsCount}}" aria-describedby="sibling-findings-count-help" title="0 hides the section"><i>items</i></span>
+                  <small id="sibling-findings-count-help">0 hides the section</small>
+                </label>
+                <div class="brief-toggles">
+                  <label class="brief-toggle">
+                    <input type="checkbox" name="include_parent_memories" value="1"{{if .Briefing.IncludeParentMemories}} checked{{end}}>
+                    <span class="brief-switch" aria-hidden="true"></span>
+                    <span><strong>Parent memories</strong><small>inherit the shared parent&rsquo;s memory index</small></span>
+                  </label>
+                  <label class="brief-toggle">
+                    <input type="checkbox" name="include_sibling_memories" value="1"{{if .Briefing.IncludeSiblingMemories}} checked{{end}}>
+                    <span class="brief-switch" aria-hidden="true"></span>
+                    <span><strong>Sibling memories</strong><small>add a low-priority family memory section</small></span>
+                  </label>
+                </div>
+              </div>
+            </section>
+
+          <section class="brief-group utility-group">
+            <header><span class="brief-group-icon">{{icon "trending-up"}}</span><div><span>Closed loop</span><h4>Utility ranking</h4></div></header>
+            <p>Blend each memory&rsquo;s time-decayed demand score into the index order, so workhorses outlast dead weight.</p>
+            <div class="brief-fields two">
+              <label class="brief-field" for="utility-weight">
+                <span>Utility weight</span>
+                <span class="brief-number"><input id="utility-weight" type="number" name="utility_weight" min="0" max="1" step="0.1" value="{{.Briefing.UtilityWeight}}" aria-describedby="utility-weight-help" title="0 restores pure recency ordering"><i>of sort key</i></span>
+                <small id="utility-weight-help">0 restores pure recency ordering</small>
+              </label>
+              <label class="brief-field" for="utility-mode">
+                <span>Activation</span>
+                <span class="brief-number"><select id="utility-mode" name="utility_mode" aria-describedby="utility-mode-help" title="auto arms each project once its demand history matures">
+                  <option value="auto"{{if eq .Briefing.UtilityMode "auto"}} selected{{end}}>auto &mdash; per project when ready</option>
+                  <option value="on"{{if eq .Briefing.UtilityMode "on"}} selected{{end}}>on &mdash; everywhere now</option>
+                  <option value="off"{{if eq .Briefing.UtilityMode "off"}} selected{{end}}>off &mdash; never</option>
+                </select></span>
+                <small id="utility-mode-help">auto arms each project once its demand history matures</small>
+              </label>
+            </div>
+          </section>
+
+          <section class="brief-group ceiling-group">
+            <header><span class="brief-group-icon">{{icon "gauge"}}</span><div><span>Last-resort bound</span><h4>Safety ceiling</h4></div></header>
+            <div class="ceiling-layout">
+              <label class="brief-field" for="hard-cap-multiplier">
+                <span>Hard cap multiplier</span>
+                <span class="brief-number"><input id="hard-cap-multiplier" type="number" name="hard_cap_multiplier" min="0" value="{{.Briefing.HardCapMultiplier}}" aria-describedby="hard-cap-multiplier-help" title="0 uses the safe default of 2&times;"><i>&times; budget</i></span>
+                <small id="hard-cap-multiplier-help">0 uses the safe default of 2&times;</small>
+              </label>
+              <div class="brief-guardrail">{{icon "lock"}}<span><strong>Protected context stays protected.</strong> Constraints and active-plan rollups are never filtered; a pinned stage is also exempt while its Status header marks a live gate.</span></div>
+            </div>
+          </section>
+          </div>
+          </details>
+
+          <footer class="brief-actions settings-savebar">
+            <div class="brief-state" id="brief-state" role="status" aria-live="polite">
+              <span class="state-dot"></span>
+              <span>Saving applies from the next session start.</span>
+            </div>
+            <div class="btn-row">
+              <button class="btn" type="button" data-form-discard>Discard</button>
+              <button class="btn primary" type="submit">{{icon "check"}} Save briefing</button>
+            </div>
+          </footer>
+        </form>
+        {{if .BriefingOverridden}}<form id="brief-reset" method="post" action="/console/settings/briefing/reset"></form>{{end}}
+      </article>
+    </section>
+{{end}}{{end}}

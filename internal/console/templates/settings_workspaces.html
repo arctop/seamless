@@ -1,0 +1,156 @@
+{{/* Settings > Workspaces: the project directory and the families. Parsed with the
+     settings page (render.go), whose dispatch calls it with the page's
+     data, so $ reads as it does there ($.Level, $.Features, $.Data). */}}
+{{define "settings-workspaces"}}{{with .Data}}
+    <section class="settings-zone settings-section" id="workspace-registry">
+      <header class="settings-section-head registry-zone-head">
+        <div>
+          <h2>Workspaces</h2>
+          <p>See which project each repository resolves to, then group related projects when they should share context.</p>
+        </div>
+        <a class="btn small" href="/console/projects">Open project explorer {{icon "arrow-right"}}</a>
+      </header>
+
+      <div class="registry-overview" aria-label="Projects, repo routes and families">
+        <span>{{icon "box"}}<strong>{{len .Projects}}</strong> {{if eq (len .Projects) 1}}project{{else}}projects{{end}}</span>
+        <span>{{icon "link"}}<strong>{{len .RepoMap}}</strong> {{if eq (len .RepoMap) 1}}repo route{{else}}repo routes{{end}}</span>
+        <span>{{icon "git-fork"}}<strong>{{len .FamilyEditors}}</strong> {{if eq (len .FamilyEditors) 1}}family{{else}}families{{end}}</span>
+      </div>
+
+      <section class="registry-panel family-manager" data-family-manager>
+        <header class="registry-panel-head family-manager-head">
+          <span class="runtime-icon ok">{{icon "git-fork"}}</span>
+          <div><span>Shared context</span><h3>Project families</h3><p>Family members contribute sibling findings and, when enabled, sibling memories.</p></div>
+          <button class="btn small" type="button" data-dialog-open="family-create-dialog" aria-haspopup="dialog" aria-controls="family-create-dialog"{{if not .FamilyOptions}} disabled title="Register a project before creating a family"{{end}}>New family</button>
+        </header>
+        {{if .FamilyEditors}}
+        <div class="family-summary-list">
+          {{range $index, $family := .FamilyEditors}}
+          <article class="family-summary" id="family-summary-{{$index}}">
+            <div class="family-summary-title">
+              <span class="family-summary-icon">{{icon "git-fork"}}</span>
+              <div><strong>{{$family.Name}}</strong><small>{{len $family.Members}} project{{if ne (len $family.Members) 1}}s{{end}}</small></div>
+            </div>
+            <div class="family-summary-members" aria-label="{{$family.Name}} family members">
+              {{range $family.Members}}{{if .Registered}}<a class="mono" href="/console/projects/{{.Slug}}">{{.Slug}}</a>{{else}}<span class="mono referenced" title="Referenced but not registered">{{.Slug}}</span>{{end}}{{end}}
+            </div>
+            <button class="btn small" type="button" data-dialog-open="family-editor-{{$index}}" aria-haspopup="dialog" aria-controls="family-editor-{{$index}}">Edit</button>
+          </article>
+          {{end}}
+        </div>
+        {{else}}
+        <div class="family-manager-empty"><span>No families yet.</span> Create one when projects should share recent work in their briefings.</div>
+        {{end}}
+      </section>
+
+      <section class="registry-panel workspace-panel">
+        <header class="registry-panel-head workspace-panel-head">
+          <span class="runtime-icon brand">{{icon "folder-tree"}}</span>
+          <div><span>Routing directory</span><h3>Projects &amp; repo routes</h3><p>One row per project. Family membership stays intentionally compact.</p></div>
+          <span class="registry-count">{{len .Workspaces}}</span>
+        </header>
+        {{if .Workspaces}}
+        <div class="workspace-columns" aria-hidden="true">
+          <span>Project</span><span>Repo route</span><span>Family</span>
+        </div>
+        <div class="registry-scroll workspace-directory" tabindex="0" aria-label="Projects, repo routes, and family membership">
+          {{range .Workspaces}}
+          <article class="workspace-row{{if not .Registered}} is-referenced{{end}}{{if .Retired}} is-retired{{end}}" data-workspace-scope="{{.Slug}}">
+            <div class="workspace-cell workspace-identity">
+              <span class="workspace-cell-label">Project</span>
+              <div class="workspace-identity-main">
+                <span class="registry-project-icon">{{icon "box"}}</span>
+                <div class="workspace-project-copy">
+                  <div class="workspace-project-title">
+                    {{if .Registered}}<a class="mono" href="/console/projects/{{.Slug}}">{{.Slug}}</a>{{else}}<span class="mono">{{.Slug}}</span>{{end}}
+                    {{if .Retired}}<span class="registry-status retired">retired</span>{{else if not .Registered}}<span class="registry-status referenced">referenced</span>{{end}}
+                  </div>
+                  {{if and .Name (ne .Name .Slug)}}<strong>{{.Name}}</strong>{{end}}
+                  {{if .Description}}<small>{{.Description}}</small>{{else if not .Registered}}<small class="faint">Named by a repo route, a parent or a family, but not registered</small>{{end}}
+                </div>
+                {{copyBtn .Slug}}
+              </div>
+            </div>
+
+            <div class="workspace-cell workspace-routes">
+              <span class="workspace-cell-label">Repo route</span>
+              {{if .Repos}}
+              <div class="workspace-route-list">
+                {{range .Repos}}<div class="workspace-route" title="{{.Path}}{{if .Host}} on {{.Host}}{{end}}"><span class="repo-path-icon">{{icon "folder-open"}}</span><span class="mono">{{.Path}}</span>{{if $.Level.AtLeast "advanced"}}<span class="kind faint" title="Machine this checkout lives on">{{if .Host}}{{.Host}}{{else}}unknown host{{end}}</span>{{end}}{{copyBtn .Path}}</div>{{end}}
+              </div>
+              {{else}}<span class="workspace-empty-mark" title="No repo route">&mdash;</span>{{end}}
+            </div>
+
+            <div class="workspace-cell workspace-lineage">
+              <span class="workspace-cell-label">Family</span>
+              {{if or .ParentSlug .Families}}<div class="workspace-tags">
+                {{if .ParentSlug}}<span class="workspace-tag parent" title="Inherits parent memories">{{icon "git-branch"}}{{if .ParentRegistered}}<a class="mono" href="/console/projects/{{.ParentSlug}}">{{.ParentSlug}}</a>{{else}}<span class="mono referenced">{{.ParentSlug}}</span>{{end}}</span>{{end}}
+                {{range .Families}}<span class="workspace-tag family" title="{{.MemberCount}} projects in this family">{{icon "git-fork"}}<span class="mono">{{.Name}}</span></span>{{end}}
+              </div>{{else}}<span class="workspace-empty-mark" title="No family membership">&mdash;</span>{{end}}
+            </div>
+          </article>
+          {{end}}
+        </div>
+        {{else}}<div class="registry-empty">No projects registered or referenced yet.</div>{{end}}
+
+        {{if and .UnboundRepos ($.Level.AtLeast "advanced")}}
+        <aside class="workspace-unbound">
+          <span class="workspace-unbound-icon">{{icon "triangle-alert"}}</span>
+          <div><strong>Unbound arrival routes</strong><p>These repo paths do not resolve to a project.</p><div>{{range .UnboundRepos}}<span class="mono" title="{{if .Host}}on {{.Host}}{{else}}host unknown{{end}}">{{.Path}}{{if .Host}} <span class="faint">({{.Host}})</span>{{end}}</span>{{end}}</div></div>
+        </aside>
+        {{end}}
+      </section>
+
+      <dialog class="family-dialog" id="family-create-dialog" aria-labelledby="family-create-title">
+        <div class="family-dialog-card">
+          <header class="family-dialog-head"><div><span>New group</span><h3 id="family-create-title">Create project family</h3><p>Choose projects that should share recent findings in their briefings.</p></div><button type="button" data-dialog-close aria-label="Close">&times;</button></header>
+          <form method="post" action="/console/settings/families/save" data-family-form>
+            <label class="family-name-field"><span>Family name</span><input type="text" name="name" maxlength="255" autocomplete="off" placeholder="e.g. mobile-apps" required></label>
+            <fieldset class="family-project-fieldset">
+              <legend><span>Projects</span><small data-family-selection>0 selected</small></legend>
+              <label class="family-project-search">{{icon "search"}}<input type="search" placeholder="Filter projects" autocomplete="off" data-family-filter></label>
+              <div class="family-project-options" data-family-options>
+                {{range .FamilyOptions}}
+                <label class="family-project-option" data-family-option>
+                  <input type="checkbox" name="members" value="{{.Slug}}">
+                  <span class="family-option-check">{{icon "check"}}</span>
+                  <span><strong class="mono">{{.Slug}}</strong>{{if and .Name (ne .Name .Slug)}}<small>{{.Name}}</small>{{end}}</span>
+                </label>
+                {{end}}
+              </div>
+            </fieldset>
+            <footer class="family-dialog-actions"><button class="btn" type="button" data-dialog-close>Cancel</button><button class="btn primary" type="submit">Create family</button></footer>
+          </form>
+        </div>
+      </dialog>
+
+      {{range $index, $family := .FamilyEditors}}
+      <dialog class="family-dialog" id="family-editor-{{$index}}" aria-labelledby="family-editor-title-{{$index}}">
+        <div class="family-dialog-card">
+          <header class="family-dialog-head"><div><span>Edit group</span><h3 id="family-editor-title-{{$index}}">Project family</h3><p>Rename the family or change which projects share context.</p></div><button type="button" data-dialog-close aria-label="Close">&times;</button></header>
+          <form id="family-save-{{$index}}" method="post" action="/console/settings/families/save" data-family-form>
+            <input type="hidden" name="original_name" value="{{$family.Name}}">
+            <label class="family-name-field"><span>Family name</span><input type="text" name="name" maxlength="255" autocomplete="off" value="{{$family.Name}}" required></label>
+            <fieldset class="family-project-fieldset">
+              <legend><span>Projects</span><small data-family-selection>{{len $family.Members}} selected</small></legend>
+              <label class="family-project-search">{{icon "search"}}<input type="search" placeholder="Filter projects" autocomplete="off" data-family-filter></label>
+              <div class="family-project-options" data-family-options>
+                {{range $family.Options}}
+                <label class="family-project-option{{if not .Registered}} is-referenced{{end}}{{if .Retired}} is-retired{{end}}" data-family-option>
+                  <input type="checkbox" name="members" value="{{.Slug}}"{{if .Selected}} checked{{end}}>
+                  <span class="family-option-check">{{icon "check"}}</span>
+                  <span><strong class="mono">{{.Slug}}</strong>{{if and .Name (ne .Name .Slug)}}<small>{{.Name}}</small>{{else if not .Registered}}<small>Referenced, not registered</small>{{else if .Retired}}<small>Retired project</small>{{end}}</span>
+                </label>
+                {{end}}
+              </div>
+            </fieldset>
+          </form>
+          <footer class="family-dialog-actions split family-dialog-outer-actions">
+            <form method="post" action="/console/settings/families/delete"><input type="hidden" name="original_name" value="{{$family.Name}}"><button class="btn danger" type="submit" data-confirm="Delete this project family? Projects and their knowledge will not be deleted." data-confirm-label="Delete it">Delete family</button></form>
+            <div><button class="btn" type="button" data-dialog-close>Cancel</button><button class="btn primary" type="submit" form="family-save-{{$index}}">Save changes</button></div>
+          </footer>
+        </div>
+      </dialog>
+      {{end}}
+    </section>
+{{end}}{{end}}

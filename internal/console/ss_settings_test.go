@@ -519,7 +519,7 @@ func TestSsStyles_RowsHeadsAndNoDeadRules(t *testing.T) {
 		".features-workbench-head", ".briefing-workbench-head"} {
 		require.NotContains(t, css, gone)
 	}
-	for _, name := range []string{"templates/settings.html", "templates/settings_backups.html"} {
+	for _, name := range append([]string{"templates/settings.html"}, settingsPartials...) {
 		src, err := templateFS.ReadFile(name)
 		require.NoError(t, err)
 		for _, gone := range []string{"settings-zone-kicker", "settings-access", "settings-precedence", "settings-subnav-copy"} {

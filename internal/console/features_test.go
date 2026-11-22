@@ -1110,8 +1110,7 @@ func TestFeatureStyles_ZoneAndDisabledPage(t *testing.T) {
 // form uses, and the page stays opted out of the live SSE morph so a half-filled
 // form is never clobbered.
 func TestSettingsFeaturesForm_DirtyStateAndNoLiveRefresh(t *testing.T) {
-	source, err := templateFS.ReadFile("templates/settings.html")
-	require.NoError(t, err)
+	source := settingsPageSource(t)
 	page := string(source)
 
 	require.Contains(t, page, "window.SEAM_NO_LIVE_REFRESH = true")

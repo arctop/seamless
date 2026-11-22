@@ -8030,7 +8030,7 @@ a.project-global-line:focus-visible { outline: none; box-shadow: var(--shadow-fo
 }
 
 /* UX 23: Settings > Knowledge engine > Gardener, the gardener's two switches
-   (settings.html #settings-gardener): one form per control, stacked. */
+   (settings_gardener.html #settings-gardener): one form per control, stacked. */
 .gardener-switches { --group-accent: var(--brand); }
 .gardener-switches > form { display: grid; gap: 8px; margin: 0 0 18px; }
 .gardener-switches > form h4 { margin: 0; color: var(--ink-2); font-size: var(--text-sm); }
@@ -9694,3 +9694,14 @@ tbody tr.row-link[data-panel-current] td:first-child { box-shadow: inset 2px 0 0
   .door-code-value code { font-size: var(--text-2xl); letter-spacing: 0.08em; }
   .door-rung-sub { max-width: 96px; }
 }
+
+/* ---- Wave cux1122f (plan:console-ux-pass): one section per step below. Each
+   step's rules go after its own marker line, never above another's. ---- */
+
+/* UX 35: Settings > Features rows and Experience level cards. */
+
+/* UX 36: Settings > Updates, Backups and Your setup. */
+
+/* UX 37: Settings > Gardener section. */
+
+/* UX 39: Settings > Workspaces filter and toggle. */
