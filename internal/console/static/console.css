@@ -8102,11 +8102,11 @@ a.project-global-line:focus-visible { outline: none; box-shadow: var(--shadow-fo
    prose; its generated name is the second line. The ops pages' active-filter
    chip (a project on Sessions and Mishaps) takes the brand accent the library
    pages set for theirs. */
-.sess-row .id-line a.sess-headline { font-family: var(--font-sans); font-size: var(--text-sm); }
-.sess-row .id-line a.sess-headline.is-prompt { font-style: italic; font-weight: 500; }
-.sess-row .id-line a.sess-headline.is-prompt::before { content: "\201C"; }
-.sess-row .id-line a.sess-headline.is-prompt::after { content: "\201D"; }
-.sess-row .sess-name .mono { font-size: var(--text-2xs); }
+a.sess-headline { font-family: var(--font-sans); font-size: var(--text-sm); }
+a.sess-headline.is-prompt { font-style: italic; font-weight: 500; }
+a.sess-headline.is-prompt::before { content: "\201C"; }
+a.sess-headline.is-prompt::after { content: "\201D"; }
+.sess-name .mono { font-size: var(--text-2xs); }
 .ops-page .lib-active-filter { --lib-accent: var(--brand); }
 .session-timeline-card .session-timeline-cap { margin: 0 0 12px; }
 

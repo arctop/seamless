@@ -621,7 +621,8 @@ Top to bottom:
   the empty project scope filters as `global`). Filtering narrows every zone
   except the pulse.
 - **On duty** - one card per live session, headed by the title of the task it
-  holds (its session name when it holds none), with the session name,
+  holds, else by its first prompt as the Sessions screen titles its rows, else
+  by its session name, with the session name,
   harness+model pill and account under it; then its project, when it was last
   seen (cards are toned hot/warm/quiet by heartbeat age), how long it has been
   running, cumulative tokens, a star toggle, every claim it holds with a live
@@ -1081,7 +1082,7 @@ Memories, and `?isolate=<state>` with no tab opens Overview.
 |---|---|
 | Plans & tasks | Per-plan step timelines with each step's [status words](#tasks), claiming session, lease countdown, and blocking dependency; plus the ready queue. Each row copies its task's whole id, and each plan's head copies `plan:<slug>`. A step in progress that no live claim holds carries a strip under its row: **claim lapsed** offers *release claim*, **unclaimed** (marked in progress with no claim at all) opens the task under its row. |
 | Overview | The project's metrics, memory kinds, injection trend, its Isolation card, and its own recent events. |
-| Sessions | The project's sessions counted by state (live, idle, completed, expired), the newest 60 of them, and a link to all of them on the Sessions screen. A live session names each task it holds by title, linked to the task. |
+| Sessions | The project's sessions counted by state (live, idle, completed, expired), the newest 60 of them, and a link to all of them on the Sessions screen. Each row is titled as the Sessions screen titles it (the task a live session holds, else its first prompt), with its name under it, and a live session names each task it holds by title, linked to the task. |
 | Memories | The project's memories with a lineage cell - provenance session, or a supersession pointer - plus the memories it *inherits* from a parent that a strict per-slug count excludes. |
 | Notes | The project's notes. |
 | Interactions | The project-scoped slice of the feed. |

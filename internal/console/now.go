@@ -12,6 +12,7 @@
 package console
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net/http"
@@ -358,6 +359,9 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 		}
 		return live[i].ID > live[j].ID
 	})
+	// The Sessions screen's headline (sessionHeadlines) titles a card that
+	// holds no claim by its first prompt; a held claim still heads it below.
+	heads := s.sessionHeadlines(ctx, live, now)
 	for _, sess := range live {
 		if !inScope(sess.ProjectSlug) {
 			continue
@@ -371,7 +375,7 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 		if vm.Name == "" {
 			vm.Name = shortID(sess.ID)
 		}
-		vm.Title = vm.Name
+		vm.Title = cmp.Or(heads[sess.ID].Text, vm.Name)
 		for _, t := range claims[sess.ID] {
 			claim := nowClaimVM{ID: t.ID, Title: t.Title, Project: t.ProjectSlug, PlanSlug: t.PlanSlug}
 			if t.LeaseExpiresAt != nil {

@@ -1500,7 +1500,8 @@ by scope.</li>
 the empty project scope filters as <code>global</code>). Filtering narrows every zone
 except the pulse.</li>
 <li><strong>On duty</strong> - one card per live session, headed by the title of the task it
-holds (its session name when it holds none), with the session name,
+holds, else by its first prompt as the Sessions screen titles its rows, else
+by its session name, with the session name,
 harness+model pill and account under it; then its project, when it was last
 seen (cards are toned hot/warm/quiet by heartbeat age), how long it has been
 running, cumulative tokens, a star toggle, every claim it holds with a live
@@ -2052,7 +2053,7 @@ Memories, and <code>?isolate=&lt;state&gt;</code> with no tab opens Overview.</p
 </tr>
 <tr>
 <td>Sessions</td>
-<td>The project's sessions counted by state (live, idle, completed, expired), the newest 60 of them, and a link to all of them on the Sessions screen. A live session names each task it holds by title, linked to the task.</td>
+<td>The project's sessions counted by state (live, idle, completed, expired), the newest 60 of them, and a link to all of them on the Sessions screen. Each row is titled as the Sessions screen titles it (the task a live session holds, else its first prompt), with its name under it, and a live session names each task it holds by title, linked to the task.</td>
 </tr>
 <tr>
 <td>Memories</td>

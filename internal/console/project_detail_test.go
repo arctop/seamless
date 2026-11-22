@@ -83,7 +83,12 @@ func TestProjectWorkspace_RendersAllTabs(t *testing.T) {
 	require.Contains(t, body, "Build project detail", "the plan step title")
 	sessions := tabPanel(t, getHTMLBody(t, mux, "/console/projects/seamless?tab=sessions"), "sessions")
 	require.Contains(t, sessions, "cc/s1", "the claiming session appears on the sessions panel")
-	claim := between(t, sessions, "Build project detail", `<span class="claim"`, "</span>")
+	// The row's headline names the task first (sessionHeadlines), so find the
+	// claim chip itself: it names the held task by title, linked.
+	at := strings.Index(sessions, `<span class="claim"`)
+	require.GreaterOrEqual(t, at, 0, "the held task's claim chip")
+	claim := sessions[at:]
+	claim = claim[:strings.Index(claim, "</a></span>")+len("</a></span>")]
 	require.Contains(t, claim, `<a href="/console/tasks/`+taskID+`">Build project detail</a>`,
 		"the session names the task it holds by title, linked to the task")
 	require.Contains(t, claim, "ico-terminal", "with the step rows' holder icon")

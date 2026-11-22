@@ -182,6 +182,11 @@ type projSessionVM struct {
 	Findings string
 	Holds    []heldTaskVM // the tasks the session holds a live claim on
 	Updated  time.Time
+	// Headline titles the row by what the session is doing, as the Sessions
+	// screen does (sessionHeadlines): the task it holds, else its first
+	// prompt. "" keeps the name. HeadlineFrom is headlineTask or headlinePrompt.
+	Headline     string
+	HeadlineFrom string
 }
 
 // heldTaskVM is a task a live session holds, as its row names it: by title,
@@ -804,24 +809,21 @@ func (s *Service) fillSessionsTab(ctx context.Context, data *projectWorkspaceDat
 	if err != nil {
 		return err
 	}
+	// Two reads for the whole list (the held tasks and the first prompts),
+	// through the request's handle.
+	heads := s.sessionHeadlines(ctx, sessions, now)
 	for _, sess := range sessions {
+		h := heads[sess.ID]
 		vm := projSessionVM{
 			ID: sess.ID, Name: sessionLabel(sess), Status: string(sess.Status),
 			Source: sess.Source, Account: sess.Account, Ambient: sess.Ambient,
 			Live:     sess.LiveAsOf(now, s.cfg.SessionIdleTTL),
 			Findings: snippet(markdown.PlainText(sess.Findings), 140), Updated: sess.UpdatedAt,
+			Headline: h.Text, HeadlineFrom: h.From,
 		}
 		vm.State = sessionState(sess, vm.Live)
-		if sess.Status == core.SessionActive {
-			held, err := store.TasksClaimedBy(ctx, s.db(ctx), sess.ID)
-			if err != nil {
-				return err
-			}
-			for _, t := range held {
-				if t.ClaimLive(now) {
-					vm.Holds = append(vm.Holds, heldTaskVM{ID: t.ID, Title: t.Title})
-				}
-			}
+		for _, t := range h.Held {
+			vm.Holds = append(vm.Holds, heldTaskVM{ID: t.ID, Title: t.Title})
 		}
 		data.Sessions = append(data.Sessions, vm)
 	}

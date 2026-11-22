@@ -130,6 +130,7 @@ type projectMetrics struct {
 	Live        int
 	OpenTasks   int
 	Blocked     int
+	Waiting     int // gates and the steps they hold (store.TaskCounts.Waiting)
 	HasReach    bool
 	ReachRate   int
 	HasCoverage bool
@@ -294,7 +295,7 @@ func (s *Service) projectWorkspace(w http.ResponseWriter, r *http.Request, p cor
 	data.Live = row.LiveSessions
 	data.Metrics = projectMetrics{
 		Memories: row.Memories, Sessions: row.Sessions, Live: row.LiveSessions,
-		OpenTasks: row.OpenTasks, Blocked: row.Blocked,
+		OpenTasks: row.OpenTasks, Blocked: row.Blocked, Waiting: row.Waiting,
 		HasReach: row.Active > 0, ReachRate: row.ReachRate,
 	}
 	data.Blocked = row.Blocked
