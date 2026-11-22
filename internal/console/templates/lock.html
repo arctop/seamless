@@ -1,41 +1,60 @@
 {{define "content"}}
 {{with .Data}}
-<div class="unlock-page" data-lock="{{.Slug}}">
-<header class="mv2-bar">
-  <h1>{{icon "lock"}}{{.Name}}</h1>{{about "A locked project closes to every agent until you approve one, its own agents included. Its name and counts still show; its content does not. Lock it here with a passkey, or force lock it in the daemon's config file, which only the file can undo."}}
-</header>
-
-<section aria-labelledby="lock-title">
-  <h2 id="lock-title">{{if .Force}}Force locked{{else if .Console}}Locked from the console{{else}}Lock this project{{end}}</h2>
+{{/* The door (plan:console-ux-pass UX 40), for a lock change: the change
+     asked as the title, the fence ladder with where the project stands and
+     where the change takes it, what changes, and one action. After the
+     passkey, the steps the script moves on: approved, restarting, done. */}}
+<div class="door-page" data-lock="{{.Slug}}">
+<div class="crumb"><a href="/console/projects">All projects</a> <span class="faint">/</span> <a href="/console/projects/{{.Slug}}">{{.Slug}}</a> <span class="faint">/</span> <b>Lock</b></div>
+<section class="door door-lock" aria-labelledby="lock-title" data-door="lock" data-rung="{{.Rung}}"{{with .RungTo}} data-rung-to="{{.}}"{{end}}>
+  <h1 class="door-title" id="lock-title">{{.Question}}</h1>
+  <p class="door-sub">{{.Lead}}</p>
+  <ol class="door-ladder" aria-label="Where the project stands">
+    {{range .Ladder}}<li class="door-rung{{if .Here}} is-here{{end}}{{if .To}} is-to{{end}}" data-rung="{{.Key}}"{{if .Here}} aria-current="step"{{end}}><span class="door-rung-pip" aria-hidden="true">{{icon .Icon}}</span><strong>{{.Label}}</strong><span class="door-rung-sub">{{.Sub}}</span>{{if .Here}}<span class="steps-sr"> (where it stands)</span>{{end}}{{if .To}}<span class="steps-sr"> (where this change takes it)</span>{{end}}</li>{{end}}
+  </ol>
   {{if .Force}}
-  <p class="held-sub">{{icon "lock"}} This project is listed under <code>peer_auth.force_locked</code> in the daemon's config file. Only the file can remove this lock.</p>
+  <div class="door-actions">
+    <p class="door-say">Only the config file can remove this lock.</p>
+    <span class="door-key"><code>peer_auth.force_locked</code>{{copyBtn "peer_auth.force_locked"}}</span>
+    {{if .Active}}<a class="door-link" href="/console/unlock/{{.Slug}}">Unlock it in this browser instead {{icon "arrow-right"}}</a>{{end}}
+  </div>
   {{else if and (not .Console) (not .Fenced)}}
-  <p class="held-sub">A lock needs an isolation fence. Make this project confidential or sealed on <a href="/console/projects/{{.Slug}}?tab=overview#isolation">its Isolation card</a> first.</p>
+  <div class="door-actions">
+    <p class="door-say">A lock sits on a fence: make it confidential first.{{hintFor "the fence" "A lock needs an isolation fence: confidential, where nothing leaves the project, or sealed, where nothing goes in or out. Set one on the project's Isolation card, then come back."}}</p>
+    <a class="btn primary" data-door-primary href="/console/projects/{{.Slug}}?tab=overview#isolation">Open its Isolation card {{icon "arrow-right"}}</a>
+  </div>
   {{else}}
-  {{if .Console}}
-  <p class="held-sub">Removing this lock lets agents reach the project again without your approval, within its isolation fence.</p>
-  {{else}}
-  <p class="held-sub">Even this project's own agents will have to ask you first, and this console will show only its name and counts until you unlock it in a browser.</p>
+  {{if .Pending}}<div class="door-chips"><span class="badge warn" data-lock-pending>{{icon "refresh-cw"}}Saved: takes effect when Seamless next restarts</span>{{hintFor "the saved change" "The locked projects are read once, at start. Until Seamless restarts, the running daemon keeps this project as it was."}}</div>{{end}}
+  <div class="door-ready" id="lock-ready">
+    <ul class="door-what" aria-label="What changes">
+      <li>{{icon "bot"}}<span>{{.WhatAgents}}</span></li>
+      <li>{{icon "monitor"}}<span>{{.WhatConsole}}</span></li>
+    </ul>
+    <div class="door-actions">
+    {{if not .Browser}}
+      <p class="door-notice">{{icon "triangle-alert"}}<span>A lock change needs a passkey: open this page in the browser you sign in to the console with.</span></p>
+    {{else if not .PasskeysOn}}
+      <p class="door-notice">{{icon "triangle-alert"}}<span>Passkeys are not configured on this daemon, so the lock can only be set in its config file.</span></p>
+    {{else if not .HasPasskey}}
+      <p class="door-say" data-needs-passkey>A lock change needs your passkey, and none is added yet.</p>
+      <a class="btn primary" data-door-primary href="/console/approvers">{{icon "key-round"}}Add a passkey on Approvers {{icon "arrow-right"}}</a>
+      <p class="door-note">Then come back here.</p>
+    {{else if not .OnOrigin}}
+      <p class="door-notice">{{icon "triangle-alert"}}<span>A passkey works only on <a href="{{.Origin}}/console/lock/{{.Slug}}">{{.Origin}}</a>. Open this page there to make the change.</span></p>
+    {{else}}
+      <form id="lock-form" data-project="{{.Slug}}" data-action="{{.Action}}">
+        <button class="btn {{if .Console}}danger{{else}}primary{{end}}" id="lock-go" type="submit" data-door-primary>{{icon "key-round"}}{{if .Console}}Remove the lock with a passkey{{else}}Lock with a passkey{{end}}</button>
+      </form>
+      {{if .CanRestart}}<p class="door-note"><span class="badge quiet">{{icon "refresh-cw"}}Seamless restarts to apply it</span>{{hintFor "the restart" "The locked projects are read once, at start, so Seamless restarts in place to apply this. Agent connections drop for a few seconds and reconnect."}}</p>
+      {{else}}<p class="door-note"><span class="badge quiet">{{icon "refresh-cw"}}It applies when Seamless next restarts</span></p>{{end}}
+    {{end}}
+    </div>
+  </div>
+  <div class="door-steps-after" id="lock-steps" hidden>{{template "steps" .Steps}}<template id="lock-check">{{icon "check"}}</template></div>
   {{end}}
-  {{if .Pending}}
-  <p class="held-sub">{{icon "triangle-alert"}} This change is saved and takes effect when Seamless next restarts.</p>
-  {{end}}
-  {{if not .Browser}}
-  <p class="held-sub">A lock change needs a passkey: open this page in the browser you sign in to the console with.</p>
-  {{else if not .PasskeysOn}}
-  <p class="held-sub">Passkeys are not configured on this daemon, so the lock can only be set in its config file.</p>
-  {{else if not .HasPasskey}}
-  <p class="held-sub" data-needs-passkey>{{icon "key-round"}} You need a passkey to change a lock. <a href="/console/approvers">Add one on the Approvers page</a>, then come back.</p>
-  {{else if not .OnOrigin}}
-  <p class="held-sub">{{icon "triangle-alert"}} A passkey works only on <a href="{{.Origin}}/console/lock/{{.Slug}}">{{.Origin}}</a>.</p>
-  {{else}}
-  <form id="lock-form" class="access-form" data-project="{{.Slug}}" data-action="{{.Action}}">
-    <button class="btn primary" id="lock-go" type="submit">{{icon "key-round"}} {{if .Console}}Remove the lock with a passkey{{else}}Lock with a passkey{{end}}</button>
-  </form>
-  {{if .CanRestart}}<p class="held-sub">Seamless restarts to apply this. Agent connections drop briefly and reconnect.</p>{{end}}
-  {{end}}
-  <p class="held-sub" id="lock-status" role="status" aria-live="polite"></p>
-  {{end}}
+  <!-- data-live-skip: the script owns this line. The server renders it empty,
+       so the refresh after a change would otherwise wipe what it said. -->
+  <p class="door-status" id="lock-status" data-live-skip role="status" aria-live="polite"></p>
 </section>
 </div>
 {{end}}
@@ -53,6 +72,40 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony in progress must not be clobbe
       return window.SeamConsole.load(location.href, { history: 'replace', source: 'query' });
     }
     return Promise.resolve(false);
+  }
+  // steps moves the change's steps on, one state per step ("done", "now" or
+  // "todo"), drawing them as the kit's "steps" partial does.
+  function steps(states) {
+    var box = document.getElementById('lock-steps');
+    var check = document.getElementById('lock-check');
+    if (!box) return;
+    box.hidden = false;
+    var ready = document.getElementById('lock-ready');
+    if (ready) ready.hidden = true;
+    var items = box.querySelectorAll('.steps-item');
+    for (var i = 0; i < items.length; i++) {
+      var state = states[i] || 'todo';
+      var li = items[i];
+      li.className = 'steps-item is-' + state;
+      if (state === 'now') li.setAttribute('aria-current', 'step');
+      else li.removeAttribute('aria-current');
+      var mark = li.querySelector('.steps-mark');
+      if (mark) {
+        mark.textContent = '';
+        if (state === 'done' && check && check.content) mark.appendChild(check.content.cloneNode(true));
+        else mark.textContent = String(i + 1);
+      }
+      var label = li.querySelector('.steps-label');
+      var sr = label && label.querySelector('.steps-sr');
+      if (state === 'done' && label && !sr) {
+        sr = document.createElement('span');
+        sr.className = 'steps-sr';
+        sr.textContent = ' (done)';
+        label.appendChild(sr);
+      } else if (state !== 'done' && sr) {
+        sr.remove();
+      }
+    }
   }
   function enhance() {
     var form = document.getElementById('lock-form');
@@ -78,11 +131,18 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony in progress must not be clobbe
           return pk.post(base + '/finish', { id: id, action: action, response: JSON.stringify(pk.toJSON(cred)) });
         });
       }).then(function (done) {
-        if (!done.restarting) { say('Saved. It takes effect when Seamless next restarts.'); return refresh(); }
+        if (!done.restarting) {
+          steps(['done', 'todo', 'todo']);
+          say('Saved. It takes effect when Seamless next restarts.');
+          return refresh();
+        }
+        steps(['done', 'now', 'todo']);
         say('Saved. Seamless is restarting to apply it.');
         return pk.waitForRestart(before, 60).then(function (back) {
-          say(back ? 'Done.' : 'Seamless has not come back yet. Check it, then reopen this page.');
-          return back ? refresh() : false;
+          if (!back) { say('Seamless has not come back yet. Check it, then reopen this page.'); return false; }
+          steps(['done', 'done', 'done']);
+          say(action === 'remove' ? 'Done: the lock is removed.' : 'Done: the project is locked.');
+          return refresh();
         });
       }).catch(function (err) {
         say(pk.refusal(err));

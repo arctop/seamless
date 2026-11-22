@@ -809,7 +809,7 @@ func TestPeerAuthMatrix_Console(t *testing.T) {
 		require.Equal(t, http.StatusOK, status, body)
 		require.Contains(t, body, `"state": "live"`)
 		_, body, _ = browserA.do(t, http.MethodGet, "/console/unlock/"+cmLegal, nil, false)
-		require.Contains(t, body, "Unlocked in this browser")
+		require.Contains(t, body, `data-door-state="unlocked">Unlocked here`)
 		_, body, _ = browserA.do(t, http.MethodGet, "/console/memories/"+d.legal.memID, nil, false)
 		require.Contains(t, body, d.legal.secret)
 		live, err := store.LiveConsoleUnlocks(ctx, d.db, browserA.unlockHash(t, d.unlockCookie(t, browserA)), time.Now())

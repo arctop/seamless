@@ -451,7 +451,7 @@ nothing, and their rows say so.</p>
 | Deny an access request | <code>POST /console/access/{id}/deny</code> | Closes a waiting request with no lease, grant or move; the project stays closed to that agent, and a move's agent stays where it works. Refused over the peer_auth socket and from a paired device, but for <a href="../../guides/peer-auth/#your-own-decisions-through-a-relay">your own hands through a relay</a>: deny on the console, or with <code>seam approve</code> in your own terminal on the server. |
 | Revoke an agent's lease | <code>POST /console/access/leases/{id}/revoke</code> | <strong>Revoke</strong> under Agent leases on <code>/console/access</code>: ends that lease before its expiry and records an <code>access.revoked</code> event. Refused over the peer_auth socket and from a paired device, but for <a href="../../guides/peer-auth/#your-own-decisions-through-a-relay">your own hands through a relay</a>. |
 | Revoke a read grant | <code>POST /console/access/grants/{id}/revoke</code> | <strong>Revoke</strong> under Read grants: ends a live grant, read-only or read and write, before its expiry. Its holder stays write-confined, since a revoke does not unread what it read. Refused over the peer_auth socket and from a paired device, but for <a href="../../guides/peer-auth/#your-own-decisions-through-a-relay">your own hands through a relay</a>. |
-| Lock a console unlock again | <code>POST /console/access/unlocks/{id}/end</code> | <strong>Lock again</strong> on <code>/console/access</code>, or <strong>Lock it again</strong> on the unlock page: ends any browser's live console unlock, by id. Refused over the peer_auth socket and from a paired device, but for <a href="../../guides/peer-auth/#your-own-decisions-through-a-relay">your own hands through a relay</a>. |
+| Lock a console unlock again | <code>POST /console/access/unlocks/{id}/end</code> | <strong>Lock again</strong> on <code>/console/access</code>, or <strong>Lock it again now</strong> on the unlock page: ends any browser's live console unlock, by id. Refused over the peer_auth socket and from a paired device, but for <a href="../../guides/peer-auth/#your-own-decisions-through-a-relay">your own hands through a relay</a>. |
 | Begin a passkey enrollment | <code>POST /console/approvers/passkey/begin</code> | Only under peer_auth: <code>name=</code> the passkey (1 to 64 characters on one line). Returns the WebAuthn creation options, excluding every passkey already <a href="../../guides/peer-auth/#enroll-an-approver">enrolled</a>. Holds the enrollment in memory and stores nothing. Refused over the peer_auth socket and from a paired device, since a passkey is created in a browser. A begin never waits for room: at most 16 enrollments wait at once for their browser, and 16 more whose passkey exists and waits for its code, so a begin past 16 displaces the oldest still waiting for its browser, and never one waiting for its code. A displaced enrollment's next step says it expired. |
 | Create the passkey | <code>POST /console/approvers/passkey/finish</code> | Verifies the browser's new passkey and returns its key's fingerprint with the <code>seamlessd approvers enroll-code</code> command that mints its code. Still stores nothing: the passkey waits for that code. Past 16 waiting for their code, it displaces the oldest of them. Refused from a paired device. |
 | Enroll the passkey | <code>POST /console/approvers/passkey/confirm</code> | <code>code=</code> the one-time code that command minted for this key. Stores the passkey and uses up the code in one transaction. A code that is mistyped, expired, used or minted for another key leaves the passkey waiting, so it can be typed again. Refused from a paired device. |
@@ -1963,6 +1963,37 @@ each need a passkey already enrolled on the Approvers page; without one the card
 links there. Seamless restarts to apply the change. A project listed under
 <code>peer_auth.force_locked</code> shows as <strong>Force locked</strong> and cannot be changed here. A
 locked project's isolation cannot be set to <code>open</code>.</p>
+<p><strong>The lock page</strong>, <code>/console/lock/&lt;project&gt;</code>, is one card. Its title asks the
+change it offers (&quot;Lock example-conf?&quot;, or &quot;Remove the lock on example-conf?&quot;
+for a lock set here), and a ladder of Open, the project's fence (Confidential,
+or Sealed) and Locked marks where the project stands and where the change takes
+it. Two rows say what the change does to the project's own agents and to this
+console, then one passkey button (in the danger tone to remove a lock), with a
+chip saying Seamless restarts to apply it. After the passkey the card shows the
+change's steps, approved, restarting and done, and the page then refreshes in
+place. An open project's card links to its Isolation card instead, and with no
+passkey enrolled it links to the Approvers page. A force lock names
+<code>peer_auth.force_locked</code>, with a copy button and a link to unlock the project
+in this browser instead. A change saved but not applied yet says it takes effect
+when Seamless next restarts. The JSON model adds <code>isolation</code>, <code>rung</code> (<code>open</code>,
+<code>confidential</code>, <code>sealed</code> or <code>locked</code>) and <code>rung_to</code>.</p>
+<p><strong>The unlock page</strong>, <code>/console/unlock/&lt;project&gt;</code>, is the same card for a locked
+project: a lock, the project's name, a <strong>Locked</strong> chip beside the lock's kind
+(<strong>config file</strong>, or <strong>from the console</strong> with a link to remove it), and its
+counts as tiles. With a passkey enrolled, its one primary action is <strong>Unlock for
+3 hours</strong> (the console's lease, shorter when <code>peer_auth.max_lease</code> is), and
+<strong>Approve from a terminal</strong> waits under &quot;no passkey here?&quot;. With no passkey
+enrolled, passkeys off, or this browser on another address than the passkey's,
+<strong>Approve from a terminal</strong> is the primary action, with a line saying why. It
+turns the card into numbered steps: this browser's code, large, with its time
+left, then the command with a copy button, and <strong>Cancel</strong>. Once the command
+approves the code, the card turns unlocked in place, without a reload. Unlocked
+here, the lock opens, the chip reads <strong>Unlocked here</strong>, the time left shows as a
+bar and in words, and <strong>Open</strong> leads (the project, or the plan, session or
+conversation a locked page sent you from), with <strong>Lock it again now</strong> under it.
+A caller that is not a browser is told an unlock is per browser. The JSON model
+adds <code>lock_kind</code>: <code>file</code>, <code>console</code>, or empty for a removed lock the next
+restart applies.</p>
 <p>The board leads with work. Its summary tiles count the agents live, the open
 tasks (in progress, ready, blocked, waiting on people, and any lapsed or
 unclaimed claims), the plans in motion (a plan with a step still open that

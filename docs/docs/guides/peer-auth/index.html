@@ -1022,9 +1022,9 @@ minutes before it ends, every tool result and hook injection says when it ends a
 how to ask again.</p>
 <p>A console unlock is separate. A browser opens a locked project from its unlock
 page, <code>/console/unlock/&lt;project&gt;</code>, for at most three hours (less when <code>max_lease</code>
-is shorter), in one of two ways. <strong>Unlock with a passkey</strong> asks your
-authenticator there. <strong>Approve from a terminal</strong> shows a code and the command
-that approves it, for example:</p>
+is shorter), in one of two ways. <strong>Unlock for 3 hours</strong> asks your passkey's
+authenticator there. <strong>Approve from a terminal</strong> shows a code, its time left
+and the command that approves it, for example:</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">/usr/bin/sudo -k -u _seamless seamlessd console-open --unlock example-finance --code 7KQ2-M9XD
 </span></span></code></pre></div>
 <p>Run it in your own terminal. <code>sudo -k</code> asks for your password or Touch ID, and the

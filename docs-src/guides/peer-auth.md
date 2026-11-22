@@ -739,9 +739,9 @@ how to ask again.
 
 A console unlock is separate. A browser opens a locked project from its unlock
 page, `/console/unlock/<project>`, for at most three hours (less when `max_lease`
-is shorter), in one of two ways. **Unlock with a passkey** asks your
-authenticator there. **Approve from a terminal** shows a code and the command
-that approves it, for example:
+is shorter), in one of two ways. **Unlock for 3 hours** asks your passkey's
+authenticator there. **Approve from a terminal** shows a code, its time left
+and the command that approves it, for example:
 
 ```bash
 /usr/bin/sudo -k -u _seamless seamlessd console-open --unlock example-finance --code 7KQ2-M9XD

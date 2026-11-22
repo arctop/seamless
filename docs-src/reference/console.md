@@ -63,7 +63,7 @@ nothing, and their rows say so.
 | Deny an access request | `POST /console/access/{id}/deny` | Closes a waiting request with no lease, grant or move; the project stays closed to that agent, and a move's agent stays where it works. Refused over the peer_auth socket and from a paired device, but for [your own hands through a relay](/guides/peer-auth/#your-own-decisions-through-a-relay): deny on the console, or with `seam approve` in your own terminal on the server. |
 | Revoke an agent's lease | `POST /console/access/leases/{id}/revoke` | **Revoke** under Agent leases on `/console/access`: ends that lease before its expiry and records an `access.revoked` event. Refused over the peer_auth socket and from a paired device, but for [your own hands through a relay](/guides/peer-auth/#your-own-decisions-through-a-relay). |
 | Revoke a read grant | `POST /console/access/grants/{id}/revoke` | **Revoke** under Read grants: ends a live grant, read-only or read and write, before its expiry. Its holder stays write-confined, since a revoke does not unread what it read. Refused over the peer_auth socket and from a paired device, but for [your own hands through a relay](/guides/peer-auth/#your-own-decisions-through-a-relay). |
-| Lock a console unlock again | `POST /console/access/unlocks/{id}/end` | **Lock again** on `/console/access`, or **Lock it again** on the unlock page: ends any browser's live console unlock, by id. Refused over the peer_auth socket and from a paired device, but for [your own hands through a relay](/guides/peer-auth/#your-own-decisions-through-a-relay). |
+| Lock a console unlock again | `POST /console/access/unlocks/{id}/end` | **Lock again** on `/console/access`, or **Lock it again now** on the unlock page: ends any browser's live console unlock, by id. Refused over the peer_auth socket and from a paired device, but for [your own hands through a relay](/guides/peer-auth/#your-own-decisions-through-a-relay). |
 | Begin a passkey enrollment | `POST /console/approvers/passkey/begin` | Only under peer_auth: `name=` the passkey (1 to 64 characters on one line). Returns the WebAuthn creation options, excluding every passkey already [enrolled](/guides/peer-auth/#enroll-an-approver). Holds the enrollment in memory and stores nothing. Refused over the peer_auth socket and from a paired device, since a passkey is created in a browser. A begin never waits for room: at most 16 enrollments wait at once for their browser, and 16 more whose passkey exists and waits for its code, so a begin past 16 displaces the oldest still waiting for its browser, and never one waiting for its code. A displaced enrollment's next step says it expired. |
 | Create the passkey | `POST /console/approvers/passkey/finish` | Verifies the browser's new passkey and returns its key's fingerprint with the `seamlessd approvers enroll-code` command that mints its code. Still stores nothing: the passkey waits for that code. Past 16 waiting for their code, it displaces the oldest of them. Refused from a paired device. |
 | Enroll the passkey | `POST /console/approvers/passkey/confirm` | `code=` the one-time code that command minted for this key. Stores the passkey and uses up the code in one transaction. A code that is mistyped, expired, used or minted for another key leaves the passkey waiting, so it can be typed again. Refused from a paired device. |
@@ -1108,6 +1108,39 @@ each need a passkey already enrolled on the Approvers page; without one the card
 links there. Seamless restarts to apply the change. A project listed under
 `peer_auth.force_locked` shows as **Force locked** and cannot be changed here. A
 locked project's isolation cannot be set to `open`.
+
+**The lock page**, `/console/lock/<project>`, is one card. Its title asks the
+change it offers ("Lock example-conf?", or "Remove the lock on example-conf?"
+for a lock set here), and a ladder of Open, the project's fence (Confidential,
+or Sealed) and Locked marks where the project stands and where the change takes
+it. Two rows say what the change does to the project's own agents and to this
+console, then one passkey button (in the danger tone to remove a lock), with a
+chip saying Seamless restarts to apply it. After the passkey the card shows the
+change's steps, approved, restarting and done, and the page then refreshes in
+place. An open project's card links to its Isolation card instead, and with no
+passkey enrolled it links to the Approvers page. A force lock names
+`peer_auth.force_locked`, with a copy button and a link to unlock the project
+in this browser instead. A change saved but not applied yet says it takes effect
+when Seamless next restarts. The JSON model adds `isolation`, `rung` (`open`,
+`confidential`, `sealed` or `locked`) and `rung_to`.
+
+**The unlock page**, `/console/unlock/<project>`, is the same card for a locked
+project: a lock, the project's name, a **Locked** chip beside the lock's kind
+(**config file**, or **from the console** with a link to remove it), and its
+counts as tiles. With a passkey enrolled, its one primary action is **Unlock for
+3 hours** (the console's lease, shorter when `peer_auth.max_lease` is), and
+**Approve from a terminal** waits under "no passkey here?". With no passkey
+enrolled, passkeys off, or this browser on another address than the passkey's,
+**Approve from a terminal** is the primary action, with a line saying why. It
+turns the card into numbered steps: this browser's code, large, with its time
+left, then the command with a copy button, and **Cancel**. Once the command
+approves the code, the card turns unlocked in place, without a reload. Unlocked
+here, the lock opens, the chip reads **Unlocked here**, the time left shows as a
+bar and in words, and **Open** leads (the project, or the plan, session or
+conversation a locked page sent you from), with **Lock it again now** under it.
+A caller that is not a browser is told an unlock is per browser. The JSON model
+adds `lock_kind`: `file`, `console`, or empty for a removed lock the next
+restart applies.
 
 The board leads with work. Its summary tiles count the agents live, the open
 tasks (in progress, ready, blocked, waiting on people, and any lapsed or

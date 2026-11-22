@@ -372,10 +372,10 @@ func TestLockedConsole_CrawlLocked(t *testing.T) {
 
 	status, page := lc.get(t, "/console/unlock/"+lockedSlug, "")
 	require.Equal(t, http.StatusOK, status)
-	require.Contains(t, page, "Open tasks")
+	require.Contains(t, page, "<strong>1</strong><span>open tasks</span>", "its counts are the door's tiles")
 	require.Contains(t, page, `id="unlock-terminal-form"`, "the terminal path is offered with no passkey enrolled")
 	require.NotContains(t, page, "console-open --unlock", "no command until this browser has begun an unlock and has its code")
-	require.Contains(t, page, "No passkey is enrolled yet")
+	require.Contains(t, page, "No passkey is added yet.")
 
 	// The open project is not locked: nothing to unlock.
 	status, _ = lc.get(t, "/console/unlock/"+openSlug, "")
@@ -405,8 +405,8 @@ func TestLockedConsole_UnlockedBrowserReads(t *testing.T) {
 	_, body = lc.get(t, "/console/search?q="+url.QueryEscape("close"), cookie)
 	require.Contains(t, body, "ledger-close", "search reaches the unlocked project")
 	_, body = lc.get(t, "/console/unlock/"+lockedSlug, cookie)
-	require.Contains(t, body, "Unlocked in this browser")
-	require.Contains(t, body, "Lock it again")
+	require.Contains(t, body, `data-door-state="unlocked">Unlocked here<`)
+	require.Contains(t, body, "Lock it again now")
 	var board projectsData
 	rr := lc.do(func() *http.Request {
 		r := lc.browser(http.MethodGet, "/console/projects?format=json", cookie, nil)

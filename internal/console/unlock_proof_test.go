@@ -49,7 +49,8 @@ func TestLockedConsole_CookieWithoutProofOpensNothing(t *testing.T) {
 	}
 	status, page := lc.get(t, "/console/unlock/"+lockedSlug, cookie)
 	require.Equal(t, http.StatusOK, status)
-	require.NotContains(t, page, "Unlocked in this browser")
+	require.NotContains(t, page, `data-door-state="unlocked"`)
+	require.Contains(t, page, `data-door-state="locked"`, "the door reads locked")
 	require.Contains(t, page, `data-browser-proof="missing"`, "the page says it was drawn without a proof, so its script asks again")
 	lc.unsigned = false
 

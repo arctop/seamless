@@ -81,6 +81,57 @@ type unlockData struct {
 	// lock set from the console does, and the page links to its removal.
 	ForceLocked   bool `json:"force_locked"`
 	ConsoleLocked bool `json:"console_locked"`
+	// LockKind is the lock's kind, as the door's chip names it: "file" (the
+	// config file's force lock, which wins over a console lock beside it),
+	// "console" (set from the console), or "" (removed, which the running
+	// daemon applies when it restarts).
+	LockKind string `json:"lock_kind"`
+	// LeftPct is how much of this browser's unlock is left, 0 to 100: the
+	// bar beside its time left.
+	LeftPct int `json:"-"`
+}
+
+// Lock kinds, as unlockData.LockKind names them.
+const (
+	lockKindFile    = "file"
+	lockKindConsole = "console"
+)
+
+// PasskeyReady reports whether the passkey button can work here: then it is
+// the door's one primary action, and the terminal way is folded under it.
+// Otherwise the terminal way is the primary action.
+func (d unlockData) PasskeyReady() bool {
+	return d.Browser && d.PasskeysOn && d.HasPasskey && d.OnOrigin
+}
+
+// ItemIcon is the icon of the strip that names the item a locked page sent
+// the owner here for.
+func (d unlockData) ItemIcon() string {
+	if d.Item == lockedItemPlan {
+		return "map"
+	}
+	return "terminal"
+}
+
+// OpenLabel is the unlocked door's primary action: the item the owner came
+// for, when a locked page sent them here and it can link back, else the
+// project.
+func (d unlockData) OpenLabel() string {
+	if d.Item != "" && d.Next != "" {
+		return "Open the " + d.Item
+	}
+	return "Open " + d.Project.Name
+}
+
+// leftPct is the share of lease left at until, 0 to 100, rounded up so an
+// unlock with a moment left still draws a sliver.
+func leftPct(until time.Time, lease time.Duration, now time.Time) int {
+	left := until.Sub(now)
+	if left <= 0 || lease <= 0 {
+		return 0
+	}
+	pct := int((left*100 + lease - 1) / lease)
+	return min(pct, 100)
 }
 
 // ItemLine says what the owner opened that this project holds. A plan or a
@@ -183,13 +234,19 @@ func (s *Service) unlockDataFor(r *http.Request, slug string) (unlockData, error
 	if rc := reachOf(ctx); rc != nil {
 		d.Leased = slices.Contains(rc.open, slug) && !slices.Contains(rc.unlocked, slug)
 		if rc.token != "" && slices.Contains(rc.unlocked, slug) {
-			rows, err := store.LiveConsoleUnlocks(ctx, s.writeDB(), rc.token, time.Now())
+			now := time.Now()
+			rows, err := store.LiveConsoleUnlocks(ctx, s.writeDB(), rc.token, now)
 			if err != nil {
 				return unlockData{}, err
 			}
 			for _, u := range rows {
 				if u.Project == slug && (d.Until == nil || u.ExpiresAt.After(*d.Until)) {
 					d.Unlocked, d.UnlockID, d.Until = true, u.ID, u.ExpiresAt
+					lease := u.Lease
+					if lease <= 0 {
+						lease = s.cfg.Approvals.ConsoleLeaseLength()
+					}
+					d.LeftPct = leftPct(*u.ExpiresAt, lease, now)
 				}
 			}
 		}
@@ -206,6 +263,12 @@ func (s *Service) unlockDataFor(r *http.Request, slug string) (unlockData, error
 	d.ForceLocked = slices.Contains(s.cfg.ForceLocked, slug)
 	if d.ConsoleLocked, err = store.HasConsoleLock(ctx, s.writeDB(), slug); err != nil {
 		return unlockData{}, err
+	}
+	switch {
+	case d.ForceLocked:
+		d.LockKind = lockKindFile
+	case d.ConsoleLocked:
+		d.LockKind = lockKindConsole
 	}
 	return d, nil
 }

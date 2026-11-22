@@ -1,121 +1,97 @@
 {{define "content"}}
 {{with .Data}}
-<div class="unlock-page" data-unlock="{{.Project.Slug}}">
-<header class="mv2-bar">
-  <h1>{{icon "lock"}}{{.Project.Name}}</h1>{{about "A locked project: its name and counts show here, never its content. Unlocking it opens it in this browser only, for a limited time. It never opens it to an agent: agents ask for access on their own, and you approve each request."}}
-</header>
+{{/* The door (plan:console-ux-pass UX 40): one card naming what is locked,
+     its state and kind, its counts, and one primary action -- the passkey,
+     else the terminal way, or once unlocked here, Open. The terminal way's
+     steps are drawn here, hidden, and filled in by the script once this
+     browser has its code. */}}
+<div class="door-page" data-unlock="{{.Project.Slug}}">
+<div class="crumb"><a href="/console/projects">All projects</a> <span class="faint">/</span> <b>{{.Project.Slug}}</b></div>
 {{if .Item}}
-<p class="held-sub" data-locked-item="{{.Item}}">{{icon "lock"}} {{.ItemLine}}{{if .Unlocked}}{{with .Next}} <a href="{{.}}">Open it</a>.{{end}}{{else}} Unlock the project in this browser to read it.{{end}}</p>
+<p class="door-strip" data-locked-item="{{.Item}}">{{icon .ItemIcon}}<span>{{.ItemLine}}{{if .Unlocked}}{{with .Next}} <a href="{{.}}">Open it</a>.{{end}}{{else}} Unlock the project in this browser to read it.{{end}}</span></p>
 {{end}}
-
-<dl class="access-facts" aria-label="What it holds">
-  <dt>Project</dt><dd><code>{{.Project.Slug}}</code>{{if not .Project.Registered}} (not registered yet){{end}}</dd>
-  <dt>Memories</dt><dd>{{.Project.Memories}}</dd>
-  <dt>Notes</dt><dd>{{.Project.Notes}}</dd>
-  <dt>Sessions</dt><dd>{{.Project.Sessions}}</dd>
-  <dt>Open tasks</dt><dd>{{.Project.OpenTasks}}</dd>
-</dl>
-
-{{if .Unlocked}}
-<section aria-labelledby="unlock-state-title">
-  <h2 id="unlock-state-title">Unlocked in this browser</h2>
-  <p class="held-sub">{{icon "key-round"}} This browser reads {{.Project.Name}} until <strong>{{clock .Until}}</strong>. Agents are unaffected: each still needs its own approval.</p>
-  <p><a class="btn primary" href="/console/projects/{{.Project.Slug}}">{{icon "box"}} Open {{.Project.Name}}</a></p>
-  <form method="post" action="/console/access/unlocks/{{.UnlockID}}/end">
-    <input type="hidden" name="next" value="/console/unlock/{{.Project.Slug}}">
-    <button class="btn" type="submit">{{icon "lock"}} Lock it again</button>
-  </form>
-</section>
-{{else if .Leased}}
-<p class="held-sub">This request reads {{.Project.Name}} through its agent's lease.</p>
-{{else}}
-<section aria-labelledby="unlock-how-title">
-  <h2 id="unlock-how-title">Unlock it in this browser for {{.Lease}}</h2>
-  {{if not .Browser}}
-  <p class="held-sub">An unlock is per browser: open this page in the browser you sign in to the console with.</p>
+<section class="door{{if .Unlocked}} is-open{{end}}" aria-labelledby="door-title" data-door="unlock">
+  <div class="door-medallion" aria-hidden="true">{{if .Unlocked}}{{icon "lock-open"}}{{else}}{{icon "lock"}}{{end}}</div>
+  <h1 class="door-title" id="door-title">{{.Project.Name}}</h1>
+  {{if ne .Project.Name .Project.Slug}}<p class="door-sub"><code>{{.Project.Slug}}</code></p>{{end}}
+  <div class="door-chips">
+    {{if .Unlocked}}<span class="badge ok" data-door-state="unlocked">Unlocked here</span>{{else}}<span class="badge brand" data-door-state="locked">Locked</span>{{end}}
+    {{if eq .LockKind "file"}}<span class="door-chip"><span class="badge quiet" data-lock-kind="file">{{icon "file-text"}}config file</span>{{hintFor "the config file's lock" "Force locked in the daemon's config file, under peer_auth.force_locked. Only the file can remove this lock; unlocking it in a browser never changes that."}}</span>
+    {{else if eq .LockKind "console"}}<span class="door-chip"><span class="badge quiet" data-lock-kind="console">{{icon "monitor"}}from the console</span><a href="/console/lock/{{.Project.Slug}}">Remove the lock</a></span>
+    {{else}}<span class="door-chip"><span class="badge warn" data-lock-kind="removed">{{icon "refresh-cw"}}lock removed</span>{{hintFor "the removed lock" "The lock was removed from the console. Seamless applies that when it next restarts; until then the project stays locked."}}</span>
+    {{end}}
+    {{if not .Project.Registered}}<span class="badge quiet">not registered yet</span>{{end}}
+  </div>
+  <div class="door-tiles" role="group" aria-label="What it holds">
+    <div class="door-tile"><strong>{{.Project.Memories}}</strong><span>memories</span></div>
+    <div class="door-tile"><strong>{{.Project.Notes}}</strong><span>notes</span></div>
+    <div class="door-tile"><strong>{{.Project.Sessions}}</strong><span>sessions</span></div>
+    <div class="door-tile"><strong>{{.Project.OpenTasks}}</strong><span>open tasks</span></div>
+  </div>
+  {{if .Unlocked}}
+  <div class="door-actions">
+    <div class="door-left">
+      <div class="door-left-row"><span>Open in this browser</span><span class="door-left-words">{{timeLeft .Until}} <span>until {{clock .Until}}</span></span></div>
+      <span class="door-left-bar" aria-hidden="true"><i style="width:{{.LeftPct}}%"></i></span>
+    </div>
+    <a class="btn primary" data-door-primary href="{{with .Next}}{{.}}{{else}}/console/projects/{{.Project.Slug}}{{end}}">{{.OpenLabel}}</a>
+    <form method="post" action="/console/access/unlocks/{{.UnlockID}}/end">
+      <input type="hidden" name="next" value="/console/unlock/{{.Project.Slug}}">
+      <button class="btn small" type="submit">{{icon "lock"}}Lock it again now</button>
+    </form>
+  </div>
+  {{else if .Leased}}
+  <p class="door-notice">{{icon "key-round"}}<span>This request reads {{.Project.Name}} through its agent's lease.</span></p>
+  {{else if not .Browser}}
+  <p class="door-notice">{{icon "triangle-alert"}}<span>An unlock is per browser: open this page in the browser you sign in to the console with.</span></p>
   {{else}}
-  {{if not .PasskeysOn}}
-  <p class="held-sub">Passkeys are not configured on this daemon. Approve the unlock from a terminal instead.</p>
-  {{else if not .HasPasskey}}
-  <p class="held-sub">No passkey is enrolled yet: add one on the <a href="/console/approvers">Approvers</a> page, or approve the unlock from a terminal.</p>
-  {{else if not .OnOrigin}}
-  <p class="held-sub">{{icon "triangle-alert"}} A passkey works only on <a href="{{.Origin}}/console/unlock/{{.Project.Slug}}">{{.Origin}}</a>.</p>
-  {{else}}
-  <form id="unlock-form" class="access-form" data-project="{{.Project.Slug}}">
-    <button class="btn primary" id="unlock-go" type="submit">{{icon "key-round"}} Unlock with a passkey</button>
-  </form>
-  {{end}}
-  <form id="unlock-terminal-form" class="access-form" data-project="{{.Project.Slug}}">
-    <button class="btn" id="unlock-terminal-go" type="submit">{{icon "terminal"}} Approve from a terminal</button>
-  </form>
-  <p class="held-sub">This page then shows a code and the command that approves it, run in your own terminal. The command asks for your password or Touch ID and unlocks this browser only. Run it with the code this page shows, never with one you were handed; a code works for {{.TerminalMinutes}} minutes.</p>
-  <div id="unlock-terminal" hidden>
-    <p class="held-sub">{{icon "terminal"}} This browser's code is <strong><code id="unlock-terminal-code"></code></strong>. Run:</p>
-    <pre id="unlock-terminal-command"></pre>
+  <div class="door-actions" id="unlock-actions">
+    {{if .PasskeyReady}}
+    <form id="unlock-form" data-project="{{.Project.Slug}}">
+      <button class="btn primary" id="unlock-go" type="submit" data-door-primary>{{icon "key-round"}}Unlock for {{.Lease}}</button>
+    </form>
+    <p class="door-note">In this browser only. Agents still ask you.{{hintFor "unlocking" "An unlock opens the project's content in this browser until it ends or you lock it again. It never opens the project to an agent: each agent asks on its own, and you approve each request."}}</p>
+    <p class="door-divider">no passkey here?</p>
+    {{else if not .PasskeysOn}}
+    <p class="door-notice">{{icon "triangle-alert"}}<span>Passkeys are not configured on this daemon. Approve the unlock from a terminal instead.</span></p>
+    {{else if .HasPasskey}}
+    <p class="door-notice">{{icon "triangle-alert"}}<span>A passkey works only on <a href="{{.Origin}}/console/unlock/{{.Project.Slug}}">{{.Origin}}</a>. Open this page there to use one, or approve from a terminal here.</span></p>
+    {{end}}
+    <form id="unlock-terminal-form" data-project="{{.Project.Slug}}">
+      <button class="btn {{if .PasskeyReady}}door-way{{else}}primary{{end}}" id="unlock-terminal-go" type="submit"{{if not .PasskeyReady}} data-door-primary{{end}}>{{icon "terminal"}}Approve from a terminal</button>
+    </form>
+    {{if and .PasskeysOn (not .HasPasskey)}}<p class="door-note">No passkey is added yet. <a href="/console/approvers">Add one on Approvers</a> to unlock with a touch.</p>{{end}}
+  </div>
+  <div class="door-code" id="unlock-terminal" hidden>
+    <p class="door-code-label">This browser's code</p>
+    <p class="door-code-value"><code id="unlock-terminal-code"></code></p>
+    <p class="door-code-left" id="unlock-terminal-left"></p>
+    <template id="unlock-terminal-clock">{{icon "clock"}}</template>
+    <ol class="steps door-steps">
+      <li class="steps-item is-done"><span class="steps-mark" aria-hidden="true">{{icon "check"}}</span><span class="steps-label">This browser asked for a code.<span class="steps-sr"> (done)</span></span></li>
+      <li class="steps-item is-now" aria-current="step"><span class="steps-mark" aria-hidden="true">2</span><span class="steps-label">Run this in your own terminal on the server.{{hintFor "the command" (printf "It asks for your password or Touch ID and unlocks this browser only. Run it with the code this page shows, never with one you were handed; a code works for %d minutes." .TerminalMinutes)}}<span class="door-cmd"><code id="unlock-terminal-command"></code><button type="button" class="copy-btn" id="unlock-terminal-copy" aria-label="Copy" title="Copy">{{icon "copy"}}{{icon "check"}}</button></span></span></li>
+      <li class="steps-item is-todo"><span class="steps-mark" aria-hidden="true">3</span><span class="steps-label">This page opens the project once the command approves it.</span></li>
+    </ol>
+    <button type="button" class="btn small" id="unlock-terminal-cancel">Cancel</button>
   </div>
   {{end}}
-  <p class="held-sub" id="unlock-status" role="status" aria-live="polite"></p>
+  <p class="door-status" id="unlock-status" role="status" aria-live="polite"></p>
 </section>
-{{end}}
-{{if .ForceLocked}}
-<p class="held-sub">{{icon "lock"}} Force locked in the daemon's config file (<code>peer_auth.force_locked</code>). Only the file can remove this lock.</p>
-{{else if .ConsoleLocked}}
-<p class="held-sub">{{icon "lock"}} Locked from the console. <a href="/console/lock/{{.Project.Slug}}">Remove the lock</a></p>
-{{end}}
+<p class="door-foot">Its name and counts always show. Its content stays closed until you unlock it here.</p>
 </div>
 {{end}}
 {{end}}
 
 {{define "scripts"}}
+<script src="{{static "passkey.js"}}"></script>
 <script>
 window.SEAM_NO_LIVE_REFRESH = true; // a ceremony or a terminal approval in progress must not be clobbered by a refresh
 (function () {
-  function b64urlToBuf(s) {
-    s = s.replace(/-/g, '+').replace(/_/g, '/');
-    while (s.length % 4) s += '=';
-    var bin = atob(s), out = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-    return out.buffer;
-  }
-  function bufToB64url(buf) {
-    var bytes = new Uint8Array(buf), bin = '';
-    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  }
-  function requestOptions(pk) {
-    if (window.PublicKeyCredential && PublicKeyCredential.parseRequestOptionsFromJSON) {
-      return PublicKeyCredential.parseRequestOptionsFromJSON(pk);
-    }
-    pk.challenge = b64urlToBuf(pk.challenge);
-    (pk.allowCredentials || []).forEach(function (c) { c.id = b64urlToBuf(c.id); });
-    return pk;
-  }
-  function toJSON(cred) {
-    if (cred.toJSON) return cred.toJSON();
-    var r = cred.response;
-    var out = {
-      id: cred.id, rawId: bufToB64url(cred.rawId), type: cred.type,
-      authenticatorAttachment: cred.authenticatorAttachment || null,
-      clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
-      response: {
-        clientDataJSON: bufToB64url(r.clientDataJSON), authenticatorData: bufToB64url(r.authenticatorData),
-        signature: bufToB64url(r.signature)
-      }
-    };
-    if (r.userHandle) out.response.userHandle = bufToB64url(r.userHandle);
-    return out;
-  }
-  function post(path, fields) {
-    return fetch(path, {
-      method: 'POST', credentials: 'same-origin',
-      headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams(fields).toString()
-    }).then(function (res) {
-      return res.json().then(function (data) {
-        if (!res.ok) throw new Error(data.error || ('request failed (' + res.status + ')'));
-        return data;
-      });
-    });
+  var pk = window.SeamPasskey; // static/passkey.js: the ceremony's helpers
+  // A failed passkey unlock, in this page's words.
+  function refused(err) {
+    if (err && err.name === 'NotAllowedError') return 'Cancelled, or the authenticator timed out. Nothing was unlocked.';
+    return err && err.message ? err.message : 'Something went wrong. Nothing was unlocked.';
   }
   // Refresh the view in place (console-data-updates-never-reload-document):
   // the shared navigation fetches the page and morphs only what changed.
@@ -140,24 +116,46 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony or a terminal approval in prog
     if (!keySetup) keySetup = window.SeamBrowserKey.ready().catch(function (err) { keySetup = null; throw err; });
     return keySetup;
   }
-  // The terminal path: begin, show the code and its command, then ask the
-  // status endpoint every couple of seconds until the terminal approves it.
-  // The status is read through this browser's cookie, and the page itself is
-  // never reloaded: once live, it refreshes in place as the passkey path does.
+  // The terminal path: begin, show the code, its time left and its command
+  // as the door's steps, then ask the status endpoint every couple of seconds
+  // until the terminal approves it. The status is read through this
+  // browser's cookie, and the page itself is never reloaded: once live, it
+  // refreshes in place as the passkey path does.
   var waiting = null; // { url, timer }: the code this page waits on
   function stopWaiting() {
     if (waiting) clearTimeout(waiting.timer);
     waiting = null;
   }
-  function clock(iso) {
-    var d = new Date(iso);
-    return isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  // showTerminal swaps the door's actions for the terminal way's steps, and
+  // back.
+  function showTerminal(on) {
+    var box = document.getElementById('unlock-terminal');
+    var actions = document.getElementById('unlock-actions');
+    if (box) box.hidden = !on;
+    if (actions) actions.hidden = on;
   }
   function terminalOver(msg) {
     stopWaiting();
-    var box = document.getElementById('unlock-terminal');
-    if (box) box.hidden = true;
+    showTerminal(false);
     say(msg);
+  }
+  // codeLeft draws the code's time left as kit.go's timeLeft does; shell.js
+  // sees it added and counts it down.
+  function codeLeft(iso, minutes) {
+    var slot = document.getElementById('unlock-terminal-left');
+    var clockIcon = document.getElementById('unlock-terminal-clock');
+    if (!slot) return;
+    var t = document.createElement('time');
+    t.className = 'badge time-left warn';
+    t.setAttribute('datetime', iso);
+    t.setAttribute('data-left', '');
+    t.setAttribute('data-clock', 'title');
+    if (clockIcon && clockIcon.content) t.appendChild(clockIcon.content.cloneNode(true));
+    var words = document.createElement('span');
+    words.textContent = minutes + ' min left';
+    t.appendChild(words);
+    slot.textContent = '';
+    slot.appendChild(t);
   }
   function schedule(url) {
     if (!waiting || waiting.url !== url) return;
@@ -204,6 +202,10 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony or a terminal approval in prog
     if (!form || form._seamWired) return;
     form._seamWired = true;
     var base = '/console/unlock/' + encodeURIComponent(form.getAttribute('data-project'));
+    var cancel = document.getElementById('unlock-terminal-cancel');
+    if (cancel) cancel.addEventListener('click', function () {
+      terminalOver('Cancelled. Nothing was unlocked, and the code expires unused.');
+    });
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       stopWaiting();
@@ -211,13 +213,15 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony or a terminal approval in prog
       if (go) go.disabled = true;
       say('Starting the unlock.');
       keyReady().then(function () {
-        return post(base + '/terminal', {});
+        return pk.post(base + '/terminal', {});
       }).then(function (begun) {
         document.getElementById('unlock-terminal-code').textContent = begun.code;
         document.getElementById('unlock-terminal-command').textContent = begun.command;
-        document.getElementById('unlock-terminal').hidden = false;
-        var until = clock(begun.pending_until);
-        say('Waiting for the terminal' + (until ? ', until ' + until : '') + '. This page updates once the command approves code ' + begun.code + '.');
+        var copy = document.getElementById('unlock-terminal-copy');
+        if (copy) copy.setAttribute('data-copy', begun.command);
+        codeLeft(begun.pending_until, begun.minutes);
+        showTerminal(true);
+        say('Waiting for the terminal to approve code ' + begun.code + '.');
         var url = base + '/terminal?id=' + encodeURIComponent(begun.id);
         waiting = { url: url, timer: null };
         schedule(url);
@@ -227,6 +231,7 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony or a terminal approval in prog
     });
   }
   function enhance() {
+    if (!pk) return;
     if (document.getElementById('unlock-terminal-form') && window.SeamBrowserKey && window.SeamBrowserKey.supported()) {
       keyReady().catch(function () {}); // reported on the click, if it still fails then
     }
@@ -238,23 +243,22 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony or a terminal approval in prog
     var base = '/console/unlock/' + encodeURIComponent(form.getAttribute('data-project'));
     form.addEventListener('submit', function (e) {
       e.preventDefault();
-      if (!window.PublicKeyCredential) { say('This browser cannot use a passkey here.'); return; }
+      if (!pk.supported()) { say('This browser cannot use a passkey here.'); return; }
       var id = '';
       go.disabled = true;
       say('Follow your browser\'s prompt.');
       keyReady().then(function () {
-        return post(base + '/begin', {});
+        return pk.post(base + '/begin', {});
       }).then(function (begun) {
         id = begun.id;
-        return navigator.credentials.get({ publicKey: requestOptions(begun.options.publicKey) });
+        return pk.assert(begun);
       }).then(function (cred) {
-        return post(base + '/finish', { id: id, response: JSON.stringify(toJSON(cred)) });
+        return pk.post(base + '/finish', { id: id, response: JSON.stringify(pk.toJSON(cred)) });
       }).then(function (done) {
         say('Unlocked ' + done.unlocked + ' in this browser.');
         refresh();
       }).catch(function (err) {
-        say(err && err.name === 'NotAllowedError' ? 'Cancelled, or the authenticator timed out. Nothing was unlocked.' :
-            (err && err.message ? err.message : 'Something went wrong. Nothing was unlocked.'));
+        say(refused(err));
       }).finally(function () { go.disabled = false; });
     });
   }
