@@ -58,7 +58,7 @@
   </header>
 <div class="list-detail-split ops-split interactions-split">
   <div class="list-pane">
-    <div class="ix-feed" id="ix-feed"></div>
+    <div class="ix-feed" id="ix-feed" data-opened="{{.Data.Opened}}"></div>
     <div class="empty dotgrid ix-empty" id="ix-empty" hidden>
       <span class="empty-ico">{{icon "activity"}}</span>
       <div class="ix-empty-body"><strong id="ix-empty-copy">Listening for new interactions</strong><p id="ix-empty-help">New events will appear here at the top. Add a recent window when you need earlier context.</p><div class="ix-empty-acts"><button class="btn small" type="button" id="ix-empty-load">Add last 5 minutes</button><span class="ix-quick" id="ix-quick">or load <button type="button" class="ix-quick-btn" data-ix-quick="900">15 min</button><button type="button" class="ix-quick-btn" data-ix-quick="3600">1 hour</button><button type="button" class="ix-quick-btn" data-ix-quick="86400">24 hours</button></span></div></div>
@@ -106,13 +106,13 @@ window.SEAM_NO_LIVE_REFRESH = true; // this screen is the live feed -- it owns i
   var emptyHelp = document.getElementById('ix-empty-help');
   if (!feed || !window.IX) return;
 
-  // Remember only the user's preferred import size. Visiting the page never
-  // restores rows: every load starts as a clean, live-only stream.
-  var historySecs = 300;
-  try {
-    var savedW = parseInt(localStorage.getItem('ix-history-window'), 10);
-    if ([60, 300, 900, 3600, 14400, 86400].indexOf(savedW) !== -1) historySecs = savedW;
-  } catch (e) {}
+  // Remember only the window the owner last loaded, in this browser
+  // (IX.rememberedWindow), and offer it as the first quick-load button.
+  // Visiting the page never restores rows: every load starts as a clean,
+  // live-only stream.
+  var WINDOWS = [60, 300, 900, 3600, 14400, 86400];
+  var remembered = window.IX.rememberedWindow(WINDOWS);
+  var historySecs = remembered || 300;
 
   // This page IS the live view -- suppress the global "refresh" pill.
   var pill = document.getElementById('live-pill');
@@ -129,8 +129,32 @@ window.SEAM_NO_LIVE_REFRESH = true; // this screen is the live feed -- it owns i
   var buffered = {};         // id set keeps reconnect gap-fill from duplicating held rows
   var cursor = null;         // {ts,id,afterTs} for the next page in an added history window
   var last = { ts: new Date().toISOString(), id: '' }; // clean-feed / reconnect anchor
+  // Loaded history sits under a "Before you arrived" divider; what arrived
+  // live stays above it. arrived is when the server rendered the page (its
+  // clock is the events' clock), else this page's load: a row older than it
+  // is history the owner added.
+  var arrived = feed.getAttribute('data-opened') || last.ts;
+  var divider = window.IX.arrivalDivider(arrived);
+  feed.appendChild(divider);
 
   function shortId(id) { return window.IX.shortId(id); }
+
+  function beforeArrival(d) {
+    var t = Date.parse(d.ts), a = Date.parse(arrived);
+    return !isNaN(t) && !isNaN(a) && t < a;
+  }
+
+  // placeDivider moves the divider above the newest visible history row, or
+  // hides it while none is in view. Rows are kept newest-first in order.
+  function placeDivider() {
+    var first = null;
+    for (var i = 0; i < order.length; i++) {
+      var r = rows[order[i]];
+      if (r && r.el && !r.el.hidden && beforeArrival(r.data)) { first = r.el; break; }
+    }
+    divider.hidden = !first;
+    if (first && divider.nextSibling !== first) feed.insertBefore(divider, first);
+  }
 
   function anyOpen() { return !!feed.querySelector('details.ix-row[open]'); }
 
@@ -282,6 +306,7 @@ window.SEAM_NO_LIVE_REFRESH = true; // this screen is the live feed -- it owns i
     var quick = document.getElementById('ix-quick');
     if (quick) quick.hidden = order.length > 0;
     if (olderWrap) olderWrap.hidden = !cursor;
+    placeDivider();
   }
 
   function refreshTabs() {
@@ -341,7 +366,15 @@ window.SEAM_NO_LIVE_REFRESH = true; // this screen is the live feed -- it owns i
   function syncHistoryChoice() {
     if (!historySel) return;
     historySel.value = String(historySecs);
-    if (emptyLoadBtn) emptyLoadBtn.textContent = 'Add ' + historyLabel();
+    if (emptyLoadBtn) {
+      emptyLoadBtn.textContent = 'Add ' + historyLabel();
+      if (remembered && remembered === historySecs) emptyLoadBtn.title = 'The window you loaded last time, in this browser';
+      else emptyLoadBtn.removeAttribute('title');
+    }
+    // The first button offers this window; the quick list offers the others.
+    document.querySelectorAll('[data-ix-quick]').forEach(function (b) {
+      b.hidden = parseInt(b.getAttribute('data-ix-quick'), 10) === historySecs;
+    });
   }
 
   function setHistoryBusy(busy) {
@@ -372,7 +405,9 @@ window.SEAM_NO_LIVE_REFRESH = true; // this screen is the live feed -- it owns i
         return;
       }
       historySecs = secs;
-      try { localStorage.setItem('ix-history-window', String(secs)); } catch (e) {}
+      remembered = secs;
+      window.IX.rememberWindow(secs);
+      syncHistoryChoice();
       url = '/console/interactions?format=json&history=' + encodeURIComponent(String(secs));
     }
 

@@ -171,6 +171,12 @@ type interactionsData struct {
 	AfterTS string           `json:"afterTs,omitempty"` // fixed lower bound for an explicitly loaded history window
 	NextTS  string           `json:"nextTs,omitempty"`
 	NextID  string           `json:"nextId,omitempty"`
+	// Opened is when the server rendered the page, the feed's arrival mark:
+	// history older than it sits under the "Before you arrived" divider. It is
+	// the server's clock, as every event's time is, so a browser whose clock
+	// runs ahead cannot file a live row under the divider. Millisecond RFC3339,
+	// which every browser's Date.parse reads.
+	Opened string `json:"-"`
 }
 
 // volBucket is one column of the interaction-volume histogram: a time slice with
@@ -396,7 +402,7 @@ func (s *Service) interactions(w http.ResponseWriter, r *http.Request) {
 		}
 		rows = append(rows, toInteractionRow(e, name))
 	}
-	data := interactionsData{Rows: rows, AfterTS: afterTS}
+	data := interactionsData{Rows: rows, AfterTS: afterTS, Opened: time.Now().UTC().Format("2006-01-02T15:04:05.000Z")}
 	// Older-page cursor: the last (oldest) event of a full descending page. Based
 	// on the raw fetch, not the filtered rows, so paging never stalls on a page
 	// that was all-skipped.

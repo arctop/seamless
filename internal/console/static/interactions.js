@@ -597,6 +597,47 @@
     return bars;
   }
 
+  // ---- the live feed's history window and arrival mark -------------------------
+  // The live feed starts empty on every visit (history is explicit). What it
+  // remembers is only the window the owner last loaded, in this browser: a
+  // convenience, so storage that is blocked, full or absent (a private window)
+  // remembers nothing rather than failing the page. Only a window the picker
+  // offers (allowed) comes back; anything else reads as nothing remembered.
+  var WINDOW_KEY = 'ix-history-window';
+
+  function rememberedWindow(allowed) {
+    try {
+      var v = parseInt(localStorage.getItem(WINDOW_KEY), 10);
+      return allowed.indexOf(v) !== -1 ? v : 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  function rememberWindow(secs) {
+    try { localStorage.setItem(WINDOW_KEY, String(secs)); } catch (e) {}
+  }
+
+  // arrivalDivider builds the mark between what arrived while the page was
+  // open (above it) and the history the owner added (under it). at is the
+  // page's arrival instant, an ISO timestamp, shown in this browser's clock.
+  // It starts hidden: the feed shows it once loaded history is in view.
+  function arrivalDivider(at) {
+    var d = el('div', 'ix-arrived');
+    d.setAttribute('role', 'separator');
+    var label = el('span', 'ix-arrived-label', 'Before you arrived');
+    var clock = fmtClock(at, false);
+    if (clock) {
+      label.appendChild(document.createTextNode(' · '));
+      var t = el('time', null, clock);
+      t.setAttribute('datetime', at);
+      label.appendChild(t);
+    }
+    d.appendChild(label);
+    d.hidden = true;
+    return d;
+  }
+
   // ---- category filter + volume mounting (server-rendered IX surfaces) --------
   // catOf maps an event kind to its filter/stack category (mirrors the server
   // volCategory and the live feed's local cat), so the .ix-seg segments and the
@@ -732,7 +773,10 @@
     revealRow: revealRow,
     wireKindFilter: wireKindFilter,
     mountVolume: mountVolume,
-    renderVolume: renderVolume
+    renderVolume: renderVolume,
+    rememberedWindow: rememberedWindow,
+    rememberWindow: rememberWindow,
+    arrivalDivider: arrivalDivider
   };
 
   // Auto-upgrade any server-rendered <pre class="ix-raw" data-ix-title> on the

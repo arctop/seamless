@@ -1,13 +1,19 @@
 package console
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/arctop/seamless/internal/approval"
 	"github.com/arctop/seamless/internal/core"
+	"github.com/arctop/seamless/internal/features"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -31,13 +37,22 @@ type eventItem struct {
 
 // eventDetailData is the payload for a single event's detail page.
 type eventDetailData struct {
-	Event   eventRow       `json:"event"`
-	Trace   interactionRow `json:"trace"`             // rich request/response + session attribution
-	Prompt  string         `json:"prompt,omitempty"`  // user prompt that triggered the event, if any
-	Content string         `json:"content,omitempty"` // verbatim injected/large text, if any
-	Items   []eventItem    `json:"items,omitempty"`   // resolved memories the event referenced
-	Fields  []kvPair       `json:"fields,omitempty"`  // remaining scalar payload fields
-	RawJSON string         `json:"rawJson"`           // pretty-printed full payload
+	Event eventRow `json:"event"`
+	// Headline is what the page is titled with: the event's summary, naming
+	// what a gardener action was about when its items resolved.
+	Headline string         `json:"headline"`
+	Trace    interactionRow `json:"trace"`             // rich request/response + session attribution
+	Prompt   string         `json:"prompt,omitempty"`  // user prompt that triggered the event, if any
+	Content  string         `json:"content,omitempty"` // verbatim injected/large text, if any
+	Items    []eventItem    `json:"items,omitempty"`   // resolved memories the event referenced
+	// Subjects are what the event is about (its ItemID, by kind), and for a
+	// gardener proposal the items the proposal names: see eventSubject.
+	Subjects []eventSubject `json:"subjects,omitempty"`
+	// ItemLink is the subject the event's ItemID names, when it resolved to a
+	// page: the inspector's Item row links it.
+	ItemLink *eventSubject `json:"-"`
+	Fields   []kvPair      `json:"fields,omitempty"` // remaining scalar payload fields
+	RawJSON  string        `json:"rawJson"`          // pretty-printed full payload
 
 	Eyebrow       string `json:"-"`
 	RequestLabel  string `json:"-"`
@@ -92,11 +107,368 @@ func (s *Service) eventDetail(w http.ResponseWriter, r *http.Request) {
 	} else {
 		data.Items = items
 	}
+	subjects, err := s.resolveEventSubjects(ctx, ev)
+	if err != nil {
+		s.serverError(w, r, err)
+		return
+	}
+	data.Subjects = subjects
+	for i := range subjects {
+		if sub := &subjects[i]; ev.ItemID != "" && sub.ID == ev.ItemID && sub.Href != "" {
+			data.ItemLink = sub
+			break
+		}
+	}
+	data.Headline = eventHeadline(ev, data.Event.Summary, subjects)
 	data.Fields = scalarFields(ev.Payload, eventBodyPayloadKeys(ev.Kind)...)
 
 	// No Active nav key: the event detail is a leaf reached from Overview/
 	// Interactions via the crumb, so highlighting a nav item would mislead.
-	s.renderDetail(w, r, "event", pageData{Title: "Event " + shortID(ev.ID), Data: data})
+	s.renderDetail(w, r, "event", pageData{Title: data.Headline, Data: data})
+}
+
+// The kinds of thing an event can be about (eventSubject.Kind).
+const (
+	subjectMemory   = "memory"
+	subjectNote     = "note"
+	subjectTask     = "task"
+	subjectTrial    = "trial"
+	subjectProposal = "proposal"
+	subjectSession  = "session"
+	subjectPlan     = "plan"
+)
+
+// eventSubject is one thing an event is about, resolved from an id by the
+// event's kind through the request's handle (s.db), so an item in a locked
+// project is neither resolved nor named: the card says what kind of thing it
+// was and shows its id, nothing more. Name and Href are set only when it
+// resolved, and Href only to a page that opens.
+type eventSubject struct {
+	Kind    string `json:"kind"`
+	ID      string `json:"id"`
+	Name    string `json:"name,omitempty"`
+	Detail  string `json:"detail,omitempty"` // one line under the name
+	Project string `json:"project,omitempty"`
+	Href    string `json:"href,omitempty"`
+	// Peek says Href has a peek fragment, so the Interactions inspector can
+	// open it in place (data-peek); a proposal's page has none.
+	Peek bool `json:"-"`
+	// Word is its state in the owner's words, where it has one: a task's
+	// (wordFor) or a proposal's (proposalStateWord).
+	Word *taskWord `json:"word,omitempty"`
+	// Role is what a proposal does with an item it names ("the memory to
+	// keep"), "" for the event's own subject.
+	Role    string `json:"role,omitempty"`
+	Missing bool   `json:"missing,omitempty"`
+}
+
+// KindLabel names the subject's kind for the card.
+func (e eventSubject) KindLabel() string {
+	if e.Kind == subjectProposal {
+		return "gardener proposal"
+	}
+	return e.Kind
+}
+
+// Icon is the subject's glyph.
+func (e eventSubject) Icon() string {
+	switch e.Kind {
+	case subjectMemory:
+		return "brain"
+	case subjectNote:
+		return "file-text"
+	case subjectTask:
+		return "list-checks"
+	case subjectTrial:
+		return "flask-conical"
+	case subjectProposal:
+		return "sprout"
+	case subjectSession:
+		return "terminal"
+	case subjectPlan:
+		return "map"
+	}
+	return "activity"
+}
+
+// eventSubjectRef names what an event's own subject is: its kind and its id,
+// by the event's kind -- the id each kind's recorder writes (ItemID, or the
+// payload where the item is named there). ok is false for an event about no
+// item the console has a page for (a record key, a lab, a hook run).
+func eventSubjectRef(ev core.Event) (kind, id string, ok bool) {
+	switch ev.Kind {
+	case core.EventMemoryWritten, core.EventMemoryRead, core.EventMemorySuperseded,
+		core.EventMemoryArchived, core.EventMemoryFirstReuse:
+		kind = subjectMemory
+	case core.EventNoteWritten, core.EventNoteRead, core.EventPlanCaptured,
+		core.EventPlanPresented, core.EventPlanApproved, core.EventSubagentCaptured:
+		// A plan capture's and a subagent cache's item is the note it wrote.
+		kind = subjectNote
+	case core.EventTaskTransition:
+		kind = subjectTask
+	case core.EventTrialRecorded:
+		kind = subjectTrial
+	case core.EventPlanShipped:
+		kind = subjectPlan // ItemID is the plan's slug
+	case core.EventGardenerAction:
+		switch payloadStr(ev.Payload, "action") {
+		case "digest_note", "undo_digest_note":
+			kind = subjectNote
+		default:
+			kind = subjectProposal
+		}
+	case core.EventMemoryHeld, core.EventMemoryReleased, core.EventMemoryDiscarded:
+		// A held write's item, when it changes one that exists.
+		switch payloadStr(ev.Payload, "item_kind") {
+		case subjectMemory, subjectNote:
+			kind = payloadStr(ev.Payload, "item_kind")
+		}
+	case core.EventFavoriteChanged:
+		switch k := payloadStr(ev.Payload, "kind"); k {
+		case subjectMemory, subjectNote, subjectTask, subjectTrial, subjectSession:
+			kind = k
+		case subjectPlan:
+			// A plan's star is kept on its note; the payload names its slug.
+			return subjectPlan, payloadStr(ev.Payload, "id"), payloadStr(ev.Payload, "id") != ""
+		}
+	case core.EventSessionStarted, core.EventSessionEnded, core.EventSessionFlagged,
+		core.EventSessionUnflagged, core.EventSessionTainted, core.EventSessionCleared,
+		core.EventSessionTranscript:
+		// A session's own event is about the session it ran in.
+		return subjectSession, cmp.Or(ev.ItemID, ev.SessionID), cmp.Or(ev.ItemID, ev.SessionID) != ""
+	}
+	if kind == "" || ev.ItemID == "" {
+		return "", "", false
+	}
+	return kind, ev.ItemID, true
+}
+
+// resolveEventSubjects resolves what ev is about: its own subject first, then,
+// for a gardener proposal, the memories (or the plan) the proposal names. Every
+// lookup goes through the request's handle.
+func (s *Service) resolveEventSubjects(ctx context.Context, ev core.Event) ([]eventSubject, error) {
+	kind, id, ok := eventSubjectRef(ev)
+	if !ok {
+		return nil, nil
+	}
+	if kind == subjectProposal {
+		return s.proposalSubjects(ctx, id)
+	}
+	sub, err := s.resolveSubject(ctx, kind, id, ev.ProjectSlug)
+	if err != nil {
+		return nil, err
+	}
+	return []eventSubject{sub}, nil
+}
+
+// resolveSubject resolves one id of a kind into its card. project is the
+// event's own project, where a plan without a page of its own is read.
+func (s *Service) resolveSubject(ctx context.Context, kind, id, project string) (eventSubject, error) {
+	db := s.db(ctx)
+	sub := eventSubject{Kind: kind, ID: id, Missing: true}
+	esc := url.PathEscape(id)
+	switch kind {
+	case subjectMemory:
+		m, ok, err := store.MemoryByID(ctx, db, id)
+		if err != nil || !ok {
+			return sub, err
+		}
+		sub.Name, sub.Detail, sub.Project = m.Name, m.Description, m.Project
+		w := taskWord{Key: string(m.Kind), Text: string(m.Kind)}
+		if m.InvalidAt != nil {
+			w = taskWord{Key: "retired", Text: string(m.Kind) + ", retired", Tone: "warn",
+				Hint: "Superseded or archived: it no longer reaches briefings or recall."}
+		}
+		sub.Word = &w
+		sub.Href, sub.Peek = "/console/memories/"+esc, true
+	case subjectNote:
+		n, ok, err := store.NoteByID(ctx, db, id)
+		if err != nil || !ok {
+			return sub, err
+		}
+		sub.Name, sub.Detail, sub.Project = cmp.Or(n.Title, n.Slug), n.Description, n.Project
+		sub.Href, sub.Peek = "/console/notes/"+esc, true
+	case subjectTask:
+		t, err := store.TaskByID(ctx, db, id)
+		if errors.Is(err, store.ErrTaskNotFound) {
+			return sub, nil
+		}
+		if err != nil {
+			return sub, err
+		}
+		words, err := s.wordTasks(ctx, []core.Task{t}, time.Now().UTC())
+		if err != nil {
+			return sub, err
+		}
+		w := words[t.ID]
+		sub.Name, sub.Project, sub.Word = t.Title, t.ProjectSlug, &w
+		if t.PlanSlug != "" {
+			sub.Detail = "a step of plan:" + t.PlanSlug
+		}
+		sub.Href, sub.Peek = "/console/tasks/"+esc, true
+	case subjectTrial:
+		tr, ok, err := store.TrialByID(ctx, db, id)
+		if err != nil || !ok {
+			return sub, err
+		}
+		sub.Name, sub.Project = cmp.Or(tr.Title, tr.Lab), tr.ProjectSlug
+		if tr.Lab != "" {
+			sub.Detail = "a trial in lab " + tr.Lab
+		}
+		// Trial pages are the research feature's: off, there is none to open.
+		if features.Enabled(s.effectiveFeatures(ctx), features.Research) {
+			sub.Href, sub.Peek = "/console/trials/"+esc, true
+		}
+	case subjectSession:
+		sess, ok, err := store.SessionByID(ctx, db, id)
+		if err != nil || !ok {
+			return sub, err
+		}
+		sub.Name, sub.Project = sessionLabel(sess), sess.ProjectSlug
+		w := taskWord{Key: string(sess.Status), Text: string(sess.Status)}
+		sub.Word = &w
+		sub.Href, sub.Peek = "/console/sessions/"+esc, true
+	case subjectPlan:
+		href, err := s.planPageHref(ctx, project, id)
+		if err != nil {
+			return sub, err
+		}
+		if href == "" && project != "" {
+			// A task-only plan: its steps are its project's to show.
+			steps, err := store.ListTasksForPlan(ctx, db, project, "", id)
+			if err != nil {
+				return sub, err
+			}
+			if len(steps) == 0 {
+				return sub, nil
+			}
+			href = projectTasksHref(project)
+		}
+		if href == "" {
+			return sub, nil
+		}
+		sub.Name, sub.Project, sub.Href = "plan:"+id, project, href
+		sub.Peek = strings.HasPrefix(href, "/console/plans/")
+	default:
+		return sub, nil
+	}
+	sub.Missing = false
+	return sub, nil
+}
+
+// proposalSubjects resolves a gardener proposal into its card and the cards of
+// what it names: the memories it would archive, merge, move or reclassify, or
+// the plan it would settle. A proposal the request cannot read -- the view
+// hides one whose payload names anything in a locked project -- is one
+// unnamed card.
+func (s *Service) proposalSubjects(ctx context.Context, id string) ([]eventSubject, error) {
+	p, ok, err := store.ProposalByID(ctx, s.db(ctx), id)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return []eventSubject{{Kind: subjectProposal, ID: id, Missing: true}}, nil
+	}
+	work, known := proposalWork[p.Kind]
+	if !known {
+		work = cmp.Or(strings.ReplaceAll(p.Kind, "_", " "), "a proposal")
+	}
+	w := proposalStateWord(p.Status)
+	card := eventSubject{
+		Kind: subjectProposal, ID: p.ID, Name: strings.ToUpper(work[:1]) + work[1:], Word: &w,
+		Detail:  cmp.Or(payloadStr(p.Payload, "reason"), payloadStr(p.Payload, "rationale")),
+		Project: payloadStr(p.Payload, "project"), Href: "/console/gardener/decisions",
+	}
+	if p.Status == store.ProposalPending {
+		card.Href = "/console/gardener/" + url.PathEscape(p.ID)
+	}
+	out := []eventSubject{card}
+
+	for _, named := range proposalNames(p) {
+		sub, err := s.resolveSubject(ctx, named.kind, named.id, payloadStr(p.Payload, "project"))
+		if err != nil {
+			return nil, err
+		}
+		sub.Role = named.role
+		out = append(out, sub)
+	}
+	return out, nil
+}
+
+// proposalName is one item a proposal's payload names, and what the proposal
+// does with it.
+type proposalName struct{ kind, id, role string }
+
+// proposalNames reads the items a proposal is about from its payload, by kind:
+// the same keys gardener.ResolveProposalScope decodes. Kinds about a project
+// or a pattern (digest, split, memory_wanted, tool_error) name no item.
+func proposalNames(p store.Proposal) []proposalName {
+	var out []proposalName
+	add := func(kind, id, role string) {
+		if id != "" {
+			out = append(out, proposalName{kind: kind, id: id, role: role})
+		}
+	}
+	switch p.Kind {
+	case store.ProposalArchive:
+		add(subjectMemory, payloadStr(p.Payload, "id"), "the memory to archive")
+	case store.ProposalRekind:
+		add(subjectMemory, payloadStr(p.Payload, "id"), "the memory to reclassify")
+	case store.ProposalReproject, store.ProposalRelocate:
+		add(subjectMemory, payloadStr(p.Payload, "id"), "the memory to move")
+	case store.ProposalMerge:
+		add(subjectMemory, payloadStr(payloadMap(p.Payload, "keep"), "id"), "the memory to keep")
+		add(subjectMemory, payloadStr(payloadMap(p.Payload, "drop"), "id"), "the memory to retire into it")
+	case store.ProposalConsolidate:
+		sources, _ := p.Payload["sources"].([]any)
+		for _, src := range sources {
+			if m, ok := src.(map[string]any); ok {
+				add(subjectMemory, payloadStr(m, "id"), "a memory it folds in")
+			}
+		}
+	case store.ProposalAbandonPlan, store.ProposalShipPlan, store.ProposalMergePlans:
+		add(subjectPlan, payloadStr(p.Payload, "slug"), "the plan it settles")
+	}
+	return out
+}
+
+// proposalStateWord is a proposal's status in the owner's words.
+func proposalStateWord(status string) taskWord {
+	switch status {
+	case store.ProposalPending:
+		return taskWord{Key: status, Text: "waiting for review", Tone: "warn",
+			Hint: "Waiting for the owner to apply or dismiss it on the Gardener screen."}
+	case store.ProposalApplied:
+		return taskWord{Key: status, Text: "applied", Tone: "ok"}
+	case store.ProposalHidden:
+		return taskWord{Key: status, Text: "hidden forever"}
+	default:
+		return taskWord{Key: status, Text: status}
+	}
+}
+
+// eventHeadline is the page's title line: the event's summary, and for a
+// gardener action about a proposal, the names of what the proposal is about --
+// "proposed archiving a memory: <name>", where the ledger, which reads no
+// proposal, says only "a memory".
+func eventHeadline(ev core.Event, summary string, subjects []eventSubject) string {
+	line := cmp.Or(summary, string(ev.Kind))
+	if ev.Kind != core.EventGardenerAction {
+		return line
+	}
+	var names []string
+	for _, sub := range subjects {
+		if sub.Role != "" && sub.Name != "" {
+			names = append(names, sub.Name)
+		}
+	}
+	if len(names) == 0 {
+		return line
+	}
+	if strings.Contains(line, ": ") {
+		return line + " (" + approval.JoinAnd(names) + ")"
+	}
+	return line + ": " + approval.JoinAnd(names)
 }
 
 // eventTrace starts with the shared Interactions projection, then promotes the

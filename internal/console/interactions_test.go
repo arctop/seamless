@@ -278,3 +278,53 @@ func TestInteractionsClient_EventPeekUsesCompactChrome(t *testing.T) {
 	require.Contains(t, css, ".interactions-split.detail-open .detail-pane-body { padding: 14px; }")
 	require.Contains(t, css, "max-height: min(42vh, 420px); overflow: auto; scrollbar-gutter: stable;")
 }
+
+// The feed still opens empty (a recorded decision: history is explicit), and
+// what it remembers is only the window the owner last loaded, in this browser:
+// interactions.js keeps it in localStorage behind try/catch, and the page
+// offers it as the first quick-load button without loading anything.
+func TestNwInteractions_RemembersTheLoadedWindowInThisBrowser(t *testing.T) {
+	_, mux, _ := newConsoleWithSession(t, "cc/testsess")
+	body := getPeek(t, mux, "/console/interactions").Body.String()
+	js := string(interactionsJS)
+
+	require.Contains(t, js, "function rememberedWindow(allowed) {\n    try {")
+	require.Contains(t, js, "return allowed.indexOf(v) !== -1 ? v : 0;", "only a window the picker offers comes back")
+	require.Contains(t, js, "} catch (e) {\n      return 0;\n    }", "blocked storage remembers nothing")
+	require.Contains(t, js, "try { localStorage.setItem(WINDOW_KEY, String(secs)); } catch (e) {}")
+	require.Contains(t, js, "rememberedWindow: rememberedWindow,")
+
+	page, err := templateFS.ReadFile("templates/interactions.html")
+	require.NoError(t, err)
+	require.NotContains(t, string(page), "localStorage", "the page reaches storage only through interactions.js")
+	require.Contains(t, body, "var remembered = window.IX.rememberedWindow(WINDOWS);")
+	require.Contains(t, body, "var historySecs = remembered || 300;")
+	require.Contains(t, body, "window.IX.rememberWindow(secs);", "a load remembers its window")
+	require.Contains(t, body, "b.hidden = parseInt(b.getAttribute('data-ix-quick'), 10) === historySecs;",
+		"the quick list does not repeat the first button's window")
+	// The empty start stays: nothing loads on arrival.
+	require.Contains(t, body, ">Listening for new interactions<")
+	require.NotContains(t, body, `fetch('/console/interactions?format=json&history=`)
+}
+
+// History the owner adds sits under a "Before you arrived" divider, with what
+// arrived live above it; the divider shows only while loaded history is in view.
+func TestNwInteractions_HistorySitsUnderTheArrivalDivider(t *testing.T) {
+	_, mux, _ := newConsoleWithSession(t, "cc/testsess")
+	body := getPeek(t, mux, "/console/interactions").Body.String()
+	js := string(interactionsJS)
+
+	require.Contains(t, js, "function arrivalDivider(at) {")
+	require.Contains(t, js, "el('span', 'ix-arrived-label', 'Before you arrived')")
+	require.Contains(t, js, "d.setAttribute('role', 'separator');")
+	require.Contains(t, js, "d.hidden = true;")
+
+	require.Contains(t, body, "var arrived = feed.getAttribute('data-opened') || last.ts;")
+	require.Regexp(t, `id="ix-feed" data-opened="\d{4}-\d{2}-\d{2}T[^"]+Z"`, body, "arrival is the server's clock, the events' own")
+	require.Contains(t, body, "var divider = window.IX.arrivalDivider(arrived);")
+	require.Contains(t, body, "if (r && r.el && !r.el.hidden && beforeArrival(r.data)) { first = r.el; break; }")
+	require.Contains(t, body, "divider.hidden = !first;")
+	require.Contains(t, body, "if (first && divider.nextSibling !== first) feed.insertBefore(divider, first);")
+	require.Contains(t, body, "    placeDivider();\n  }", "every feed change re-places it (updateEmpty)")
+	require.Contains(t, string(consoleCSS), ".ix-arrived[hidden] { display: none; }")
+}

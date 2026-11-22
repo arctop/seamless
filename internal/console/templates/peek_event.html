@@ -1,15 +1,17 @@
 {{define "peek-body"}}
 <article class="peek-entity event-peek">
-  <header class="peek-head"><span class="kind {{.Trace.Tone}}" title="{{.Event.Kind}}">{{evtLabel .Event.Kind}}</span><span class="event-peek-time" title="{{ts .Event.When}}">{{ago .Event.When}}</span></header>
-  <h2 class="peek-title">{{if .Event.Summary}}{{.Event.Summary}}{{else}}{{.Event.Kind}}{{end}}</h2>
+  <header class="peek-head"><span class="kind {{.Trace.Tone}}" title="{{.Event.Kind}}">{{evtLabel .Event.Kind}}</span><span class="event-peek-time">{{agoTime .Event.When}}</span></header>
+  <h2 class="peek-title">{{.Headline}}</h2>
   <p class="event-peek-context">{{.Eyebrow}}{{if .Trace.SessionName}} <span>&middot;</span> {{.Trace.SessionName}}{{end}}</p>
   {{template "detail-body" .}}
 </article>
 {{end}}
 
 {{define "detail-body"}}
+{{/* The page's one <main> is the layout's: the body is a plain column, as a
+     peek fragment and inside a full page alike. */}}
 <div class="event-workspace">
-  <main class="event-primary">
+  <div class="event-primary">
     {{if .Trace.Request}}
     <section class="card event-content-card event-request-card">
       <header class="event-card-head">
@@ -51,13 +53,36 @@
     </section>
     {{end}}
 
-    {{if not (or .Trace.Request .Trace.Response .Items)}}
-    <section class="card event-empty-card">
-      <span>{{icon (evtIcon .Event.Kind)}}</span>
-      <div><strong>No captured body for this event</strong><p>The event is fully represented by its provenance and payload fields.</p></div>
+    {{with .Subjects}}
+    <section class="card event-memory-card event-subject-card">
+      <header class="event-card-head">
+        <div><span class="event-card-eyebrow">About</span><h2>What this event is about</h2></div>
+      </header>
+      <div class="event-memory-grid">
+        {{range .}}
+        <div class="event-memory-row{{if .Missing}} is-missing{{end}}" data-subject="{{.Kind}}">
+          <span class="event-memory-mark">{{if .Missing}}{{icon "triangle-alert"}}{{else}}{{icon .Icon}}{{end}}</span>
+          <div class="event-memory-copy">
+            <div class="event-memory-title">
+              {{if .Missing}}<span>{{.KindLabel}}</span><span class="badge warn">not found</span>{{else if .Href}}<a href="{{.Href}}"{{if .Peek}} data-peek{{end}}>{{.Name}}</a>{{else}}<span>{{.Name}}</span>{{end}}
+              {{if not .Missing}}<span class="kind">{{.KindLabel}}</span>{{with .Word}}{{taskChip .}}{{end}}{{end}}
+            </div>
+            {{if or .Missing .Role .Detail (eq .Kind "memory" "note")}}<p>{{if .Missing}}Not here any more, or in a project this console does not show.{{else if .Role}}{{.Role}}{{if .Detail}}: {{.Detail}}{{end}}{{else if .Detail}}{{.Detail}}{{else}}No description recorded.{{end}}</p>{{end}}
+            <div class="event-memory-meta">{{if .Missing}}<span>scope unknown</span>{{else if .Project}}<span>{{.Project}}</span>{{else if ne .Kind "proposal"}}<span>global</span>{{end}}<span class="mono" title="{{.ID}}">{{shortID .ID}}</span>{{copyBtn .ID}}</div>
+          </div>
+        </div>
+        {{end}}
+      </div>
     </section>
     {{end}}
-  </main>
+
+    {{if not (or .Trace.Request .Trace.Response .Items .Subjects)}}
+    <section class="card event-empty-card">
+      <span>{{icon (evtIcon .Event.Kind)}}</span>
+      <div><strong>Nothing more was recorded</strong><p>The details beside this are the whole event.</p></div>
+    </section>
+    {{end}}
+  </div>
 
   <aside class="event-inspector" aria-label="Event inspector">
     <section class="card event-meta-card">
@@ -66,10 +91,10 @@
       </header>
       <dl class="event-meta-list">
         <div><dt>ID</dt><dd class="mono"><span title="{{.Event.ID}}">{{shortID .Event.ID}}</span>{{copyBtn .Event.ID}}</dd></div>
-        <div><dt>Recorded</dt><dd><time title="{{ts .Event.When}}">{{ts .Event.When}}</time> <span class="muted">&middot; {{ago .Event.When}}</span></dd></div>
+        <div><dt>Recorded</dt><dd>{{clockDate .Event.When}} <span class="muted">&middot; {{agoTime .Event.When}}</span></dd></div>
         <div><dt>Project</dt><dd>{{if .Event.Project}}<a href="/console/projects/{{.Event.Project}}" data-peek>{{.Event.Project}}</a>{{else}}global{{end}}</dd></div>
         <div><dt>Session</dt><dd>{{if .Event.SessionID}}<a href="/console/sessions/{{.Event.SessionID}}" data-peek>{{if .Trace.SessionName}}{{.Trace.SessionName}}{{else}}{{shortID .Event.SessionID}}{{end}}</a>{{copyBtn .Event.SessionID}}{{else}}&mdash;{{end}}</dd></div>
-        {{if .Event.ItemID}}<div><dt>Item</dt><dd class="mono"><span title="{{.Event.ItemID}}">{{shortID .Event.ItemID}}</span>{{copyBtn .Event.ItemID}}</dd></div>{{end}}
+        {{if .Event.ItemID}}<div><dt>Item</dt><dd>{{with .ItemLink}}<a href="{{.Href}}"{{if .Peek}} data-peek{{end}}>{{.Name}}</a> {{end}}<span class="mono" title="{{.Event.ItemID}}">{{shortID .Event.ItemID}}</span>{{copyBtn .Event.ItemID}}</dd></div>{{end}}
       </dl>
     </section>
 

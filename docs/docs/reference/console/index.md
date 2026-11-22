@@ -615,26 +615,36 @@ Top to bottom:
 - **A scope strip** - one chip per project with a live agent (`?scope=<slug>`;
   the empty project scope filters as `global`). Filtering narrows every zone
   except the pulse.
-- **On duty** - one card per live session: harness+model pill, project, last
-  heartbeat (cards are toned hot/warm/quiet by heartbeat age), session wall
-  clock, cumulative tokens, a star toggle, every claim it holds with a live
-  lease countdown, and a short trail of what it just produced. A live agent
-  holding nothing says so: "no claim held - roaming".
+- **On duty** - one card per live session, headed by the title of the task it
+  holds (its session name when it holds none), with the session name,
+  harness+model pill and account under it; then its project, when it was last
+  seen (cards are toned hot/warm/quiet by heartbeat age), how long it has been
+  running, cumulative tokens, a star toggle, every claim it holds with a live
+  lease countdown, and a short trail of what it just produced. A claim it let
+  lapse reads on its card as it reads in Loose ends: "claim lapsed 12m ago:"
+  and the task's title. A live agent holding nothing says so: "holds no
+  claim".
 - **Loose ends** - `in_progress` tasks no live agent is carrying: a lapsed
   lease, a claimless start (`tasks_update status=in_progress` without a
-  claim), or a holder that went quiet mid-lease. A lapsed claim offers
-  **release claim** with no confirmation - the lease is already dead, so there
-  is no live holder to interrupt, only a stale claim to clear.
+  claim), or a holder that went quiet mid-lease. Each row says its state once,
+  in the words every task screen uses: "claim lapsed 12m ago", "unclaimed", or
+  "in progress" with the quiet holder named and its lease counting down. A
+  lapsed claim offers **release claim** with no confirmation - the lease is
+  already dead, so there is no live holder to interrupt, only a stale claim to
+  clear.
 - **Plans in motion** - a horizontally scrolling rail of every incomplete plan
   across every project, done/in-flight progress bars and ready counts, cards
-  dimmed once a plan has rested for 24h. Each links to its project's Plans &
-  tasks tab.
+  dimmed once a plan has rested for 24h. Each links to its plan's page, or to
+  its project's Plans & tasks tab when the plan has no page in that project (a
+  plan with no narrative note).
 - **Up next** - the cross-project ready queue: claimable this instant, plan
   steps included, each naming what closing it would unblock.
 - **The wire** - the freshest business events, scope-filtered.
 
 Everything links onward - sessions, tasks, plans, projects, events - and the
-lease countdowns tick client-side between refreshes. With the
+lease countdowns tick client-side between refreshes. A title wraps to two
+lines rather than cutting at one, and one that two lines still cut keeps its
+whole text on hover. With the
 [gamification](#optional-features) feature on, the page also carries the day
 tape, the personal-records rail, the hot-streak pulse, and celebration moments;
 off (the default), none of that renders.
@@ -650,9 +660,13 @@ visiting never restores old rows.
 
 History is explicit and additive. Choose a recent window and select **Add** when
 earlier context is useful; live rows stay in place, and **Load older events**
-paginates only inside that chosen window. Filters operate over the rows already
-in memory, by event category and session lane. Pausing buffers new arrivals
-rather than discarding them.
+paginates only inside that chosen window. Loaded history sits under a **Before
+you arrived** divider, with what arrived live above it. The empty feed offers
+the window you loaded last time in this browser as its first button, and the
+other windows beside it; that choice is kept in this browser only and never
+loads by itself. Filters operate over the rows already in memory, by event
+category and session lane. Pausing buffers new arrivals rather than discarding
+them.
 
 Each compact row expands just enough to expose its request/result or injected
 text. Selecting the inspector keeps that context beside the stream and links to
@@ -2186,6 +2200,18 @@ missing), remaining payload fields, and raw JSON (the last two at the Advanced
 level; `?format=json` always carries them). The Interactions inspector
 uses the same content model in a side pane; opening the full page adds context
 without changing the underlying event.
+
+**What it is about.** The item an event names is resolved by the event's kind
+and linked: the memory it wrote or read, the note, the task (with its state),
+the trial, the session, the plan, or the gardener proposal. A gardener event
+also names what its proposal is about - the memory it would archive, the two
+it would merge, the plan it would settle - and its title says so: "proposed
+archiving a memory:" and the memory's name. A pending proposal links to it on
+the Gardener screen, a decided one to the decision history. Everything
+resolves through what this console reads: an item it cannot read - deleted, or
+in a locked project - is shown by its kind and id alone, never named. Times
+read in this browser's own clock, and the page's title is the event's
+headline.
 
 ## Errors
 

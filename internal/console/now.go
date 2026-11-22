@@ -15,12 +15,14 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/features"
+	"github.com/arctop/seamless/internal/plans"
 	"github.com/arctop/seamless/internal/store"
 )
 
@@ -76,8 +78,11 @@ type nowScopeVM struct {
 
 // nowAgentVM is one live agent card.
 type nowAgentVM struct {
-	ID       string       `json:"id"`
-	Name     string       `json:"name"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Title heads the card: the title of the task the agent holds (its first
+	// claim), else its name -- what Now showed before sessions had titles.
+	Title    string       `json:"title"`
 	Project  string       `json:"project"` // "global" for the empty scope
 	Harness  string       `json:"harness,omitempty"`
 	Model    string       `json:"model,omitempty"`
@@ -88,7 +93,10 @@ type nowAgentVM struct {
 	Tokens   int          `json:"tokens,omitempty"`
 	Favorite bool         `json:"favorite,omitempty"`
 	Claims   []nowClaimVM `json:"claims"`
-	Trail    []eventRow   `json:"trail"`
+	// Lapsed are the claims this agent held whose lease ran out: the same rows
+	// Loose ends lists, in the same words, so the card and the list agree.
+	Lapsed []nowLooseVM `json:"lapsedClaims,omitempty"`
+	Trail  []eventRow   `json:"trail"`
 
 	// Contrib is the agent's today line, a gamification surface: nil while the
 	// feature is off.
@@ -116,16 +124,25 @@ type nowContribVM struct {
 // nowLooseVM is an in_progress task no live agent card is carrying: a lapsed
 // lease, a claimless start, or a holder that went quiet mid-lease.
 type nowLooseVM struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	Project   string    `json:"project"`
-	PlanSlug  string    `json:"planSlug,omitempty"`
-	Holder    string    `json:"holder,omitempty"` // session name when it resolves, else the short id
-	HolderID  string    `json:"holderId,omitempty"`
-	State     string    `json:"state"` // "lapsed" | "claimless" | "quiet-holder"
-	LeaseExp  string    `json:"leaseExp,omitempty"`
-	LeaseLeft string    `json:"leaseLeft,omitempty"`
-	Since     time.Time `json:"since"` // last movement (updated_at)
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Project  string `json:"project"`
+	PlanSlug string `json:"planSlug,omitempty"`
+	Holder   string `json:"holder,omitempty"` // session name when it resolves, else the short id
+	HolderID string `json:"holderId,omitempty"`
+	// HolderLink is the holder linked to its session page when it resolved to
+	// one this request reads (holderLink), else its raw id and no link.
+	HolderLink *taskSession `json:"-"`
+	State      string       `json:"state"` // "lapsed" | "claimless" | "quiet-holder"
+	// Word is the row's one state phrase, in the task vocabulary (wordFor):
+	// claim lapsed, unclaimed, or in progress for a quiet holder's live claim.
+	Word taskWord `json:"word"`
+	// LapsedAt is when the claim lapsed (its lease's end), set only while Word
+	// is claim lapsed, so the phrase reads "claim lapsed 12m ago".
+	LapsedAt  *time.Time `json:"lapsedAt,omitempty"`
+	LeaseExp  string     `json:"leaseExp,omitempty"`
+	LeaseLeft string     `json:"leaseLeft,omitempty"`
+	Since     time.Time  `json:"since"` // last movement (updated_at)
 	// Releasable marks the states whose claim can be cleared without a confirm:
 	// the lease is already dead, so there is no live holder to interrupt.
 	Releasable bool `json:"releasable"`
@@ -143,6 +160,9 @@ type nowPlanVM struct {
 	DoingPct  int       `json:"doingPct"`
 	Moving    bool      `json:"moving"` // a step moved within the last 24h
 	Last      time.Time `json:"lastActivity"`
+	// Href is the plan's page when it has one in this project (planPageHref),
+	// else the project's Plans & tasks tab: a card never links to a 404.
+	Href string `json:"href"`
 }
 
 // nowReadyVM is one cross-project ready-queue row: claimable this instant.
@@ -265,6 +285,7 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 	// flight is a loose end.
 	namer := s.sessionNamer(ctx)
 	claims := map[string][]core.Task{}
+	var looseTasks []core.Task
 	for _, t := range inProg {
 		if !inScope(t.ProjectSlug) {
 			continue
@@ -275,9 +296,20 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 			claims[holder.ID] = append(claims[holder.ID], t)
 			continue
 		}
+		looseTasks = append(looseTasks, t)
+	}
+	// Each loose end reads in the task vocabulary, the words every other task
+	// surface prints for the same row.
+	words, err := s.wordTasks(ctx, looseTasks, now)
+	if err != nil {
+		return nowData{}, fmt.Errorf("now: loose-end words: %w", err)
+	}
+	// A live agent's own lapsed claims ride its card too, worded as here.
+	lapsedBy := map[string][]nowLooseVM{}
+	for _, t := range looseTasks {
 		loose := nowLooseVM{
 			ID: t.ID, Title: t.Title, Project: t.ProjectSlug, PlanSlug: t.PlanSlug,
-			Since: t.UpdatedAt,
+			Since: t.UpdatedAt, Word: words[t.ID],
 		}
 		switch {
 		case t.ClaimedBy == "":
@@ -294,15 +326,25 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 		if t.ClaimedBy != "" {
 			loose.HolderID = t.ClaimedBy
 			loose.Holder = shortID(t.ClaimedBy)
-			if holder := namer(t.ClaimedBy); holder.Name != "" {
-				loose.Holder = holder.Name
+			loose.HolderLink = holderLink(t.ClaimedBy, namer)
+			if loose.HolderLink.ID != "" {
+				loose.Holder = loose.HolderLink.Name
+			} else {
+				loose.HolderLink.Name = loose.Holder
 			}
 		}
 		if t.LeaseExpiresAt != nil {
 			loose.LeaseExp = t.LeaseExpiresAt.UTC().Format(time.RFC3339)
 			loose.LeaseLeft = durUntil(*t.LeaseExpiresAt, now)
+			if loose.Word.Key == wordLapsed {
+				at := t.LeaseExpiresAt.UTC()
+				loose.LapsedAt = &at
+			}
 		}
 		data.Loose = append(data.Loose, loose)
+		if _, live := liveByID[t.ClaimedBy]; live && loose.State == "lapsed" {
+			lapsedBy[t.ClaimedBy] = append(lapsedBy[t.ClaimedBy], loose)
+		}
 	}
 	sort.SliceStable(data.Loose, func(i, j int) bool { return data.Loose[i].Since.After(data.Loose[j].Since) })
 
@@ -329,6 +371,7 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 		if vm.Name == "" {
 			vm.Name = shortID(sess.ID)
 		}
+		vm.Title = vm.Name
 		for _, t := range claims[sess.ID] {
 			claim := nowClaimVM{ID: t.ID, Title: t.Title, Project: t.ProjectSlug, PlanSlug: t.PlanSlug}
 			if t.LeaseExpiresAt != nil {
@@ -337,6 +380,10 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 			}
 			vm.Claims = append(vm.Claims, claim)
 		}
+		if len(vm.Claims) > 0 && vm.Claims[0].Title != "" {
+			vm.Title = vm.Claims[0].Title
+		}
+		vm.Lapsed = lapsedBy[sess.ID]
 		// Trail + today's contribution from one newest-first read. Best-effort:
 		// a trail failure leaves the card, not the page.
 		if s.cfg.Events != nil {
@@ -402,6 +449,14 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 			data.Moving++
 		}
 		if len(data.Plans) < 12 {
+			href, err := s.planPageHref(ctx, p.Project, p.Slug)
+			if err != nil {
+				return nowData{}, fmt.Errorf("now: plan page: %w", err)
+			}
+			if href == "" {
+				href = projectTasksHref(p.Project)
+			}
+			vm.Href = href
 			data.Plans = append(data.Plans, vm)
 		}
 	}
@@ -453,6 +508,35 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 		data.Arcade = s.nowArcade(ctx, now, dayStart, len(live), shippedToday, pulseTimes)
 	}
 	return data, nil
+}
+
+// planPageHref is a plan's page, /console/plans/<slug>, when the plan has one
+// in project: plans.Composition resolves the slug through the request's handle
+// and its primary note is in that project (the Diary's rule, diary.Ref's
+// HasPage). The plan route resolves by slug alone and a task-only plan has no
+// page, so "" means link elsewhere, never to a 404.
+func (s *Service) planPageHref(ctx context.Context, project, slug string) (string, error) {
+	if slug == "" {
+		return "", nil
+	}
+	primary, _, ok, err := plans.Composition(ctx, s.db(ctx), slug)
+	if err != nil {
+		return "", err
+	}
+	if !ok || primary.Project != project {
+		return "", nil
+	}
+	return "/console/plans/" + url.PathEscape(slug), nil
+}
+
+// projectTasksHref is a project's Plans & tasks tab, where a plan without a
+// page of its own is read. The global scope has no project page, so its plans
+// fall back to the Plans screen.
+func projectTasksHref(project string) string {
+	if project == "" {
+		return "/console/plans"
+	}
+	return "/console/projects/" + url.PathEscape(project) + "?tab=tasks"
 }
 
 // nowFreshness buckets a heartbeat age for card presentation.

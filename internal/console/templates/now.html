@@ -42,21 +42,26 @@
     <div class="now-agents">
       {{range .Agents}}
       <article class="now-agent" data-fresh="{{.Fresh}}" id="ag-{{.ID}}">
+        {{/* The card is headed by the agent's title (the task it holds, else
+             its name); the name, its harness and its account sit under it.
+             The whole title is in the link's title when two lines cut it. */}}
         <header class="now-agent-head">
-          <span class="now-beat" title="last heartbeat {{ts .Beat}}"><span class="live-dot"></span></span>
-          <a class="now-agent-name mono" href="/console/sessions/{{.ID}}" title="open session">{{.Name}}</a>
-          {{copyBtn .Name}}
-          {{agentPill .Harness .Model}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}
+          <span class="now-beat" aria-hidden="true"><span class="live-dot"></span></span>
+          <a class="now-agent-name" href="/console/sessions/{{.ID}}" title="{{.Title}}">{{.Title}}</a>
           <form class="star-form" method="post" action="/console/favorites/session/{{.ID}}">
             <input type="hidden" name="favorite" value="{{if .Favorite}}0{{else}}1{{end}}">
             <input type="hidden" name="next" value="/console/now">
             <button class="star{{if .Favorite}} on{{end}}" type="submit" aria-pressed="{{if .Favorite}}true{{else}}false{{end}}" title="{{if .Favorite}}Unstar{{else}}Star{{end}} this session">{{icon "star"}}</button>
           </form>
+          <span class="now-agent-who">
+            {{if ne .Title .Name}}<span class="now-agent-handle mono" title="{{.Name}}">{{.Name}}</span>{{end}}{{copyBtn .Name}}
+            {{agentPill .Harness .Model}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}
+          </span>
         </header>
         <div class="now-agent-meta">
-          <a class="now-proj" href="/console/projects/{{.Project}}">{{icon "folder-open"}}{{.Project}}</a>
-          <span title="last heartbeat {{ts .Beat}}">beat {{ago .Beat}}</span>
-          {{if .Dur}}<span>up {{.Dur}}</span>{{end}}
+          <a class="now-proj" href="/console/projects/{{.Project}}" title="{{.Project}}">{{icon "folder-open"}}{{.Project}}</a>
+          <span>{{timeAs .Beat (printf "last seen %s" (agoPhrase .Beat))}}</span>
+          {{if .Dur}}<span>running {{.Dur}}</span>{{end}}
           {{if .Tokens}}<span title="cumulative tokens this session">{{compactNum .Tokens}} tok</span>{{end}}
         </div>
         {{if .Claims}}
@@ -64,18 +69,26 @@
           {{range .Claims}}
           <a class="now-claim" id="cl-{{.ID}}" href="/console/tasks/{{.ID}}">
             {{icon "lock"}}
-            <span class="t">{{.Title}}</span>
-            {{if .PlanSlug}}<span class="now-chip plan">plan:{{.PlanSlug}}</span>{{end}}
+            <span class="t" title="{{.Title}}">{{.Title}}</span>
+            {{if .PlanSlug}}<span class="now-chip plan" title="plan:{{.PlanSlug}}">plan:{{.PlanSlug}}</span>{{end}}
             {{if .LeaseExp}}<span class="lease" data-lease-exp="{{.LeaseExp}}">{{icon "timer"}}<span class="v">{{.LeaseLeft}}</span></span>{{end}}
           </a>
           {{end}}
         </div>
-        {{else}}
-        <div class="now-roam">no claim held &mdash; roaming</div>
+        {{end}}
+        {{/* A claim this agent let lapse reads as Loose ends reads it. */}}
+        {{range .Lapsed}}
+        <a class="now-lapsed" id="cl-lapsed-{{.ID}}" href="/console/tasks/{{.ID}}">
+          <span class="w">{{taskChip .Word}}{{with .LapsedAt}} {{timeAs . (agoPhrase .)}}{{end}}:</span>
+          <span class="t" title="{{.Title}}">{{.Title}}</span>
+        </a>
+        {{end}}
+        {{if not (or .Claims .Lapsed)}}
+        <div class="now-roam">holds no claim</div>
         {{end}}
         {{if .Trail}}
         <ul class="now-trail">
-          {{range .Trail}}<li id="tr-{{.ID}}"><time title="{{ts .When}}">{{ago .When}}</time><span>{{.Summary}}</span></li>{{end}}
+          {{range .Trail}}<li id="tr-{{.ID}}">{{agoTime .When}}<span title="{{.Summary}}">{{.Summary}}</span></li>{{end}}
         </ul>
         {{end}}
         {{with .Contrib}}
@@ -102,17 +115,21 @@
     </header>
     <div class="now-loose-list">
       {{range .Loose}}
+      {{/* One state phrase per row, in the task vocabulary: "claim lapsed
+           12m ago", "unclaimed", or "in progress" for a live claim whose holder
+           went quiet -- only that one still counts its lease down. */}}
       <div class="now-loose" data-state="{{.State}}" id="lo-{{.ID}}">
         {{icon "triangle-alert"}}
         <a class="t" href="/console/tasks/{{.ID}}">{{.Title}}</a>
-        <span class="now-chip proj">{{.Project}}</span>
-        {{if .PlanSlug}}<span class="now-chip plan">plan:{{.PlanSlug}}</span>{{end}}
-        {{if .Holder}}<span class="now-holder" title="holding session">{{icon "lock"}}{{.Holder}}</span>{{end}}
-        <span class="kind warn">{{.State}}</span>
-        {{if .LeaseExp}}<span class="lease{{if .Releasable}} lease-lapsed{{end}}" data-lease-exp="{{.LeaseExp}}">{{icon "timer"}}<span class="v">{{.LeaseLeft}}</span></span>{{end}}
-        <time title="{{ts .Since}}">moved {{ago .Since}}</time>
+        <span class="now-chip proj" title="{{.Project}}">{{.Project}}</span>
+        {{if .PlanSlug}}<span class="now-chip plan" title="plan:{{.PlanSlug}}">plan:{{.PlanSlug}}</span>{{end}}
+        <span class="now-state">{{taskChip .Word}}{{with .LapsedAt}} {{timeAs . (agoPhrase .)}}{{end}}</span>
+        {{$quiet := eq .State "quiet-holder"}}
+        {{with .HolderLink}}<span class="now-holder">claimed by {{if .ID}}<a href="/console/sessions/{{.ID}}">{{.Name}}</a>{{else}}<span class="mono">{{.Name}}</span>{{end}}{{if $quiet}}, which went quiet{{end}}</span>{{end}}
+        {{if and .LeaseExp $quiet}}<span class="lease" data-lease-exp="{{.LeaseExp}}">{{icon "timer"}}<span class="v">{{.LeaseLeft}}</span></span>{{end}}
+        <span class="now-moved">{{timeAs .Since (printf "moved %s" (agoPhrase .Since))}}</span>
         {{/* No confirm, same rule as the workspace strip: the lease is already
-             dead, so there is no live holder to interrupt, only a stale lock. */}}
+             dead, so there is no live holder to interrupt, only a stale claim. */}}
         {{if .Releasable}}
         <form method="post" action="/console/tasks/{{.ID}}/release">
           <input type="hidden" name="next" value="/console/now">
@@ -138,10 +155,10 @@
     </header>
     <div class="now-plans" data-now-rail>
       {{range .Plans}}
-      <a class="now-plan{{if not .Moving}} resting{{end}}" id="pl-{{.Project}}-{{.Slug}}" href="/console/projects/{{.Project}}?tab=tasks">
-        <span class="now-plan-top"><span class="mono nm">plan:{{.Slug}}</span><span class="now-plan-proj">{{.Project}}</span></span>
+      <a class="now-plan{{if not .Moving}} resting{{end}}" id="pl-{{.Project}}-{{.Slug}}" href="{{.Href}}">
+        <span class="now-plan-top"><span class="mono nm" title="plan:{{.Slug}}">plan:{{.Slug}}</span><span class="now-plan-proj">{{.Project}}</span></span>
         <span class="now-bar"><i class="done" style="width:{{.DonePct}}%"></i><i class="doing" style="width:{{.DoingPct}}%"></i></span>
-        <span class="now-plan-meta">{{.Done}}/{{.Total}} done{{if .InFlight}} &middot; {{.InFlight}} in flight{{end}}{{if .Claimable}} &middot; <b>{{.Claimable}} ready</b>{{end}} &middot; moved {{ago .Last}}</span>
+        <span class="now-plan-meta">{{.Done}}/{{.Total}} done{{if .InFlight}} &middot; {{.InFlight}} in flight{{end}}{{if .Claimable}} &middot; <b>{{.Claimable}} ready</b>{{end}} &middot; {{timeAs .Last (printf "moved %s" (agoPhrase .Last))}}</span>
       </a>
       {{end}}
     </div>
@@ -161,10 +178,10 @@
         <div class="now-ready" id="up-{{.ID}}">
           <span class="dot"></span>
           <a class="t" href="/console/tasks/{{.ID}}">{{.Title}}</a>
-          <span class="now-chip proj">{{.Project}}</span>
-          {{if .PlanSlug}}<span class="now-chip plan">plan:{{.PlanSlug}}</span>{{end}}
+          <span class="now-chip proj" title="{{.Project}}">{{.Project}}</span>
+          {{if .PlanSlug}}<span class="now-chip plan" title="plan:{{.PlanSlug}}">plan:{{.PlanSlug}}</span>{{end}}
           {{if .Unblocks}}<span class="edge ok" title="closing this unblocks {{.Unblocks}} task{{if ne .Unblocks 1}}s{{end}}">{{icon "arrow-right"}}unblocks {{.Unblocks}}</span>{{end}}
-          <time title="{{ts .Created}}">{{ago .Created}}</time>
+          {{agoTime .Created}}
         </div>
         {{end}}
       </div>
@@ -199,9 +216,9 @@
         <div class="now-wire">
           {{range .Wire}}
           <a id="{{.ID}}" class="now-evt" href="/console/events/{{.ID}}">
-            <time title="{{ts .When}}">{{ago .When}}</time>
+            {{agoTime .When}}
             <span class="kindchip" title="{{.Kind}}">{{icon (evtIcon .Kind)}}{{evtLabel .Kind}}</span>
-            <p>{{.Summary}}</p>
+            <p title="{{.Summary}}">{{.Summary}}</p>
             <span class="scope">{{if .Project}}{{.Project}}{{else}}global{{end}}</span>
           </a>
           {{end}}

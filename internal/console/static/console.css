@@ -8087,6 +8087,42 @@ a.project-global-line:focus-visible { outline: none; box-shadow: var(--shadow-fo
 .btn[data-armed] { color: var(--danger-ink); background: var(--danger); border-color: var(--danger); }
 .confirm-note { display: inline-block; max-width: 100%; margin-left: 8px; font-size: var(--text-xs); color: var(--danger); vertical-align: middle; }
 
+/* UX 15: Now and Interactions in plain words. A Now title wraps to two lines
+   instead of cutting at one, and keeps its whole text in its title attribute
+   when two lines still cut it. An agent card is headed by what it holds, with
+   its session name, harness and account on the line under it; a claim it let
+   lapse reads on the card as Loose ends reads it. The Interactions feed marks
+   where the history the owner added meets what arrived live. */
+.now-agent-head { flex-wrap: wrap; row-gap: 4px; }
+.now-agent-name, .now-claim .t, .now-lapsed .t, .now-trail span, .now-plan-top .nm, .now-evt p {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+  overflow: hidden; white-space: normal; overflow-wrap: anywhere;
+}
+.now-agent-name { flex: 1 1 0; }
+.now-agent-who {
+  flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0;
+  font-size: var(--text-xs); color: var(--text-muted);
+}
+.now-agent-handle { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+.now-lapsed {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 7px; padding: 7px 10px; min-width: 0;
+  border: 1px solid var(--border); border-left: 3px solid var(--danger); border-radius: var(--radius-sm);
+  background: var(--bg-page); color: inherit; text-decoration: none; font-size: var(--text-xs);
+}
+.now-lapsed:hover { border-color: var(--danger); text-decoration: none; }
+.now-lapsed .w { flex: none; color: var(--text-muted); }
+.now-lapsed .t { flex: 1 1 12em; min-width: 0; font-weight: 600; color: var(--text-primary); }
+.now-state { display: inline-flex; align-items: baseline; gap: 5px; color: var(--text-muted); }
+.now-holder a { color: var(--text-secondary); }
+.now-moved { color: var(--faint); }
+.ix-quick-btn[hidden] { display: none; }
+.ix-arrived {
+  display: flex; align-items: center; gap: 10px; margin: 4px 0;
+  font-size: var(--text-2xs); color: var(--faint);
+}
+.ix-arrived::before, .ix-arrived::after { content: ""; flex: 1; border-top: 1px dashed var(--border-strong); }
+.ix-arrived[hidden] { display: none; }
+
 /* UX 11: projects board rows lead with work */
 /* A row is a line of identity and a line of work, then three small figures:
    open tasks, last activity, reach. About 48px tall on a desktop; on a phone
