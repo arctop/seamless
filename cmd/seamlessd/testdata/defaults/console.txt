@@ -5996,7 +5996,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
           <header class="level-card-head"><h3>Advanced</h3></header>
           <p class="level-card-line">Every screen, every knob, every number.</p>
           <div class="level-card-items"><span class="level-card-lead">Adds</span><ul><li>Interactions</li><li>Retrieval</li><li>Context</li><li>Settings: Knowledge engine</li></ul>
-            <ul class="level-card-details"><li>Settings › Workspaces: each repo route&#39;s host and the unbound repo routes</li><li>Event pages: the decoded payload fields and the raw payload</li></ul></div>
+            <ul class="level-card-details"><li>Settings › Workspaces: each repo route&#39;s host and the repo routes with no project</li><li>Event pages: the decoded payload fields and the raw payload</li></ul></div>
           <button class="btn small primary" type="submit">Use Advanced</button>
         </form>
         
@@ -6020,7 +6020,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
         </section>
       </div>
     </section>
-    
+
 
     
 
@@ -6331,6 +6331,52 @@ window.SEAM_NO_LIVE_REFRESH = true;
   }
   enhanceSettings();
   document.addEventListener('seam:content-updated', enhanceSettings);
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  function filterWorkspaces() {
+    var panel = document.querySelector('[data-workspace-directory]');
+    if (!panel) return;
+    var tools = panel.querySelector('[data-workspace-tools]');
+    if (tools) tools.hidden = false;
+    var filter = panel.querySelector('[data-workspace-filter]');
+    var routedOnly = panel.querySelector('[data-workspace-routed-only]');
+    var query = filter ? filter.value.trim().toLowerCase() : '';
+    var onlyRouted = !!(routedOnly && routedOnly.checked);
+    var rows = panel.querySelectorAll('[data-workspace-find]');
+    var shown = 0;
+    var unrouted = 0;
+    rows.forEach(function (row) {
+      var match = query === '' || row.getAttribute('data-workspace-find').toLowerCase().indexOf(query) !== -1;
+      var keep = match && (!onlyRouted || row.hasAttribute('data-workspace-routed'));
+      if (match && !keep) unrouted++;
+      row.hidden = !keep;
+      if (keep) shown++;
+    });
+    var count = panel.querySelector('[data-workspace-shown]');
+    if (count) count.textContent = shown === rows.length ? String(rows.length) : shown + ' of ' + rows.length;
+    var none = panel.querySelector('[data-workspace-none]');
+    if (none) {
+      none.hidden = shown > 0 || rows.length === 0;
+      none.textContent = unrouted > 0
+        ? 'No project with a repo route matches. ' + unrouted + ' without one ' + (unrouted === 1 ? 'does.' : 'do.')
+        : 'No project matches.';
+    }
+  }
+  document.addEventListener('input', function (event) {
+    if (event.target.matches && event.target.matches('[data-workspace-filter]')) filterWorkspaces();
+  });
+  document.addEventListener('change', function (event) {
+    if (event.target.matches && event.target.matches('[data-workspace-routed-only]')) filterWorkspaces();
+  });
+  document.addEventListener('seam:content-updated', filterWorkspaces);
+  filterWorkspaces();
 })();
 </script>
 

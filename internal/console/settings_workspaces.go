@@ -80,6 +80,66 @@ type workspaceScope struct {
 	Families         []workspaceFamily `json:"families"`
 }
 
+// FindText is what the directory's filter matches a row against: its slug,
+// its name and each repo route's path, as the family dialog's filter matches
+// a project's slug and name. The page lowercases it and the query alike.
+func (w workspaceScope) FindText() string {
+	parts := make([]string, 0, 2+len(w.Repos))
+	parts = append(parts, w.Slug)
+	if w.Name != "" && w.Name != w.Slug {
+		parts = append(parts, w.Name)
+	}
+	for _, r := range w.Repos {
+		parts = append(parts, r.Path)
+	}
+	return strings.Join(parts, " ")
+}
+
+// workspaceRoutedOnlyAfter is how many directory rows without a repo route it
+// takes for the directory to open on "With repo routes": past it, rows that
+// show a project and nothing else outnumber the ones the directory is for.
+const workspaceRoutedOnlyAfter = 12
+
+// workspaceDirectory is what the directory's tools and columns follow,
+// counted from its rows (a project, or a slug a route, a parent or a family
+// names). Page state only: it is a method's answer, never a JSON field, so
+// ?format=json keeps exactly the fields it had.
+type workspaceDirectory struct {
+	Routed   int // rows with at least one repo route
+	Unrouted int // rows with none
+	// Toggle offers the "With repo routes" switch, only where it changes what
+	// shows: some rows have a route and some do not.
+	Toggle bool
+	// RoutedOnly is the switch's starting state: on when more than
+	// workspaceRoutedOnlyAfter rows have no route. Without script the bar
+	// that holds the switch stays hidden and every row shows.
+	RoutedOnly bool
+	// Family draws the Family column: some row has a family or a parent.
+	Family bool
+}
+
+// WorkspaceDirectory counts the Workspaces directory for its template.
+func (d settingsData) WorkspaceDirectory() workspaceDirectory {
+	return newWorkspaceDirectory(d.Workspaces)
+}
+
+func newWorkspaceDirectory(rows []workspaceScope) workspaceDirectory {
+	var dir workspaceDirectory
+	for _, row := range rows {
+		if len(row.Repos) > 0 {
+			dir.Routed++
+		} else {
+			dir.Unrouted++
+		}
+		if row.ParentSlug != "" || len(row.Families) > 0 {
+			dir.Family = true
+		}
+	}
+	dir.Toggle = dir.Routed > 0 && dir.Unrouted > 0
+	dir.RoutedOnly = dir.Toggle && dir.Unrouted > workspaceRoutedOnlyAfter
+	return dir
+}
+
 // settingsFamilySave creates a family or replaces one family's name and member
 // set. The picker submits a closed list of known project slugs; accepting an
 // arbitrary slug here would let a typo create a plausible but inert family

@@ -340,7 +340,7 @@ func TestSsHeads_OneLineAtEverySection(t *testing.T) {
 		{"updates", true, true, "New releases, and whether this install takes them by itself."},
 		{"backups", true, true, "Copies of everything, on a schedule."},
 		{"briefing", true, true, "What every new agent session starts with."},
-		{"workspaces", false, false, "See which project each repository resolves to"},
+		{"workspaces", true, false, "See which project each repository resolves to"},
 		{"engine", true, false, "How recall finds knowledge, how the briefing ranks it, and where it all lives."},
 	} {
 		sec, _ := settingsSectionByID(tc.id)

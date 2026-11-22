@@ -1307,7 +1307,7 @@ there. See <a href="../../reference/configuration/">Configuration</a>.</p>
 <td>shown</td>
 </tr>
 <tr>
-<td><strong>Settings › Workspaces: the unbound repo routes</strong></td>
+<td><strong>Settings › Workspaces: the repo routes with no project</strong></td>
 <td>-</td>
 <td>-</td>
 <td>shown</td>
@@ -3497,8 +3497,15 @@ manages from the CLI - the same <code>project_families</code> setting, so a chan
 surface shows up on the other. Members are chosen from a closed picker of
 registered projects; the CLI is the route for pre-registering a slug that does
 not exist yet. Below it, one bounded directory lists every project with its repo
-routes and family tags. At Advanced each route also names the machine it lives
-on, and repo paths that resolve to no project are listed as unbound.</p>
+routes, plus a Family column when any project has a family or a parent. A repo
+route ties a repository folder to a project: an agent that starts in that folder,
+or anywhere under it, works in that project. <strong>Find a project</strong> narrows the rows
+as you type, matching a slug, a name, or a route's path, and <strong>With repo routes</strong>
+keeps only the projects that have one. The switch is offered when some projects
+have a route and some do not, and starts on when more than 12 have none. Both
+narrow the rows in the page, with no reload; without JavaScript every row shows.
+At Advanced each route also names the machine it lives on, and repo paths that
+resolve to no project are listed under <strong>Repo routes with no project</strong>.</p>
 <h3 id="knowledge-engine">Knowledge engine</h3>
 <p><code>/console/settings?s=engine</code></p>
 <p>The machinery, in four groups.</p>

@@ -451,7 +451,7 @@ var surfaces = []surface{
 	{Where: "Settings \u203a Features", Template: "settings_features.html", Label: "the source chip", Min: levelStandard},
 	{Where: "Settings \u203a Features", Template: "settings_features.html", Label: "the agent tool names", Min: levelStandard},
 	{Where: "Settings \u203a Workspaces", Template: "settings_workspaces.html", Label: "each repo route's host", Min: levelAdvanced},
-	{Where: "Settings \u203a Workspaces", Template: "settings_workspaces.html", Label: "the unbound repo routes", Min: levelAdvanced},
+	{Where: "Settings \u203a Workspaces", Template: "settings_workspaces.html", Label: "the repo routes with no project", Min: levelAdvanced},
 	{Where: "Event pages", Template: "peek_event.html", Label: "the decoded payload fields", Min: levelAdvanced},
 	{Where: "Event pages", Template: "peek_event.html", Label: "the raw payload", Min: levelAdvanced},
 }

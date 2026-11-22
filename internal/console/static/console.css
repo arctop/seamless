@@ -9705,3 +9705,26 @@ tbody tr.row-link[data-panel-current] td:first-child { box-shadow: inset 2px 0 0
 /* UX 37: Settings > Gardener section. */
 
 /* UX 39: Settings > Workspaces filter and toggle. */
+
+/* The directory's bar (templates/settings_workspaces.html): a find field
+   and the With repo routes switch, revealed by the page script. A row, the
+   bar and the no-match line are display-set, so each says what hidden means;
+   the family dialogs' options need the same to let their filter narrow
+   them. Without a Family column the route takes the room. Tokens only. */
+.workspace-row[hidden], .workspace-tools[hidden], .workspace-none[hidden], .family-project-option[hidden] { display: none; }
+.workspace-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.workspace-find {
+  display: flex; flex: 1 1 240px; align-items: center; gap: 7px; min-width: 0; max-width: 420px; padding: 0 10px;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm); color: var(--faint); background: var(--surface-2);
+}
+.workspace-find:focus-within { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-soft); }
+.workspace-find .ico { flex: none; width: 14px; height: 14px; }
+.workspace-find input { width: 100%; min-width: 0; padding: 7px 0; border: 0; outline: 0; color: var(--ink); background: transparent; font: inherit; font-size: var(--text-sm); }
+.workspace-toggle { display: inline-flex; align-items: center; gap: 9px; color: var(--ink-2); font-size: var(--text-xs); font-weight: 650; cursor: pointer; }
+.workspace-panel.is-no-family { --workspace-columns: minmax(220px, .85fr) minmax(320px, 1.95fr); }
+@media (max-width: 900px) {
+  .workspace-panel.is-no-family .workspace-row { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 520px) {
+  .workspace-find { flex-basis: 100%; max-width: none; }
+}

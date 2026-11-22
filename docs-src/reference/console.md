@@ -2685,8 +2685,15 @@ manages from the CLI - the same `project_families` setting, so a change on eithe
 surface shows up on the other. Members are chosen from a closed picker of
 registered projects; the CLI is the route for pre-registering a slug that does
 not exist yet. Below it, one bounded directory lists every project with its repo
-routes and family tags. At Advanced each route also names the machine it lives
-on, and repo paths that resolve to no project are listed as unbound.
+routes, plus a Family column when any project has a family or a parent. A repo
+route ties a repository folder to a project: an agent that starts in that folder,
+or anywhere under it, works in that project. **Find a project** narrows the rows
+as you type, matching a slug, a name, or a route's path, and **With repo routes**
+keeps only the projects that have one. The switch is offered when some projects
+have a route and some do not, and starts on when more than 12 have none. Both
+narrow the rows in the page, with no reload; without JavaScript every row shows.
+At Advanced each route also names the machine it lives on, and repo paths that
+resolve to no project are listed under **Repo routes with no project**.
 
 ### Knowledge engine
 

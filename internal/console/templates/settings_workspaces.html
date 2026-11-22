@@ -1,11 +1,14 @@
 {{/* Settings > Workspaces: the project directory and the families. Parsed with the
      settings page (render.go), whose dispatch calls it with the page's
-     data, so $ reads as it does there ($.Level, $.Features, $.Data). */}}
-{{define "settings-workspaces"}}{{with .Data}}
+     data, so $ reads as it does there ($.Level, $.Features, $.Data).
+     $dir is the directory counted (settings_workspaces.go,
+     workspaceDirectory): whether the With repo routes switch is offered and
+     starts on, and whether the Family column is drawn. */}}
+{{define "settings-workspaces"}}{{with .Data}}{{$dir := .WorkspaceDirectory}}
     <section class="settings-zone settings-section" id="workspace-registry">
       <header class="settings-section-head registry-zone-head">
         <div>
-          <h2>Workspaces</h2>
+          <h2>Workspaces{{hintFor "Workspaces" "A repo route ties a repository folder to a project: an agent that starts in that folder, or anywhere under it, works in that project. A session that starts in a repository with no route adds one, and seamlessd map-repo sets one by hand. A family lets related projects share recent work in their briefings."}}</h2>
           <p>See which project each repository resolves to, then group related projects when they should share context.</p>
         </div>
         <a class="btn small" href="/console/projects">Open project explorer {{icon "arrow-right"}}</a>
@@ -43,19 +46,29 @@
         {{end}}
       </section>
 
-      <section class="registry-panel workspace-panel">
+      {{/* The directory. Its bar (a filter, and the With repo routes switch
+           where some rows have a route and some do not) is hidden until the
+           page script reveals it, so without script every row shows; the
+           script narrows the rows in place (settings.html, filterWorkspaces).
+           data-live-skip keeps a redraw after a family save off the bar, so
+           what the owner typed and switched stays. */}}
+      <section class="registry-panel workspace-panel{{if not $dir.Family}} is-no-family{{end}}" data-workspace-directory>
         <header class="registry-panel-head workspace-panel-head">
           <span class="runtime-icon brand">{{icon "folder-tree"}}</span>
-          <div><span>Routing directory</span><h3>Projects &amp; repo routes</h3><p>One row per project. Family membership stays intentionally compact.</p></div>
-          <span class="registry-count">{{len .Workspaces}}</span>
+          <div><span>Repo routes</span><h3>Projects and their repositories</h3><p>An agent that starts in a project&rsquo;s repository works in that project.</p></div>
+          <span class="registry-count" data-workspace-shown aria-live="polite">{{len .Workspaces}}</span>
         </header>
         {{if .Workspaces}}
-        <div class="workspace-columns" aria-hidden="true">
-          <span>Project</span><span>Repo route</span><span>Family</span>
+        <div class="workspace-tools" id="workspace-tools" data-workspace-tools data-live-skip hidden>
+          <label class="workspace-find">{{icon "search"}}<input type="search" placeholder="Find a project" aria-label="Find a project by slug, name or repo route" autocomplete="off" spellcheck="false" data-workspace-filter></label>
+          {{if $dir.Toggle}}<label class="workspace-toggle"><span class="set-switch"><input type="checkbox" role="switch" data-workspace-routed-only{{if $dir.RoutedOnly}} checked{{end}}><span class="brief-switch" aria-hidden="true"></span></span><span>With repo routes</span></label>{{end}}
         </div>
-        <div class="registry-scroll workspace-directory" tabindex="0" aria-label="Projects, repo routes, and family membership">
+        <div class="workspace-columns" aria-hidden="true">
+          <span>Project</span><span>Repo route</span>{{if $dir.Family}}<span>Family</span>{{end}}
+        </div>
+        <div class="registry-scroll workspace-directory" tabindex="0" aria-label="Projects, repo routes{{if $dir.Family}}, and family membership{{end}}">
           {{range .Workspaces}}
-          <article class="workspace-row{{if not .Registered}} is-referenced{{end}}{{if .Retired}} is-retired{{end}}" data-workspace-scope="{{.Slug}}">
+          <article class="workspace-row{{if not .Registered}} is-referenced{{end}}{{if .Retired}} is-retired{{end}}" data-workspace-scope="{{.Slug}}" data-workspace-find="{{.FindText}}"{{if .Repos}} data-workspace-routed{{end}}>
             <div class="workspace-cell workspace-identity">
               <span class="workspace-cell-label">Project</span>
               <div class="workspace-identity-main">
@@ -81,6 +94,7 @@
               {{else}}<span class="workspace-empty-mark" title="No repo route">&mdash;</span>{{end}}
             </div>
 
+            {{if $dir.Family}}
             <div class="workspace-cell workspace-lineage">
               <span class="workspace-cell-label">Family</span>
               {{if or .ParentSlug .Families}}<div class="workspace-tags">
@@ -88,15 +102,17 @@
                 {{range .Families}}<span class="workspace-tag family" title="{{.MemberCount}} projects in this family">{{icon "git-fork"}}<span class="mono">{{.Name}}</span></span>{{end}}
               </div>{{else}}<span class="workspace-empty-mark" title="No family membership">&mdash;</span>{{end}}
             </div>
+            {{end}}
           </article>
           {{end}}
         </div>
+        <p class="registry-empty workspace-none" data-workspace-none hidden>No project matches.</p>
         {{else}}<div class="registry-empty">No projects registered or referenced yet.</div>{{end}}
 
         {{if and .UnboundRepos ($.Level.AtLeast "advanced")}}
         <aside class="workspace-unbound">
           <span class="workspace-unbound-icon">{{icon "triangle-alert"}}</span>
-          <div><strong>Unbound arrival routes</strong><p>These repo paths do not resolve to a project.</p><div>{{range .UnboundRepos}}<span class="mono" title="{{if .Host}}on {{.Host}}{{else}}host unknown{{end}}">{{.Path}}{{if .Host}} <span class="faint">({{.Host}})</span>{{end}}</span>{{end}}</div></div>
+          <div><strong>Repo routes with no project</strong><p>These repo paths do not resolve to a project.</p><div>{{range .UnboundRepos}}<span class="mono" title="{{if .Host}}on {{.Host}}{{else}}host unknown{{end}}">{{.Path}}{{if .Host}} <span class="faint">({{.Host}})</span>{{end}}</span>{{end}}</div></div>
         </aside>
         {{end}}
       </section>
