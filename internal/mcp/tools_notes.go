@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"slices"
 	"strings"
 	"time"
@@ -535,7 +536,25 @@ func (s *Server) handleNotesDelete(ctx context.Context, req mcp.CallToolRequest)
 	if err := s.fenceWrite(ctx, idx.Project); err != nil {
 		return errResult("notes_delete", err)
 	}
-	if err := s.cfg.Files.Remove(ctx, idx.FilePath); err != nil {
+	// Under the file's lock, with the note re-read inside it: the index row is
+	// a mirror, so a racing notes_append (which takes the same lock) can
+	// neither write the note back after the delete nor be lost to it, and a
+	// path that now holds another note is never removed in this one's name
+	// (memory corpus-mutation-lock-and-expect-hash-contract).
+	err = s.cfg.Files.Mutate(ctx, idx.FilePath, func(ctx context.Context) error {
+		cur, rerr := s.cfg.Files.Store().ReadNote(idx.FilePath)
+		if rerr != nil {
+			return rerr
+		}
+		if cur.ID != idx.ID {
+			return errNoteNotAtPath
+		}
+		return s.cfg.Files.Remove(ctx, idx.FilePath)
+	})
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, errNoteNotAtPath) {
+		return errResult("notes_delete", fmt.Errorf("no note with id %q", id))
+	}
+	if err != nil {
 		return errResult("notes_delete", err)
 	}
 	// idx.Project, not any scope the caller named: a delete is by globally-unique
@@ -545,6 +564,10 @@ func (s *Server) handleNotesDelete(ctx context.Context, req mcp.CallToolRequest)
 		map[string]any{"slug": idx.Slug, "deleted": true})
 	return jsonResult(map[string]any{"status": "deleted", "id": id})
 }
+
+// errNoteNotAtPath is notes_delete finding another note's file at the path
+// the index gave for the one it was asked to delete.
+var errNoteNotAtPath = errors.New("notes_delete: the note's file holds another note now")
 
 // noteContentFields is the authored text notes_update and notes_append answer
 // with, and therefore what withholdContent removes for a caller that may write
