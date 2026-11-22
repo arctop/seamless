@@ -613,7 +613,7 @@ func (s *Service) auth(next http.HandlerFunc) http.HandlerFunc {
 				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized: bearer key required"})
 				return
 			}
-			http.Redirect(w, r, "/console/login?next="+safeNext(r.URL.RequestURI()), http.StatusSeeOther)
+			http.Redirect(w, r, "/console/login?next="+url.QueryEscape(safeNext(r.URL.RequestURI())), http.StatusSeeOther)
 		}
 	}
 }

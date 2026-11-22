@@ -687,7 +687,7 @@ Causes worth knowing:
   nothing changed, for three intervals. Usually the daemon was not running, or
   the machine slept through them.
 
-**Got it** hides the alert in that tab until a new episode begins.
+**Got it** hides the alert in this browser until a new episode begins.
 `seamlessd doctor`'s `backups` row says the same from a terminal.
 
 **Fix.** **Settings > Backups** shows the last failure's reason under the status

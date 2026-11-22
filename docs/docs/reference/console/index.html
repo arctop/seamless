@@ -805,7 +805,9 @@ something wrong, indigo for everything else. Each event also rings the daemon's
 dot in the sidebar and the page's live dots once, and the sky behind the pages
 brightens with the recent event rate and settles when the fleet is idle; the
 dot dims while the live stream is down. Headline numbers count up when a page
-opens; agents working right now carry a slow orbit of light on the Now screen.</p>
+opens; agents working right now carry a slow orbit of light on the Now screen.
+The page settling in and the count-up play once per browser tab, on the first
+page it shows; later pages in that tab appear at once.</p>
 <p>All of it is decoration over data the page already states: nothing here changes
 a number, and <code>prefers-reduced-motion</code> stills every part of it (the Seam sends no
 sparks, numbers render at their value). Between events the sky and the sidebar
@@ -857,7 +859,8 @@ goes there too.</p>
 <p><strong>Hidden, not locked.</strong> A level removes screens from the sidebar, the palette,
 and the shortcut map; it never locks them. A link to a screen above your level -
 from these docs, an agent's finding, a briefing, a bookmark - still opens it,
-under a note saying it is not in your sidebar, with a button to switch. JSON
+under a note saying it is not in your sidebar, with a button to switch;
+<strong>Got it</strong> sets the note aside for that screen in this browser. JSON
 callers (<code>?format=json</code>, and so the <code>seam</code> CLI, <code>seam doctor</code> included) get the
 same answer at every level.</p>
 <p><strong>Upgrading keeps every screen.</strong> An installation that already recorded sessions
@@ -1264,7 +1267,15 @@ opens only a few connections to a console served over plain http (six in
 Chrome) and each open stream keeps one. Shown again, it opens the stream again
 and refreshes once to catch up (the Interactions feed fills in the rows it
 missed), and a live refresh with no answer after 15 seconds gives up and leaves
-the tap-to-refresh pill.</p>
+the tap-to-refresh pill. Under <code>peer_auth</code> the stream leaves out every event
+about a locked project this browser has not unlocked, with one exception: an
+agent's access request for one arrives as its kind, id and time alone, so the
+open page refreshes its Access requests count.</p>
+<p>A live refresh changes the page without a word; only a refresh you ask for
+with the pill says <strong>Updated</strong>. Three events also raise a toast that links to
+the screen that acts on them: an agent asking for access (<strong>Access
+requests</strong>), a write held for review (<strong>Held</strong>) and a reported mishap
+(<strong>Mishaps</strong>).</p>
 <h2 id="overview">Overview</h2>
 <p><code>/console/</code></p>
 <p>The check-in page. It answers what waits on you first, then what is in motion,
@@ -2667,6 +2678,9 @@ its settings, the parts it works with, and the screen that holds more.
 tab is hidden or the view is scrolled away, keeps to a pixel budget on very
 large displays, and asks for the low-power GPU. <strong>Still</strong> (and the system's
 reduced-motion setting) keeps everything in place.</li>
+<li><strong>Without WebGL</strong> the deck is not drawn: the page says so in one line, the
+list of parts below is the page, and picking a part opens its readout above
+the list.</li>
 </ul>
 <p>It is a Standard screen: Basic installs reach it by URL.</p>
 <h2 id="privacy">Privacy</h2>
@@ -3014,11 +3028,12 @@ The daemon re-reads the updater's record every few seconds while an update
 runs, so both clear soon after it is confirmed. For a day after the daemon
 starts on a new version, every page carries
 a banner - &quot;Seamless updated to v0.7.3 (from v0.7.2)&quot; - with the release notes
-and <strong>Got it</strong>, which hides it for that tab. It also says when Codex's hooks
+and <strong>Got it</strong>, which hides it in this browser. It also says when Codex's hooks
 changed with the update (re-approve them in Codex's <code>/hooks</code>) or the installer
 reported warnings (run <code>seamlessd install-hooks</code>). For a week after automatic
 updates pause themselves, or after an update the daemon started does not apply,
-every page also carries a warning banner pointing here.</p>
+every page also carries a warning banner pointing here. While automatic backups
+are in trouble too, the two warnings share one row with one <strong>Got it</strong>.</p>
 <h3 id="backups">Backups</h3>
 <p><code>/console/settings?s=backups</code></p>
 <p>Scheduled backups of the whole instance into one folder you choose, the
@@ -3111,7 +3126,7 @@ kept, and the last backup.</li>
 here. <strong>Automatic backups are failing.</strong> appears when two automatic runs in a
 row did not finish, with the first failure's time and the reason.
 <strong>Automatic backups are overdue.</strong> appears when none has finished for three
-intervals. <strong>Got it</strong> hides it for that tab until a new episode begins.</li>
+intervals. <strong>Got it</strong> hides it in this browser until a new episode begins.</li>
 <li><a href="#system">System</a> draws backups as a core part, on, off, failing or
 overdue.</li>
 </ul>

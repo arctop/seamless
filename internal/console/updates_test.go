@@ -727,22 +727,22 @@ func TestUpdateBanner(t *testing.T) {
 	}
 }
 
-// The banner's "Got it" is per tab and keyed by version, through the same
-// dismissal the level banner uses; it never reloads anything.
-func TestUpdateBanner_DismissalIsPerTabByVersion(t *testing.T) {
+// The banner's "Got it" holds in this browser, keyed by version, through the
+// same dismissal the level banner uses; it never reloads anything.
+func TestUpdateBanner_DismissalIsPerBrowserByVersion(t *testing.T) {
 	shell := string(shellJS)
 	require.Contains(t, shell, "var BANNER = '[data-level-banner], [data-update-banner]';")
-	require.Contains(t, shell, "return version ? 'update:' + version : b.getAttribute('data-level-banner');")
+	require.Contains(t, shell, "return keys.split(' ').filter(Boolean).map(function (k) { return 'update:' + k; });")
 	require.Contains(t, shell, "e.target.closest('[data-level-banner-dismiss], [data-update-banner-dismiss]')")
-	require.Contains(t, shell, "sessionStorage.setItem(BANNERS")
+	require.Contains(t, shell, "store(BANNERS, JSON.stringify(gone.slice(-BANNERS_KEPT)));")
 	require.Contains(t, shell, "document.addEventListener('seam:content-updated', applyBanners);",
 		"a morph restores the server's markup, so the dismissal is re-applied after it")
 	require.Contains(t, string(consoleCSS), ".level-banner[hidden], .update-banner[hidden] { display: none; }")
 }
 
 // The live toast for a newly seen release shows the server-built summary, and
-// the refresh that same event triggers does not step on it. Neither does the
-// refresh an owner action's event triggers step on that action's own line.
+// a refresh the owner taps for meanwhile does not step on it. Neither does it
+// step on an owner action's own line.
 func TestLayout_ToastsANewRelease(t *testing.T) {
 	layout, err := templateFS.ReadFile("templates/layout.html")
 	require.NoError(t, err)
@@ -750,7 +750,7 @@ func TestLayout_ToastsANewRelease(t *testing.T) {
 	require.Contains(t, src, "if (k === 'update.available' && d.summary) eventToast(d.summary);")
 	require.Contains(t, src, "if (k === 'memory.first_reuse' && d.summary) eventToast(d.summary);")
 	require.Contains(t, src, "function actionToastUp() { return !!(toast && !toast.hidden && toast.classList.contains('show') && toast.textContent !== 'Updated'); }")
-	require.Contains(t, src, "if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');")
+	require.Contains(t, src, "if (manual === true && Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');")
 	require.NotContains(t, src, "d.itemId", "the toast never interpolates the raw item id")
 }
 

@@ -17,6 +17,23 @@ import (
 // quiet periods.
 const ssePingInterval = 25 * time.Second
 
+// accessRequestSignal is the live row of an access request the console's
+// filter hides (liveEventVisible): that one arrived, and when. It is its own
+// type, built from nothing but the event's kind, id and time, so no field of
+// the request can ride along: not its project, session, item, summary or
+// payload.
+type accessRequestSignal struct {
+	ID   string    `json:"id"`
+	When time.Time `json:"ts"`
+	Kind string    `json:"kind"`
+}
+
+// reducedAccessRequestRow is the row an access.requested event the filter
+// refuses goes out as.
+func reducedAccessRequestRow(e core.Event) accessRequestSignal {
+	return accessRequestSignal{ID: e.ID, When: e.TS, Kind: string(core.EventAccessRequested)}
+}
+
 // sse streams the live event feed as Server-Sent Events. Each recorded event is
 // sent as one JSON `data:` frame (the display projection, matching the overview
 // table). The stream stays open until the client disconnects.
@@ -86,12 +103,17 @@ func (s *Service) sse(w http.ResponseWriter, r *http.Request) {
 			if !open {
 				return
 			}
-			if !s.liveEventVisible(ctx, e) {
-				continue
-			}
 			var payload []byte
 			var err error
-			if interactions {
+			if !s.liveEventVisible(ctx, e) {
+				// The one exception (liveEventVisible): a new access request
+				// still tells the page that one arrived, by its kind alone.
+				// The Interactions feed is sent nothing.
+				if interactions || e.Kind != core.EventAccessRequested {
+					continue
+				}
+				payload, err = json.Marshal(reducedAccessRequestRow(e))
+			} else if interactions {
 				if !isInteraction(e) || skipInteraction(e) {
 					continue
 				}
@@ -127,6 +149,14 @@ func (s *Service) sse(w http.ResponseWriter, r *http.Request) {
 // does not (an unlock is a console cookie, never a lease): an event of that
 // project passes only while the unlock is still live, asked again per event,
 // so locking it again takes effect on the open stream too.
+//
+// One kind is not dropped whole: an access.requested this filter refuses (an
+// agent asking for a locked project this browser has not unlocked) goes out
+// as reducedAccessRequestRow, its kind, id and time, so the open page
+// refreshes and says that a request arrived. That tells the owner nothing a
+// reload would not: the Access requests page and its sidebar count are the
+// owner's own queue, read unfiltered through Config.Approvals, project
+// included. Every other kind of such an event is still dropped.
 func (s *Service) liveEventVisible(ctx context.Context, e core.Event) bool {
 	if s.cfg.WriteDB == nil {
 		return true

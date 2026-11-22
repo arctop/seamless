@@ -9523,7 +9523,9 @@ socket is ([relays](#agents-on-another-computer-relays)).
 
 "Closed" means every surface: recall, briefings, the prompt matcher, every MCP
 tool by name or by id, tasks, trials, sessions, the gardener's proposals, the
-hooks, A2A, the console and its live feed. A call that names a locked project is
+hooks, A2A, the console and its live feed. Of a locked project, the live feed
+tells an open console page only that an agent asked for access to it, so the
+page's Access requests count refreshes. A call that names a locked project is
 refused with the rule and the remedy, never with any of its content. A `recall`
 that names no project answers from the rest of its scope and says
 `<project> (locked) may hold results`; `project_list` lists the project with the
@@ -12796,7 +12798,7 @@ Causes worth knowing:
   nothing changed, for three intervals. Usually the daemon was not running, or
   the machine slept through them.
 
-**Got it** hides the alert in that tab until a new episode begins.
+**Got it** hides the alert in this browser until a new episode begins.
 `seamlessd doctor`'s `backups` row says the same from a terminal.
 
 **Fix.** **Settings > Backups** shows the last failure's reason under the status
@@ -19889,6 +19891,8 @@ dot in the sidebar and the page's live dots once, and the sky behind the pages
 brightens with the recent event rate and settles when the fleet is idle; the
 dot dims while the live stream is down. Headline numbers count up when a page
 opens; agents working right now carry a slow orbit of light on the Now screen.
+The page settling in and the count-up play once per browser tab, on the first
+page it shows; later pages in that tab appear at once.
 
 All of it is decoration over data the page already states: nothing here changes
 a number, and `prefers-reduced-motion` stills every part of it (the Seam sends no
@@ -19951,7 +19955,8 @@ goes there too.
 **Hidden, not locked.** A level removes screens from the sidebar, the palette,
 and the shortcut map; it never locks them. A link to a screen above your level -
 from these docs, an agent's finding, a briefing, a bookmark - still opens it,
-under a note saying it is not in your sidebar, with a button to switch. JSON
+under a note saying it is not in your sidebar, with a button to switch;
+**Got it** sets the note aside for that screen in this browser. JSON
 callers (`?format=json`, and so the `seam` CLI, `seam doctor` included) get the
 same answer at every level.
 
@@ -20070,7 +20075,16 @@ opens only a few connections to a console served over plain http (six in
 Chrome) and each open stream keeps one. Shown again, it opens the stream again
 and refreshes once to catch up (the Interactions feed fills in the rows it
 missed), and a live refresh with no answer after 15 seconds gives up and leaves
-the tap-to-refresh pill.
+the tap-to-refresh pill. Under `peer_auth` the stream leaves out every event
+about a locked project this browser has not unlocked, with one exception: an
+agent's access request for one arrives as its kind, id and time alone, so the
+open page refreshes its Access requests count.
+
+A live refresh changes the page without a word; only a refresh you ask for
+with the pill says **Updated**. Three events also raise a toast that links to
+the screen that acts on them: an agent asking for access (**Access
+requests**), a write held for review (**Held**) and a reported mishap
+(**Mishaps**).
 
 ## Overview
 
@@ -21407,6 +21421,9 @@ the **outside** services it calls (the LLM provider, GitHub releases).
   tab is hidden or the view is scrolled away, keeps to a pixel budget on very
   large displays, and asks for the low-power GPU. **Still** (and the system's
   reduced-motion setting) keeps everything in place.
+- **Without WebGL** the deck is not drawn: the page says so in one line, the
+  list of parts below is the page, and picking a part opens its readout above
+  the list.
 
 It is a Standard screen: Basic installs reach it by URL.
 
@@ -21767,11 +21784,12 @@ The daemon re-reads the updater's record every few seconds while an update
 runs, so both clear soon after it is confirmed. For a day after the daemon
 starts on a new version, every page carries
 a banner - "Seamless updated to v0.7.3 (from v0.7.2)" - with the release notes
-and **Got it**, which hides it for that tab. It also says when Codex's hooks
+and **Got it**, which hides it in this browser. It also says when Codex's hooks
 changed with the update (re-approve them in Codex's `/hooks`) or the installer
 reported warnings (run `seamlessd install-hooks`). For a week after automatic
 updates pause themselves, or after an update the daemon started does not apply,
-every page also carries a warning banner pointing here.
+every page also carries a warning banner pointing here. While automatic backups
+are in trouble too, the two warnings share one row with one **Got it**.
 
 ### Backups
 
@@ -21871,7 +21889,7 @@ Elsewhere:
   here. **Automatic backups are failing.** appears when two automatic runs in a
   row did not finish, with the first failure's time and the reason.
   **Automatic backups are overdue.** appears when none has finished for three
-  intervals. **Got it** hides it for that tab until a new episode begins.
+  intervals. **Got it** hides it in this browser until a new episode begins.
 - [System](#system) draws backups as a core part, on, off, failing or
   overdue.
 

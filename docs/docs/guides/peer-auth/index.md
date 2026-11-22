@@ -112,7 +112,9 @@ socket is ([relays](#agents-on-another-computer-relays)).
 
 "Closed" means every surface: recall, briefings, the prompt matcher, every MCP
 tool by name or by id, tasks, trials, sessions, the gardener's proposals, the
-hooks, A2A, the console and its live feed. A call that names a locked project is
+hooks, A2A, the console and its live feed. Of a locked project, the live feed
+tells an open console page only that an agent asked for access to it, so the
+page's Access requests count refreshes. A call that names a locked project is
 refused with the rule and the remedy, never with any of its content. A `recall`
 that names no project answers from the rest of its scope and says
 `<project> (locked) may hold results`; `project_list` lists the project with the

@@ -567,7 +567,7 @@ func TestSignIn_UnprovenPageChecksThroughTheWorker(t *testing.T) {
 	owner.unsigned = true
 	rr := sc.do(nil, owner.request(t, http.MethodGet, "/console/memories?w=7d", nil))
 	require.Equal(t, http.StatusSeeOther, rr.Code)
-	require.Equal(t, "/console/login?next=/console/memories?w=7d", rr.Header().Get("Location"))
+	require.Equal(t, "/console/login?next="+url.QueryEscape("/console/memories?w=7d"), rr.Header().Get("Location"))
 
 	rr = sc.do(nil, owner.request(t, http.MethodGet, "/console/login?next="+url.QueryEscape("/console/memories?w=7d"), nil))
 	require.Equal(t, http.StatusOK, rr.Code)

@@ -376,28 +376,39 @@
 
   /* ---- Banners: "Got it" --------------------------------------------------- */
 
-  // Two notes can be set aside (layout.html): the level banner, on a screen
-  // above the console level, and the update banner, for a day after the
-  // daemon upgraded. "Got it" hides one for this tab only -- a banner is not
-  // durable state, so sessionStorage -- keyed by what it is about: the screen,
-  // or "update:" plus the version, so a newer update shows again. Re-applied
-  // after every morph, which restores what the server rendered.
+  // Four notes can be set aside (layout.html): the level banner, on a screen
+  // above the console level; the update banner, for a day after the daemon
+  // upgraded; and the update and backup alerts, while either is in trouble,
+  // in one row when both are. "Got it" hides one in this browser, in every
+  // tab and on the next visit (localStorage, as the theme), keyed by what it
+  // is about: the screen, or "update:" plus the version or the episode, so a
+  // newer update or a new streak shows again. The row of both alerts names
+  // both keys and hides once both are set aside; each of its lines hides by
+  // its own key (data-update-part). Without storage a banner hides for this
+  // page only. Re-applied after every morph, which restores what the server
+  // rendered.
   var BANNERS = 'seamless-level-banners';
   var BANNER = '[data-level-banner], [data-update-banner]';
-  function bannerKey(b) {
-    var version = b.getAttribute('data-update-banner');
-    return version ? 'update:' + version : b.getAttribute('data-level-banner');
+  var BANNERS_KEPT = 50; // the newest keys: an older version's note never comes back anyway
+  function bannerKeys(b) {
+    var keys = b.getAttribute('data-update-banner');
+    if (!keys) return [b.getAttribute('data-level-banner')];
+    return keys.split(' ').filter(Boolean).map(function (k) { return 'update:' + k; });
   }
   function dismissed() {
     try {
-      var list = JSON.parse(sessionStorage.getItem(BANNERS) || '[]');
+      var list = JSON.parse(read(BANNERS) || '[]');
       return Array.isArray(list) ? list : [];
     } catch (e) { return []; }
   }
   function applyBanners() {
     var gone = dismissed();
+    function out(key) { return gone.indexOf(key) !== -1; }
     document.querySelectorAll(BANNER).forEach(function (b) {
-      if (gone.indexOf(bannerKey(b)) !== -1) b.hidden = true;
+      if (bannerKeys(b).every(out)) b.hidden = true;
+      b.querySelectorAll('[data-update-part]').forEach(function (part) {
+        if (out('update:' + part.getAttribute('data-update-part'))) part.hidden = true;
+      });
     });
   }
   document.addEventListener('click', function (e) {
@@ -405,10 +416,9 @@
     if (!x) return;
     var banner = x.closest(BANNER);
     if (!banner) return;
-    var id = bannerKey(banner);
     var gone = dismissed();
-    if (gone.indexOf(id) === -1) gone.push(id);
-    try { sessionStorage.setItem(BANNERS, JSON.stringify(gone)); } catch (e2) {}
+    bannerKeys(banner).forEach(function (id) { if (gone.indexOf(id) === -1) gone.push(id); });
+    store(BANNERS, JSON.stringify(gone.slice(-BANNERS_KEPT)));
     banner.hidden = true;
   });
   applyBanners();
@@ -416,9 +426,11 @@
 
   /* ---- Arrival: reveal, count-up, and the panel flashlight ------------------ */
 
-  // html.reveal is set before first paint (layout.html) so the page settles in
-  // section by section; it comes off once the sequence has played, so a live
-  // morph that inserts a node later never replays it.
+  // html.reveal is set before first paint (layout.html), on the first page a
+  // tab shows only, so that page settles in section by section and counts its
+  // numbers up; every later page in the tab simply appears. It comes off once
+  // the sequence has played, so a live morph that inserts a node later never
+  // replays it.
   var calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   setTimeout(function () { root.classList.remove('reveal'); }, 1100);
 

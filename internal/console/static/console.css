@@ -4650,7 +4650,7 @@ button.star.on .ico { fill: currentColor; }
 @media (max-width: 760px) {
   .ov2-titlebar { flex-wrap: wrap; }
   .ov2-window-tabs { order: 9; }
-  .ov2-vitals { grid-template-columns: 1fr; }
+  .ov2-vitals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   /* one card plus a peek of the next: the peek is what says "swipe" */
   .ov2-attn-card { flex-basis: min(300px, 82vw); }
 }
@@ -8567,4 +8567,45 @@ a.ov2-attn-main:hover > .ico-arrow-right { transform: translateX(2px); }
     content: ""; position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%;
     background: var(--pop); box-shadow: 0 0 0 2px var(--surface);
   }
+}
+
+/* UX 16: alerts that share a row, toasts that link, System without WebGL,
+   and the Overview's vitals two by two on a phone (layout.html, shell.js,
+   orrery.js). */
+/* The update and backup alerts in one row: a line each on the left, both
+   links and one "Got it" on the right. A line set aside before the other
+   appeared stays hidden (shell.js, data-update-part). The row takes the
+   update's tone; the backup line keeps its warn icon. */
+.update-alert-lines { display: flex; flex-direction: column; gap: 6px; flex: 1 1 320px; min-width: 0; }
+.update-alert-lines .update-alert-copy { flex: none; }
+.update-alert [data-update-part][hidden] { display: none; }
+.update-alert.is-danger .update-alert-warn .ico { color: var(--warn); }
+.alert-pair .update-alert-acts { flex-wrap: wrap; justify-content: flex-end; }
+/* A toast that links to the screen that acts on it takes the pointer, so the
+   link can be followed; a plain status line lets clicks through. */
+#live-toast { max-width: calc(100vw - 40px); }
+#live-toast:has(a) { pointer-events: auto; }
+#live-toast a {
+  color: var(--brand); font-weight: 650; text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--brand) 45%, transparent); text-underline-offset: 3px;
+}
+#live-toast a:hover { color: var(--brand-strong); }
+/* System without WebGL (orrery.js adds .no-gl): the stage is its note, and a
+   part's readout once one is picked from the list below. Nothing is left that
+   steers a view the browser cannot draw. */
+.sys-stage.no-gl { height: auto; min-height: 0; overflow: visible; background: var(--surface); box-shadow: var(--shadow-xs); }
+.sys-stage.no-gl canvas, .sys-stage.no-gl .sys-tools, .sys-stage.no-gl .sys-hint,
+.sys-stage.no-gl .sys-labels, .sys-stage.no-gl .sys-captions { display: none; }
+.sys-stage.no-gl .sys-nogl { position: static; display: block; padding: 14px 16px; text-align: left; }
+.sys-stage.no-gl .sys-nogl p { margin: 0; }
+.sys-stage.no-gl .sys-readout { position: static; display: none; width: auto; max-height: none; margin: 0 12px 12px; transform: none; transition: none; }
+.sys-stage.no-gl .sys-readout.open { display: flex; }
+/* Phone: the Overview's four vitals sit two by two (the rule at 760px above),
+   so each tile tightens. The Diary's tiles size by their own container. */
+@media (max-width: 760px) {
+  .ov2-vitals:not(.dy-tiles) { gap: 8px; }
+  .ov2-vitals:not(.dy-tiles) .ov2-vital { padding: 12px 12px 10px; }
+  .ov2-vitals:not(.dy-tiles) .ov2-vital-num strong { font-size: var(--text-2xl); }
+  .ov2-vitals:not(.dy-tiles) .ov2-vital-foot { flex-wrap: wrap; }
+  .ov2-vitals:not(.dy-tiles) .ov2-spark { width: 72px; }
 }

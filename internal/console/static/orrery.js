@@ -1934,10 +1934,15 @@
     scene = new S.Scene(canvas, labels, { calm: !!(reduce && reduce.matches), labels: labelText, onSelect: showReadout, onHover: hoverPart });
     scene.setData(stateMap());
   } catch (e) {
+    // No 3D here (no WebGL2, or it failed to start): the stage collapses to
+    // its note, and to a part's readout once one is picked, and the parts
+    // list below is the page. Nothing that only steers the view is left.
     scene = null;
+    stage.classList.add('no-gl');
+    stage.setAttribute('aria-label', 'Part details');
     var nogl = document.getElementById('sys-nogl');
     if (nogl) nogl.hidden = false;
-    canvas.hidden = true;
+    [canvas, labels, caps, stage.querySelector('.sys-tools'), stage.querySelector('.sys-hint')].forEach(function (el) { if (el) el.hidden = true; });
   }
 
   /* ---- readout ------------------------------------------------------ */

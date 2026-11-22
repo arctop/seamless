@@ -1098,8 +1098,11 @@ any of it.
 - **Events reach the console through the filtered handle.** The console's live
   feed re-reads each event through it (`liveEventVisible`) and the event log's
   reads go through `events.ReadingFrom`, so an event about a locked project
-  reaches no page without a lease. Never insert into `events` anywhere but the
-  recorder.
+  reaches no page without a lease. The one exception is `access.requested`:
+  it reaches the page as its kind, id and time alone
+  (`reducedAccessRequestRow`), so an open page refreshes the owner's Access
+  requests queue, which reads unfiltered. Never insert into `events` anywhere
+  but the recorder.
 - **No agent-disk reads under peer_auth; the client pushes the captures.**
   `localDiskOK` answers no for every hook: the daemon runs as its own account,
   so every path a hook names was chosen by another account, and the daemon

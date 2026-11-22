@@ -46,7 +46,7 @@ func lvBetween(t *testing.T, s, start, end string) string {
 // through the pill's click.
 func lvLiveScript(t *testing.T) string {
 	t.Helper()
-	return lvBetween(t, lvTemplate(t, "layout.html"), "  var n = 0;", "if (pill) pill.onclick = function () { apply(); };")
+	return lvBetween(t, lvTemplate(t, "layout.html"), "  var n = 0;", "if (pill) pill.onclick = function () { apply(true); };")
 }
 
 // lvFeedScript is the Interactions page's gap-fill and stream section.
@@ -166,7 +166,8 @@ func TestLvLayout_AHiddenPageLetsItsStreamGoAfterTheGrace(t *testing.T) {
 // does it catch up, once: the flag is cleared before the call. The catch-up
 // goes through trigger, so safe() still decides when the page may change,
 // and a page that keeps its own view live (SEAM_NO_LIVE_REFRESH) is only
-// told, never refreshed under its feet.
+// told, never refreshed under its feet. Like every refresh the stream
+// starts, it says nothing: only the owner's tap on the pill says "Updated".
 func TestLvLayout_ShownAgainItReconnectsAndCatchesUpOnce(t *testing.T) {
 	js := lvLiveScript(t)
 
@@ -186,15 +187,19 @@ func TestLvLayout_ShownAgainItReconnectsAndCatchesUpOnce(t *testing.T) {
 	lvInOrder(t, catchUp,
 		"document.dispatchEvent(new CustomEvent('seam:stream-resumed'));",
 		"if (window.SEAM_NO_LIVE_REFRESH) return;",
-		"trigger(true);")
+		"trigger();")
 	require.NotContains(t, catchUp, "apply(", "the catch-up waits for a safe moment like any live refresh")
 
-	require.Contains(t, js, "function trigger(quiet) { if (safe()) apply(quiet === true); else { pending = true; showPill(); } }")
-	require.Contains(t, js, "debounce = setTimeout(trigger, 700);", "an event's refresh is not quiet")
-	// the catch-up shows no toast of its own
-	lvInOrder(t, lvBody(t, js, "function apply(quiet) {"),
+	require.Contains(t, js, "function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }")
+	require.Contains(t, js, "debounce = setTimeout(trigger, 700);")
+	// Only the pill's own refresh says "Updated": an event's, the catch-up's
+	// and a deferred one's (the interval) say nothing.
+	lvInOrder(t, lvBody(t, js, "function apply(manual) {"),
 		"n = 0; pending = false; hidePill();",
-		"if (quiet !== true) {\n          if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');\n        }")
+		"if (manual === true && Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');")
+	require.Equal(t, 1, strings.Count(js, "flashToast('Updated')"))
+	require.Equal(t, 1, strings.Count(js, "apply(true)"), "the pill alone asks for a manual refresh")
+	require.Equal(t, []string{"(safe())", "safe())"}, lvCallers(js, "apply();"), "trigger and the interval refresh without a word")
 
 	// A catch-up that has to wait says so without inventing a count.
 	require.Contains(t, js, "pill.textContent = (n ? n + ' update' + (n > 1 ? 's' : '') : 'may be out of date') + ' · tap to refresh';")
@@ -235,7 +240,7 @@ func TestLvLayout_ALiveRefreshCanNeverHang(t *testing.T) {
 	js := lvLiveScript(t)
 
 	require.Equal(t, 15000, lvConst(t, js, "LIVE_TIMEOUT"))
-	apply := lvBody(t, js, "function apply(quiet) {")
+	apply := lvBody(t, js, "function apply(manual) {")
 	lvInOrder(t, apply,
 		"if (busy) { again = true; return; }",
 		"busy = true;",

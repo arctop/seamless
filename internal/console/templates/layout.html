@@ -12,8 +12,10 @@
    first paint, so none of them flashes. Only an explicit Light or Dark sets data-theme: with no choice
    (System) the stylesheet follows the OS through prefers-color-scheme, which
    resolves before paint with no script at all. Both are per-browser
-   conveniences, never server state. */
-(function(){var d=document.documentElement;d.classList.add('js','reveal');try{var t=localStorage.getItem('seamless-theme');if(t==='dark'||t==='light')d.setAttribute('data-theme',t);if(localStorage.getItem('seamless-sidebar')==='collapsed')d.setAttribute('data-sidebar','collapsed');if(localStorage.getItem('seamless-sky')==='folded')d.setAttribute('data-sky','folded');}catch(e){}})();
+   conveniences, never server state. The entrance (html.reveal: the page
+   settles in and its numbers count up, shell.js) plays on the first page a
+   tab shows, never again in that tab, and not at all without storage. */
+(function(){var d=document.documentElement;d.classList.add('js');try{if(!sessionStorage.getItem('seamless-arrived')){sessionStorage.setItem('seamless-arrived','1');d.classList.add('reveal');}}catch(e){}try{var t=localStorage.getItem('seamless-theme');if(t==='dark'||t==='light')d.setAttribute('data-theme',t);if(localStorage.getItem('seamless-sidebar')==='collapsed')d.setAttribute('data-sidebar','collapsed');if(localStorage.getItem('seamless-sky')==='folded')d.setAttribute('data-sky','folded');}catch(e){}})();
 </script>
 {{/* Hover prefetch for console pages (Chromium; ignored elsewhere). It only
      fetches the document, never runs it, and skips the SSE stream, sign-out,
@@ -101,8 +103,8 @@
          restart. Built from parsed versions and the constant release URL only
          (updates.go), plus two fixed notes: Codex's hooks changed with the
          update, and an update that applied with warnings. "Got it" hides it
-         for this browser tab, keyed by the version (shell.js), so a newer
-         update shows again. */}}
+         in this browser, keyed by the version (shell.js), so a newer update
+         shows again. */}}
     {{with .UpdateBanner}}<div class="section notice update-banner" id="update-banner" role="note" data-update-banner="{{.To}}">
       <p class="update-banner-copy">{{icon "refresh-cw"}}<span><strong>Seamless updated to v{{.To}}</strong> (from v{{.From}}) <span title="{{.At}}">{{.Ago}}</span>.{{if .CodexHooks}} Its Codex hooks changed: Codex skips them until you re-approve them in Codex&rsquo;s <span class="mono">/hooks</span>.{{end}}{{if .Rewire}} The installer reported warnings: run <span class="mono">seamlessd install-hooks</span> to re-wire your agents.{{end}}</span></p>
       <div class="update-banner-acts">
@@ -114,9 +116,26 @@
          the last update the daemon started did not apply -- every page says
          so for a week, pointing to Settings > Updates. Fixed words and parsed
          versions only (updates_auto.go): never the attempt's error text, which
-         stays in that section. "Got it" rides the update banner's per-tab
-         dismissal (data-update-banner), keyed by the failure or the pause, so
-         a newer one shows again. */}}
+         stays in that section. "Got it" rides the update banner's dismissal
+         (data-update-banner), keyed by the failure or the pause, so a newer
+         one shows again.
+
+         While automatic backups are in trouble too, the two share one row
+         (below): one line each, each line's link, one "Got it" that sets both
+         aside. data-update-banner then names both keys, and each line its own
+         (data-update-part), so a line set aside before the other appeared
+         stays hidden. */}}
+    {{if and .UpdateAlert .BackupAlert}}<div class="section notice update-alert alert-pair{{if .UpdateAlert.Danger}} is-danger{{end}}" id="update-backup-alert" role="alert" data-update-banner="{{.UpdateAlert.Key}} {{.BackupAlert.Key}}">
+      <div class="update-alert-lines">
+        <p class="update-alert-copy" data-update-part="{{.UpdateAlert.Key}}">{{icon "triangle-alert"}}<span><strong>{{.UpdateAlert.Head}}</strong> {{.UpdateAlert.Line}}</span></p>
+        <p class="update-alert-copy update-alert-warn" data-update-part="{{.BackupAlert.Key}}">{{icon "triangle-alert"}}<span><strong>{{.BackupAlert.Head}}</strong> {{.BackupAlert.Line}}</span></p>
+      </div>
+      <div class="update-alert-acts">
+        <a class="btn small" href="/console/settings?s=updates" data-update-part="{{.UpdateAlert.Key}}">Settings &rsaquo; Updates</a>
+        <a class="btn small" href="/console/settings?s=backups" data-update-part="{{.BackupAlert.Key}}">Settings &rsaquo; Backups</a>
+        <button class="btn small" type="button" data-update-banner-dismiss>Got it</button>
+      </div>
+    </div>{{else -}}
     {{with .UpdateAlert}}<div class="section notice update-alert{{if .Danger}} is-danger{{end}}" id="update-alert" role="alert" data-update-banner="{{.Key}}">
       <p class="update-alert-copy">{{icon "triangle-alert"}}<span><strong>{{.Head}}</strong> {{.Line}}</span></p>
       <div class="update-alert-acts">
@@ -128,18 +147,19 @@
          has finished for three intervals -- every page says so, pointing to
          Settings > Backups. Fixed words and counts only (backups.go): never a
          run's error text, which stays in that section. "Got it" rides the
-         update banner's per-tab dismissal, keyed by when the trouble began,
-         so a new streak shows again. */}}
+         update banner's dismissal, keyed by when the trouble began, so a new
+         streak shows again. */}}
     {{with .BackupAlert}}<div class="section notice update-alert" id="backup-alert" role="alert" data-update-banner="{{.Key}}">
       <p class="update-alert-copy">{{icon "triangle-alert"}}<span><strong>{{.Head}}</strong> {{.Line}}</span></p>
       <div class="update-alert-acts">
         <a class="btn small" href="/console/settings?s=backups">Settings &rsaquo; Backups</a>
         <button class="btn small" type="button" data-update-banner-dismiss>Got it</button>
       </div>
-    </div>{{end}}
+    </div>{{end}}{{end}}
     {{/* Hidden, not locked: a screen above the console level still renders in
          full, under this note offering the switch. Information, never an error;
-         "Got it" hides it for this browser tab only (shell.js, sessionStorage). */}}
+         "Got it" hides it for that screen in this browser (shell.js,
+         localStorage). */}}
     {{with .LevelBanner}}<div class="section notice level-banner" role="note" data-level-banner="{{.ID}}">
       <p class="level-banner-copy">{{icon "eye-off"}}<span><strong>{{.Label}}</strong> is {{.MinArticle}} {{.Min.Label}} {{.Kind}}. You are in {{.Current.Label}}: it works, it just is not in {{.Place}}.</span></p>
       <div class="level-banner-acts">
@@ -273,18 +293,47 @@
   // have gone by while the stream was down.
   function showPill() { if (!pill) return; pill.textContent = (n ? n + ' update' + (n > 1 ? 's' : '') : 'may be out of date') + ' · tap to refresh'; pill.hidden = false; }
   function hidePill() { if (pill) pill.hidden = true; }
-  function flashToast(msg) {
+  // ask, when given, is something that now waits on the owner (ASKS): the
+  // toast links to the screen that acts on it, unless that is this page, and
+  // stays for ASK_MS, and while the pointer or focus is on it.
+  var ASK_MS = 8000;
+  function flashToast(msg, ask) {
     if (!toast) return;
     toast.textContent = msg; toast.hidden = false;
     toast.classList.remove('error');
+    if (ask && location.pathname !== ask.href) {
+      var a = document.createElement('a');
+      a.href = ask.href; a.textContent = ask.label;
+      toast.appendChild(document.createTextNode(' '));
+      toast.appendChild(a);
+    }
     toast.classList.remove('show'); void toast.offsetWidth; toast.classList.add('show'); // restart the enter transition
+    holdToast(ask ? ASK_MS : 2600);
+  }
+  function holdToast(ms) {
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { toast.classList.remove('show'); setTimeout(function () { toast.hidden = true; }, 300); }, 2600);
+    toastTimer = setTimeout(function () {
+      if (toast.matches(':hover, :focus-within')) { holdToast(1500); return; }
+      toast.classList.remove('show');
+      setTimeout(function () { if (!toast.classList.contains('show')) toast.hidden = true; }, 300);
+    }, ms);
   }
   // An event that carries its own line (a first reuse, a new release) holds
-  // the toast for its full time: the live refresh the same event schedules
-  // must not replace it with the generic "Updated" a moment later.
+  // the toast for its full time: a refresh the owner taps for meanwhile must
+  // not replace it with the generic "Updated".
   function eventToast(msg) { flashToast(msg); toastHold = Date.now() + 2600; }
+  // What now waits on the owner, by the event that says so: fixed words and
+  // the screen that acts on it, never the event's own text. An access
+  // request for a locked project this browser has not unlocked arrives as
+  // its kind alone (sse.go), which is all this reads. A link says what to do
+  // rather than naming its screen: this script is on every page, and a
+  // console without peer_auth names no Access requests anywhere.
+  var ASKS = {
+    'access.requested': { text: 'An agent asks for access.', href: '/console/access', label: 'Review requests' },
+    'memory.held': { text: 'A write was held.', href: '/console/held', label: 'Review held writes' },
+    'agent.mishap': { text: 'An agent reported a mishap.', href: '/console/mishaps', label: 'Review mishaps' }
+  };
+  function askToast(ask) { flashToast(ask.text, ask); toastHold = Date.now() + ASK_MS; }
   // An owner action's own line (the notice or error it redirects back with,
   // shown through SeamConsole.flash) keeps the toast the same way, while it is
   // on screen: the action's event schedules a refresh too. The toast's own
@@ -299,8 +348,10 @@
   // under a second; 15 s is far past a slow one and still short of the owner
   // giving up on the page.
   var LIVE_TIMEOUT = 15000;
-  // quiet: the catch-up refresh, which shows no "Updated" of its own.
-  function apply(quiet) {
+  // manual: the owner tapped the pill. Only that refresh says "Updated": one
+  // the stream starts changes the page in place without a word, or every
+  // event an agent records would flash a toast at the owner.
+  function apply(manual) {
     if (busy) { again = true; return; }
     busy = true;
     // The page names the server-versioned views it holds (the Overview's sky),
@@ -321,10 +372,7 @@
         if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
         setLive(connected); // the morph may have swapped the topbar's live indicator
         n = 0; pending = false; hidePill();
-        // The catch-up's refresh shows no "Updated" of its own.
-        if (quiet !== true) {
-          if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
-        }
+        if (manual === true && Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
         // strip enter/pulse markers once their animations have played (longest
         // is the count pulse at 450ms) so nothing replays on a later reveal
         setTimeout(function () {
@@ -339,7 +387,7 @@
       })
       .finally(function () { if (limit) clearTimeout(limit); busy = false; if (again) { again = false; schedule(); } });
   }
-  function trigger(quiet) { if (safe()) apply(quiet === true); else { pending = true; showPill(); } }
+  function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
   function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } // coalesce write bursts
 
   // One stream per page at a time, and only while the page is in sight. The
@@ -388,6 +436,7 @@
         // summary is built server-side from the parsed version, never from the
         // release's own text (eventSummary).
         if (k === 'update.available' && d.summary) eventToast(d.summary);
+        if (Object.prototype.hasOwnProperty.call(ASKS, k)) askToast(ASKS[k]);
       } catch (e) {}
       // Pages that own their liveness (live feeds, forms, JS-built islands) opt out
       // via window.SEAM_NO_LIVE_REFRESH. Checked lazily so per-page scripts (which
@@ -419,7 +468,7 @@
   function catchUp() {
     document.dispatchEvent(new CustomEvent('seam:stream-resumed'));
     if (window.SEAM_NO_LIVE_REFRESH) return;
-    trigger(true);
+    trigger();
   }
   // A page opened out of sight (a tab opened in the background) connects once
   // it is shown.
@@ -431,7 +480,7 @@
   // Flush a deferred refresh once the moment turns safe again (tab refocus, pane
   // or palette close, selection cleared). Cheap poll, decoupled from those events.
   setInterval(function () { if (pending && !busy && safe()) apply(); }, 1500);
-  if (pill) pill.onclick = function () { apply(); };
+  if (pill) pill.onclick = function () { apply(true); };
 })();
 (function () {
   /* Whole-row navigation on screens WITHOUT a detail pane (overview,

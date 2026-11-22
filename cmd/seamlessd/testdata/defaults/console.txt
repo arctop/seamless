@@ -11,7 +11,7 @@
 <script>
 
 
-(function(){var d=document.documentElement;d.classList.add('js','reveal');try{var t=localStorage.getItem('seamless-theme');if(t==='dark'||t==='light')d.setAttribute('data-theme',t);if(localStorage.getItem('seamless-sidebar')==='collapsed')d.setAttribute('data-sidebar','collapsed');if(localStorage.getItem('seamless-sky')==='folded')d.setAttribute('data-sky','folded');}catch(e){}})();
+(function(){var d=document.documentElement;d.classList.add('js');try{if(!sessionStorage.getItem('seamless-arrived')){sessionStorage.setItem('seamless-arrived','1');d.classList.add('reveal');}}catch(e){}try{var t=localStorage.getItem('seamless-theme');if(t==='dark'||t==='light')d.setAttribute('data-theme',t);if(localStorage.getItem('seamless-sidebar')==='collapsed')d.setAttribute('data-sidebar','collapsed');if(localStorage.getItem('seamless-sky')==='folded')d.setAttribute('data-sky','folded');}catch(e){}})();
 </script>
 
 <script type="speculationrules">
@@ -186,18 +186,47 @@
   
   function showPill() { if (!pill) return; pill.textContent = (n ? n + ' update' + (n > 1 ? 's' : '') : 'may be out of date') + ' · tap to refresh'; pill.hidden = false; }
   function hidePill() { if (pill) pill.hidden = true; }
-  function flashToast(msg) {
+  
+  
+  
+  var ASK_MS = 8000;
+  function flashToast(msg, ask) {
     if (!toast) return;
     toast.textContent = msg; toast.hidden = false;
     toast.classList.remove('error');
+    if (ask && location.pathname !== ask.href) {
+      var a = document.createElement('a');
+      a.href = ask.href; a.textContent = ask.label;
+      toast.appendChild(document.createTextNode(' '));
+      toast.appendChild(a);
+    }
     toast.classList.remove('show'); void toast.offsetWidth; toast.classList.add('show'); 
+    holdToast(ask ? ASK_MS : 2600);
+  }
+  function holdToast(ms) {
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { toast.classList.remove('show'); setTimeout(function () { toast.hidden = true; }, 300); }, 2600);
+    toastTimer = setTimeout(function () {
+      if (toast.matches(':hover, :focus-within')) { holdToast(1500); return; }
+      toast.classList.remove('show');
+      setTimeout(function () { if (!toast.classList.contains('show')) toast.hidden = true; }, 300);
+    }, ms);
   }
   
   
   
   function eventToast(msg) { flashToast(msg); toastHold = Date.now() + 2600; }
+  
+  
+  
+  
+  
+  
+  var ASKS = {
+    'access.requested': { text: 'An agent asks for access.', href: '/console/access', label: 'Review requests' },
+    'memory.held': { text: 'A write was held.', href: '/console/held', label: 'Review held writes' },
+    'agent.mishap': { text: 'An agent reported a mishap.', href: '/console/mishaps', label: 'Review mishaps' }
+  };
+  function askToast(ask) { flashToast(ask.text, ask); toastHold = Date.now() + ASK_MS; }
   
   
   
@@ -213,7 +242,9 @@
   
   var LIVE_TIMEOUT = 15000;
   
-  function apply(quiet) {
+  
+  
+  function apply(manual) {
     if (busy) { again = true; return; }
     busy = true;
     
@@ -234,10 +265,7 @@
         if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
         setLive(connected); 
         n = 0; pending = false; hidePill();
-        
-        if (quiet !== true) {
-          if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
-        }
+        if (manual === true && Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
         
         
         setTimeout(function () {
@@ -252,7 +280,7 @@
       })
       .finally(function () { if (limit) clearTimeout(limit); busy = false; if (again) { again = false; schedule(); } });
   }
-  function trigger(quiet) { if (safe()) apply(quiet === true); else { pending = true; showPill(); } }
+  function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
   function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } 
 
   
@@ -301,6 +329,7 @@
         
         
         if (k === 'update.available' && d.summary) eventToast(d.summary);
+        if (Object.prototype.hasOwnProperty.call(ASKS, k)) askToast(ASKS[k]);
       } catch (e) {}
       
       
@@ -332,7 +361,7 @@
   function catchUp() {
     document.dispatchEvent(new CustomEvent('seam:stream-resumed'));
     if (window.SEAM_NO_LIVE_REFRESH) return;
-    trigger(true);
+    trigger();
   }
   
   
@@ -344,7 +373,7 @@
   
   
   setInterval(function () { if (pending && !busy && safe()) apply(); }, 1500);
-  if (pill) pill.onclick = function () { apply(); };
+  if (pill) pill.onclick = function () { apply(true); };
 })();
 (function () {
   
@@ -1049,18 +1078,47 @@
   
   function showPill() { if (!pill) return; pill.textContent = (n ? n + ' update' + (n > 1 ? 's' : '') : 'may be out of date') + ' · tap to refresh'; pill.hidden = false; }
   function hidePill() { if (pill) pill.hidden = true; }
-  function flashToast(msg) {
+  
+  
+  
+  var ASK_MS = 8000;
+  function flashToast(msg, ask) {
     if (!toast) return;
     toast.textContent = msg; toast.hidden = false;
     toast.classList.remove('error');
+    if (ask && location.pathname !== ask.href) {
+      var a = document.createElement('a');
+      a.href = ask.href; a.textContent = ask.label;
+      toast.appendChild(document.createTextNode(' '));
+      toast.appendChild(a);
+    }
     toast.classList.remove('show'); void toast.offsetWidth; toast.classList.add('show'); 
+    holdToast(ask ? ASK_MS : 2600);
+  }
+  function holdToast(ms) {
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { toast.classList.remove('show'); setTimeout(function () { toast.hidden = true; }, 300); }, 2600);
+    toastTimer = setTimeout(function () {
+      if (toast.matches(':hover, :focus-within')) { holdToast(1500); return; }
+      toast.classList.remove('show');
+      setTimeout(function () { if (!toast.classList.contains('show')) toast.hidden = true; }, 300);
+    }, ms);
   }
   
   
   
   function eventToast(msg) { flashToast(msg); toastHold = Date.now() + 2600; }
+  
+  
+  
+  
+  
+  
+  var ASKS = {
+    'access.requested': { text: 'An agent asks for access.', href: '/console/access', label: 'Review requests' },
+    'memory.held': { text: 'A write was held.', href: '/console/held', label: 'Review held writes' },
+    'agent.mishap': { text: 'An agent reported a mishap.', href: '/console/mishaps', label: 'Review mishaps' }
+  };
+  function askToast(ask) { flashToast(ask.text, ask); toastHold = Date.now() + ASK_MS; }
   
   
   
@@ -1076,7 +1134,9 @@
   
   var LIVE_TIMEOUT = 15000;
   
-  function apply(quiet) {
+  
+  
+  function apply(manual) {
     if (busy) { again = true; return; }
     busy = true;
     
@@ -1097,10 +1157,7 @@
         if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
         setLive(connected); 
         n = 0; pending = false; hidePill();
-        
-        if (quiet !== true) {
-          if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
-        }
+        if (manual === true && Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
         
         
         setTimeout(function () {
@@ -1115,7 +1172,7 @@
       })
       .finally(function () { if (limit) clearTimeout(limit); busy = false; if (again) { again = false; schedule(); } });
   }
-  function trigger(quiet) { if (safe()) apply(quiet === true); else { pending = true; showPill(); } }
+  function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
   function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } 
 
   
@@ -1164,6 +1221,7 @@
         
         
         if (k === 'update.available' && d.summary) eventToast(d.summary);
+        if (Object.prototype.hasOwnProperty.call(ASKS, k)) askToast(ASKS[k]);
       } catch (e) {}
       
       
@@ -1195,7 +1253,7 @@
   function catchUp() {
     document.dispatchEvent(new CustomEvent('seam:stream-resumed'));
     if (window.SEAM_NO_LIVE_REFRESH) return;
-    trigger(true);
+    trigger();
   }
   
   
@@ -1207,7 +1265,7 @@
   
   
   setInterval(function () { if (pending && !busy && safe()) apply(); }, 1500);
-  if (pill) pill.onclick = function () { apply(); };
+  if (pill) pill.onclick = function () { apply(true); };
 })();
 (function () {
   
@@ -1890,18 +1948,47 @@
   
   function showPill() { if (!pill) return; pill.textContent = (n ? n + ' update' + (n > 1 ? 's' : '') : 'may be out of date') + ' · tap to refresh'; pill.hidden = false; }
   function hidePill() { if (pill) pill.hidden = true; }
-  function flashToast(msg) {
+  
+  
+  
+  var ASK_MS = 8000;
+  function flashToast(msg, ask) {
     if (!toast) return;
     toast.textContent = msg; toast.hidden = false;
     toast.classList.remove('error');
+    if (ask && location.pathname !== ask.href) {
+      var a = document.createElement('a');
+      a.href = ask.href; a.textContent = ask.label;
+      toast.appendChild(document.createTextNode(' '));
+      toast.appendChild(a);
+    }
     toast.classList.remove('show'); void toast.offsetWidth; toast.classList.add('show'); 
+    holdToast(ask ? ASK_MS : 2600);
+  }
+  function holdToast(ms) {
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { toast.classList.remove('show'); setTimeout(function () { toast.hidden = true; }, 300); }, 2600);
+    toastTimer = setTimeout(function () {
+      if (toast.matches(':hover, :focus-within')) { holdToast(1500); return; }
+      toast.classList.remove('show');
+      setTimeout(function () { if (!toast.classList.contains('show')) toast.hidden = true; }, 300);
+    }, ms);
   }
   
   
   
   function eventToast(msg) { flashToast(msg); toastHold = Date.now() + 2600; }
+  
+  
+  
+  
+  
+  
+  var ASKS = {
+    'access.requested': { text: 'An agent asks for access.', href: '/console/access', label: 'Review requests' },
+    'memory.held': { text: 'A write was held.', href: '/console/held', label: 'Review held writes' },
+    'agent.mishap': { text: 'An agent reported a mishap.', href: '/console/mishaps', label: 'Review mishaps' }
+  };
+  function askToast(ask) { flashToast(ask.text, ask); toastHold = Date.now() + ASK_MS; }
   
   
   
@@ -1917,7 +2004,9 @@
   
   var LIVE_TIMEOUT = 15000;
   
-  function apply(quiet) {
+  
+  
+  function apply(manual) {
     if (busy) { again = true; return; }
     busy = true;
     
@@ -1938,10 +2027,7 @@
         if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
         setLive(connected); 
         n = 0; pending = false; hidePill();
-        
-        if (quiet !== true) {
-          if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
-        }
+        if (manual === true && Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
         
         
         setTimeout(function () {
@@ -1956,7 +2042,7 @@
       })
       .finally(function () { if (limit) clearTimeout(limit); busy = false; if (again) { again = false; schedule(); } });
   }
-  function trigger(quiet) { if (safe()) apply(quiet === true); else { pending = true; showPill(); } }
+  function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
   function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } 
 
   
@@ -2005,6 +2091,7 @@
         
         
         if (k === 'update.available' && d.summary) eventToast(d.summary);
+        if (Object.prototype.hasOwnProperty.call(ASKS, k)) askToast(ASKS[k]);
       } catch (e) {}
       
       
@@ -2036,7 +2123,7 @@
   function catchUp() {
     document.dispatchEvent(new CustomEvent('seam:stream-resumed'));
     if (window.SEAM_NO_LIVE_REFRESH) return;
-    trigger(true);
+    trigger();
   }
   
   
@@ -2048,7 +2135,7 @@
   
   
   setInterval(function () { if (pending && !busy && safe()) apply(); }, 1500);
-  if (pill) pill.onclick = function () { apply(); };
+  if (pill) pill.onclick = function () { apply(true); };
 })();
 (function () {
   
@@ -2726,18 +2813,47 @@
   
   function showPill() { if (!pill) return; pill.textContent = (n ? n + ' update' + (n > 1 ? 's' : '') : 'may be out of date') + ' · tap to refresh'; pill.hidden = false; }
   function hidePill() { if (pill) pill.hidden = true; }
-  function flashToast(msg) {
+  
+  
+  
+  var ASK_MS = 8000;
+  function flashToast(msg, ask) {
     if (!toast) return;
     toast.textContent = msg; toast.hidden = false;
     toast.classList.remove('error');
+    if (ask && location.pathname !== ask.href) {
+      var a = document.createElement('a');
+      a.href = ask.href; a.textContent = ask.label;
+      toast.appendChild(document.createTextNode(' '));
+      toast.appendChild(a);
+    }
     toast.classList.remove('show'); void toast.offsetWidth; toast.classList.add('show'); 
+    holdToast(ask ? ASK_MS : 2600);
+  }
+  function holdToast(ms) {
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { toast.classList.remove('show'); setTimeout(function () { toast.hidden = true; }, 300); }, 2600);
+    toastTimer = setTimeout(function () {
+      if (toast.matches(':hover, :focus-within')) { holdToast(1500); return; }
+      toast.classList.remove('show');
+      setTimeout(function () { if (!toast.classList.contains('show')) toast.hidden = true; }, 300);
+    }, ms);
   }
   
   
   
   function eventToast(msg) { flashToast(msg); toastHold = Date.now() + 2600; }
+  
+  
+  
+  
+  
+  
+  var ASKS = {
+    'access.requested': { text: 'An agent asks for access.', href: '/console/access', label: 'Review requests' },
+    'memory.held': { text: 'A write was held.', href: '/console/held', label: 'Review held writes' },
+    'agent.mishap': { text: 'An agent reported a mishap.', href: '/console/mishaps', label: 'Review mishaps' }
+  };
+  function askToast(ask) { flashToast(ask.text, ask); toastHold = Date.now() + ASK_MS; }
   
   
   
@@ -2753,7 +2869,9 @@
   
   var LIVE_TIMEOUT = 15000;
   
-  function apply(quiet) {
+  
+  
+  function apply(manual) {
     if (busy) { again = true; return; }
     busy = true;
     
@@ -2774,10 +2892,7 @@
         if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
         setLive(connected); 
         n = 0; pending = false; hidePill();
-        
-        if (quiet !== true) {
-          if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
-        }
+        if (manual === true && Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
         
         
         setTimeout(function () {
@@ -2792,7 +2907,7 @@
       })
       .finally(function () { if (limit) clearTimeout(limit); busy = false; if (again) { again = false; schedule(); } });
   }
-  function trigger(quiet) { if (safe()) apply(quiet === true); else { pending = true; showPill(); } }
+  function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
   function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } 
 
   
@@ -2841,6 +2956,7 @@
         
         
         if (k === 'update.available' && d.summary) eventToast(d.summary);
+        if (Object.prototype.hasOwnProperty.call(ASKS, k)) askToast(ASKS[k]);
       } catch (e) {}
       
       
@@ -2872,7 +2988,7 @@
   function catchUp() {
     document.dispatchEvent(new CustomEvent('seam:stream-resumed'));
     if (window.SEAM_NO_LIVE_REFRESH) return;
-    trigger(true);
+    trigger();
   }
   
   
@@ -2884,7 +3000,7 @@
   
   
   setInterval(function () { if (pending && !busy && safe()) apply(); }, 1500);
-  if (pill) pill.onclick = function () { apply(); };
+  if (pill) pill.onclick = function () { apply(true); };
 })();
 (function () {
   
@@ -4527,18 +4643,47 @@
   
   function showPill() { if (!pill) return; pill.textContent = (n ? n + ' update' + (n > 1 ? 's' : '') : 'may be out of date') + ' · tap to refresh'; pill.hidden = false; }
   function hidePill() { if (pill) pill.hidden = true; }
-  function flashToast(msg) {
+  
+  
+  
+  var ASK_MS = 8000;
+  function flashToast(msg, ask) {
     if (!toast) return;
     toast.textContent = msg; toast.hidden = false;
     toast.classList.remove('error');
+    if (ask && location.pathname !== ask.href) {
+      var a = document.createElement('a');
+      a.href = ask.href; a.textContent = ask.label;
+      toast.appendChild(document.createTextNode(' '));
+      toast.appendChild(a);
+    }
     toast.classList.remove('show'); void toast.offsetWidth; toast.classList.add('show'); 
+    holdToast(ask ? ASK_MS : 2600);
+  }
+  function holdToast(ms) {
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { toast.classList.remove('show'); setTimeout(function () { toast.hidden = true; }, 300); }, 2600);
+    toastTimer = setTimeout(function () {
+      if (toast.matches(':hover, :focus-within')) { holdToast(1500); return; }
+      toast.classList.remove('show');
+      setTimeout(function () { if (!toast.classList.contains('show')) toast.hidden = true; }, 300);
+    }, ms);
   }
   
   
   
   function eventToast(msg) { flashToast(msg); toastHold = Date.now() + 2600; }
+  
+  
+  
+  
+  
+  
+  var ASKS = {
+    'access.requested': { text: 'An agent asks for access.', href: '/console/access', label: 'Review requests' },
+    'memory.held': { text: 'A write was held.', href: '/console/held', label: 'Review held writes' },
+    'agent.mishap': { text: 'An agent reported a mishap.', href: '/console/mishaps', label: 'Review mishaps' }
+  };
+  function askToast(ask) { flashToast(ask.text, ask); toastHold = Date.now() + ASK_MS; }
   
   
   
@@ -4554,7 +4699,9 @@
   
   var LIVE_TIMEOUT = 15000;
   
-  function apply(quiet) {
+  
+  
+  function apply(manual) {
     if (busy) { again = true; return; }
     busy = true;
     
@@ -4575,10 +4722,7 @@
         if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
         setLive(connected); 
         n = 0; pending = false; hidePill();
-        
-        if (quiet !== true) {
-          if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
-        }
+        if (manual === true && Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
         
         
         setTimeout(function () {
@@ -4593,7 +4737,7 @@
       })
       .finally(function () { if (limit) clearTimeout(limit); busy = false; if (again) { again = false; schedule(); } });
   }
-  function trigger(quiet) { if (safe()) apply(quiet === true); else { pending = true; showPill(); } }
+  function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
   function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } 
 
   
@@ -4642,6 +4786,7 @@
         
         
         if (k === 'update.available' && d.summary) eventToast(d.summary);
+        if (Object.prototype.hasOwnProperty.call(ASKS, k)) askToast(ASKS[k]);
       } catch (e) {}
       
       
@@ -4673,7 +4818,7 @@
   function catchUp() {
     document.dispatchEvent(new CustomEvent('seam:stream-resumed'));
     if (window.SEAM_NO_LIVE_REFRESH) return;
-    trigger(true);
+    trigger();
   }
   
   
@@ -4685,7 +4830,7 @@
   
   
   setInterval(function () { if (pending && !busy && safe()) apply(); }, 1500);
-  if (pill) pill.onclick = function () { apply(); };
+  if (pill) pill.onclick = function () { apply(true); };
 })();
 (function () {
   
@@ -5296,18 +5441,47 @@
   
   function showPill() { if (!pill) return; pill.textContent = (n ? n + ' update' + (n > 1 ? 's' : '') : 'may be out of date') + ' · tap to refresh'; pill.hidden = false; }
   function hidePill() { if (pill) pill.hidden = true; }
-  function flashToast(msg) {
+  
+  
+  
+  var ASK_MS = 8000;
+  function flashToast(msg, ask) {
     if (!toast) return;
     toast.textContent = msg; toast.hidden = false;
     toast.classList.remove('error');
+    if (ask && location.pathname !== ask.href) {
+      var a = document.createElement('a');
+      a.href = ask.href; a.textContent = ask.label;
+      toast.appendChild(document.createTextNode(' '));
+      toast.appendChild(a);
+    }
     toast.classList.remove('show'); void toast.offsetWidth; toast.classList.add('show'); 
+    holdToast(ask ? ASK_MS : 2600);
+  }
+  function holdToast(ms) {
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { toast.classList.remove('show'); setTimeout(function () { toast.hidden = true; }, 300); }, 2600);
+    toastTimer = setTimeout(function () {
+      if (toast.matches(':hover, :focus-within')) { holdToast(1500); return; }
+      toast.classList.remove('show');
+      setTimeout(function () { if (!toast.classList.contains('show')) toast.hidden = true; }, 300);
+    }, ms);
   }
   
   
   
   function eventToast(msg) { flashToast(msg); toastHold = Date.now() + 2600; }
+  
+  
+  
+  
+  
+  
+  var ASKS = {
+    'access.requested': { text: 'An agent asks for access.', href: '/console/access', label: 'Review requests' },
+    'memory.held': { text: 'A write was held.', href: '/console/held', label: 'Review held writes' },
+    'agent.mishap': { text: 'An agent reported a mishap.', href: '/console/mishaps', label: 'Review mishaps' }
+  };
+  function askToast(ask) { flashToast(ask.text, ask); toastHold = Date.now() + ASK_MS; }
   
   
   
@@ -5323,7 +5497,9 @@
   
   var LIVE_TIMEOUT = 15000;
   
-  function apply(quiet) {
+  
+  
+  function apply(manual) {
     if (busy) { again = true; return; }
     busy = true;
     
@@ -5344,10 +5520,7 @@
         if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
         setLive(connected); 
         n = 0; pending = false; hidePill();
-        
-        if (quiet !== true) {
-          if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
-        }
+        if (manual === true && Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
         
         
         setTimeout(function () {
@@ -5362,7 +5535,7 @@
       })
       .finally(function () { if (limit) clearTimeout(limit); busy = false; if (again) { again = false; schedule(); } });
   }
-  function trigger(quiet) { if (safe()) apply(quiet === true); else { pending = true; showPill(); } }
+  function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
   function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } 
 
   
@@ -5411,6 +5584,7 @@
         
         
         if (k === 'update.available' && d.summary) eventToast(d.summary);
+        if (Object.prototype.hasOwnProperty.call(ASKS, k)) askToast(ASKS[k]);
       } catch (e) {}
       
       
@@ -5442,7 +5616,7 @@
   function catchUp() {
     document.dispatchEvent(new CustomEvent('seam:stream-resumed'));
     if (window.SEAM_NO_LIVE_REFRESH) return;
-    trigger(true);
+    trigger();
   }
   
   
@@ -5454,7 +5628,7 @@
   
   
   setInterval(function () { if (pending && !busy && safe()) apply(); }, 1500);
-  if (pill) pill.onclick = function () { apply(); };
+  if (pill) pill.onclick = function () { apply(true); };
 })();
 (function () {
   
@@ -6280,18 +6454,47 @@ window.SEAM_NO_LIVE_REFRESH = true;
   
   function showPill() { if (!pill) return; pill.textContent = (n ? n + ' update' + (n > 1 ? 's' : '') : 'may be out of date') + ' · tap to refresh'; pill.hidden = false; }
   function hidePill() { if (pill) pill.hidden = true; }
-  function flashToast(msg) {
+  
+  
+  
+  var ASK_MS = 8000;
+  function flashToast(msg, ask) {
     if (!toast) return;
     toast.textContent = msg; toast.hidden = false;
     toast.classList.remove('error');
+    if (ask && location.pathname !== ask.href) {
+      var a = document.createElement('a');
+      a.href = ask.href; a.textContent = ask.label;
+      toast.appendChild(document.createTextNode(' '));
+      toast.appendChild(a);
+    }
     toast.classList.remove('show'); void toast.offsetWidth; toast.classList.add('show'); 
+    holdToast(ask ? ASK_MS : 2600);
+  }
+  function holdToast(ms) {
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { toast.classList.remove('show'); setTimeout(function () { toast.hidden = true; }, 300); }, 2600);
+    toastTimer = setTimeout(function () {
+      if (toast.matches(':hover, :focus-within')) { holdToast(1500); return; }
+      toast.classList.remove('show');
+      setTimeout(function () { if (!toast.classList.contains('show')) toast.hidden = true; }, 300);
+    }, ms);
   }
   
   
   
   function eventToast(msg) { flashToast(msg); toastHold = Date.now() + 2600; }
+  
+  
+  
+  
+  
+  
+  var ASKS = {
+    'access.requested': { text: 'An agent asks for access.', href: '/console/access', label: 'Review requests' },
+    'memory.held': { text: 'A write was held.', href: '/console/held', label: 'Review held writes' },
+    'agent.mishap': { text: 'An agent reported a mishap.', href: '/console/mishaps', label: 'Review mishaps' }
+  };
+  function askToast(ask) { flashToast(ask.text, ask); toastHold = Date.now() + ASK_MS; }
   
   
   
@@ -6307,7 +6510,9 @@ window.SEAM_NO_LIVE_REFRESH = true;
   
   var LIVE_TIMEOUT = 15000;
   
-  function apply(quiet) {
+  
+  
+  function apply(manual) {
     if (busy) { again = true; return; }
     busy = true;
     
@@ -6328,10 +6533,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
         if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
         setLive(connected); 
         n = 0; pending = false; hidePill();
-        
-        if (quiet !== true) {
-          if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
-        }
+        if (manual === true && Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
         
         
         setTimeout(function () {
@@ -6346,7 +6548,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
       })
       .finally(function () { if (limit) clearTimeout(limit); busy = false; if (again) { again = false; schedule(); } });
   }
-  function trigger(quiet) { if (safe()) apply(quiet === true); else { pending = true; showPill(); } }
+  function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
   function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } 
 
   
@@ -6395,6 +6597,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
         
         
         if (k === 'update.available' && d.summary) eventToast(d.summary);
+        if (Object.prototype.hasOwnProperty.call(ASKS, k)) askToast(ASKS[k]);
       } catch (e) {}
       
       
@@ -6426,7 +6629,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
   function catchUp() {
     document.dispatchEvent(new CustomEvent('seam:stream-resumed'));
     if (window.SEAM_NO_LIVE_REFRESH) return;
-    trigger(true);
+    trigger();
   }
   
   
@@ -6438,7 +6641,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
   
   
   setInterval(function () { if (pending && !busy && safe()) apply(); }, 1500);
-  if (pill) pill.onclick = function () { apply(); };
+  if (pill) pill.onclick = function () { apply(true); };
 })();
 (function () {
   
