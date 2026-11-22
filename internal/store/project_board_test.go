@@ -59,6 +59,11 @@ func TestProjectsWithCounts(t *testing.T) {
 	d := addTask(t, db, "seam", "D", 3)
 	setStatus(t, db, d, core.TaskDone)
 	addTask(t, db, "seam", "B", 4, a) // depends on open A -> blocked
+	// Task recency counts every status: the done task changed last.
+	_, err := db.ExecContext(ctx, `UPDATE tasks SET updated_at = ? WHERE project_slug = 'seam'`, ts(6))
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `UPDATE tasks SET updated_at = ? WHERE id = ?`, ts(20), d)
+	require.NoError(t, err)
 
 	// One injection of a seam memory so reach joins in (seam: 1/2 surfaced -> 50%).
 	insertRetrievalEvent(t, db, core.EventInjected, "s-seam-a", "m1", "{}", tsAt(1))
@@ -93,6 +98,7 @@ func TestProjectsWithCounts(t *testing.T) {
 	require.Equal(t, 1, seam.Notes)
 	require.False(t, seam.Unregistered)
 	require.True(t, seam.LastActive.Equal(tsAt(5)), "LastActive == MAX(session updated_at)")
+	require.True(t, seam.LastTask.Equal(tsAt(20)), "LastTask == MAX(task updated_at), any status: %v", seam.LastTask)
 	require.Equal(t, 50, seam.ReachRate) // 1 of 2 active surfaced
 	require.Equal(t, 1, seam.Surfaced)
 	require.Equal(t, 2, seam.Active)
@@ -121,6 +127,8 @@ func TestProjectsWithCounts(t *testing.T) {
 	require.Equal(t, 0, other.Memories)
 	require.Equal(t, 0, other.Sessions)
 	require.True(t, other.LastActive.IsZero())
+	require.True(t, other.LastTask.IsZero(), "no tasks, no task recency")
+	require.True(t, global.LastTask.IsZero())
 
 	// Rows are ordered by slug (global "" first).
 	require.Equal(t, "", rows[0].Project)

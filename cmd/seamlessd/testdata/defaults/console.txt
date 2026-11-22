@@ -1336,17 +1336,17 @@
     
 
 
-<div class="ops-page" data-ops="projects">
+<div class="ops-page" data-ops="projects" data-board-group="activity" data-board-sort="recent">
 <header class="mv2-bar">
-  <h1><svg class="ico ico-table-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>Projects</h1><details class="page-about"><summary aria-label="About this page" title="About this page"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary><p class="page-about-pop" role="note">Your shared-context map: where agents are working, what each scope knows, what needs attention, and how often that knowledge comes back.</p></details>
-  <span class="mv2-count" aria-label="6 workspaces">
-    <strong>6</strong>workspaces<small>1 agent working across 1 scope</small>
+  <h1><svg class="ico ico-table-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>Projects</h1><details class="page-about"><summary aria-label="About this page" title="About this page"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary><p class="page-about-pop" role="note">Your shared-context map: where agents are working, what each project knows, what needs attention, and how often that knowledge comes back.</p></details>
+  <span class="mv2-count" aria-label="6 projects">
+    <strong>6</strong>projects<small>1 agent working across 1 project</small>
   </span>
-  <a class="lib-active-filter" href="#projects-attention"><svg class="ico ico-triangle-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span>1 scope needs attention</span></a>
+  <a class="lib-active-filter" href="#projects-attention"><svg class="ico ico-triangle-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span>1 project needs attention</span></a>
   <form class="search lib-query" method="get" action="/console/projects" data-seam-query>
     <svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
     <input name="q" aria-label="Filter projects by slug, name, or description" placeholder="Filter by slug, name, or description&hellip;" value="">
-    <input type="hidden" name="group" value="family">
+    <input type="hidden" name="group" value="activity">
     <input type="hidden" name="sort" value="recent">
     <input type="hidden" name="w" value="24h">
   </form>
@@ -1356,23 +1356,24 @@
   <div class="mv2-sort">
     <span class="mv2-sort-label">View</span>
     <div class="seg" data-seam-query>
-      <a class="on" href="/console/projects?group=family&amp;sort=recent&amp;q=&amp;w=24h">Family</a>
+      <a class="on" href="/console/projects?group=activity&amp;sort=recent&amp;q=&amp;w=24h">Activity</a>
+      <a class="" href="/console/projects?group=family&amp;sort=recent&amp;q=&amp;w=24h">Family</a>
       <a class="" href="/console/projects?group=flat&amp;sort=recent&amp;q=&amp;w=24h">Flat</a>
     </div>
   </div>
   <details class="menu sort-menu">
     <summary class="menu-btn" aria-label="Sort: Recent"><svg class="ico ico-arrow-up-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></svg><span class="menu-k">Sort</span><strong>Recent</strong><svg class="ico ico-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
     <div class="menu-list" data-seam-query>
-      <a class="on" href="/console/projects?group=family&amp;sort=recent&amp;q=&amp;w=24h">Recent</a>
-      <a class="" href="/console/projects?group=family&amp;sort=coverage&amp;q=&amp;w=24h">Reach</a>
-      <a class="" href="/console/projects?group=family&amp;sort=name&amp;q=&amp;w=24h">Name</a>
-      <a class="" href="/console/projects?group=family&amp;sort=favorites&amp;q=&amp;w=24h">Starred</a>
+      <a class="on" href="/console/projects?group=activity&amp;sort=recent&amp;q=&amp;w=24h">Recent</a>
+      <a class="" href="/console/projects?group=activity&amp;sort=coverage&amp;q=&amp;w=24h">Reach</a>
+      <a class="" href="/console/projects?group=activity&amp;sort=name&amp;q=&amp;w=24h">Name</a>
+      <a class="" href="/console/projects?group=activity&amp;sort=favorites&amp;q=&amp;w=24h">Starred</a>
     </div>
   </details>
   <div class="mv2-sort">
     <span class="mv2-sort-label">Reach window</span>
     <div class="seg" data-seam-query>
-      <a class="on" href="/console/projects?group=family&amp;sort=recent&amp;q=&amp;w=24h">24h</a><a class="" href="/console/projects?group=family&amp;sort=recent&amp;q=&amp;w=7d">7d</a><a class="" href="/console/projects?group=family&amp;sort=recent&amp;q=&amp;w=30d">30d</a><a class="" href="/console/projects?group=family&amp;sort=recent&amp;q=&amp;w=all">All time</a>
+      <a class="on" href="/console/projects?group=activity&amp;sort=recent&amp;q=&amp;w=24h">24h</a><a class="" href="/console/projects?group=activity&amp;sort=recent&amp;q=&amp;w=7d">7d</a><a class="" href="/console/projects?group=activity&amp;sort=recent&amp;q=&amp;w=30d">30d</a><a class="" href="/console/projects?group=activity&amp;sort=recent&amp;q=&amp;w=all">All time</a>
     </div>
   </div>
   <a class="btn small" href="/console/context" title="Global, parent, family, and split-lineage context flow"><svg class="ico ico-share-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg><span>Context</span></a>
@@ -1386,11 +1387,11 @@
   </article>
   <article class="project-summary-card">
     <span class="project-summary-icon"><svg class="ico ico-layout-dashboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg></span>
-    <div class="project-summary-copy"><span>Workspaces</span><strong>6</strong><small>independent scopes</small></div>
+    <div class="project-summary-copy"><span>Projects</span><strong>6</strong><small>independent projects</small></div>
   </article>
   <article class="project-summary-card live">
     <span class="project-summary-icon"><svg class="ico ico-terminal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></svg></span>
-    <div class="project-summary-copy"><span>Agent activity</span><strong>1</strong><small>live across 1 scope</small></div>
+    <div class="project-summary-copy"><span>Agent activity</span><strong>1</strong><small>live across 1 project</small></div>
   </article>
   <article class="project-summary-card">
     <span class="project-summary-icon"><svg class="ico ico-database" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg></span>
@@ -1401,95 +1402,27 @@
     <div class="project-summary-copy"><span>Task flow</span><strong>6</strong><small>open &middot; 1 blocked</small></div>
   </article>
 </section>
+<a class="project-global-line" href="/console/context" title="The global scope: knowledge every project&rsquo;s briefing draws on"><svg class="ico ico-database" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg><span><strong>Shared context:</strong> 1 memory, 0 notes, reach 100%</span></a>
 
 <section class="ops-stage projects-stage" aria-label="Project map">
   <header class="ops-stage-head">
     <div class="ops-stage-title">
-      <span class="ops-stage-eyebrow">Project topology</span>
-      <strong>Scopes grouped by shared context</strong>
+      <span class="ops-stage-eyebrow">Projects by activity</span>
+      <strong>Active first; quiet and retired projects folded</strong>
     </div>
     <div class="ops-stage-meta"><span>Reach = active memories surfaced</span><span class="ops-stage-dot">&middot;</span><span>24h</span></div>
   </header>
   <div class="project-board">
     
       
-      <section class="project-group">
+      <section class="project-group" id="pg-active">
         <header class="project-group-head">
           <div class="project-group-identity">
-            <span class="project-group-icon"><svg class="ico ico-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg></span>
-            <div><strong>Root</strong><span>Shared context available to every project</span></div>
+            <span class="project-group-icon"><svg class="ico ico-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+            <div><strong>Active</strong><span>A live agent, or a session or task in the last 30 days</span></div>
           </div>
           <div class="project-group-signals">
-            <span>1 scope</span>
-            <span class="brand">100% reach</span>
-            <span>1 mem &middot; 0 notes</span>
-            
-            
-            
-            
-            
-          </div>
-        </header>
-        <div class="project-group-rows">
-<article class="project-card">
-  <div class="project-card-main">
-    <span class="project-card-tile tile grp"><svg class="ico ico-database" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg></span>
-    <div class="project-card-copy">
-      <div class="project-card-titleline">
-        <span class="project-card-name">Global context</span>
-      </div>
-      <div class="project-card-badges">
-        <span class="project-role global">shared root</span>
-        
-        
-        
-      </div>
-      <p>Knowledge available to every project and unscoped session.</p>
-      <div class="project-inheritance"><svg class="ico ico-database" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>Injected alongside every project&rsquo;s local context</div>
-    </div>
-  </div>
-
-  <div class="project-card-panel project-card-reach">
-    <div class="project-card-label"><svg class="ico ico-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg> Knowledge reach</div>
-    
-    <div class="project-card-value"><strong>100%</strong><span>1 / 1 surfaced</span></div>
-    <div class="project-meter"><span style="width:100%"></span></div>
-    
-  </div>
-
-  <div class="project-card-panel project-card-knowledge">
-    <div class="project-card-label"><svg class="ico ico-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg> Knowledge</div>
-    <div class="project-stat"><span>Memories</span><strong>1</strong></div>
-    <div class="project-stat"><span>Notes</span><strong>0</strong></div>
-    
-  </div>
-
-  <div class="project-card-panel project-card-work">
-    <div class="project-card-label"><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg> Work</div>
-    <div class="project-stat"><span>Sessions</span><strong>0</strong></div>
-    <div class="project-stat"><span>Open tasks</span><strong>0</strong></div>
-    
-    
-  </div>
-
-  <div class="project-card-panel project-card-activity">
-    <div class="project-card-label"><svg class="ico ico-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Last activity</div>
-    <strong class="project-last-active">-</strong>
-    <span class="project-activity-state">No sessions yet</span>
-    
-  </div>
-</article>
-</div>
-      </section>
-      
-      <section class="project-group">
-        <header class="project-group-head">
-          <div class="project-group-identity">
-            <span class="project-group-icon"><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
-            <div><strong>Standalone</strong><span>Independent project scopes</span></div>
-          </div>
-          <div class="project-group-signals">
-            <span>6 scopes</span>
+            <span>4 projects</span>
             <span class="brand">80% reach</span>
             <span>5 mem &middot; 3 notes</span>
             
@@ -1498,155 +1431,8 @@
             <span class="warn">1 blocked</span>
             
           </div>
-        </header>
+</header>
         <div class="project-group-rows">
-<article id="p-example-confidential" class="project-card row-link" data-href="/console/projects/example-confidential">
-  <div class="project-card-main">
-    <span class="project-card-tile tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
-    <div class="project-card-copy">
-      <div class="project-card-titleline">
-        <a class="project-card-name" href="/console/projects/example-confidential">example-confidential</a>
-      </div>
-      <div class="project-card-badges">
-        <span class="project-role">standalone</span>
-        <span class="kind accent iso-pill" title="Confidential — nothing leaves. Agents in other projects never see this project&#39;s knowledge, and agents here cannot write outside it."><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>confidential</span>
-        
-        
-      </div>
-      <p>Independent project workspace.</p>
-      
-    </div>
-  </div>
-
-  <div class="project-card-panel project-card-reach">
-    <div class="project-card-label"><svg class="ico ico-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg> Knowledge reach</div>
-    
-    <div class="project-card-value"><strong>100%</strong><span>1 / 1 surfaced</span></div>
-    <div class="project-meter"><span style="width:100%"></span></div>
-    
-  </div>
-
-  <div class="project-card-panel project-card-knowledge">
-    <div class="project-card-label"><svg class="ico ico-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg> Knowledge</div>
-    <div class="project-stat"><span>Memories</span><strong>1</strong></div>
-    <div class="project-stat"><span>Notes</span><strong>1</strong></div>
-    
-  </div>
-
-  <div class="project-card-panel project-card-work">
-    <div class="project-card-label"><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg> Work</div>
-    <div class="project-stat"><span>Sessions</span><strong>2</strong></div>
-    <div class="project-stat"><span>Open tasks</span><strong>2</strong></div>
-    
-    
-  </div>
-
-  <div class="project-card-panel project-card-activity">
-    <div class="project-card-label"><svg class="ico ico-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Last activity</div>
-    <strong class="project-last-active"><age></strong>
-    <span class="project-activity-state">2 sessions total</span>
-    <span class="project-open-cue">Open workspace <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
-  </div>
-</article>
-
-<article id="p-example-open-beta" class="project-card row-link blocked" data-href="/console/projects/example-open-beta">
-  <div class="project-card-main">
-    <span class="project-card-tile tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
-    <div class="project-card-copy">
-      <div class="project-card-titleline">
-        <a class="project-card-name" href="/console/projects/example-open-beta">example-open-beta</a>
-      </div>
-      <div class="project-card-badges">
-        <span class="project-role">standalone</span>
-        
-        
-        <span class="project-state warn"><svg class="ico ico-triangle-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>1 blocked</span>
-      </div>
-      <p>Independent project workspace.</p>
-      
-    </div>
-  </div>
-
-  <div class="project-card-panel project-card-reach">
-    <div class="project-card-label"><svg class="ico ico-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg> Knowledge reach</div>
-    
-    <div class="project-card-value empty-value"><strong>&mdash;</strong><span>No active memories</span></div>
-    <div class="project-meter"><span style="width:0%"></span></div>
-    
-  </div>
-
-  <div class="project-card-panel project-card-knowledge">
-    <div class="project-card-label"><svg class="ico ico-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg> Knowledge</div>
-    <div class="project-stat"><span>Memories</span><strong>0</strong></div>
-    <div class="project-stat"><span>Notes</span><strong>0</strong></div>
-    
-  </div>
-
-  <div class="project-card-panel project-card-work">
-    <div class="project-card-label"><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg> Work</div>
-    <div class="project-stat"><span>Sessions</span><strong>1</strong></div>
-    <div class="project-stat"><span>Open tasks</span><strong>1</strong></div>
-    
-    <div class="project-stat warn"><span>Blocked</span><strong>1</strong></div>
-  </div>
-
-  <div class="project-card-panel project-card-activity">
-    <div class="project-card-label"><svg class="ico ico-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Last activity</div>
-    <strong class="project-last-active"><age></strong>
-    <span class="project-activity-state">1 session total</span>
-    <span class="project-open-cue">Open workspace <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
-  </div>
-</article>
-
-<article id="p-example-sealed" class="project-card row-link" data-href="/console/projects/example-sealed">
-  <div class="project-card-main">
-    <span class="project-card-tile tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
-    <div class="project-card-copy">
-      <div class="project-card-titleline">
-        <a class="project-card-name" href="/console/projects/example-sealed">example-sealed</a>
-      </div>
-      <div class="project-card-badges">
-        <span class="project-role">standalone</span>
-        <span class="kind warn iso-pill" title="Sealed — nothing in or out. Agents here see only this project: no global memories, no family, no cross-project reads."><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>sealed</span>
-        
-        
-      </div>
-      <p>Independent project workspace.</p>
-      
-    </div>
-  </div>
-
-  <div class="project-card-panel project-card-reach">
-    <div class="project-card-label"><svg class="ico ico-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg> Knowledge reach</div>
-    
-    <div class="project-card-value"><strong>0%</strong><span>0 / 1 surfaced</span></div>
-    <div class="project-meter"><span style="width:0%"></span></div>
-    
-  </div>
-
-  <div class="project-card-panel project-card-knowledge">
-    <div class="project-card-label"><svg class="ico ico-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg> Knowledge</div>
-    <div class="project-stat"><span>Memories</span><strong>1</strong></div>
-    <div class="project-stat"><span>Notes</span><strong>0</strong></div>
-    
-  </div>
-
-  <div class="project-card-panel project-card-work">
-    <div class="project-card-label"><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg> Work</div>
-    <div class="project-stat"><span>Sessions</span><strong>1</strong></div>
-    <div class="project-stat"><span>Open tasks</span><strong>0</strong></div>
-    
-    
-  </div>
-
-  <div class="project-card-panel project-card-activity">
-    <div class="project-card-label"><svg class="ico ico-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Last activity</div>
-    <strong class="project-last-active"><age></strong>
-    <span class="project-activity-state">1 session total</span>
-    <span class="project-open-cue">Open workspace <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
-  </div>
-</article>
-
 <article id="p-example-open-alpha" class="project-card row-link working" data-href="/console/projects/example-open-alpha">
   <div class="project-card-main">
     <span class="project-card-tile tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
@@ -1660,7 +1446,7 @@
         <span class="project-state live"><span class="live-dot"></span>1 working</span>
         
       </div>
-      <p>Independent project workspace.</p>
+      <p>Independent project.</p>
       
     </div>
   </div>
@@ -1692,10 +1478,177 @@
     <div class="project-card-label"><svg class="ico ico-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Last activity</div>
     <strong class="project-last-active"><age></strong>
     <span class="project-activity-state">Active now</span>
-    <span class="project-open-cue">Open workspace <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
+    <span class="project-open-cue">Open project <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
   </div>
 </article>
 
+<article id="p-example-confidential" class="project-card row-link" data-href="/console/projects/example-confidential">
+  <div class="project-card-main">
+    <span class="project-card-tile tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
+    <div class="project-card-copy">
+      <div class="project-card-titleline">
+        <a class="project-card-name" href="/console/projects/example-confidential">example-confidential</a>
+      </div>
+      <div class="project-card-badges">
+        <span class="project-role">standalone</span>
+        <span class="kind accent iso-pill" title="Confidential — nothing leaves. Agents in other projects never see this project&#39;s knowledge, and agents here cannot write outside it."><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>confidential</span>
+        
+        
+      </div>
+      <p>Independent project.</p>
+      
+    </div>
+  </div>
+
+  <div class="project-card-panel project-card-reach">
+    <div class="project-card-label"><svg class="ico ico-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg> Knowledge reach</div>
+    
+    <div class="project-card-value"><strong>100%</strong><span>1 / 1 surfaced</span></div>
+    <div class="project-meter"><span style="width:100%"></span></div>
+    
+  </div>
+
+  <div class="project-card-panel project-card-knowledge">
+    <div class="project-card-label"><svg class="ico ico-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg> Knowledge</div>
+    <div class="project-stat"><span>Memories</span><strong>1</strong></div>
+    <div class="project-stat"><span>Notes</span><strong>1</strong></div>
+    
+  </div>
+
+  <div class="project-card-panel project-card-work">
+    <div class="project-card-label"><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg> Work</div>
+    <div class="project-stat"><span>Sessions</span><strong>2</strong></div>
+    <div class="project-stat"><span>Open tasks</span><strong>2</strong></div>
+    
+    
+  </div>
+
+  <div class="project-card-panel project-card-activity">
+    <div class="project-card-label"><svg class="ico ico-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Last activity</div>
+    <strong class="project-last-active"><age></strong>
+    <span class="project-activity-state">2 sessions total</span>
+    <span class="project-open-cue">Open project <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
+  </div>
+</article>
+
+<article id="p-example-open-beta" class="project-card row-link blocked" data-href="/console/projects/example-open-beta">
+  <div class="project-card-main">
+    <span class="project-card-tile tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
+    <div class="project-card-copy">
+      <div class="project-card-titleline">
+        <a class="project-card-name" href="/console/projects/example-open-beta">example-open-beta</a>
+      </div>
+      <div class="project-card-badges">
+        <span class="project-role">standalone</span>
+        
+        
+        <span class="project-state warn"><svg class="ico ico-triangle-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>1 blocked</span>
+      </div>
+      <p>Independent project.</p>
+      
+    </div>
+  </div>
+
+  <div class="project-card-panel project-card-reach">
+    <div class="project-card-label"><svg class="ico ico-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg> Knowledge reach</div>
+    
+    <div class="project-card-value empty-value"><strong>&mdash;</strong><span>No active memories</span></div>
+    <div class="project-meter"><span style="width:0%"></span></div>
+    
+  </div>
+
+  <div class="project-card-panel project-card-knowledge">
+    <div class="project-card-label"><svg class="ico ico-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg> Knowledge</div>
+    <div class="project-stat"><span>Memories</span><strong>0</strong></div>
+    <div class="project-stat"><span>Notes</span><strong>0</strong></div>
+    
+  </div>
+
+  <div class="project-card-panel project-card-work">
+    <div class="project-card-label"><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg> Work</div>
+    <div class="project-stat"><span>Sessions</span><strong>1</strong></div>
+    <div class="project-stat"><span>Open tasks</span><strong>1</strong></div>
+    
+    <div class="project-stat warn"><span>Blocked</span><strong>1</strong></div>
+  </div>
+
+  <div class="project-card-panel project-card-activity">
+    <div class="project-card-label"><svg class="ico ico-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Last activity</div>
+    <strong class="project-last-active"><age></strong>
+    <span class="project-activity-state">1 session total</span>
+    <span class="project-open-cue">Open project <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
+  </div>
+</article>
+
+<article id="p-example-sealed" class="project-card row-link" data-href="/console/projects/example-sealed">
+  <div class="project-card-main">
+    <span class="project-card-tile tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
+    <div class="project-card-copy">
+      <div class="project-card-titleline">
+        <a class="project-card-name" href="/console/projects/example-sealed">example-sealed</a>
+      </div>
+      <div class="project-card-badges">
+        <span class="project-role">standalone</span>
+        <span class="kind warn iso-pill" title="Sealed — nothing in or out. Agents here see only this project: no global memories, no family, no cross-project reads."><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>sealed</span>
+        
+        
+      </div>
+      <p>Independent project.</p>
+      
+    </div>
+  </div>
+
+  <div class="project-card-panel project-card-reach">
+    <div class="project-card-label"><svg class="ico ico-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></svg> Knowledge reach</div>
+    
+    <div class="project-card-value"><strong>0%</strong><span>0 / 1 surfaced</span></div>
+    <div class="project-meter"><span style="width:0%"></span></div>
+    
+  </div>
+
+  <div class="project-card-panel project-card-knowledge">
+    <div class="project-card-label"><svg class="ico ico-brain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z"/><path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4"/></svg> Knowledge</div>
+    <div class="project-stat"><span>Memories</span><strong>1</strong></div>
+    <div class="project-stat"><span>Notes</span><strong>0</strong></div>
+    
+  </div>
+
+  <div class="project-card-panel project-card-work">
+    <div class="project-card-label"><svg class="ico ico-list-checks" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg> Work</div>
+    <div class="project-stat"><span>Sessions</span><strong>1</strong></div>
+    <div class="project-stat"><span>Open tasks</span><strong>0</strong></div>
+    
+    
+  </div>
+
+  <div class="project-card-panel project-card-activity">
+    <div class="project-card-label"><svg class="ico ico-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Last activity</div>
+    <strong class="project-last-active"><age></strong>
+    <span class="project-activity-state">1 session total</span>
+    <span class="project-open-cue">Open project <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
+  </div>
+</article>
+</div>
+      </section>
+      
+      <details class="project-group project-fold" id="pg-quiet">
+        <summary class="project-group-head">
+          <div class="project-group-identity">
+            <span class="project-group-icon"><svg class="ico ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></span>
+            <div><strong>Quiet</strong><span>No live agent, and no session or task in the last 30 days</span></div>
+          </div>
+          <div class="project-group-signals">
+            <span>2 projects</span>
+            
+            <span>0 mem &middot; 0 notes</span>
+            
+            
+            
+            
+            
+          </div>
+<span class="project-fold-cue" aria-hidden="true"><svg class="ico ico-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></summary>
+        <div class="project-group-rows">
 <article id="p-example-open-delta" class="project-card row-link" data-href="/console/projects/example-open-delta">
   <div class="project-card-main">
     <span class="project-card-tile tile "><svg class="ico ico-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg></span>
@@ -1741,7 +1694,7 @@
     <div class="project-card-label"><svg class="ico ico-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Last activity</div>
     <strong class="project-last-active">-</strong>
     <span class="project-activity-state">No sessions yet</span>
-    <span class="project-open-cue">Open workspace <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
+    <span class="project-open-cue">Open project <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
   </div>
 </article>
 
@@ -1758,7 +1711,7 @@
         
         
       </div>
-      <p>Independent project workspace.</p>
+      <p>Independent project.</p>
       
     </div>
   </div>
@@ -1790,11 +1743,11 @@
     <div class="project-card-label"><svg class="ico ico-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Last activity</div>
     <strong class="project-last-active">-</strong>
     <span class="project-activity-state">No sessions yet</span>
-    <span class="project-open-cue">Open workspace <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
+    <span class="project-open-cue">Open project <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg></span>
   </div>
 </article>
 </div>
-      </section>
+      </details>
       
     
   </div>
@@ -1803,7 +1756,501 @@
 
 
   </main>
-==== /console/projects tail: the common tail ====
+==== /console/projects tail ====
+</div>
+<div class="nav-progress" aria-hidden="true"></div>
+<button id="live-pill" type="button" hidden>new activity &middot; refresh</button>
+<div id="live-toast" role="status" aria-live="polite" hidden></div>
+
+<div class="build-notice" id="build-notice" role="status" aria-live="polite">
+  <div class="build-notice-card" hidden>
+    <p class="build-notice-copy">Seamless was updated. Reload this page to use the new version.</p>
+    <a class="btn small primary" id="build-reload" href="" data-no-prefetch>Reload</a>
+  </div>
+</div>
+<div id="cmdk" class="cmdk-overlay" hidden>
+  <div class="cmdk" role="dialog" aria-modal="true" aria-label="Search or jump to">
+    <div class="cmdk-input-row">
+      <svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="cmdk-input" type="text" role="combobox" aria-expanded="true" aria-controls="cmdk-list"
+             aria-autocomplete="list" autocomplete="off" spellcheck="false"
+             placeholder="Search knowledge and work, or jump to a page&hellip;">
+      <kbd class="cmdk-esc">esc</kbd>
+    </div>
+    <ul id="cmdk-list" class="cmdk-list" role="listbox" aria-label="Results"></ul>
+    <div class="cmdk-foot">
+      <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> navigate</span>
+      <span><kbd>&crarr;</kbd> open</span>
+      <span><kbd>?</kbd> shortcuts</span>
+      <a class="sp" id="cmdk-all" href="/console/search">See all results</a>
+    </div>
+  </div>
+</div>
+
+<div id="keys" class="keys-overlay" hidden>
+  <div class="keys" role="dialog" aria-modal="true" aria-labelledby="keys-title">
+    <header class="keys-head">
+      <h2 id="keys-title"><svg class="ico ico-keyboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 8h.01"/><path d="M12 12h.01"/><path d="M14 8h.01"/><path d="M16 12h.01"/><path d="M18 8h.01"/><path d="M6 8h.01"/><path d="M7 16h10"/><path d="M8 12h.01"/><rect width="20" height="16" x="2" y="4" rx="2"/></svg>Keyboard shortcuts</h2>
+      <button type="button" class="keys-close" data-keys-close aria-label="Close"><svg class="ico ico-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    </header>
+    <div class="keys-body">
+      <section>
+        <h3>Anywhere</h3>
+        <dl>
+          <div><dt><kbd>&#8984;</kbd><kbd>K</kbd></dt><dd>Search or jump to a page</dd></div>
+          <div><dt><kbd>/</kbd></dt><dd>Filter this page (search when it has no filter)</dd></div>
+          <div><dt><kbd>?</kbd></dt><dd>This sheet</dd></div>
+          <div><dt><kbd>[</kbd></dt><dd>Collapse or expand the sidebar</dd></div>
+          <div><dt><kbd>esc</kbd></dt><dd>Close a panel, sheet, or search</dd></div>
+        </dl>
+      </section>
+      <section>
+        <h3>Lists and readers</h3>
+        <dl>
+          <div><dt><kbd>j</kbd></dt><dd>Next item</dd></div>
+          <div><dt><kbd>k</kbd></dt><dd>Previous item</dd></div>
+        </dl>
+      </section>
+      <section>
+        <h3>Go to <small>press <kbd>g</kbd>, then</small></h3>
+        <dl id="keys-goto"></dl>
+      </section>
+    </div>
+  </div>
+</div>
+<script src="/console/static/interactions.js?v=<hash:11>"></script>
+<script src="/console/static/search.js?v=<hash:12>"></script>
+<script src="/console/static/library.js?v=<hash:13>"></script>
+<script src="/console/static/charts.js?v=<hash:14>"></script>
+<script src="/console/static/navigation.js?v=<hash:15>"></script>
+<script src="/console/static/shell.js?v=<hash:16>"></script>
+<script>
+(function () {
+  
+  
+  
+  
+  var connected = false;
+  function setLive(on) { document.querySelectorAll('.topbar .live:not(#ix-live)').forEach(function (p) { p.classList.toggle('off', !on); }); }
+  if (!window.EventSource) { setLive(false); return; }
+  var pill = document.getElementById('live-pill');
+  var toast = document.getElementById('live-toast');
+  
+  
+  
+  
+  var orbs = document.querySelectorAll('a.brand .dot');
+  function setOrb(on) { orbs.forEach(function (o) { o.classList.toggle('on', on); o.classList.toggle('off', !on); }); }
+
+  var n = 0;            
+  var pending = false;  
+  var busy = false;     
+  var again = false;    
+  var debounce = null;
+  var toastTimer = null;
+  var toastHold = 0;    
+
+  function fieldFocused() { var a = document.activeElement; return !!(a && a.matches && a.matches('input, textarea, select, [contenteditable=""], [contenteditable="true"]')); }
+  function selecting() { var s = window.getSelection && window.getSelection(); return !!(s && s.type === 'Range' && String(s).trim()); }
+  function paneOpen() { return !!document.querySelector('.list-detail-split.detail-open'); }
+  function cmdkOpen() { var c = document.getElementById('cmdk'); return !!(c && !c.hidden); }
+  
+  function safe() { return !document.hidden && !fieldFocused() && !selecting() && !paneOpen() && !cmdkOpen(); }
+
+  function showPill() { if (!pill) return; pill.textContent = n + ' update' + (n > 1 ? 's' : '') + ' · tap to refresh'; pill.hidden = false; }
+  function hidePill() { if (pill) pill.hidden = true; }
+  function flashToast(msg) {
+    if (!toast) return;
+    toast.textContent = msg; toast.hidden = false;
+    toast.classList.remove('error');
+    toast.classList.remove('show'); void toast.offsetWidth; toast.classList.add('show'); 
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toast.classList.remove('show'); setTimeout(function () { toast.hidden = true; }, 300); }, 2600);
+  }
+  
+  
+  
+  function eventToast(msg) { flashToast(msg); toastHold = Date.now() + 2600; }
+  
+  
+  
+  
+  function actionToastUp() { return !!(toast && !toast.hidden && toast.classList.contains('show') && toast.textContent !== 'Updated'); }
+
+  function apply() {
+    if (busy) { again = true; return; }
+    busy = true;
+    
+    
+    var headers = { 'X-Seam-Live': '1' };
+    if (window.SeamConsole) window.SeamConsole.heldViews(headers);
+    fetch(location.href, { credentials: 'same-origin', headers: headers })
+      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.text(); })
+      .then(function (html) {
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        if (!doc.querySelector('.sidebar')) {
+          
+          location.assign('/console/login?next=' + encodeURIComponent(location.pathname + location.search));
+          return;
+        }
+        if (!window.SeamConsole || !window.SeamConsole.patchPage(doc, 'live')) throw new Error('invalid console document');
+        setLive(connected); 
+        n = 0; pending = false; hidePill();
+        if (Date.now() >= toastHold && !actionToastUp()) flashToast('Updated');
+        
+        
+        setTimeout(function () {
+          document.querySelectorAll('.live-in, nav.nav .count.bump').forEach(function (el) { el.classList.remove('live-in', 'bump'); });
+        }, 600);
+      })
+      .catch(function (error) {
+        
+        
+        if (window.SeamConsole && window.SeamConsole.stale(error)) { again = true; return; }
+        pending = true; showPill(); 
+      })
+      .finally(function () { busy = false; if (again) { again = false; schedule(); } });
+  }
+  function trigger() { if (safe()) apply(); else { pending = true; showPill(); } }
+  function schedule() { if (debounce) clearTimeout(debounce); debounce = setTimeout(trigger, 700); } 
+
+  
+  
+  
+  
+  
+  var es = null;
+  function connect() {
+    es = new EventSource('/console/events');
+    es.onopen = function () { connected = true; setOrb(true); setLive(true); };
+    es.onmessage = function (ev) {
+      
+      
+      
+      
+      try {
+        var d = JSON.parse(ev.data), k = d.kind;
+        
+        
+        
+        document.dispatchEvent(new CustomEvent('seam:event', { detail: d }));
+        if ((k === 'tool.call' || k === 'hook.prompt') && !window.SEAM_LIVE_ALL_KINDS) return;
+        
+        
+        if (k === 'memory.first_reuse' && d.summary) eventToast(d.summary);
+        
+        
+        
+        if (k === 'update.available' && d.summary) eventToast(d.summary);
+      } catch (e) {}
+      
+      
+      
+      if (window.SEAM_NO_LIVE_REFRESH) return;
+      n++; schedule();
+    };
+    es.onerror = function () { connected = false; setOrb(false); setLive(false); };
+  }
+  connect();
+  window.addEventListener('pagehide', function () { if (es) { es.close(); es = null; connected = false; } });
+  window.addEventListener('pageshow', function (e) { if (e.persisted && !es) connect(); });
+
+  
+  
+  setInterval(function () { if (pending && !busy && safe()) apply(); }, 1500);
+  if (pill) pill.onclick = function () { apply(); };
+})();
+(function () {
+  
+
+  if (document.querySelector('.list-detail-split')) return;
+  document.addEventListener('click', function (e) {
+    var row = e.target.closest ? e.target.closest('.row-link[data-href]') : null;
+    if (!row) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+    if (e.target.closest('a, button, form')) return; 
+    var sel = window.getSelection && window.getSelection();
+    if (sel && sel.type === 'Range' && sel.toString()) return;
+    location.href = row.getAttribute('data-href');
+  });
+})();
+(function () {
+  
+
+  
+  
+  
+  if (!document.querySelector('.list-detail-split') || !document.getElementById('detail-pane')) return;
+  function split() { return document.querySelector('.list-detail-split'); }
+  function pane() { return document.getElementById('detail-pane'); }
+  function pbody() { var p = pane(); return p ? p.querySelector('.detail-pane-body') : null; }
+  var lastTrigger = null; 
+  var pushed = false;     
+
+  function peekURL(href) { return href + (href.indexOf('?') >= 0 ? '&' : '?') + 'peek=1'; }
+  function targetHref(el) {
+    if (el.getAttribute('href')) return el.getAttribute('href');
+    var h = el.closest('[data-href]');
+    return h ? h.getAttribute('data-href') : null;
+  }
+  function mark(href) {
+    var s = split();
+    if (!s) return;
+    s.querySelectorAll('.row-link.selected').forEach(function (r) {
+      r.classList.remove('selected'); r.removeAttribute('aria-current');
+    });
+    if (!href) return;
+    s.querySelectorAll('.row-link[data-href]').forEach(function (r) {
+      if (r.getAttribute('data-href') === href) { r.classList.add('selected'); r.setAttribute('aria-current', 'true'); }
+    });
+  }
+  
+  
+  
+  
+  
+  function anchorOf(el) {
+    if (!el || !el.isConnected) return null;
+    var lp = el.closest('.list-pane');
+    return lp ? { el: el, lp: lp, top: el.getBoundingClientRect().top } : null;
+  }
+  function restore(k) {
+    if (!k || !k.el.isConnected || k.lp.scrollHeight <= k.lp.clientHeight) return;
+    var box = k.lp.getBoundingClientRect(), r = k.el.getBoundingClientRect();
+    var lo = Math.max(box.top, 0) + 8, hi = Math.min(box.bottom, window.innerHeight) - r.height - 8;
+    k.lp.scrollTop += r.top - Math.max(lo, Math.min(k.top, hi));
+  }
+  function load(href) {
+    return fetch(peekURL(href)).then(function (r) {
+      if (!r.ok) throw new Error('http ' + r.status);
+      return r.text();
+    }).then(function (html) {
+      var b = pbody(), p = pane(), s = split();
+      if (!b || !p || !s) return;
+      b.innerHTML = html;
+      if (window.IX) window.IX.enhance(b);
+      var openLink = p.querySelector('.detail-open');
+      if (openLink) openLink.setAttribute('href', href);
+      var keep = p.hidden ? anchorOf(lastTrigger) : null;
+      p.hidden = false;
+      s.classList.add('detail-open');
+      restore(keep);
+      b.scrollTop = 0;
+    }).catch(function () {
+      if (window.SeamConsole) window.SeamConsole.flash('Could not update the detail view. The current data is unchanged.', 'error');
+    });
+  }
+  function teardown() {
+    var p = pane(), s = split(), b = pbody();
+    if (p) p.hidden = true;
+    if (s) s.classList.remove('detail-open');
+    if (b) b.innerHTML = '';
+    mark(null);
+    pushed = false;
+    if (lastTrigger && typeof lastTrigger.focus === 'function') { try { lastTrigger.focus(); } catch (e) {} }
+    lastTrigger = null;
+  }
+  
+  
+  
+  function open(href, drill) {
+    if (!href) return;
+    var wasHidden = pane().hidden;
+    load(href);
+    mark(href);
+    var hash = '#peek=' + encodeURIComponent(href);
+    try {
+      if (wasHidden) { history.pushState({ peek: 1 }, '', hash); pushed = true; }
+      else if (drill) { history.pushState({ peek: 1 }, '', hash); }
+      else { history.replaceState({ peek: 1 }, '', hash); }
+    } catch (e) {}
+  }
+  
+  
+  function requestClose() {
+    if (pushed) { history.back(); return; }
+    if (location.hash.indexOf('#peek=') === 0) {
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+    }
+    teardown();
+  }
+
+  document.addEventListener('click', function (e) {
+    var closeHit = e.target.closest ? e.target.closest('.detail-close') : null;
+    if (closeHit) { e.preventDefault(); requestClose(); return; }
+    var peek = e.target.closest ? e.target.closest('[data-peek]') : null;
+    if (peek) {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return; 
+      if (e.target.closest('button, form')) return;                       
+      var plainLink = e.target.closest('a[href]');
+      if (plainLink && !plainLink.hasAttribute('data-peek')) return;      
+      var href = targetHref(peek);
+      if (!href) return;
+      e.preventDefault();
+      lastTrigger = e.target.closest('a[href]') || peek;
+      open(href, !!e.target.closest('#detail-pane'));
+      return;
+    }
+    var row = e.target.closest ? e.target.closest('.row-link[data-href]') : null;
+    var s = split();
+    if (!row || !s || !s.contains(row)) return;
+    if (e.target.closest('a, button')) return;
+    var sel = window.getSelection && window.getSelection();
+    if (sel && sel.type === 'Range' && sel.toString()) return;
+    location.href = row.getAttribute('data-href');
+  });
+
+  document.addEventListener('keydown', function (e) { var p = pane(); if (e.key === 'Escape' && p && !p.hidden) requestClose(); });
+  
+  window.addEventListener('popstate', function () {
+    var mm = location.hash.match(/^#peek=(.+)$/);
+    if (mm) { var hp = decodeURIComponent(mm[1]); pushed = true; load(hp); mark(hp); }
+    else { var p = pane(); if (p && !p.hidden) teardown(); }
+  });
+  
+  
+  var m = location.hash.match(/^#peek=(.+)$/);
+  if (m) {
+    try { var h0 = decodeURIComponent(m[1]); pushed = false; load(h0); mark(h0); } catch (e) {}
+  }
+})();
+(function () {
+  var btn = document.getElementById('theme-toggle');
+  var root = document.documentElement;
+  var osDark = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  
+  
+  function choice() {
+    var t = root.getAttribute('data-theme');
+    return t === 'dark' || t === 'light' ? t : 'system';
+  }
+  function effective() {
+    var c = choice();
+    if (c !== 'system') return c;
+    return osDark && osDark.matches ? 'dark' : 'light';
+  }
+  
+  
+  
+  function label() {
+    if (!btn) return;
+    var next = effective() === 'dark' ? 'Light theme' : 'Dark theme';
+    if (choice() === 'system') next += effective() === 'dark' ? ' instead of the system\u2019s dark' : ' instead of the system\u2019s light';
+    btn.setAttribute('aria-label', next);
+    btn.setAttribute('title', next);
+  }
+  label();
+  function announce() {
+    document.dispatchEvent(new CustomEvent('seam:theme', { detail: { theme: choice(), effective: effective() } }));
+  }
+  
+  
+  
+  function set(theme) {
+    if (theme === 'system') {
+      root.removeAttribute('data-theme');
+      try { localStorage.removeItem('seamless-theme'); } catch (e) {}
+    } else if (theme === 'dark' || theme === 'light') {
+      root.setAttribute('data-theme', theme);
+      try { localStorage.setItem('seamless-theme', theme); } catch (e) {}
+    } else {
+      return;
+    }
+    label();
+    announce();
+  }
+  window.SeamTheme = { set: set, choice: choice, effective: effective };
+  if (btn) btn.onclick = function () { set(effective() === 'dark' ? 'light' : 'dark'); };
+  
+  
+  if (osDark) {
+    var onOS = function () { if (choice() === 'system') { label(); announce(); } };
+    if (osDark.addEventListener) osDark.addEventListener('change', onOS);
+    else if (osDark.addListener) osDark.addListener(onOS);
+  }
+})();
+(function () {
+  
+
+  function flash(btn) {
+    btn.classList.add('copied');
+    btn.setAttribute('aria-label', 'Copied');
+    setTimeout(function () {
+      btn.classList.remove('copied');
+      btn.setAttribute('aria-label', 'Copy');
+    }, 1100);
+  }
+  function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-1000px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('.copy-btn[data-copy]') : null;
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var text = btn.getAttribute('data-copy');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { flash(btn); }, function () { fallbackCopy(text); flash(btn); });
+    } else {
+      fallbackCopy(text);
+      flash(btn);
+    }
+  });
+})();
+</script>
+
+<script>
+(function () {
+  
+
+  var KEYS = { group: 'seamless-projects-view', sort: 'seamless-projects-sort' };
+  var VALID = { group: ['activity', 'family', 'flat'], sort: ['recent', 'coverage', 'name', 'favorites'] };
+  function read(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+  function write(key, value) { try { localStorage.setItem(key, value); } catch (e) {} }
+  function board() { return document.querySelector('.main [data-ops="projects"]'); }
+  function remember() {
+    var page = board();
+    if (!page) return;
+    var params = new URLSearchParams(location.search);
+    ['group', 'sort'].forEach(function (p) {
+      var shown = page.getAttribute('data-board-' + p);
+      if (params.has(p) && VALID[p].indexOf(shown) >= 0) write(KEYS[p], shown);
+    });
+  }
+  function restore() {
+    var page = board();
+    if (!page || !window.SeamConsole) return;
+    var url = new URL(location.href);
+    var changed = false;
+    ['group', 'sort'].forEach(function (p) {
+      if (url.searchParams.has(p)) return;
+      var kept = read(KEYS[p]);
+      if (kept && VALID[p].indexOf(kept) >= 0 && kept !== page.getAttribute('data-board-' + p)) {
+        url.searchParams.set(p, kept);
+        changed = true;
+      }
+    });
+    if (changed) window.SeamConsole.load(url.href, { history: 'replace', source: 'query' });
+  }
+  remember();
+  restore();
+   
+  document.addEventListener('seam:content-updated', function () { setTimeout(remember, 0); });
+})();
+</script>
+
+</body>
+</html>
+
 ==== GET /console/projects/example-open-alpha -> 200 ====
 <title>Project example-open-alpha &middot; Seamless</title>
 ==== /console/projects/example-open-alpha main ====

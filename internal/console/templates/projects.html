@@ -1,13 +1,13 @@
 {{define "content"}}
 {{with .Data}}
 {{$group := .Group}}{{$sort := .Sort}}{{$query := .Query}}
-<div class="ops-page" data-ops="projects">
+<div class="ops-page" data-ops="projects" data-board-group="{{.Group}}" data-board-sort="{{.Sort}}">
 <header class="mv2-bar">
-  <h1>{{icon "table-2"}}Projects</h1>{{about "Your shared-context map: where agents are working, what each scope knows, what needs attention, and how often that knowledge comes back."}}
-  <span class="mv2-count" aria-label="{{.Projects}} workspaces">
-    <strong>{{.Projects}}</strong>workspace{{if ne .Projects 1}}s{{end}}<small>{{if .Working}}{{.Working}} agent{{if ne .Working 1}}s{{end}} working across {{.LiveScopes}} scope{{if ne .LiveScopes 1}}s{{end}}{{else}}no agents working now{{end}}{{if .Retired}} &middot; {{.Retired}} retired{{end}}</small>
+  <h1>{{icon "table-2"}}Projects</h1>{{about "Your shared-context map: where agents are working, what each project knows, what needs attention, and how often that knowledge comes back."}}
+  <span class="mv2-count" aria-label="{{.Projects}} project{{if ne .Projects 1}}s{{end}}">
+    <strong>{{.Projects}}</strong>project{{if ne .Projects 1}}s{{end}}<small>{{if .Working}}{{.Working}} agent{{if ne .Working 1}}s{{end}} working{{if .LiveScopes}} across {{.LiveScopes}} project{{if ne .LiveScopes 1}}s{{end}}{{end}}{{else}}no agents working now{{end}}{{if .Retired}} &middot; {{.Retired}} retired{{end}}</small>
   </span>
-  {{if .Attention}}<a class="lib-active-filter" href="#projects-attention">{{icon "triangle-alert"}}<span>{{.Attention}} scope{{if ne .Attention 1}}s{{end}} need{{if eq .Attention 1}}s{{end}} attention</span></a>{{end}}
+  {{if .Attention}}<a class="lib-active-filter" href="#projects-attention">{{icon "triangle-alert"}}<span>{{.Attention}} project{{if ne .Attention 1}}s{{end}} need{{if eq .Attention 1}}s{{end}} attention</span></a>{{end}}
   <form class="search lib-query" method="get" action="/console/projects" data-seam-query>
     {{icon "search"}}
     <input name="q" aria-label="Filter projects by slug, name, or description" placeholder="Filter by slug, name, or description&hellip;" value="{{.Query}}">
@@ -21,6 +21,7 @@
   <div class="mv2-sort">
     <span class="mv2-sort-label">View</span>
     <div class="seg" data-seam-query>
+      <a class="{{if eq .Group "activity"}}on{{end}}" href="/console/projects?group=activity&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;w={{.Window}}">Activity</a>
       <a class="{{if eq .Group "family"}}on{{end}}" href="/console/projects?group=family&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;w={{.Window}}">Family</a>
       <a class="{{if eq .Group "flat"}}on{{end}}" href="/console/projects?group=flat&amp;sort={{.Sort}}&amp;q={{.Query}}&amp;w={{.Window}}">Flat</a>
     </div>
@@ -51,11 +52,11 @@
   </article>
   <article class="project-summary-card">
     <span class="project-summary-icon">{{icon "layout-dashboard"}}</span>
-    <div class="project-summary-copy"><span>Workspaces</span><strong>{{.Projects}}</strong><small>{{if .Families}}{{.Families}} connected famil{{if eq .Families 1}}y{{else}}ies{{end}}{{else}}independent scopes{{end}}{{if .Retired}} &middot; {{.Retired}} retired{{end}}</small></div>
+    <div class="project-summary-copy"><span>Projects</span><strong>{{.Projects}}</strong><small>{{if .Families}}{{.Families}} connected famil{{if eq .Families 1}}y{{else}}ies{{end}}{{else}}independent projects{{end}}{{if .Retired}} &middot; {{.Retired}} retired{{end}}</small></div>
   </article>
   <article class="project-summary-card{{if .Working}} live{{end}}">
     <span class="project-summary-icon">{{icon "terminal"}}</span>
-    <div class="project-summary-copy"><span>Agent activity</span><strong>{{.Working}}</strong><small>{{if .Working}}live across {{.LiveScopes}} scope{{if ne .LiveScopes 1}}s{{end}}{{else}}{{.Sessions}} sessions recorded{{end}}{{if .TokensTotal}} &middot; {{compactNum .TokensTotal}} tokens{{end}}</small></div>
+    <div class="project-summary-copy"><span>Agent activity</span><strong>{{.Working}}</strong><small>{{if .Working}}live{{if .LiveScopes}} across {{.LiveScopes}} project{{if ne .LiveScopes 1}}s{{end}}{{end}}{{else}}{{.Sessions}} sessions recorded{{end}}{{if .TokensTotal}} &middot; {{compactNum .TokensTotal}} tokens{{end}}</small></div>
   </article>
   <article class="project-summary-card">
     <span class="project-summary-icon">{{icon "database"}}</span>
@@ -66,28 +67,45 @@
     <div class="project-summary-copy"><span>Task flow</span><strong>{{.OpenTasks}}</strong><small>open{{if .Blocked}} &middot; {{.Blocked}} blocked{{else}} &middot; no blockers{{end}}</small></div>
   </article>
 </section>
+{{with .Global}}<a class="project-global-line" href="/console/context" title="The global scope: knowledge every project&rsquo;s briefing draws on">{{icon "database"}}<span><strong>Shared context:</strong> {{.Line}}</span></a>{{end}}
 
 <section class="ops-stage projects-stage" aria-label="Project map">
   <header class="ops-stage-head">
     <div class="ops-stage-title">
-      <span class="ops-stage-eyebrow">{{if eq .Group "family"}}Project topology{{else}}Project index{{end}}</span>
-      <strong>{{if eq .Group "family"}}Scopes grouped by shared context{{else}}Every scope in one sortable portfolio{{end}}</strong>
+      {{if eq .Group "family"}}<span class="ops-stage-eyebrow">Project families</span>
+      <strong>Projects grouped by shared briefing</strong>{{else if eq .Group "flat"}}<span class="ops-stage-eyebrow">Project index</span>
+      <strong>Every project in one sortable list</strong>{{else}}<span class="ops-stage-eyebrow">Projects by activity</span>
+      <strong>Active first; quiet and retired projects folded</strong>{{end}}
     </div>
     <div class="ops-stage-meta"><span>Reach = active memories surfaced</span><span class="ops-stage-dot">&middot;</span><span>{{.WindowLabel}}</span>{{if .Unregistered}}<span class="ops-stage-dot">&middot;</span><span class="project-meta-warn">{{.Unregistered}} unregistered</span>{{end}}</div>
   </header>
   <div class="project-board">
     {{if eq .Group "flat"}}
-      {{if .Flat}}<div class="project-flat-stack">{{range .Flat}}{{template "projrow" .}}{{end}}</div>{{else}}<div class="empty dotgrid"><span class="empty-ico">{{icon "folder-tree"}}</span><div>No projects match &ldquo;{{.Query}}&rdquo;.</div></div>{{end}}
+      {{if .Flat}}<div class="project-flat-stack">{{range .Flat}}{{template "projrow" .}}{{end}}</div>{{else}}<div class="empty dotgrid"><span class="empty-ico">{{icon "folder-tree"}}</span><div>No projects{{if .Query}} match &ldquo;{{.Query}}&rdquo;{{end}} yet.</div></div>{{end}}
     {{else}}
       {{if .Groups}}{{range .Groups}}
-      <section class="project-group">
-        <header class="project-group-head">
+      {{if .Folded}}<details class="project-group project-fold" id="pg-{{.Key}}"{{if .Open}} open{{end}}>
+        <summary class="project-group-head">{{template "projgrouphead" .}}<span class="project-fold-cue" aria-hidden="true">{{icon "chevron-down"}}</span></summary>
+        <div class="project-group-rows">{{range .Rows}}{{template "projrow" .}}{{end}}</div>
+      </details>{{else}}<section class="project-group" id="pg-{{.Key}}">
+        <header class="project-group-head">{{template "projgrouphead" .}}</header>
+        <div class="project-group-rows">{{range .Rows}}{{template "projrow" .}}{{end}}</div>
+      </section>{{end}}
+      {{end}}{{else}}<div class="empty dotgrid"><span class="empty-ico">{{icon "folder-tree"}}</span><div>No projects{{if .Query}} match &ldquo;{{.Query}}&rdquo;{{end}} yet.</div></div>{{end}}
+    {{end}}
+  </div>
+</section>
+</div><!-- .ops-page -->
+{{end}}
+{{end}}
+
+{{define "projgrouphead"}}
           <div class="project-group-identity">
             <span class="project-group-icon">{{icon .Icon}}</span>
             <div><strong>{{.Label}}</strong>{{if .Note}}<span>{{.Note}}</span>{{end}}</div>
           </div>
           <div class="project-group-signals">
-            <span>{{.Count}} scope{{if ne .Count 1}}s{{end}}</span>
+            <span>{{.Count}} project{{if ne .Count 1}}s{{end}}</span>
             {{if .HasReach}}<span class="brand">{{.ReachRate}}% reach</span>{{end}}
             <span>{{.Memories}} mem &middot; {{.Notes}} notes</span>
             {{if .TokensTotal}}<span>{{compactNum .TokensTotal}} tokens</span>{{end}}
@@ -96,20 +114,10 @@
             {{if .Blocked}}<span class="warn">{{.Blocked}} blocked</span>{{end}}
             {{if .Unregistered}}<span class="warn">{{.Unregistered}} unregistered</span>{{end}}
           </div>
-        </header>
-        <div class="project-group-rows">{{range .Rows}}{{template "projrow" .}}{{end}}</div>
-      </section>
-      {{end}}{{else}}<div class="empty dotgrid"><span class="empty-ico">{{icon "folder-tree"}}</span><div>No projects{{if .Query}} match &ldquo;{{.Query}}&rdquo;{{end}} yet.</div></div>{{end}}
-    {{end}}
-    {{- if .Locked}}{{template "lockedrows" .Locked}}{{end}}
-  </div>
-</section>
-</div><!-- .ops-page -->
-{{end}}
 {{end}}
 
-{{define "projrow"}}
-<article{{if not .Global}} id="p-{{.Slug}}"{{end}} class="project-card{{if not .Global}} row-link{{end}}{{if .Child}} child{{end}}{{if .Retired}} retired{{end}}{{if .Working}} working{{end}}{{if .Blocked}} blocked{{end}}{{if .Unregistered}} unregistered{{end}}"{{if not .Global}} data-href="/console/projects/{{.Slug}}"{{end}}>
+{{define "projrow"}}{{if .Locked}}{{template "lockedrow" .}}{{else}}
+<article{{if not .Global}} id="p-{{.Slug}}"{{end}} class="project-card{{if not .Global}} row-link{{end}}{{if .Indent}} child{{end}}{{if .Retired}} retired{{end}}{{if .Working}} working{{end}}{{if .Blocked}} blocked{{end}}{{if .Unregistered}} unregistered{{end}}"{{if not .Global}} data-href="/console/projects/{{.Slug}}"{{end}}>
   <div class="project-card-main">
     <span class="project-card-tile tile {{.TileClass}}">{{icon .TileIcon}}</span>
     <div class="project-card-copy">
@@ -117,12 +125,12 @@
         {{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{if .Global}}<span class="project-card-name">Global context</span>{{else}}<a class="project-card-name" href="/console/projects/{{.Slug}}">{{.Name}}</a>{{if ne .Name .Slug}}<span class="project-card-slug">{{.Slug}}</span>{{end}}{{end}}{{.Stage}}
       </div>
       <div class="project-card-badges">
-        {{if .Global}}<span class="project-role global">shared root</span>{{else if .Retired}}<span class="project-role retired">retired</span>{{else if .Unregistered}}<span class="project-role warn">unregistered</span>{{else if .Child}}<span class="project-role child">child scope</span>{{else if .Parent}}<span class="project-role parent">shared parent</span>{{else}}<span class="project-role">standalone</span>{{end}}
+        {{if .Global}}<span class="project-role global">shared root</span>{{else if .Retired}}<span class="project-role retired">retired</span>{{else if .Unregistered}}<span class="project-role warn">unregistered</span>{{else if .Child}}<span class="project-role child">child project</span>{{else if .Parent}}<span class="project-role parent">shared parent</span>{{else}}<span class="project-role">standalone</span>{{end}}
         {{isoPill .Isolation}}
         {{if .Working}}<span class="project-state live"><span class="live-dot"></span>{{.Working}} working</span>{{end}}
         {{if .Blocked}}<span class="project-state warn">{{icon "triangle-alert"}}{{.Blocked}} blocked</span>{{end}}
       </div>
-      <p>{{if .Description}}{{.Description}}{{else if .Global}}Knowledge available to every project and unscoped session.{{else if .Unregistered}}Data exists for this scope, but it is missing from the project registry.{{else if .Child}}A child workspace with inherited shared context.{{else if .Parent}}A shared-context parent for related projects.{{else if .Retired}}Historical workspace retained for lineage.{{else}}Independent project workspace.{{end}}</p>
+      <p>{{if .Description}}{{.Description}}{{else if .Global}}Knowledge available to every project and unscoped session.{{else if .Unregistered}}Data exists for this project, but it is missing from the project registry.{{else if .Child}}A child project with inherited shared context.{{else if .Parent}}A shared-context parent for related projects.{{else if .Retired}}Historical project retained for lineage.{{else}}Independent project.{{end}}</p>
       {{if .Child}}<div class="project-inheritance">{{icon "git-branch"}}Inherits {{.Inherited}} memor{{if eq .Inherited 1}}y{{else}}ies{{end}} from <strong>{{.ParentSlug}}</strong></div>{{else if .Parent}}<div class="project-inheritance">{{icon "folder-tree"}}Shares its active memories with child projects</div>{{else if .Global}}<div class="project-inheritance">{{icon "database"}}Injected alongside every project&rsquo;s local context</div>{{end}}
     </div>
   </div>
@@ -157,45 +165,83 @@
     <div class="project-card-label">{{icon "activity"}} Last activity</div>
     <strong class="project-last-active">{{ago .LastActive}}</strong>
     <span class="project-activity-state">{{if .Working}}Active now{{else if .Sessions}}{{.Sessions}} session{{if ne .Sessions 1}}s{{end}} total{{else}}No sessions yet{{end}}</span>
-    {{if not .Global}}<span class="project-open-cue">Open workspace {{icon "arrow-right"}}</span>{{end}}
+    {{if not .Global}}<span class="project-open-cue">Open project {{icon "arrow-right"}}</span>{{end}}
+  </div>
+</article>
+{{end}}{{end}}
+
+{{define "lockedrow"}}
+<article id="p-{{.Slug}}" class="project-card row-link project-locked" data-href="/console/unlock/{{.Slug}}">
+  <div class="project-card-main">
+    <span class="project-card-tile tile">{{icon "lock"}}</span>
+    <div class="project-card-copy">
+      <div class="project-card-titleline"><a class="project-card-name" href="/console/unlock/{{.Slug}}">{{.Name}}</a>{{if ne .Name .Slug}}<span class="project-card-slug">{{.Slug}}</span>{{end}}</div>
+      <div class="project-card-badges"><span class="project-role warn">{{icon "lock"}}locked</span></div>
+      <p>Name, counts and last activity only. Its content opens only with your approval.</p>
+    </div>
+  </div>
+  <div class="project-card-panel project-card-knowledge">
+    <div class="project-card-label">{{icon "brain"}} Knowledge</div>
+    <div class="project-stat"><span>Memories</span><strong>{{.Memories}}</strong></div>
+    <div class="project-stat"><span>Notes</span><strong>{{.Notes}}</strong></div>
+  </div>
+  <div class="project-card-panel project-card-work">
+    <div class="project-card-label">{{icon "list-checks"}} Work</div>
+    <div class="project-stat"><span>Sessions</span><strong>{{.Sessions}}</strong></div>
+    <div class="project-stat"><span>Open tasks</span><strong>{{.OpenTasks}}</strong></div>
+  </div>
+  <div class="project-card-panel project-card-activity">
+    <div class="project-card-label">{{icon "activity"}} Last activity</div>
+    <strong class="project-last-active">{{ago .LastActive}}</strong>
+    <span class="project-activity-state">{{if .Sessions}}{{.Sessions}} session{{if ne .Sessions 1}}s{{end}} total{{else}}No sessions yet{{end}}</span>
+    <span class="project-open-cue">Unlock {{icon "arrow-right"}}</span>
   </div>
 </article>
 {{end}}
 
-{{define "lockedrows"}}
-<section class="project-group project-locked" aria-label="Locked projects">
-  <header class="project-group-head">
-    <div class="project-group-identity">
-      <span class="project-group-icon">{{icon "lock"}}</span>
-      <div><strong>Locked</strong><span>Name and counts only; unlock one to read it in this browser</span></div>
-    </div>
-    <div class="project-group-signals"><span>{{len .}} scope{{if ne (len .) 1}}s{{end}}</span></div>
-  </header>
-  <div class="project-group-rows">{{range .}}
-  <article id="p-{{.Slug}}" class="project-card row-link locked" data-href="/console/unlock/{{.Slug}}">
-    <div class="project-card-main">
-      <span class="project-card-tile tile">{{icon "lock"}}</span>
-      <div class="project-card-copy">
-        <div class="project-card-titleline"><a class="project-card-name" href="/console/unlock/{{.Slug}}">{{.Name}}</a>{{if ne .Name .Slug}}<span class="project-card-slug">{{.Slug}}</span>{{end}}</div>
-        <div class="project-card-badges"><span class="project-role warn">locked</span></div>
-        <p>Its content opens only with your approval.</p>
-      </div>
-    </div>
-    <div class="project-card-panel project-card-knowledge">
-      <div class="project-card-label">{{icon "brain"}} Knowledge</div>
-      <div class="project-stat"><span>Memories</span><strong>{{.Memories}}</strong></div>
-      <div class="project-stat"><span>Notes</span><strong>{{.Notes}}</strong></div>
-    </div>
-    <div class="project-card-panel project-card-work">
-      <div class="project-card-label">{{icon "list-checks"}} Work</div>
-      <div class="project-stat"><span>Sessions</span><strong>{{.Sessions}}</strong></div>
-      <div class="project-stat"><span>Open tasks</span><strong>{{.OpenTasks}}</strong></div>
-    </div>
-    <div class="project-card-panel project-card-activity">
-      <div class="project-card-label">{{icon "lock"}} Locked</div>
-      <span class="project-open-cue">Unlock {{icon "arrow-right"}}</span>
-    </div>
-  </article>{{end}}
-  </div>
-</section>
+{{define "scripts"}}
+<script>
+(function () {
+  /* The board remembers the owner's view and sort in this browser. A URL that
+     names a view or a sort wins, and is what gets remembered; one that names
+     neither shows the remembered pair, drawn in place by the shared no-reload
+     path (navigation.js), never a reload. The page names what it shows in its
+     data-board-* attributes, which every morph keeps current, so this runs
+     again after each in-place load. Storage can be off (a private window):
+     then the server's default stands. */
+  var KEYS = { group: 'seamless-projects-view', sort: 'seamless-projects-sort' };
+  var VALID = { group: ['activity', 'family', 'flat'], sort: ['recent', 'coverage', 'name', 'favorites'] };
+  function read(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+  function write(key, value) { try { localStorage.setItem(key, value); } catch (e) {} }
+  function board() { return document.querySelector('.main [data-ops="projects"]'); }
+  function remember() {
+    var page = board();
+    if (!page) return;
+    var params = new URLSearchParams(location.search);
+    ['group', 'sort'].forEach(function (p) {
+      var shown = page.getAttribute('data-board-' + p);
+      if (params.has(p) && VALID[p].indexOf(shown) >= 0) write(KEYS[p], shown);
+    });
+  }
+  function restore() {
+    var page = board();
+    if (!page || !window.SeamConsole) return;
+    var url = new URL(location.href);
+    var changed = false;
+    ['group', 'sort'].forEach(function (p) {
+      if (url.searchParams.has(p)) return;
+      var kept = read(KEYS[p]);
+      if (kept && VALID[p].indexOf(kept) >= 0 && kept !== page.getAttribute('data-board-' + p)) {
+        url.searchParams.set(p, kept);
+        changed = true;
+      }
+    });
+    if (changed) window.SeamConsole.load(url.href, { history: 'replace', source: 'query' });
+  }
+  remember();
+  restore();
+  /* An in-place load names its URL just after the morph that announces it. */
+  document.addEventListener('seam:content-updated', function () { setTimeout(remember, 0); });
+})();
+</script>
 {{end}}

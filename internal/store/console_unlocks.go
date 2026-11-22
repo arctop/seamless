@@ -700,7 +700,8 @@ func AccessLeaseByID(ctx context.Context, db *sql.DB, id string) (AccessLease, e
 }
 
 // ProjectTally is what a locked project shows where it cannot be read: its
-// name and how many items it holds -- aggregates, never a row of content.
+// name, how many items it holds and when a session last started or ended
+// there -- aggregates and one timestamp, never a row of content.
 type ProjectTally struct {
 	Slug       string
 	Name       string
@@ -709,6 +710,11 @@ type ProjectTally struct {
 	Notes      int
 	Sessions   int
 	OpenTasks  int // open or in progress
+	// LastActive is the latest session start or end in the project, zero
+	// when it has none. Sessions keep no end column: a session's updated_at
+	// is its end once its status leaves active, so a live session counts by
+	// its start, never by a heartbeat.
+	LastActive time.Time
 }
 
 // ProjectTallies counts each project in slugs on db, which must be the main
@@ -744,6 +750,14 @@ func ProjectTallies(ctx context.Context, db *sql.DB, slugs []string) ([]ProjectT
 			if err := db.QueryRowContext(ctx, c.q, slug).Scan(c.dst); err != nil {
 				return nil, fmt.Errorf("%s: %w", op, err)
 			}
+		}
+		var last sql.NullString
+		if err := db.QueryRowContext(ctx, `SELECT MAX(CASE WHEN status = 'active' THEN created_at ELSE updated_at END)
+			FROM sessions WHERE project_slug = ?`, slug).Scan(&last); err != nil {
+			return nil, fmt.Errorf("%s: %w", op, err)
+		}
+		if t.LastActive, err = nullTime(last); err != nil {
+			return nil, fmt.Errorf("%s: last active: %w", op, err)
 		}
 		out = append(out, t)
 	}

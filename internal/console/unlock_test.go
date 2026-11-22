@@ -352,6 +352,9 @@ func TestLockedConsole_CrawlLocked(t *testing.T) {
 	}())
 	require.Equal(t, http.StatusOK, rr.Code)
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &board))
+	require.Len(t, board.Locked, 1)
+	require.False(t, board.Locked[0].LastActive.IsZero(), "the tally carries its last session start or end")
+	board.Locked[0].LastActive = time.Time{}
 	require.Equal(t, []store.ProjectTally{{Slug: lockedSlug, Name: lockedSlug, Registered: true, Memories: 1, Notes: 1, Sessions: 1, OpenTasks: 1}}, board.Locked)
 	_, html := lc.get(t, "/console/projects", "")
 	require.Contains(t, html, `href="/console/unlock/`+lockedSlug+`"`)

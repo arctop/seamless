@@ -32,6 +32,7 @@ type ProjectBoardRow struct {
 	Blocked      int       `json:"blocked"`      // open tasks that are not ready: an open/in_progress blocker, or waiting on people (a gate, an open gate of its own)
 	Notes        int       `json:"notes"`        // notes project = slug (matches GetProjectCounts.Notes)
 	LastActive   time.Time `json:"lastActive"`   // MAX(sessions.updated_at) for the project; zero when none
+	LastTask     time.Time `json:"lastTask"`     // MAX(tasks.updated_at) for the project, any status; zero when none
 	TokensTotal  int       `json:"tokensTotal"`  // SUM(sessions.total_tokens): real model token burn harvested from transcripts
 	Unregistered bool      `json:"unregistered"` // slug seen in data tables but absent from the projects table
 	ReachRate    int       `json:"reachRate"`    // Surfaced/Active rounded %, from BuildRetrievalReport; 0 when absent
@@ -42,7 +43,7 @@ type ProjectBoardRow struct {
 // ProjectsWithCounts returns a ProjectBoardRow for every project -- every slug
 // that appears in memories_index / sessions / tasks / notes_index unioned with
 // the projects table -- with strict per-slug counts, liveness, blocked-task
-// backpressure, and last-active recency computed in SQL, then retrieval reach
+// backpressure, and session and task recency computed in SQL, then retrieval reach
 // (ReachRate/Surfaced/Active) joined by slug from BuildRetrievalReport over the
 // given window. LiveSessions counts the sessions live at now by the one rule
 // (core.Session.LiveAsOf, in SQL: sessionLive): active, and updated within
@@ -136,6 +137,35 @@ func ProjectsWithCounts(ctx context.Context, db *sql.DB, window RetrievalWindow,
 		GROUP BY t.project_slug`,
 		func(slug string, n int) { row(slug).Blocked = n }); err != nil {
 		return nil, fmt.Errorf("store.ProjectsWithCounts: blocked tasks: %w", err)
+	}
+
+	// Task recency per project: the last time any of its tasks changed, any
+	// status. The board's activity grouping reads it beside LastActive, since a
+	// task can move with no session in the project (an agent bound elsewhere,
+	// the owner's CLI).
+	taskRows, err := db.QueryContext(ctx, `SELECT project_slug, MAX(updated_at) FROM tasks GROUP BY project_slug`)
+	if err != nil {
+		return nil, fmt.Errorf("store.ProjectsWithCounts: task recency: %w", err)
+	}
+	if err := func() error {
+		defer func() { _ = taskRows.Close() }()
+		for taskRows.Next() {
+			var (
+				slug string
+				last sql.NullString
+			)
+			if err := taskRows.Scan(&slug, &last); err != nil {
+				return fmt.Errorf("scan: %w", err)
+			}
+			t, err := nullTime(last)
+			if err != nil {
+				return fmt.Errorf("last_task: %w", err)
+			}
+			row(slug).LastTask = t
+		}
+		return taskRows.Err()
+	}(); err != nil {
+		return nil, fmt.Errorf("store.ProjectsWithCounts: task recency: %w", err)
 	}
 
 	// Notes per project (matches GetProjectCounts.Notes).

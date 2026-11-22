@@ -1892,10 +1892,33 @@ links there. Seamless restarts to apply the change. A project listed under
 <code>peer_auth.force_locked</code> shows as <strong>Force locked</strong> and cannot be changed here. A
 locked project's isolation cannot be set to <code>open</code>.</p>
 <p>The board: one row per project, with live sessions, total sessions, open and
-blocked tasks, memory count, inherited memories, reach rate, and last activity.
-Grouped by family (<code>?group=family|flat</code>) and sortable (<code>?sort=recent|coverage|name</code>).
-The global (<code>&quot;&quot;</code>) scope appears as a row but is not a project and has no detail
-link.</p>
+blocked tasks, memory count, inherited memories, reach rate, and last activity
+(the later of its last session update and its last task change). It has three
+views (<code>?group=activity|family|flat</code>):</p>
+<ul>
+<li><strong>Activity</strong>, the default: <strong>Active</strong> (a live agent, or a session or task
+touched in the last 30 days), then <strong>Quiet</strong>, then <strong>Retired</strong>. Quiet and
+Retired are folded. A filter (<code>?q=</code>) that matches a project inside one opens
+it, and Quiet stands open when no project is Active.</li>
+<li><strong>Family</strong>: each shared-briefing family, a parent with its children under
+it, then Standalone, then Retired by split, folded.</li>
+<li><strong>Flat</strong>: every project in one list.</li>
+</ul>
+<p><code>?sort=recent|coverage|name|favorites</code> orders the rows inside each band. In
+the Activity view, Recent puts starred projects first, then those with a live
+agent, then the most recent.</p>
+<p>The global (<code>&quot;&quot;</code>) scope is not a project, so no view lists it. It is one line
+under the summary tiles, &quot;Shared context: N memories, N notes, reach N%&quot;,
+linking to <a href="#context">Context</a>.</p>
+<p>Under <code>peer_auth</code>, a locked project this browser has not unlocked is a row in
+the same bands, sorted with the others, with a lock badge: its name, its
+counts, its last activity (the latest session start or end in it, never a
+title) and <strong>Unlock</strong>, which opens <code>/console/unlock/&lt;project&gt;</code>. Nothing else
+about it is read. The JSON model also lists these tallies as <code>locked</code>.</p>
+<p>The board remembers the view and sort you pick, in this browser only (its
+local storage). A link that names neither, such as the sidebar's, shows the
+remembered pair, drawn in place without a reload; a URL that names a view or
+a sort wins. A fresh browser starts on Activity, sorted by Recent.</p>
 <p>Selecting a project opens the <strong>project workspace</strong> - a seven-tab page over that
 project alone:</p>
 <div class="table-wrap">

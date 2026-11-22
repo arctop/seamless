@@ -528,11 +528,17 @@ func TestLiveAccessLeasesAndTallies(t *testing.T) {
 	_, err = EnsureProject(ctx, db, "example-finance", "Example Finance")
 	require.NoError(t, err)
 	ts := core.FormatTime(now)
+	// The live session started two hours ago and heartbeated a minute ago;
+	// the completed one started three hours ago and ended an hour ago. The
+	// tally's LastActive is the latest start or end: the hour-old end, never
+	// the heartbeat. A task changed since counts for nothing.
+	at := func(d time.Duration) string { return core.FormatTime(now.Add(-d)) }
 	for _, q := range []string{
 		`INSERT INTO memories_index (id, kind, name, project, file_path, content_hash, created_at, updated_at) VALUES ('m1','gotcha','a','example-finance','memory/example-finance/a.md','h','` + ts + `','` + ts + `')`,
 		`INSERT INTO memories_index (id, kind, name, project, file_path, content_hash, created_at, updated_at, invalid_at) VALUES ('m2','gotcha','b','example-finance','memory/example-finance/b.md','h','` + ts + `','` + ts + `','` + ts + `')`,
 		`INSERT INTO notes_index (id, title, slug, project, file_path, content_hash, created_at, updated_at) VALUES ('n1','t','t','example-finance','notes/example-finance/t.md','h','` + ts + `','` + ts + `')`,
-		`INSERT INTO sessions (id, name, project_slug, created_at, updated_at) VALUES ('s1','cc/fin','example-finance','` + ts + `','` + ts + `')`,
+		`INSERT INTO sessions (id, name, project_slug, created_at, updated_at) VALUES ('s1','cc/fin','example-finance','` + at(2*time.Hour) + `','` + at(time.Minute) + `')`,
+		`INSERT INTO sessions (id, name, project_slug, status, created_at, updated_at) VALUES ('s2','cc/fin-2','example-finance','completed','` + at(3*time.Hour) + `','` + at(time.Hour) + `')`,
 		`INSERT INTO tasks (id, project_slug, title, status, created_at, updated_at) VALUES ('t1','example-finance','x','open','` + ts + `','` + ts + `'), ('t2','example-finance','y','done','` + ts + `','` + ts + `')`,
 	} {
 		_, err := db.ExecContext(ctx, q)
@@ -540,10 +546,19 @@ func TestLiveAccessLeasesAndTallies(t *testing.T) {
 	}
 	tallies, err := ProjectTallies(ctx, db, []string{"example-finance", "example-legal"})
 	require.NoError(t, err)
+	require.Len(t, tallies, 2)
+	require.WithinDuration(t, now.Add(-time.Hour), tallies[0].LastActive, time.Second, "the latest start or end, not the heartbeat")
 	require.Equal(t, []ProjectTally{
-		{Slug: "example-finance", Name: "Example Finance", Registered: true, Memories: 1, Notes: 1, Sessions: 1, OpenTasks: 1},
+		{Slug: "example-finance", Name: "Example Finance", Registered: true, Memories: 1, Notes: 1, Sessions: 2, OpenTasks: 1, LastActive: tallies[0].LastActive},
 		{Slug: "example-legal", Name: "example-legal"},
-	}, tallies)
+	}, tallies, "an unregistered slug with no sessions has no last activity")
+
+	// With only the live session left, its start is the last activity.
+	_, err = db.ExecContext(ctx, `DELETE FROM sessions WHERE id = 's2'`)
+	require.NoError(t, err)
+	tallies, err = ProjectTallies(ctx, db, []string{"example-finance"})
+	require.NoError(t, err)
+	require.WithinDuration(t, now.Add(-2*time.Hour), tallies[0].LastActive, time.Second)
 	n, err := CountRegisteredProjects(ctx, db, []string{"example-finance", "example-legal"})
 	require.NoError(t, err)
 	require.Equal(t, 1, n)

@@ -7926,3 +7926,35 @@ body:has(.build-notice-card:not([hidden])) .main { padding-bottom: calc(112px + 
   .mishap-mem-list li { grid-template-columns: minmax(0, 1fr) 3em; }
   .mishap-mem-scope { display: none; }
 }
+
+/* UX 10: projects board */
+/* The shared-context line: the global scope under the summary tiles. It is
+   not a project, so no view draws it as a row. */
+.project-global-line {
+  display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0; padding: 9px 14px;
+  border: 1px dashed var(--border-strong); border-radius: var(--radius-md);
+  color: var(--muted); font-size: var(--text-xs); text-decoration: none;
+}
+.project-global-line .ico { width: 14px; height: 14px; color: var(--brand); }
+.project-global-line span { min-width: 0; }
+.project-global-line strong { color: var(--ink-2); font-weight: 650; }
+a.project-global-line:hover { color: var(--ink); border-color: color-mix(in oklab, var(--brand) 40%, var(--border-strong)); text-decoration: none; }
+a.project-global-line:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+/* Quiet and Retired fold: the band's head is the summary that opens it. */
+.project-fold > summary { cursor: pointer; list-style: none; font-family: inherit; }
+.project-fold > summary::-webkit-details-marker { display: none; }
+.project-fold > summary:focus-visible { outline: none; box-shadow: inset 3px 0 0 var(--brand), var(--shadow-focus); }
+.project-fold:not([open]) > summary { border-bottom: 0; }
+.project-fold > summary .project-group-signals { margin-left: auto; }
+.project-fold-cue { display: inline-flex; flex: none; color: var(--faint); transition: transform var(--dur-fast) var(--ease-out); }
+.project-fold-cue .ico { width: 16px; height: 16px; }
+.project-fold:not([open]) .project-fold-cue { transform: rotate(-90deg); }
+.project-fold > summary:hover .project-fold-cue { color: var(--brand); }
+/* A locked project is a row like any other, with its lock. */
+.project-card.project-locked .project-card-tile { color: var(--muted); }
+.project-role .ico { width: 10px; height: 10px; }
+@media (max-width: 760px) {
+  .project-fold > summary { position: relative; padding-right: 42px; }
+  .project-fold > summary .project-group-signals { margin-left: 0; }
+  .project-fold-cue { position: absolute; top: 14px; right: 16px; }
+}
