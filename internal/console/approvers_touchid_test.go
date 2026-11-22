@@ -158,8 +158,9 @@ func TestTouchID_EnrollOverTheSocket(t *testing.T) {
 	require.Equal(t, store.ApproverTouchID, list.Credentials[0].Kind)
 	require.Equal(t, "Touch ID on laptop", list.Credentials[0].Name)
 	page := do(f.mux, authedReq(httptest.NewRequest(http.MethodGet, "/console/approvers", nil))).Body.String()
-	require.Contains(t, page, `<span class="badge">Touch ID</span>`)
-	require.Contains(t, page, "seam touchid enroll")
+	require.Contains(t, page, `data-approver="`+id+`" data-kind="touchid"`, "its card")
+	require.Contains(t, page, "Touch ID &middot; in the agent's dialog")
+	require.Contains(t, page, `data-copy="seam touchid enroll"`)
 
 	// The same key again, with a fresh code: already enrolled.
 	code, _, err := store.MintEnrollCode(ctx, f.db, store.ApproverTouchID, store.ApproverKeyFingerprint(k.pub), time.Now())

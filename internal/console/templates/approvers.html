@@ -2,115 +2,109 @@
 {{with .Data}}
 <div class="approvers-page" data-approvers>
 <header class="mv2-bar">
-  <h1>{{icon "key-round"}}Approvers</h1>{{about "Passkeys and Touch ID keys that approve an agent's access to a locked project. Each approval needs you present: a passkey asks for your PIN, fingerprint or face; a Touch ID key asks for your finger, your Apple Watch or your login password."}}
-  <span class="mv2-count" aria-label="{{len .Credentials}} enrolled"><strong>{{len .Credentials}}</strong>enrolled</span>
+  <h1>{{icon "key-round"}}Approvers</h1>{{about "Passkeys and Touch ID keys that approve an agent's access to a locked project. A passkey also unlocks a project in this browser and changes a lock; a Touch ID key approves agents' requests. Each approval needs you present: a passkey asks for your PIN, fingerprint or face; a Touch ID key asks for your finger, your Apple Watch or your login password."}}
+  <span class="mv2-count" aria-label="{{len .Credentials}} added"><strong>{{len .Credentials}}</strong>added</span>
 </header>
+<p class="ap-lede">The keys that prove it is you: they approve agents' access, unlock a project, and change a lock.</p>
 
-<section aria-labelledby="approvers-list-title">
-  <h2 id="approvers-list-title">Enrolled</h2>
-  {{if .Credentials}}
-  <ul class="approvers-list">
-    {{range .Credentials}}
-    <li class="approver" data-approver="{{.ID}}">
-      <span class="badge">{{if eq .Kind "touchid"}}Touch ID{{else}}passkey{{end}}</span>
-      <strong>{{.Name}}</strong>
-      {{if .Synced}}<span class="badge" title="The passkey provider syncs it to your other devices">synced</span>{{end}}
-      <small>added {{clockDate .AddedAt}} by {{.AddedBy}} &middot; {{if .LastUsed}}last used {{clockDate .LastUsed}}{{else}}never used{{end}}</small>
-      <code class="approver-id">{{.ID}}</code>
-    </li>
-    {{end}}
-  </ul>
-  <p class="held-sub">To remove one, or all of them at once, run <code>seamlessd approvers remove &lt;id&gt;</code> or <code>seamlessd approvers reset --yes</code> as the daemon's account.</p>
-  {{else}}
-  <p class="held-sub">Nothing is enrolled yet. Until something is, only the terminal path approves: <code>seam approve</code> in your own terminal.</p>
+{{/* One card per key: the kind's icon, the name, what it is, when it was
+     last used and added. Its id and the command that removes it sit in the
+     card's hint alone: removal stays in the terminal, since the console's
+     key is no proof of the owner. */}}
+{{if .Credentials}}
+<ul class="ap-keys" aria-label="Approver keys">
+  {{range .Credentials}}
+  <li class="ap-key" data-approver="{{.ID}}" data-kind="{{.Kind}}">
+    <div class="ap-key-head">
+      <span class="ap-key-icon{{if eq .Kind "touchid"}} is-touchid{{end}}">{{if eq .Kind "touchid"}}{{icon "fingerprint"}}{{else if .Synced}}{{icon "cloud"}}{{else}}{{icon "key-round"}}{{end}}</span>
+      <div class="ap-key-name"><strong>{{.Name}}</strong><span>{{if eq .Kind "touchid"}}Touch ID &middot; in the agent's dialog{{else}}passkey{{if .Synced}} &middot; synced to your devices{{end}}{{end}}</span></div>
+      <span class="hint ap-key-more"><button type="button" class="hint-btn" aria-label="{{.Name}}: its id, and how to remove it" aria-describedby="approver-more-{{.ID}}">{{icon "ellipsis-vertical"}}</button><span class="hint-pop" id="approver-more-{{.ID}}" role="tooltip">Its id is <code>{{.ID}}</code>. How it was added: {{.AddedBy}}. To remove it, run this in your own terminal, as the daemon's account: <code class="ap-remove">{{.RemoveCommand}}</code>. Removing stays in the terminal on purpose: the console's key is no proof of you.</span></span>
+    </div>
+    <div class="ap-key-chips">
+      {{if .LastUsed}}<span class="badge ok compact">{{timeAs .LastUsed (printf "used %s" (agoPhrase .LastUsed))}}</span>{{else}}<span class="badge quiet compact">never used</span>{{end}}
+      <span class="badge quiet compact">{{timeAs .AddedAt (printf "added %s" .Added)}}</span>
+    </div>
+  </li>
   {{end}}
-</section>
+</ul>
+{{else}}
+<p class="ap-empty">{{icon "key-round"}}<span>Nothing is enrolled yet. Until something is, only the terminal path approves: <code>seam approve</code> in your own terminal.</span></p>
+{{end}}
 
-<section aria-labelledby="approvers-add-title">
-  <h2 id="approvers-add-title">Add a passkey</h2>
+{{/* Add one: two tiles, real radios, and the panel under them follows the
+     one chosen (console.css, without script). */}}
+<section class="ap-add" aria-labelledby="ap-add-title">
+  <h2 class="ap-kicker" id="ap-add-title">Add one</h2>
+  <div class="ap-tiles" role="radiogroup" aria-labelledby="ap-add-title">
+    <label class="ap-tile"><input type="radio" name="ap-kind" value="passkey" checked><span class="ap-tile-icon">{{icon "key-round"}}</span><span class="ap-tile-text"><strong>A passkey</strong><small>A security key, your phone, this computer or a password manager.{{if .AddPage}} It also signs you in.{{end}}</small></span></label>
+    <label class="ap-tile"><input type="radio" name="ap-kind" value="touchid"><span class="ap-tile-icon">{{icon "fingerprint"}}</span><span class="ap-tile-text"><strong>Touch ID on a Mac</strong><small>Approve from the agent's own dialog with your finger or your Watch.</small></span></label>
+  </div>
+
+  <div class="ap-panel ap-panel-passkey">
   {{if not .PasskeysOn}}
-  <p class="held-sub">Passkeys are not configured on this daemon.</p>
+    <p class="ap-notice">{{icon "info"}}<span>Passkeys are not configured on this daemon.</span></p>
   {{else if .AddPage}}
-  <p class="held-sub">Add a passkey from the device that will hold it: open <a href="{{.AddPage}}">{{if .Origin}}{{.Origin}}{{end}}{{.AddPage}}</a> there, or run <code>seamlessd approvers add</code> on the server, which prints that address. The page creates the passkey and shows a short code. Approve that code in your own terminal on the server, and the passkey both signs in to the console and approves:</p>
-  <pre>{{.AddCommand}}</pre>
-  <p class="held-sub">The address is not a secret: creating a passkey there adds nothing until you approve its code. Approve only the code your own device shows, never one you were handed. A synced passkey (iCloud Keychain, Google Password Manager, a password manager) is one passkey: add it once, and every device it syncs to can sign in.</p>
+    <div class="ap-notice">{{icon "info"}}<div>
+      <p>Add it from the device that will hold it: open <a href="{{.AddPage}}">{{if .Origin}}{{.Origin}}{{end}}{{.AddPage}}</a> there, where it shows a short code. Then approve that code in your own terminal on the server: {{hintFor "adding a passkey from its device" "The address is not a secret: creating a passkey there adds nothing until you approve its code, and seamlessd approvers add on the server prints it. Approve only the code your own device shows, never one you were handed. A synced passkey (iCloud Keychain, Google Password Manager, a password manager) is one passkey: add it once, and every device it syncs to signs in."}}</p>
+      <div class="ap-cmd"><code>{{.AddCommand}}</code>{{copyBtn .AddCommand}}</div>
+    </div></div>
   {{else if not .OnOrigin}}
-  <p class="held-sub">{{icon "triangle-alert"}} A passkey can only be created on <a href="{{.Origin}}/console/approvers">{{.Origin}}</a>. Browsers refuse passkeys on an IP address such as 127.0.0.1, so open this page there (you may need to sign in to the console again on that address).</p>
+    <p class="ap-notice">{{icon "triangle-alert"}}<span>A passkey can only be created on <a href="{{.Origin}}/console/approvers">{{.Origin}}</a>. Browsers refuse passkeys on an IP address such as 127.0.0.1, so open this page there (you may need to sign in to the console again on that address).</span></p>
   {{else}}
-  <p class="held-sub">A security key, your phone, this computer, or a password manager. Each passkey needs its own authenticator, and devices that share synced passkeys count as one. Every passkey needs a one-time code, even when one is already enrolled: once the new passkey exists, this page shows the command that makes the code for it, run as the daemon's account.</p>
-  <form id="approver-form" class="approver-form" autocomplete="off">
-    <label>Name <input id="approver-name" name="name" maxlength="64" required placeholder="security key, phone, laptop"></label>
-    <button class="btn primary" id="approver-go" type="submit">{{icon "key-round"}} Create passkey</button>
-  </form>
-  <form id="approver-confirm" class="approver-form" autocomplete="off" hidden>
-    <p class="held-sub">Run this in your own terminal, one your agents cannot read. It asks for your password and prints a code that works only for the passkey you just created.</p>
-    <pre id="approver-command"></pre>
-    <label>Enrollment code <input id="approver-code" name="code" placeholder="XXXX-XXXX-XXXX-XXXX" required autocapitalize="characters" spellcheck="false"></label>
-    <button class="btn primary" id="approver-confirm-go" type="submit">{{icon "key-round"}} Enroll</button>
-  </form>
-  <!-- data-live-skip: the script owns this line. The server renders it empty,
-       so the refresh after an enrollment would otherwise wipe the confirmation. -->
-  <p class="held-sub" id="approver-status" data-live-skip role="status" aria-live="polite"></p>
+    <ol class="steps steps-rich" id="approver-steps">
+      <li class="steps-item is-now" aria-current="step">
+        <span class="steps-mark" aria-hidden="true"><span class="steps-num">1</span>{{icon "check"}}</span>
+        <div class="steps-label">
+          <strong>Name it, and create it</strong>{{hintFor "a passkey's authenticator" "Each passkey needs its own authenticator: the browser refuses one that already holds a passkey enrolled here, and devices that share synced passkeys, such as a phone on the same iCloud Keychain, count as one."}}<span class="steps-sr"> (done)</span>
+          <span class="steps-sub">Your browser asks which authenticator to use.</span>
+          <form id="approver-form" class="approver-form" autocomplete="off">
+            <input id="approver-name" name="name" maxlength="64" required placeholder="Phone" aria-label="Name">
+            <button class="btn primary" id="approver-go" type="submit">{{icon "key-round"}} Create passkey</button>
+          </form>
+        </div>
+      </li>
+      <li class="steps-item is-todo">
+        <span class="steps-mark" aria-hidden="true"><span class="steps-num">2</span>{{icon "check"}}</span>
+        <div class="steps-label">
+          <strong>Make its one-time code in your own terminal</strong>{{hintFor "the one-time code" "Every passkey needs a one-time code, even when one is already enrolled. Run the command in a terminal your agents cannot read: it asks for your password, and the code it prints enrolls only the passkey you just created, so a code read off your screen enrolls nothing else."}}<span class="steps-sr"> (done)</span>
+          <div class="steps-body" id="approver-mint" hidden>
+            <div class="ap-cmd"><code id="approver-command"></code><button type="button" class="copy-btn" id="approver-command-copy" data-copy="" aria-label="Copy" title="Copy">{{icon "copy"}}{{icon "check"}}</button></div>
+            <button class="btn small" id="approver-have-code" type="button">I have the code</button>
+          </div>
+        </div>
+      </li>
+      <li class="steps-item is-todo">
+        <span class="steps-mark" aria-hidden="true"><span class="steps-num">3</span>{{icon "check"}}</span>
+        <div class="steps-label">
+          <strong>Enter the code</strong><span class="steps-sr"> (done)</span>
+          <form id="approver-confirm" class="approver-form" autocomplete="off" hidden>
+            <input id="approver-code" name="code" placeholder="XXXX-XXXX-XXXX-XXXX" required autocapitalize="characters" spellcheck="false" aria-label="Enrollment code">
+            <button class="btn primary" id="approver-confirm-go" type="submit">{{icon "key-round"}} Add it</button>
+          </form>
+        </div>
+      </li>
+    </ol>
+    <!-- data-live-skip: the script owns this line. The server renders it empty,
+         so the refresh after an enrollment would otherwise wipe the confirmation. -->
+    <p class="ap-status" id="approver-status" data-live-skip role="status" aria-live="polite"></p>
   {{end}}
-</section>
+  </div>
 
-<section aria-labelledby="approvers-touchid-title">
-  <h2 id="approvers-touchid-title">Add a Touch ID key</h2>
-  <p class="held-sub">On a Mac, run <code>seam touchid enroll</code> in your own terminal. It installs the Seamless Approve app, which keeps its key in this Mac's Secure Enclave and shows the command that makes a one-time code for that key, run as the daemon's account. The key then approves from the agent's dialog with your finger, your Apple Watch or your login password. Enrolling the same Mac again replaces its key: the earlier one signs for its own removal and leaves this list with the enrollment. Another Mac's key, and a passkey, are never removed that way.</p>
+  <div class="ap-panel ap-panel-touchid">
+    <p class="ap-panel-head"><strong>On the Mac, in your own terminal</strong>{{hintFor "Touch ID enrollment" "It installs the Seamless Approve app, which keeps its key in this Mac's Secure Enclave and shows the command that makes that key's one-time code, run as the daemon's account. The key then approves from the agent's dialog with your finger, your Apple Watch or your login password. Enrolling the same Mac again replaces its key: the earlier one signs for its own removal. Another Mac's key, and a passkey, are never removed that way."}}</p>
+    <div class="ap-cmd"><code>seam touchid enroll</code>{{copyBtn "seam touchid enroll"}}</div>
+  </div>
 </section>
 </div>
 {{end}}
 {{end}}
 
 {{define "scripts"}}
+<script src="{{static "passkey.js"}}"></script>
 <script>
 window.SEAM_NO_LIVE_REFRESH = true; // a ceremony in progress must not be clobbered by a refresh
 (function () {
-  function b64urlToBuf(s) {
-    s = s.replace(/-/g, '+').replace(/_/g, '/');
-    while (s.length % 4) s += '=';
-    var bin = atob(s), out = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-    return out.buffer;
-  }
-  function bufToB64url(buf) {
-    var bytes = new Uint8Array(buf), bin = '';
-    for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  }
-  function creationOptions(pk) {
-    if (window.PublicKeyCredential && PublicKeyCredential.parseCreationOptionsFromJSON) {
-      return PublicKeyCredential.parseCreationOptionsFromJSON(pk);
-    }
-    pk.challenge = b64urlToBuf(pk.challenge);
-    pk.user.id = b64urlToBuf(pk.user.id);
-    (pk.excludeCredentials || []).forEach(function (c) { c.id = b64urlToBuf(c.id); });
-    return pk;
-  }
-  function toJSON(cred) {
-    if (cred.toJSON) return cred.toJSON();
-    var r = cred.response, out = {
-      id: cred.id, rawId: bufToB64url(cred.rawId), type: cred.type,
-      authenticatorAttachment: cred.authenticatorAttachment || null,
-      clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
-      response: { clientDataJSON: bufToB64url(r.clientDataJSON), attestationObject: bufToB64url(r.attestationObject) }
-    };
-    if (r.getTransports) out.response.transports = r.getTransports();
-    return out;
-  }
-  function post(path, fields) {
-    var body = new URLSearchParams(fields);
-    return fetch(path, {
-      method: 'POST', credentials: 'same-origin',
-      headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString()
-    }).then(function (res) {
-      return res.json().then(function (data) {
-        if (!res.ok) throw new Error(data.error || ('request failed (' + res.status + ')'));
-        return data;
-      });
-    });
-  }
+  var pk = window.SeamPasskey;
   // Refresh the view in place (console-data-updates-never-reload-document):
   // the shared navigation fetches the page and morphs only what changed.
   function refresh() {
@@ -119,22 +113,46 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony in progress must not be clobbe
     }
     return Promise.resolve(false);
   }
+  // step marks the adding's steps: those before n done, n under way, the rest
+  // still to come (n past the last marks every one done).
+  function step(n) {
+    var items = document.querySelectorAll('#approver-steps > .steps-item');
+    for (var i = 0; i < items.length; i++) {
+      var state = i + 1 < n ? 'done' : i + 1 === n ? 'now' : 'todo';
+      items[i].classList.remove('is-done', 'is-now', 'is-todo');
+      items[i].classList.add('is-' + state);
+      if (state === 'now') items[i].setAttribute('aria-current', 'step');
+      else items[i].removeAttribute('aria-current');
+    }
+  }
   function enhance() {
     var form = document.getElementById('approver-form');
-    if (!form || form._seamWired) return;
+    if (!form || form._seamWired || !pk) return;
     form._seamWired = true;
     var status = document.getElementById('approver-status');
     var go = document.getElementById('approver-go');
-    var confirm = document.getElementById('approver-confirm');
+    var mint = document.getElementById('approver-mint');
+    var command = document.getElementById('approver-command');
+    var copy = document.getElementById('approver-command-copy');
+    var haveCode = document.getElementById('approver-have-code');
+    var codeForm = document.getElementById('approver-confirm');
+    var code = document.getElementById('approver-code');
     var id = '';
     function say(msg) { status.textContent = msg; }
-    confirm.addEventListener('submit', function (e) {
+    haveCode.addEventListener('click', function () {
+      codeForm.hidden = false;
+      step(3);
+      code.focus();
+    });
+    codeForm.addEventListener('submit', function (e) {
       e.preventDefault();
       var again = document.getElementById('approver-confirm-go');
       again.disabled = true;
-      post('/console/approvers/passkey/confirm', { id: id, code: document.getElementById('approver-code').value }).then(function (done) {
-        confirm.hidden = true;
-        say('Enrolled "' + done.name + '".');
+      pk.post('/console/approvers/passkey/confirm', { id: id, code: code.value }).then(function (done) {
+        codeForm.hidden = true;
+        mint.hidden = true;
+        step(4);
+        say('Added "' + done.name + '". It approves from now on.');
         refresh();
       }).catch(function (err) {
         say(err && err.message ? err.message : 'Something went wrong. Nothing was enrolled.');
@@ -142,28 +160,31 @@ window.SEAM_NO_LIVE_REFRESH = true; // a ceremony in progress must not be clobbe
     });
     form.addEventListener('submit', function (e) {
       e.preventDefault();
-      if (!window.PublicKeyCredential) { say('This browser does not support passkeys.'); return; }
+      if (!pk.supported()) { say('This browser does not support passkeys.'); return; }
       var name = document.getElementById('approver-name').value;
       id = '';
-      confirm.hidden = true;
+      mint.hidden = true;
+      codeForm.hidden = true;
+      step(1);
       go.disabled = true;
       say('Starting...');
-      post('/console/approvers/passkey/begin', { name: name }).then(function (begun) {
+      pk.post('/console/approvers/passkey/begin', { name: name }).then(function (begun) {
         id = begun.id;
         say('Follow your browser\'s prompt to create the passkey.');
-        return navigator.credentials.create({ publicKey: creationOptions(begun.options.publicKey) });
+        return pk.create(begun);
       }).then(function (cred) {
         say('Checking the new passkey...');
-        return post('/console/approvers/passkey/finish', { id: id, response: JSON.stringify(toJSON(cred)) });
+        return pk.post('/console/approvers/passkey/finish', { id: id, response: JSON.stringify(pk.toJSON(cred)) });
       }).then(function (fin) {
-        document.getElementById('approver-command').textContent = fin.command;
-        document.getElementById('approver-code').value = '';
-        confirm.hidden = false;
-        say('The passkey exists. Enter the code made for it to enroll it.');
+        command.textContent = fin.command;
+        copy.setAttribute('data-copy', fin.command);
+        code.value = '';
+        mint.hidden = false;
+        step(2);
+        say('The passkey exists. Make its code in your terminal, then enter it here.');
       }).catch(function (err) {
-        say(err && err.name === 'NotAllowedError' ? 'Cancelled, or the authenticator timed out. Nothing was enrolled.' :
-            err && err.name === 'InvalidStateError' ? 'That authenticator already holds one of your enrolled passkeys, and each passkey needs its own. Nothing was enrolled. Click Create passkey again and choose a different authenticator in your browser\'s prompt. A device sharing the same synced passkeys, such as a phone on the same iCloud Keychain, counts as the same authenticator.' :
-            (err && err.message ? err.message : 'Something went wrong. Nothing was enrolled.'));
+        say(err && err.name === 'InvalidStateError' ? 'That authenticator already holds one of your enrolled passkeys, and each passkey needs its own. Nothing was enrolled. Click Create passkey again and choose a different authenticator in your browser\'s prompt. A device sharing the same synced passkeys, such as a phone on the same iCloud Keychain, counts as the same authenticator.' :
+            pk.refusal(err));
       }).finally(function () { go.disabled = false; });
     });
   }

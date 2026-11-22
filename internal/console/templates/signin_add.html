@@ -15,53 +15,66 @@
 </head>
 <body class="login-body">
 <main class="login-wrap">
+  {{template "login-sky"}}
   <div class="login-shell">
     <section class="login-intro" aria-labelledby="add-title">
       <a class="login-brand" href="/console/login">
         <span class="live-dot"></span><strong>Seamless</strong><span>console</span>
       </a>
       <div class="login-hero-copy">
-        <div class="login-kicker">Console sign-in</div>
         <h1 id="add-title">Add a passkey on this device.</h1>
-        <p>Create a passkey here, then approve the code this page shows in your own terminal on the server. Until you approve it, it signs nothing in. Once approved it signs in to the console, from this device and from every device it syncs to.</p>
+        <p>Create it here, then approve its code on the server. Once approved it signs in to the console, from this device and every device it syncs to.</p>
       </div>
-      <section class="login-guide" aria-labelledby="add-synced-title">
-        <div class="login-guide-icon">{{icon "key-round"}}</div>
-        <div class="login-guide-copy">
-          <span class="login-section-label">Synced passkeys</span>
-          <h2 id="add-synced-title">Add it once</h2>
-          <p>A passkey synced through iCloud Keychain, Google Password Manager or another password manager is one passkey: every device it syncs to signs in once it is approved, with nothing more to add. A device without it can sign in with your phone's passkey through the browser's QR prompt.</p>
-          <p>It works only for this server's name{{if .Origin}}, <code>{{.Origin}}</code>{{end}}. A passkey made for another site{{if not .Localhost}}, or for <code>localhost</code> on an install of its own,{{end}} does not work here, and renaming the server strands every passkey made for the old name.{{if .Localhost}} This console's passkeys belong to <code>localhost</code>, so only a browser on the server's own machine can make or use one.{{end}}</p>
-        </div>
-      </section>
     </section>
 
+    {{/* One card: the adding in the sign-in's steps. 1 creates the passkey
+         here, 2 shows its code and the command that approves it on the
+         server, 3 is the sign-in once it is approved. */}}
     <aside class="login-access" aria-label="Add a passkey">
-      <form class="login-card" id="passkey-add-form" autocomplete="off">
-        <div class="login-section-label">New passkey</div>
-        <h2>Create it here</h2>
+      <section class="login-card signin-card" aria-labelledby="passkey-add-title">
+        <h2 id="passkey-add-title">New passkey</h2>
+        {{$name := "this server's name"}}{{with .Origin}}{{$name = printf "this server's name, %s" .}}{{end}}
+        {{$other := "A passkey made for another site, or for localhost on an install of its own, does not work here"}}{{$local := ""}}
+        {{if .Localhost}}{{$other = "A passkey made for another site does not work here"}}{{$local = " This console's passkeys belong to localhost, so only a browser on the server's own machine can make or use one."}}{{end}}
+        <p class="signin-lede">Until you approve it, it signs nothing in.{{hintFor "which passkey to add" (printf "A passkey synced through iCloud Keychain, Google Password Manager or another password manager is one passkey: add it once, and every device it syncs to signs in, with nothing more to add. A device without it can sign in with your phone's passkey through the browser's QR prompt. It works only for %s. %s, and renaming the server strands every passkey made for the old name.%s" $name $other $local)}}</p>
         {{if not .OnOrigin}}
         <div class="login-err" role="alert">{{icon "triangle-alert"}}<span>A passkey can be made only on <a href="{{.Origin}}/console/passkeys/add">{{.Origin}}</a>: open this page there.</span></div>
         {{end}}
-        <label for="passkey-name">Name</label>
-        <input id="passkey-name" name="name" maxlength="64" required placeholder="phone, laptop, security key">
-        <button class="btn primary" id="passkey-add-go" type="submit">{{icon "key-round"}} Create passkey</button>
-        <p class="login-config-note" id="passkey-add-status" role="status" aria-live="polite"></p>
-      </form>
-      <section class="login-config" id="passkey-add-wait" aria-labelledby="passkey-add-code-title" hidden>
-        <div class="login-config-head">
-          <span class="login-config-icon">{{icon "terminal"}}</span>
-          <div><span class="login-section-label">Waiting for the owner</span><h2 id="passkey-add-code-title">Code <code id="passkey-add-code"></code></h2></div>
-        </div>
-        <p>In your own terminal on the server, run this. It shows the passkey's name and key; check that they match this page, then approve. The code works for {{.Minutes}} minutes.</p>
-        <pre id="passkey-add-command"></pre>
-        <p>Key <code id="passkey-add-fingerprint"></code></p>
-        <p class="login-config-note">This page updates once the passkey is approved. Approve only the code this page shows, never one you were handed.</p>
+        <ol class="steps steps-rich" id="passkey-add-steps">
+          <li class="steps-item is-now" aria-current="step">
+            <span class="steps-mark" aria-hidden="true"><span class="steps-num">1</span>{{icon "check"}}</span>
+            <div class="steps-label"><strong>Name it, and create it</strong><span class="steps-sr"> (done)</span>
+              <span class="steps-sub">Your browser asks where to keep it.</span>
+              <form id="passkey-add-form" class="signin-key-row" autocomplete="off">
+                <input id="passkey-name" name="name" maxlength="64" required placeholder="phone, laptop, security key" aria-label="Name">
+                <button class="btn primary" id="passkey-add-go" type="submit">{{icon "key-round"}} Create</button>
+              </form>
+            </div>
+          </li>
+          <li class="steps-item is-todo">
+            <span class="steps-mark" aria-hidden="true"><span class="steps-num">2</span>{{icon "check"}}</span>
+            <div class="steps-label"><strong>Approve its code on the server</strong>{{hintFor "approving the code" "Run the command in your own terminal on the server, as the daemon's account. It shows the passkey's name and key and asks before it adds it: check that they match this page. Approve only the code this page shows, never one you were handed."}}<span class="steps-sr"> (done)</span>
+              <div class="steps-body" id="passkey-add-wait" hidden>
+                <p class="signin-codeline">Code <code class="signin-code-word" id="passkey-add-code"></code> <span class="steps-sub">It works for {{.Minutes}} minutes.</span></p>
+                <div class="login-command"><code id="passkey-add-command"></code><button type="button" class="copy-btn" id="passkey-add-command-copy" data-copy="" aria-label="Copy" title="Copy">{{icon "copy"}}{{icon "check"}}</button></div>
+                <span class="steps-sub">Key <code id="passkey-add-fingerprint"></code></span>
+              </div>
+            </div>
+          </li>
+          <li class="steps-item is-todo">
+            <span class="steps-mark" aria-hidden="true"><span class="steps-num">3</span>{{icon "check"}}</span>
+            <div class="steps-label"><strong>Sign in with it</strong><span class="steps-sr"> (done)</span>
+              <span class="steps-sub">This page updates once the passkey is approved.</span>
+            </div>
+          </li>
+        </ol>
+        <p class="signin-status" id="passkey-add-status" role="status" aria-live="polite"></p>
+        {{if .SignedIn}}<p class="signin-back"><a href="/console/approvers">Back to the console</a></p>{{end}}
       </section>
-      {{if .SignedIn}}<p class="login-config-note"><a href="/console/approvers">Back to the console</a></p>{{end}}
     </aside>
   </div>
 </main>
+{{template "login-kit"}}
 <script src="{{static "passkey.js"}}"></script>
 <script>
 /* Add a passkey (internal/console/signin.go): create the passkey, then wait
@@ -73,9 +86,22 @@
   if (!form) return;
   var status = document.getElementById('passkey-add-status');
   var go = document.getElementById('passkey-add-go');
+  var wait = document.getElementById('passkey-add-wait');
   var waiting = null;
   function say(msg) { status.textContent = msg; }
   function stop() { if (waiting) clearTimeout(waiting.timer); waiting = null; }
+  // step marks the steps: those before n done, n under way, the rest to come
+  // (n past the last marks every one done).
+  function step(n) {
+    var items = document.querySelectorAll('#passkey-add-steps > .steps-item');
+    for (var i = 0; i < items.length; i++) {
+      var state = i + 1 < n ? 'done' : i + 1 === n ? 'now' : 'todo';
+      items[i].classList.remove('is-done', 'is-now', 'is-todo');
+      items[i].classList.add('is-' + state);
+      if (state === 'now') items[i].setAttribute('aria-current', 'step');
+      else items[i].removeAttribute('aria-current');
+    }
+  }
   function check(url) {
     if (!waiting || waiting.url !== url) return;
     fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } }).then(function (res) {
@@ -88,7 +114,8 @@
           return;
         case 'enrolled':
           stop();
-          document.getElementById('passkey-add-wait').hidden = true;
+          wait.hidden = true;
+          step(4);
           status.textContent = '';
           var done = document.createElement('a');
           done.href = '/console/login';
@@ -98,10 +125,14 @@
           return;
         case 'ended':
           stop();
+          wait.hidden = true;
+          step(1);
           say('Every passkey was reset on the server while this one waited. Nothing was added: create it again.');
           return;
         default:
           stop();
+          wait.hidden = true;
+          step(1);
           say('The code stopped waiting before it was approved: it expired, or newer passkeys added from this address took its place. Nothing was added: create the passkey again for a new code.');
       }
     }).catch(function () {
@@ -116,7 +147,8 @@
     stop();
     var name = document.getElementById('passkey-name').value;
     var ticket = '';
-    document.getElementById('passkey-add-wait').hidden = true;
+    wait.hidden = true;
+    step(1);
     go.disabled = true;
     say('Follow your browser\'s prompt to create the passkey.');
     window.SeamPasskey.post('/console/passkeys/add/begin', { name: name }).then(function (begun) {
@@ -128,8 +160,10 @@
     }).then(function (added) {
       document.getElementById('passkey-add-code').textContent = added.code;
       document.getElementById('passkey-add-command').textContent = added.command;
+      document.getElementById('passkey-add-command-copy').setAttribute('data-copy', added.command);
       document.getElementById('passkey-add-fingerprint').textContent = added.fingerprint;
-      document.getElementById('passkey-add-wait').hidden = false;
+      wait.hidden = false;
+      step(2);
       say('The passkey exists and waits for your approval on the server.');
       var url = '/console/passkeys/add/status?id=' + encodeURIComponent(added.id);
       waiting = { url: url, timer: null };

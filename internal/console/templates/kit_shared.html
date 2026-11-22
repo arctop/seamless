@@ -16,6 +16,8 @@
      Its dot is a list of values with Label and State ("done", "now" or
      "todo"; "doing" reads as "now", Backups' word). A step that needs more
      than words (a command and its Copy button) writes the same markup by
-     hand: ol.steps > li.steps-item.is-<state> > .steps-mark + .steps-label. */}}
+     hand: ol.steps > li.steps-item.is-<state> > .steps-mark + .steps-label,
+     and adds .steps-rich to the list for one step per row with its body
+     (console.css, UX 42: the Approvers and sign-in steps). */}}
 {{define "source-chip"}}{{with .}}<span class="src-chip is-{{.Source}}">{{if eq .Source "locked"}}{{icon "lock"}}{{else}}<span class="src-chip-dot" aria-hidden="true"></span>{{end}}<span class="src-chip-label">{{.Label}}</span>{{with .Note}}{{hintFor "where this comes from" .}}{{end}}{{with .Reset}}<button class="btn small src-chip-reset" type="submit" form="{{.}}"{{with $.Confirm}} data-confirm="{{.}}" data-confirm-label="Reset it"{{end}}>Reset</button>{{end}}</span>{{end}}{{end}}
 {{define "steps"}}<ol class="steps">{{range $i, $s := .}}{{$state := .State}}{{if eq $state "doing"}}{{$state = "now"}}{{end}}<li class="steps-item is-{{$state}}"{{if eq $state "now"}} aria-current="step"{{end}}><span class="steps-mark" aria-hidden="true">{{if eq $state "done"}}{{icon "check"}}{{else}}{{add $i 1}}{{end}}</span><span class="steps-label">{{.Label}}{{if eq $state "done"}}<span class="steps-sr"> (done)</span>{{end}}</span></li>{{end}}</ol>{{end}}

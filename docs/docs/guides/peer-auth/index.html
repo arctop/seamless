@@ -705,13 +705,14 @@ also lists credentials and removes them, and <code>reset --yes</code> drops ever
 and revokes every live lease
 (<a href="../../reference/cli-seamlessd/#seamlessd_approvers">reference</a>).</p>
 <p><strong>Passkeys</strong> work with hardware keys, phones and password managers. Open
-<code>/console/approvers</code> on the passkey origin in your browser and create the passkey.
-The page then shows the command that mints a code for it:</p>
+<code>/console/approvers</code> on the passkey origin in your browser, choose <strong>A passkey</strong>
+under <strong>Add one</strong>, and create the passkey (step 1 of 3). Step 2 shows the
+command that mints a code for it:</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">/usr/bin/sudo -k -u _seamless /usr/bin/env <span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>/opt/seamless/etc/seamless.yaml <span class="se">\
 </span></span></span><span class="line"><span class="cl">  /opt/seamless/bin/seamlessd approvers enroll-code passkey --key XXXX-XXXX-XXXX-XXXX
 </span></span></code></pre></div>
 <p>Run it in your own terminal, check that the key it prints is the one on the page,
-and enter the code there. Browsers refuse passkeys on <code>127.0.0.1</code>, so open the
+and enter the code in step 3. Browsers refuse passkeys on <code>127.0.0.1</code>, so open the
 page on <a href="#the-passkey-origin">the passkey origin</a>. Each passkey needs its own
 authenticator: the browser refuses one that already holds a passkey enrolled here,
 and devices that share synced passkeys, such as a phone on the same iCloud

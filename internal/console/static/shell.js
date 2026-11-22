@@ -919,15 +919,23 @@
       if (h !== except && hintOpen(h)) shutHint(h);
     });
   }
-  // Keep an open tooltip inside the window: nudged sideways, never clipped.
+  // Keep an open tooltip inside the window, and inside the page's own column
+  // when it sits in one (.main): nudged sideways, never clipped and never
+  // under the sidebar, which stacks above the column.
   function placeHint(h) {
     var pop = h.querySelector('.hint-pop');
     if (!pop) return;
     pop.style.removeProperty('--hint-dx');
     var r = pop.getBoundingClientRect();
     if (!r.width) return;
-    var edge = document.documentElement.clientWidth - 12;
-    var dx = r.right > edge ? edge - r.right : (r.left < 12 ? 12 - r.left : 0);
+    var left = 12, edge = document.documentElement.clientWidth - 12;
+    var col = h.closest('.main');
+    if (col) {
+      var c = col.getBoundingClientRect();
+      left = Math.max(left, c.left + 12);
+      edge = Math.min(edge, c.right - 12);
+    }
+    var dx = r.right > edge ? edge - r.right : (r.left < left ? left - r.left : 0);
     if (dx) pop.style.setProperty('--hint-dx', Math.round(dx) + 'px');
   }
   function enterHint(e) {

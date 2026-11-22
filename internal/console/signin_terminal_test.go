@@ -192,7 +192,7 @@ func TestTerminalSignIn_AWayInWithTheKeyRetiredAndNoPasskey(t *testing.T) {
 	rr := sc.do(nil, b.request(t, http.MethodGet, "/console/login", nil))
 	require.Equal(t, http.StatusOK, rr.Code)
 	require.Contains(t, rr.Body.String(), `id="terminal-go"`)
-	require.Contains(t, rr.Body.String(), "Sign in from a terminal on the server")
+	require.Contains(t, rr.Body.String(), "Show a code for the server's terminal")
 
 	id, code := retireBegin(t, sc, b)
 	_, err := store.ApproveTerminalSignIn(context.Background(), sc.db, id, code, approval.SignInLifetime, time.Now())

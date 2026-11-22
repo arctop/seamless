@@ -424,8 +424,9 @@ and revokes every live lease
 ([reference](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_approvers)).
 
 **Passkeys** work with hardware keys, phones and password managers. Open
-`/console/approvers` on the passkey origin in your browser and create the passkey.
-The page then shows the command that mints a code for it:
+`/console/approvers` on the passkey origin in your browser, choose **A passkey**
+under **Add one**, and create the passkey (step 1 of 3). Step 2 shows the
+command that mints a code for it:
 
 ```bash
 /usr/bin/sudo -k -u _seamless /usr/bin/env SEAMLESS_CONFIG=/opt/seamless/etc/seamless.yaml \
@@ -433,7 +434,7 @@ The page then shows the command that mints a code for it:
 ```
 
 Run it in your own terminal, check that the key it prints is the one on the page,
-and enter the code there. Browsers refuse passkeys on `127.0.0.1`, so open the
+and enter the code in step 3. Browsers refuse passkeys on `127.0.0.1`, so open the
 page on [the passkey origin](#the-passkey-origin). Each passkey needs its own
 authenticator: the browser refuses one that already holds a passkey enrolled here,
 and devices that share synced passkeys, such as a phone on the same iCloud

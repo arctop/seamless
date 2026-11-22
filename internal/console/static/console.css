@@ -909,18 +909,11 @@ details > summary { font-family: var(--font-display); }
 .login-brand strong { font-weight: 700; letter-spacing: var(--tracking-tight); }
 .login-brand > span:last-child { color: var(--faint); font-size: var(--text-xs); font-weight: 600; }
 .login-hero-copy { max-width: 570px; margin: auto 0; padding: 48px 0 38px; }
-.login-kicker, .login-section-label { color: var(--brand); font-size: var(--text-2xs); font-weight: 700; letter-spacing: var(--tracking-wider); text-transform: uppercase; }
 .login-hero-copy h1 { max-width: 620px; margin: 9px 0 13px; font-family: var(--font-display); font-size: clamp(36px, 5.2vw, 58px); line-height: 1.02; letter-spacing: -.045em; }
 .login-hero-copy > p { max-width: 56ch; margin: 0; color: var(--muted); font-size: var(--text-md); line-height: 1.55; }
 .login-signals { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 20px; }
 .login-signals span { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border: 1px solid var(--border); border-radius: var(--radius-pill); background: color-mix(in oklab, var(--surface) 78%, transparent); color: var(--muted); font-size: var(--text-2xs); font-weight: 650; }
 .login-signals .ico { width: 12px; height: 12px; color: var(--brand); }
-.login-guide { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 13px; padding: 17px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: color-mix(in oklab, var(--surface-2) 70%, transparent); }
-.login-guide-icon, .login-config-icon { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 11px; background: var(--brand-soft); color: var(--brand); }
-.login-guide-icon .ico, .login-config-icon .ico { width: 18px; height: 18px; }
-.login-guide-copy { min-width: 0; }
-.login-guide h2, .login-config h2 { margin: 2px 0 5px; font-family: var(--font-display); font-size: var(--text-md); line-height: 1.2; }
-.login-guide p { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
 .login-command { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; margin-top: 12px; padding: 9px 10px 9px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); }
 .login-command code { overflow: hidden; min-width: 0; color: var(--ink); font-size: var(--text-sm); text-overflow: ellipsis; white-space: nowrap; }
 .login-command .copy-btn { flex: none; }
@@ -932,7 +925,7 @@ details > summary { font-family: var(--font-display); }
 .login-card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 30px; width: 100%; box-shadow: var(--shadow-md); }
 .login-card h2 { margin: 5px 0 7px; font-family: var(--font-display); font-size: var(--text-xl); font-weight: 700; letter-spacing: var(--tracking-tight); }
 .login-card p { color: var(--muted); margin: 0 0 22px; font-size: var(--text-sm); line-height: 1.5; }
-.login-card p code, .login-config p code { color: var(--ink-2); font-size: .92em; }
+.login-card p code { color: var(--ink-2); font-size: .92em; }
 .login-card label { display: block; font-size: var(--text-sm); font-weight: 600; margin-bottom: 6px; }
 .login-card input {
   width: 100%; padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
@@ -941,20 +934,6 @@ details > summary { font-family: var(--font-display); }
 .login-card input:focus { outline: none; border-color: var(--brand); box-shadow: var(--shadow-focus); }
 .login-card .btn { width: 100%; }
 .login-err { background: var(--danger-soft); color: var(--danger); padding: 9px 12px; border-radius: var(--radius-sm); font-size: var(--text-sm); margin-bottom: 16px; }
-.login-config { min-width: 0; padding: 21px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: color-mix(in oklab, var(--surface) 88%, var(--surface-2)); box-shadow: var(--shadow-sm); }
-.login-config-head { display: flex; align-items: center; gap: 11px; }
-.login-config-icon { width: 36px; height: 36px; border-radius: 10px; }
-.login-config h2 { margin-bottom: 0; }
-.login-config-path { display: flex; align-items: center; gap: 5px; min-width: 0; margin: 14px 0 9px; padding: 8px 9px 8px 11px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
-.login-config-path > a { display: flex; align-items: center; justify-content: space-between; gap: 9px; min-width: 0; flex: 1; }
-.login-config-path code { overflow: hidden; min-width: 0; color: var(--ink-2); font-size: var(--text-2xs); text-overflow: ellipsis; white-space: nowrap; }
-.login-config-path a > span { flex: none; color: var(--brand); font-size: 10px; font-weight: 700; }
-.login-config-path .copy-btn { flex: none; }
-.login-config-path.static { overflow: auto; }
-.login-config p { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
-.login-config .login-config-note { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); color: var(--faint); }
-.login-config-doc { display: inline-flex; align-items: center; gap: 5px; margin-top: 12px; font-size: var(--text-xs); font-weight: 650; }
-.login-config-doc .ico { width: 13px; height: 13px; }
 
 @media (max-width: 820px) {
   .login-wrap { align-items: flex-start; padding: 22px 16px; }
@@ -965,10 +944,8 @@ details > summary { font-family: var(--font-display); }
 @media (max-width: 480px) {
   .login-wrap { padding: 10px; }
   .login-intro, .login-card { padding: 22px; border-radius: var(--radius-lg); }
-  .login-config { padding: 18px; }
   .login-hero-copy { padding: 42px 0 34px; }
   .login-hero-copy h1 { font-size: 38px; }
-  .login-guide { grid-template-columns: 1fr; }
   .login-docs { flex-direction: column; }
 }
 
@@ -5388,7 +5365,7 @@ a.checkin-chip:hover { border-color: var(--brand); color: var(--brand); text-dec
 .card, .ov2-panel, .ov2-vital, .ov2-attn-card, .table-wrap, .reader-sheet, .sess-list, .search-results,
 .ops-stage .sess-list, .lib-rail, .now-zone, .now-card, .project-summary-card, .mom-cal, .ix-volume, .ix-row,
 .context-scope-card, .retrieval-flow-panel, .retrieval-panel, .registry-panel, .gardener-request-card,
-.login-intro, .login-card, .login-config, .ov2-live {
+.login-intro, .login-card, .ov2-live {
   border-color: var(--border);
   box-shadow: inset 0 1px 0 var(--sheen), var(--shadow-sm);
 }
@@ -5905,8 +5882,8 @@ a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex]:focus-v
 .context-rule-label, .context-section-kicker, .embedder-facts > div > span, .event-card-eyebrow, .event-detail-eyebrow,
 .event-raw-card > summary small, .family-dialog-head > div > span, .funnel .step .l, .gardener-composer-title,
 .gardener-examples > span, .gardener-fenced-note > div > span, .gardener-request-origin > span, .gardener-retarget label,
-.gardener-scope > span, .gardener-split-controls label, .grp-hd, .ix-chip-k, .ix-section-title, .login-kicker,
-.login-section-label, .mem-index .hd, .metricbar .k, .now-tape-label, .ops-stage-eyebrow, .ov2-attn-label,
+.gardener-scope > span, .gardener-split-controls label, .grp-hd, .ix-chip-k, .ix-section-title,
+.mem-index .hd, .metricbar .k, .now-tape-label, .ops-stage-eyebrow, .ov2-attn-label,
 .ov2-live-label, .ov2-vital-label, .plan-ledger .lbl, .project-summary-copy > span,
 .proposal-document-head > div > span, .proposal-memory > span, .proposal-move-map div > span,
 .proposal-object > div:nth-child(2) > span, .proposal-project > span, .proposal-query-list > span, .proposal-reason > span,
@@ -6010,7 +5987,7 @@ a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex]:focus-v
 .ls-fig { fill: var(--brand-strong); opacity: .9; filter: drop-shadow(0 0 4px var(--brand)); }
 .ls-line { fill: none; stroke: color-mix(in oklab, var(--brand) 45%, transparent); stroke-width: 1; stroke-dasharray: 3 5; }
 @keyframes ls-twinkle { 0%, 100% { opacity: .55; } 50% { opacity: .15; } }
-.login-intro, .login-card, .login-config {
+.login-intro, .login-card {
   background: color-mix(in oklab, var(--surface-solid) 72%, transparent);
   -webkit-backdrop-filter: blur(16px) saturate(140%); backdrop-filter: blur(16px) saturate(140%);
   border-color: var(--border-strong);
@@ -6018,7 +5995,6 @@ a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex]:focus-v
 }
 .login-intro { border-radius: var(--radius-xl); animation: rise-in .7s var(--ease-out) both; }
 .login-card { border-radius: var(--radius-xl); animation: rise-in .7s var(--ease-out) .12s both; }
-.login-config { animation: rise-in .7s var(--ease-out) .22s both; }
 .login-brand strong { font-family: var(--font-serif); font-weight: 600; font-size: 20px; font-variation-settings: "SOFT" 100, "opsz" 48; letter-spacing: -0.01em; }
 .login-hero-copy h1 {
   font-family: var(--font-serif); font-weight: 520; font-size: clamp(40px, 5.6vw, 66px); line-height: 1.02;
@@ -6029,7 +6005,7 @@ a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex]:focus-v
   background: linear-gradient(100deg, var(--brand-strong), var(--flow) 55%, var(--violet));
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
-.login-card h2, .login-guide h2, .login-config h2 { font-family: var(--font-serif); font-weight: 560; font-variation-settings: "SOFT" 60, "opsz" 36; letter-spacing: -0.01em; }
+.login-card h2 { font-family: var(--font-serif); font-weight: 560; font-variation-settings: "SOFT" 60, "opsz" 36; letter-spacing: -0.01em; }
 .login-card input { background: color-mix(in oklab, var(--ink) 5%, var(--surface-solid)); border-color: var(--border-strong); border-radius: var(--radius-md); }
 .login-card .btn { min-height: 40px; border-radius: var(--radius-md); }
 
@@ -6606,16 +6582,8 @@ html:not(.js) .brief-preview { display: none; }
   background: color-mix(in oklab, var(--ink) 4%, var(--surface-solid)); font-family: var(--font-mono);
   font-size: var(--text-xs); overflow-wrap: anywhere;
 }
-/* The Approvers page: enrolled credentials as rows, and the passkey form's
-   fields as the console's own inputs. */
-.approvers-page h2 { margin: 18px 0 0; font-family: var(--font-serif); font-weight: 560; font-size: 19px; }
-.approvers-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.approver {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 10px 14px;
-  border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface);
-}
-.approver small { color: var(--muted); font-size: var(--text-xs); }
-.approver-id { margin-left: auto; color: var(--faint); font-family: var(--font-mono); font-size: var(--text-2xs); overflow-wrap: anywhere; }
+/* The Approvers page's passkey forms (the name, then the code) as the
+   console's own inputs; the page's cards are UX 42's. */
 .approver-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; margin: 12px 0 0; }
 .approver-form[hidden] { display: none; } /* display beats the hidden attribute otherwise */
 .approver-form label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: var(--text-xs); }
@@ -9141,6 +9109,185 @@ tbody tr.row-link[data-panel-current] td:first-child { box-shadow: inset 2px 0 0
 .plan-page-hd .count { color: var(--muted); font-weight: 600; letter-spacing: 0; }
 .plan-page .plan-page-card { margin-bottom: 0; }
 .item-card-title.mono { font-family: var(--font-mono); font-size: var(--text-sm); }
+
+
+/* UX 42: Approvers and sign-in. Approvers shows each key as a card (its id
+   and the command that removes it only in the card's hint), Add one as two
+   tiles over real radios, and adding a passkey as steps. The sign-in keeps
+   its sky, with the hero bare on it and the right column one card; the Add a
+   passkey page is drawn the same way. Tokens only. */
+
+/* Steps that hold more than words ("steps" markup written by hand in
+   approvers.html, login.html and signin_add.html): one step per row, a title
+   and its body, and a check in the mark once a step is done. */
+.steps-rich { gap: 0; margin: 0; }
+.steps-rich > .steps-item { padding: 12px 0; border-top: 1px solid var(--border); }
+.steps-rich > .steps-item:first-child { padding-top: 2px; border-top: 0; }
+.steps-rich > .steps-item:last-child { padding-bottom: 2px; }
+.steps-rich .steps-label { flex: 1; color: var(--muted); font-weight: 400; }
+.steps-rich .steps-item.is-now .steps-label { font-weight: 400; }
+.steps-rich .steps-label > strong { color: var(--ink-2); font-weight: 650; }
+.steps-rich .steps-item.is-now .steps-label > strong { color: var(--ink); }
+.steps-rich .steps-mark > .ico, .steps-rich .is-done .steps-num { display: none; }
+.steps-rich .is-done .steps-mark > .ico { display: block; }
+.steps-rich .steps-item:not(.is-done) .steps-sr { display: none; }
+.steps-rich .steps-label > .hint { margin-left: 2px; }
+.steps-sub { display: block; margin-top: 1px; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
+.steps-body { display: grid; justify-items: start; gap: 8px; min-width: 0; margin-top: 8px; }
+.steps-body[hidden] { display: none; }
+.steps-body > * { max-width: 100%; }
+
+/* Approvers (approvers.html). */
+.ap-lede { margin: -2px 0 18px; color: var(--muted); font-size: var(--text-sm); }
+.ap-keys {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 12px;
+  margin: 0 0 28px; padding: 0; list-style: none;
+}
+.ap-key {
+  display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 16px;
+  border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-solid);
+}
+.ap-key-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ap-key-icon, .ap-tile-icon {
+  display: grid; flex: none; place-items: center; width: 38px; height: 38px;
+  border-radius: var(--radius-md); background: var(--surface-2); color: var(--brand);
+}
+.ap-key-icon .ico, .ap-tile-icon .ico { width: 18px; height: 18px; }
+.ap-key-icon.is-touchid { color: var(--ok); }
+.ap-key-name { flex: 1; min-width: 0; line-height: 1.35; }
+.ap-key-name strong { display: block; color: var(--ink); font-weight: 650; overflow-wrap: anywhere; }
+.ap-key-name span { display: block; color: var(--faint); font-size: var(--text-xs); }
+.ap-key-more { align-self: flex-start; }
+.ap-key-more .hint-btn .ico { width: 15px; height: 15px; }
+.ap-key-more .hint-pop { left: auto; right: -8px; margin-left: 0; margin-right: calc(-1 * var(--hint-dx, 0px)); transform-origin: top right; }
+.ap-key-more .hint-pop code { color: var(--ink); font-family: var(--font-mono); font-size: var(--text-2xs); overflow-wrap: anywhere; }
+.ap-key-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ap-empty {
+  display: flex; align-items: flex-start; gap: 10px; margin: 0 0 28px; padding: 14px 16px;
+  border: 1px dashed var(--border-strong); border-radius: var(--radius-lg); color: var(--muted); font-size: var(--text-sm);
+}
+.ap-empty > .ico { flex: none; width: 16px; height: 16px; margin-top: 2px; color: var(--faint); }
+.ap-kicker {
+  margin: 0 0 8px; color: var(--faint); font-family: var(--font-sans); font-size: var(--text-2xs);
+  font-weight: 700; letter-spacing: var(--tracking-wider); text-transform: uppercase;
+}
+.ap-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 12px; margin-bottom: 14px; }
+.ap-tile {
+  position: relative; display: flex; align-items: flex-start; gap: 14px; min-width: 0; padding: 16px;
+  border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-solid); cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.ap-tile > input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.ap-tile:hover { border-color: var(--border-strong); }
+.ap-tile:has(> input:checked) {
+  border-color: color-mix(in oklab, var(--brand) 55%, transparent);
+  background: linear-gradient(180deg, color-mix(in oklab, var(--brand) 10%, var(--surface-solid)), var(--surface-solid));
+}
+.ap-tile:has(> input:focus-visible) { box-shadow: var(--shadow-focus); }
+.ap-tile-text { min-width: 0; }
+.ap-tile-text strong { display: block; color: var(--ink); font-weight: 650; }
+.ap-tile-text small { display: block; margin-top: 2px; color: var(--muted); font-size: var(--text-sm); line-height: 1.45; }
+.ap-panel { min-width: 0; padding: 14px 18px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-solid); }
+.ap-panel-touchid { display: none; }
+.ap-add:has(input[value="touchid"]:checked) .ap-panel-passkey { display: none; }
+.ap-add:has(input[value="touchid"]:checked) .ap-panel-touchid { display: block; }
+.ap-panel-head { margin: 0; color: var(--ink); }
+.ap-panel-head strong { font-weight: 650; }
+.ap-cmd {
+  display: flex; align-items: center; gap: 8px; min-width: 0; margin-top: 8px; padding: 8px 8px 8px 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--paper);
+}
+.ap-cmd code { flex: 1; min-width: 0; color: var(--ink-2); font-family: var(--font-mono); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.ap-cmd .copy-btn { flex: none; }
+.ap-notice { display: flex; align-items: flex-start; gap: 9px; margin: 0; color: var(--ink-2); font-size: var(--text-sm); line-height: 1.5; }
+.ap-notice > .ico { flex: none; width: 16px; height: 16px; margin-top: 3px; color: var(--brand); }
+.ap-notice > .ico-triangle-alert { color: var(--warn); }
+.ap-notice > div { min-width: 0; }
+.ap-notice p { margin: 0; }
+.ap-notice a { overflow-wrap: anywhere; }
+.ap-panel .approver-form { align-items: center; margin-top: 8px; }
+.ap-panel .approver-form input { width: 14rem; }
+.ap-status { margin: 10px 0 2px; color: var(--muted); font-size: var(--text-sm); }
+.ap-status:empty { display: none; }
+
+/* Sign-in and Add a passkey (login.html, signin_add.html): the hero bare on
+   the sky, and one card. */
+.login-shell { grid-template-columns: minmax(0, 1fr) minmax(0, 400px); align-items: center; gap: clamp(28px, 6vw, 72px); width: min(1040px, 100%); }
+.login-intro {
+  min-height: 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+.login-hero-copy { margin: 0; padding: 52px 0 0; }
+.login-signals { margin-top: 22px; }
+.login-docs { margin-top: 28px; }
+.signin-card { padding: 30px 28px 24px; }
+.login-card.signin-card h2 { margin: 0 0 4px; font-size: var(--text-2xl); }
+.login-card .signin-lede { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin: 0 0 18px; }
+.login-card .signin-lede .hint { vertical-align: 0; }
+.login-card .signin-none { display: flex; align-items: flex-start; gap: 8px; margin: -6px 0 16px; color: var(--ink-2); font-size: var(--text-xs); }
+.signin-none > .ico { flex: none; width: 14px; height: 14px; margin-top: 2px; color: var(--brand); }
+.login-card .signin-status { margin: 10px 0 0; font-size: var(--text-xs); }
+.login-card .signin-status:empty { display: none; }
+.signin-or { display: flex; align-items: center; gap: 10px; margin: 18px 0 12px; color: var(--faint); font-size: var(--text-xs); }
+.signin-or::before, .signin-or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.signin-alts { display: grid; gap: 8px; }
+.signin-alt {
+  display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; padding: 11px 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-md); background: transparent;
+  color: var(--ink-2); font: inherit; font-size: var(--text-sm); font-weight: 600; line-height: 1.35;
+  text-align: left; text-decoration: none; cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.signin-alt:hover, .signin-alt[aria-expanded="true"] {
+  border-color: var(--border-strong); background: color-mix(in oklab, var(--brand) 6%, transparent); color: var(--ink); text-decoration: none;
+}
+.signin-alt:focus-visible { outline: none; box-shadow: var(--shadow-focus); }
+.signin-alt:disabled { cursor: default; }
+.signin-alt-icon {
+  display: grid; flex: none; place-items: center; width: 30px; height: 30px;
+  border-radius: var(--radius-sm); background: var(--surface-2); color: var(--brand);
+}
+.signin-alt-icon .ico { width: 15px; height: 15px; }
+.signin-alt-text { min-width: 0; }
+.signin-alt-text small { display: block; color: var(--faint); font-size: var(--text-xs); font-weight: 400; }
+.signin-code { padding: 4px 2px 0 4px; }
+.signin-code[hidden] { display: none; }
+.signin-code-word { color: var(--ink); font-family: var(--font-mono); font-size: var(--text-lg); font-weight: 600; letter-spacing: .08em; }
+.login-card .signin-codeline { margin: 0; color: var(--ink-2); }
+.steps-rich .login-command { margin-top: 8px; padding: 8px 8px 8px 11px; }
+.steps-rich .login-command code { font-size: var(--text-xs); white-space: normal; overflow-wrap: anywhere; }
+.signin-key-row { display: flex; gap: 8px; min-width: 0; }
+.login-card .signin-key-row input { flex: 1 1 auto; width: auto; min-width: 0; margin: 0; }
+.login-card .signin-key-row input[name="name"] { font-family: var(--font-sans); }
+.login-card .signin-key-row .btn { flex: none; width: auto; }
+.steps-rich .signin-key-row { margin-top: 8px; }
+.signin-where { margin-top: 12px; }
+.signin-where > summary { color: var(--muted); font-size: var(--text-xs); font-weight: 600; cursor: pointer; }
+.signin-where > summary:hover { color: var(--ink-2); }
+.login-card .signin-where p { margin: 8px 0 0; font-size: var(--text-xs); line-height: 1.5; }
+.login-card .signin-where .signin-note { color: var(--faint); }
+.signin-where p .copy-btn { vertical-align: middle; }
+.signin-path {
+  display: flex; align-items: center; gap: 5px; min-width: 0; margin: 8px 0 0; padding: 7px 8px 7px 11px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2);
+}
+.signin-path > a { display: flex; flex: 1; align-items: center; justify-content: space-between; gap: 9px; min-width: 0; }
+.signin-path code { overflow: hidden; min-width: 0; color: var(--ink-2); font-size: var(--text-2xs); text-overflow: ellipsis; white-space: nowrap; }
+.signin-path a > span { flex: none; color: var(--brand); font-size: 10px; font-weight: 700; }
+.signin-path .copy-btn { flex: none; }
+.login-card .signin-back { margin: 14px 0 0; font-size: var(--text-xs); }
+@media (max-width: 820px) {
+  .login-shell { grid-template-columns: minmax(0, 1fr); max-width: 460px; gap: 22px; }
+  .login-hero-copy { padding: 18px 0 0; }
+  .login-docs { margin-top: 16px; }
+}
+@media (max-width: 480px) {
+  .login-wrap { padding: 16px; }
+  .signin-card { padding: 22px 18px 18px; }
+  .login-hero-copy h1 { font-size: 36px; }
+  .signin-key-row { flex-wrap: wrap; }
+  .login-card .signin-key-row .btn { width: 100%; }
+}
 
 
 /* UX 40: the door's two pages, a locked project's unlock page and the lock

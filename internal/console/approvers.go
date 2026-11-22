@@ -97,6 +97,12 @@ type approverRow struct {
 	AddedAt  time.Time  `json:"added_at"`
 	AddedBy  string     `json:"added_by"` // how it was enrolled, for a person
 	LastUsed *time.Time `json:"last_used_at,omitempty"`
+	// Added is the day it was added as its card says it (approverDay), and
+	// RemoveCommand the terminal command that removes it, which the card
+	// shows only in its hint: removal stays in the terminal, as the
+	// console's key is no proof of the owner.
+	Added         string `json:"-"`
+	RemoveCommand string `json:"-"`
 }
 
 type approversData struct {
@@ -170,13 +176,29 @@ func (s *Service) approversPage(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.SignIn != nil {
 		d.AddPage, d.AddCommand = passkeyAddPath, s.approveEnrollmentCommand(enrollmentCodeSlot)
 	}
+	now := time.Now()
 	for _, c := range creds {
 		d.Credentials = append(d.Credentials, approverRow{
 			ID: c.ID, Kind: c.Kind, Name: c.Name, Synced: c.BackupState, AddedAt: c.AddedAt,
 			AddedBy: approverAddedBy(c.AddedBy, creds), LastUsed: c.LastUsedAt,
+			Added: approverDay(c.AddedAt, now), RemoveCommand: s.daemonCommand("approvers remove " + c.ID),
 		})
 	}
 	s.render(w, r, "approvers", pageData{Title: "Approvers", Active: "approvers", Data: d})
+}
+
+// approverDay is the day a key was added, as its card's chip says it: "Nov 9"
+// this year, "Nov 9, 2025" in another, in the daemon's zone (the chip's
+// tooltip gives the moment in the browser's own).
+func approverDay(t, now time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	t, now = t.Local(), now.Local()
+	if t.Year() == now.Year() {
+		return t.Format("Jan 2")
+	}
+	return t.Format("Jan 2, 2006")
 }
 
 // approverError answers a ceremony step with a JSON error the page shows. The

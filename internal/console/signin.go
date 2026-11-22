@@ -30,6 +30,7 @@ package console
 // restricted account first, like every console route.
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -449,11 +450,14 @@ func (s *Service) passkeyAddPage(w http.ResponseWriter, r *http.Request) {
 		d.Origin = origins[0]
 		d.OnOrigin = slices.Contains(origins, requestOrigin(r))
 	}
+	var buf bytes.Buffer
+	if err := s.signinPages.ExecuteTemplate(&buf, "passkey-add", d); err != nil {
+		s.serverErrorBare(w, r, err)
+		return
+	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.signinPages.ExecuteTemplate(w, "passkey-add", d); err != nil {
-		s.logger.Error("console: render the Add a passkey page", "error", err)
-	}
+	_, _ = w.Write(uniqueHintIDs(buf.Bytes()))
 }
 
 // passkeyAddBegin starts creating a passkey named name.
@@ -554,8 +558,11 @@ func lifetimeWord(d time.Duration) string {
 
 // signInTemplates parses the Add a passkey page: a standalone document like
 // the login page, with no console chrome, since its visitor is not signed in.
+// login.html comes with it for the parts the two pages share: the sky
+// ("login-sky") and what the console's shell would otherwise give them
+// ("login-kit": the copy buttons and the hints).
 func signInTemplates() (*template.Template, error) {
-	t, err := template.New("passkey-add").Funcs(funcs).ParseFS(templateFS, "templates/signin_add.html")
+	t, err := template.New("passkey-add").Funcs(funcs).ParseFS(templateFS, "templates/signin_add.html", "templates/login.html")
 	if err != nil {
 		return nil, fmt.Errorf("console: parse signin_add: %w", err)
 	}
