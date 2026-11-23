@@ -497,6 +497,13 @@ func TestNdMishaps_MarkReviewedClearsTheItem(t *testing.T) {
 	require.Equal(t, "console", evs[0].Payload["by"])
 	require.EqualValues(t, 8, evs[0].Payload["reports"])
 	require.Equal(t, "marked 8 mishap reports reviewed", eventSummary(evs[0]))
+	// The stamp is the newest report's time (three minutes old here), not
+	// the mark's, so the strip dates the report rather than claiming the
+	// mark was made then.
+	html = getHTMLBody(t, c.mux, "/console/mishaps")
+	require.Contains(t, html, "Reviewed through the newest report, from ")
+	require.Contains(t, html, "3m ago</time>: nothing new since.")
+	require.NotContains(t, html, "Marked reviewed")
 
 	// A new report brings the item back, counted since the stamp.
 	newID := ndMishap(t, c.db, "example-ops", "live-state: wrote to the live table", time.Now().UTC())
@@ -507,6 +514,7 @@ func TestNdMishaps_MarkReviewedClearsTheItem(t *testing.T) {
 	html = getHTMLBody(t, c.mux, "/console/mishaps")
 	require.Contains(t, html, `<span class="badge warn mishap-new"`, "the new report is marked")
 	require.Equal(t, 1, strings.Count(html, "mishap-new\""), "only the new one")
+	require.Contains(t, html, "new since the last one you marked reviewed, from ")
 	_ = newID
 
 	// A stale page's mark through an older report changes nothing.

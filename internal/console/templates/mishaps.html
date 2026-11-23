@@ -26,11 +26,14 @@
 {{/* The review: what came in since the owner last marked the reports
      reviewed, whatever the filters. Mark reviewed clears the Overview's
      mishap item until a new report arrives; it marks through the newest
-     report this page drew, so one that arrives while you read stays new. */}}
+     report this page drew, so one that arrives while you read stays new.
+     The stamp is that report's time, not when the mark was made, so the
+     line dates the report ("Marked reviewed 3h ago" once followed a mark
+     made a minute before). */}}
 {{with .Review}}
 <section class="mishap-review" id="mishap-review" data-review-new="{{.New}}" aria-label="Your review">
   <span class="mishap-review-ico">{{icon "check"}}</span>
-  <p>{{if .New}}<strong>{{.New}}</strong> {{if eq .New 1}}report{{else}}reports{{end}} {{with .At}}new since you marked the reports reviewed {{timeAs . (agoPhrase .)}}{{else}}not reviewed yet{{end}}{{else}}{{with .At}}Marked reviewed {{timeAs . (agoPhrase .)}}: nothing new since.{{end}}{{end}}</p>
+  <p>{{if .New}}<strong>{{.New}}</strong> {{if eq .New 1}}report{{else}}reports{{end}} {{with .At}}new since the last one you marked reviewed, from {{timeAs . (agoPhrase .)}}{{else}}not reviewed yet{{end}}{{else}}{{with .At}}Reviewed through the newest report, from {{timeAs . (agoPhrase .)}}: nothing new since.{{end}}{{end}}</p>
   {{if .New}}
   <form method="post" action="/console/mishaps/reviewed">
     <input type="hidden" name="through" value="{{.Through}}">
