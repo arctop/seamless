@@ -3,6 +3,7 @@ package console
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -212,4 +213,28 @@ func TestSessionDetail_ShowsTrialsRecorded(t *testing.T) {
 	getJSON(t, mux, "/console/trials/"+trialID+"?format=json", &d)
 	require.Equal(t, sessID, d.SessionID)
 	require.Equal(t, "cc/trialsess", d.SessionName)
+}
+
+// Past the rail's cut the head counts every trial and says the rail holds the
+// newest: it read "200 trials across 11 labs" while Labs counted 208 across 13.
+func TestTrialsLibrary_HeadCountsPastTheCut(t *testing.T) {
+	db, mux := newConsole(t)
+	for i := range trialListLimit + 3 {
+		lab := "lab-a"
+		if i < 3 {
+			lab = "lab-old" // the oldest three: only this lab falls past the cut
+		}
+		seedTrial(t, db, lab, fmt.Sprintf("trial %03d", i), core.OutcomePass, "demo", "", nil, i)
+	}
+	var list trialsData
+	getJSON(t, mux, "/console/trials?format=json", &list)
+	require.Equal(t, trialListLimit, list.Count)
+	require.Equal(t, trialListLimit+3, list.Total)
+	body := getPeek(t, mux, "/console/trials").Body.String()
+	require.Contains(t, body, `<strong>203</strong>trials<small>newest 200 shown</small>`)
+	require.NotContains(t, body, "across 1 lab", "a lab count of the cut would leave lab-old out")
+
+	getJSON(t, mux, "/console/trials?lab=lab-old&format=json", &list)
+	require.Equal(t, 3, list.Total, "under the cut the head is the rows")
+	require.Contains(t, getPeek(t, mux, "/console/trials?lab=lab-old").Body.String(), `<strong>3</strong>trials<small>across 1 lab</small>`)
 }

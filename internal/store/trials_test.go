@@ -188,3 +188,25 @@ func TestGetNavCounts_CountsLabsAndTrials(t *testing.T) {
 	require.Equal(t, 2, n.Labs)
 	require.Equal(t, 3, n.Trials)
 }
+
+func TestCountTrials_MatchesTheFilterWithoutALimit(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	for i := range 5 {
+		outcome := core.OutcomePass
+		if i%2 == 0 {
+			outcome = core.OutcomeFail
+		}
+		id, err := core.NewID()
+		require.NoError(t, err)
+		require.NoError(t, CreateTrial(ctx, db, core.Trial{ID: id, Lab: "count-lab", Title: "t", Outcome: outcome, CreatedAt: time.Now().UTC()}))
+	}
+	n, err := CountTrials(ctx, db, TrialFilter{Lab: "count-lab"})
+	require.NoError(t, err)
+	require.Equal(t, 5, n)
+	n, err = CountTrials(ctx, db, TrialFilter{Lab: "count-lab", Outcome: string(core.OutcomeFail)})
+	require.NoError(t, err)
+	require.Equal(t, 3, n)
+	_, err = CountTrials(ctx, db, TrialFilter{MetricsEquals: map[string]any{"hz": 1}})
+	require.Error(t, err, "a metrics filter is QueryTrials' alone")
+}

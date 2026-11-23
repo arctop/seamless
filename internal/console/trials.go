@@ -53,10 +53,13 @@ type trialLabGroup struct {
 // trialsData is the payload for the Trials library screen. The Selected/QS
 // fields drive the HTML reader pane only.
 type trialsData struct {
-	Groups  []trialLabGroup `json:"groups"`
-	Count   int             `json:"count"`
-	Lab     string          `json:"lab,omitempty"`     // active ?lab= filter
-	Outcome string          `json:"outcome,omitempty"` // active ?outcome= filter
+	Groups []trialLabGroup `json:"groups"`
+	Count  int             `json:"count"`
+	// Total is every trial the filters match; Count is the newest of them the
+	// rail draws, at most trialListLimit.
+	Total   int    `json:"total"`
+	Lab     string `json:"lab,omitempty"`     // active ?lab= filter
+	Outcome string `json:"outcome,omitempty"` // active ?outcome= filter
 	// Selected is the trial open in the reader: the requested one on a
 	// /console/trials/{id} page, or the newest match on the list URL
 	// (SelectedAuto, which the client pins into the URL).
@@ -114,7 +117,13 @@ func (s *Service) trialsPage(ctx context.Context, lab, outcome string) (trialsDa
 	if err != nil {
 		return trialsData{}, err
 	}
-	data := trialsData{Lab: lab, Outcome: outcome, Count: len(trials), QS: trialsQS(lab, outcome)}
+	data := trialsData{Lab: lab, Outcome: outcome, Count: len(trials), Total: len(trials), QS: trialsQS(lab, outcome)}
+	if len(trials) == trialListLimit {
+		// The rail is cut: the head counts every match, not the cut.
+		if data.Total, err = store.CountTrials(ctx, s.db(ctx), store.TrialFilter{Lab: lab, Outcome: outcome}); err != nil {
+			return trialsData{}, err
+		}
+	}
 	// Group by lab, preserving the newest-first order both across groups (a
 	// group sits where its newest trial does) and within each group.
 	idx := map[string]int{}

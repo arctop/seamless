@@ -82,24 +82,8 @@ func QueryTrials(ctx context.Context, db *sql.DB, f TrialFilter) ([]core.Trial, 
 		return nil, fmt.Errorf("store.QueryTrials: %w: got %d, want 1-%d (or 0 for the default)",
 			ErrInvalidTrialQueryLimit, f.Limit, MaxTrialQueryLimit)
 	}
-	query := `SELECT ` + trialCols + ` FROM trials WHERE 1=1`
-	var args []any
-	if f.Lab != "" {
-		query += ` AND lab = ?`
-		args = append(args, f.Lab)
-	}
-	if f.Outcome != "" {
-		query += ` AND outcome = ?`
-		args = append(args, f.Outcome)
-	}
-	if f.Project != "" {
-		query += ` AND project_slug = ?`
-		args = append(args, f.Project)
-	}
-	if f.SessionID != "" {
-		query += ` AND session_id = ?`
-		args = append(args, f.SessionID)
-	}
+	where, args := trialWhere(f)
+	query := `SELECT ` + trialCols + ` FROM trials` + where
 	// Over-fetch when filtering metrics in Go so the limit still returns enough
 	// matches; the metrics filter runs after the SQL cut.
 	sqlLimit := limit
@@ -130,6 +114,45 @@ func QueryTrials(ctx context.Context, db *sql.DB, f TrialFilter) ([]core.Trial, 
 		}
 	}
 	return out, rows.Err()
+}
+
+// trialWhere is the SQL filter of f's lab, outcome, project and session (the
+// metrics filter runs in Go), shared by QueryTrials and CountTrials.
+func trialWhere(f TrialFilter) (string, []any) {
+	where := ` WHERE 1=1`
+	var args []any
+	if f.Lab != "" {
+		where += ` AND lab = ?`
+		args = append(args, f.Lab)
+	}
+	if f.Outcome != "" {
+		where += ` AND outcome = ?`
+		args = append(args, f.Outcome)
+	}
+	if f.Project != "" {
+		where += ` AND project_slug = ?`
+		args = append(args, f.Project)
+	}
+	if f.SessionID != "" {
+		where += ` AND session_id = ?`
+		args = append(args, f.SessionID)
+	}
+	return where, args
+}
+
+// CountTrials counts the trials matching f's lab, outcome, project and
+// session, with no limit: what a capped QueryTrials list is a part of. It
+// refuses a metrics filter, which only QueryTrials applies.
+func CountTrials(ctx context.Context, db *sql.DB, f TrialFilter) (int, error) {
+	if len(f.MetricsEquals) > 0 {
+		return 0, errors.New("store.CountTrials: a metrics filter is applied in Go, by QueryTrials only")
+	}
+	where, args := trialWhere(f)
+	var n int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM trials`+where, args...).Scan(&n); err != nil {
+		return 0, fmt.Errorf("store.CountTrials: %w", err)
+	}
+	return n, nil
 }
 
 // TrialByID loads one trial. found=false means no such trial.
