@@ -23,7 +23,7 @@
     </div>
     <ol class="pv-layers" aria-label="Protection layers">
       {{range .Layers}}
-      <li class="pv-layer{{if .On}} on{{end}}{{if .Later}} later{{end}}"><span class="ix" aria-hidden="true">{{.N}}</span><span class="nm">{{.Name}}</span><span class="st">{{.State}}</span><p class="what">{{.What}}</p></li>
+      <li class="pv-layer{{if .On}} on{{end}}{{if .Later}} later{{end}}"><span class="ix" aria-hidden="true">{{.N}}</span><span class="nm">{{.Name}}</span><span class="st{{if .Names}} names{{end}}">{{.State}}</span><p class="what">{{.What}}</p></li>
       {{end}}
     </ol>
   </section>

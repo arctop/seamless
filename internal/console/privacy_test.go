@@ -139,3 +139,17 @@ func TestLoopbackAddr(t *testing.T) {
 		require.Equal(t, want, loopbackAddr(addr), addr)
 	}
 }
+
+// The restricted layer's state is account names, which the column's small caps
+// must not rewrite: _example_agent showed as _EXAMPLE_AGENT.
+func TestPrivacyLayers_RestrictedAccountsKeepTheirSpelling(t *testing.T) {
+	layers := privacyLayers(privacyData{Mode: "dedicated", Restricted: []string{"_example_agent"}})
+	require.Equal(t, "_example_agent", layers[4].State)
+	require.True(t, layers[4].Names)
+	for _, l := range layers[:4] {
+		require.False(t, l.Names, l.Name)
+	}
+	_, mux := newConsole(t)
+	css := getPeek(t, mux, "/console/static/console.css").Body.String()
+	require.Contains(t, css, ".pv-layer .st.names { letter-spacing: 0; text-transform: none; }")
+}

@@ -6402,6 +6402,7 @@ html:not(.js) [data-form-discard] { display: none; }
 .pv-layer.on .ix { color: var(--brand-ink); background: var(--ok); border: 0; }
 .pv-layer .nm { font-weight: 650; font-size: var(--text-sm); }
 .pv-layer .st { font: 600 var(--text-2xs)/1.2 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); text-align: right; }
+.pv-layer .st.names { letter-spacing: 0; text-transform: none; }
 .pv-layer.on .st { color: var(--ok); }
 .pv-layer.later .st { color: var(--faint); }
 .pv-layer .what { grid-column: 2 / 4; margin: 0; font-size: var(--text-xs); color: var(--muted); }

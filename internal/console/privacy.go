@@ -64,6 +64,10 @@ type privacyLayer struct {
 	What  string `json:"what"`
 	On    bool   `json:"on"`
 	Later bool   `json:"later"`
+	// Names says State is account names, shown as spelled: the column's
+	// small caps turned _example_agent into _EXAMPLE_AGENT, an account that
+	// does not exist.
+	Names bool `json:"names,omitempty"`
 }
 
 type privacyStep struct {
@@ -313,7 +317,7 @@ func privacyLayers(d privacyData) []privacyLayer {
 	}
 	switch {
 	case len(d.Restricted) > 0:
-		layers[4].On, layers[4].State = true, strings.Join(d.Restricted, ", ")
+		layers[4].On, layers[4].State, layers[4].Names = true, strings.Join(d.Restricted, ", "), true
 	case !d.Dedicated():
 		layers[4].Later, layers[4].State = true, "Needs 3"
 	default:
