@@ -791,10 +791,10 @@ off (the default), none of that renders.
 
 The clean live feed of what agents are actually doing: MCP tool calls, hook
 injections, recall-miss prompts, session lifecycle, and the plan-mode capture
-stream. A fresh page starts empty and listens from that moment forward; merely
-visiting never restores old rows.
+stream. A fresh page opens with the five newest interactions, under a **Before
+you arrived** divider, and listens from that moment forward.
 
-History is explicit and additive. Choose a recent window and select **Add** when
+Older history is explicit and additive. Choose a recent window and select **Add** when
 earlier context is useful; live rows stay in place, and **Load older events**
 paginates only inside that chosen window. Loaded history sits under a **Before
 you arrived** divider, with what arrived live above it. The empty feed offers

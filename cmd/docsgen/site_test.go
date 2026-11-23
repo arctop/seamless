@@ -63,7 +63,7 @@ func TestRepoDocumentationContracts(t *testing.T) {
 	require.NotContains(t, cli, "Bare `seam task` with no subcommand is the same as")
 
 	console := read("docs-src/reference/console.md")
-	for _, phrase := range []string{"fresh page starts empty", "History is explicit and additive", "Agent-reported mishaps"} {
+	for _, phrase := range []string{"fresh page opens with the five newest interactions", "Older history is explicit and additive", "Agent-reported mishaps"} {
 		require.Contains(t, console, phrase)
 	}
 

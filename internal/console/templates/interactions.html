@@ -59,6 +59,7 @@
 <div class="list-detail-split ops-split interactions-split">
   <div class="list-pane">
     <div class="ix-feed" id="ix-feed" data-opened="{{.Data.Opened}}"></div>
+    <script type="application/json" id="ix-preload">{{.Data.Preload}}</script>
     <div class="empty dotgrid ix-empty" id="ix-empty" hidden>
       <span class="empty-ico">{{icon "activity"}}</span>
       <div class="ix-empty-body"><strong id="ix-empty-copy">Listening for new interactions</strong><p id="ix-empty-help">New events will appear here at the top. Add a recent window when you need earlier context.</p><div class="ix-empty-acts"><button class="btn small" type="button" id="ix-empty-load">Add last 5 minutes</button><span class="ix-quick" id="ix-quick">or load <button type="button" class="ix-quick-btn" data-ix-quick="900">15 min</button><button type="button" class="ix-quick-btn" data-ix-quick="3600">1 hour</button><button type="button" class="ix-quick-btn" data-ix-quick="86400">24 hours</button></span></div></div>
@@ -108,8 +109,8 @@ window.SEAM_NO_LIVE_REFRESH = true; // this screen is the live feed -- it owns i
 
   // Remember only the window the owner last loaded, in this browser
   // (IX.rememberedWindow), and offer it as the first quick-load button.
-  // Visiting the page never restores rows: every load starts as a clean,
-  // live-only stream.
+  // A visit opens with the newest few interactions (#ix-preload, under the
+  // "Before you arrived" divider) and adds anything older only when asked.
   var WINDOWS = [60, 300, 900, 3600, 14400, 86400];
   var remembered = window.IX.rememberedWindow(WINDOWS);
   var historySecs = remembered || 300;
@@ -554,6 +555,15 @@ window.SEAM_NO_LIVE_REFRESH = true; // this screen is the live feed -- it owns i
   feed.addEventListener('toggle', function () {
     if (!paused && !anyOpen()) flushBuffer();
   }, true);
+
+  // The newest few interactions the server rendered with the page: history
+  // like any other, so they sit under the divider and live rows go above.
+  var preload = document.getElementById('ix-preload');
+  if (preload) {
+    var seed = [];
+    try { seed = JSON.parse(preload.textContent || 'null') || []; } catch (e) { seed = []; }
+    seed.forEach(insert);
+  }
 
   syncHistoryChoice();
   refreshTabs();

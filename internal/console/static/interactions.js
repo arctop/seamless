@@ -598,8 +598,9 @@
   }
 
   // ---- the live feed's history window and arrival mark -------------------------
-  // The live feed starts empty on every visit (history is explicit). What it
-  // remembers is only the window the owner last loaded, in this browser: a
+  // The live feed opens with the newest few interactions and adds older
+  // history only when asked. What it remembers is only the window the owner
+  // last loaded, in this browser: a
   // convenience, so storage that is blocked, full or absent (a private window)
   // remembers nothing rather than failing the page. Only a window the picker
   // offers (allowed) comes back; anything else reads as nothing remembered.

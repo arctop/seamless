@@ -177,6 +177,11 @@ type interactionsData struct {
 	// runs ahead cannot file a live row under the divider. Millisecond RFC3339,
 	// which every browser's Date.parse reads.
 	Opened string `json:"-"`
+	// Preload is the newest interactionsPreload rows, which the page opens
+	// with under the "Before you arrived" divider, so a visit from a link
+	// such as the Overview's "Full interaction stream" shows the latest
+	// activity at once. Only the HTML page carries it.
+	Preload []interactionRow `json:"-"`
 }
 
 // volBucket is one column of the interaction-volume histogram: a time slice with
@@ -293,8 +298,13 @@ func (s *Service) interactionVolume(ctx context.Context, project string, windowS
 	return buildVolume(ticks, window, now), nil
 }
 
-// interactions serves the live transport feed: an empty HTML shell (default)
-// that receives new rows over SSE. JSON callers can explicitly add a bounded
+// interactionsPreload is how many of the newest interactions the page opens
+// with (the owner's call, 2026-11-22: it opened empty, history explicit).
+const interactionsPreload = 5
+
+// interactions serves the live transport feed: an HTML shell (default) that
+// opens with the newest interactionsPreload rows and receives new rows over
+// SSE. JSON callers can explicitly add a bounded
 // history window via history=<seconds>, page within its returned afterTs bound,
 // or gap-fill newer rows via since/sinceTs after an SSE drop.
 func (s *Service) interactions(w http.ResponseWriter, r *http.Request) {
@@ -403,6 +413,10 @@ func (s *Service) interactions(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, toInteractionRow(e, name))
 	}
 	data := interactionsData{Rows: rows, AfterTS: afterTS, Opened: time.Now().UTC().Format("2006-01-02T15:04:05.000Z")}
+	if !wantsJSON(r) && !gapFill && afterTS == "" && !hasBefore {
+		// The plain page: rows is the newest page, newest first.
+		data.Preload = rows[:min(len(rows), interactionsPreload)]
+	}
 	// Older-page cursor: the last (oldest) event of a full descending page. Based
 	// on the raw fetch, not the filtered rows, so paging never stalls on a page
 	// that was all-skipped.

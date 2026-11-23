@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"testing"
 	"time"
 
@@ -279,8 +280,8 @@ func TestInteractionsClient_EventPeekUsesCompactChrome(t *testing.T) {
 	require.Contains(t, css, "max-height: min(42vh, 420px); overflow: auto; scrollbar-gutter: stable;")
 }
 
-// The feed still opens empty (a recorded decision: history is explicit), and
-// what it remembers is only the window the owner last loaded, in this browser:
+// The feed opens with the newest few interactions only (older history is
+// explicit), and what it remembers is only the window the owner last loaded, in this browser:
 // interactions.js keeps it in localStorage behind try/catch, and the page
 // offers it as the first quick-load button without loading anything.
 func TestNwInteractions_RemembersTheLoadedWindowInThisBrowser(t *testing.T) {
@@ -327,4 +328,27 @@ func TestNwInteractions_HistorySitsUnderTheArrivalDivider(t *testing.T) {
 	require.Contains(t, body, "if (first && divider.nextSibling !== first) feed.insertBefore(divider, first);")
 	require.Contains(t, body, "    placeDivider();\n  }", "every feed change re-places it (updateEmpty)")
 	require.Contains(t, string(consoleCSS), ".ix-arrived[hidden] { display: none; }")
+}
+
+// The page opens with the five newest interactions (the owner's call: it
+// opened empty, so the Overview's "Full interaction stream" link landed on
+// "Listening for new interactions"). The rows ride in the page itself, newest
+// first, without the recall twin the feed drops; the JSON answer has no
+// preload, and the script inserts them as history under the divider.
+func TestInteractions_PageOpensWithTheNewestFive(t *testing.T) {
+	_, mux, _ := newConsoleWithSession(t, "cc/testsess")
+	body := getPeek(t, mux, "/console/interactions").Body.String()
+	m := regexp.MustCompile(`(?s)<script type="application/json" id="ix-preload">(.*?)</script>`).FindStringSubmatch(body)
+	require.NotNil(t, m, "the page carries its preload")
+	var rows []interactionRow
+	require.NoError(t, json.Unmarshal([]byte(m[1]), &rows))
+	ids := make([]string, 0, len(rows))
+	for _, r := range rows {
+		ids = append(ids, r.ID)
+	}
+	require.Equal(t, []string{"01ERR", "01SES", "01TC1", "01TC2", "01INJ"}, ids, "the five newest, newest first")
+
+	require.Contains(t, body, "var preload = document.getElementById('ix-preload');")
+	require.Contains(t, body, "seed.forEach(insert);", "inserted like history, so the divider places them")
+	require.NotContains(t, getPeek(t, mux, "/console/interactions?format=json").Body.String(), "ix-preload")
 }
