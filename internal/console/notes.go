@@ -917,7 +917,7 @@ func (s *Service) noteDelete(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"status": "deleted", "id": idx.ID})
 		return
 	}
-	http.Redirect(w, r, withNotice(back, "Deleted "+idx.Title+"."), http.StatusSeeOther)
+	http.Redirect(w, r, withNotice(back, "Deleted "+shownTitle(idx.Title)+"."), http.StatusSeeOther)
 }
 
 // errNoteMoved: the file an index row named now holds another note.

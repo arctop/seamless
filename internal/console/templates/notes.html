@@ -59,9 +59,9 @@
     <header class="ml-group-hd"><h2 id="ml-gh-{{.Key}}">{{.Label}}</h2><span class="ml-note">{{.Note}}</span></header>
     {{- range .Rows}}
     <a class="ml-row nl-row{{if .Cache}} nl-cache{{end}}" id="ml-{{.ID}}" href="/console/notes/{{.ID}}{{$rowqs}}" data-peek>
-      <span class="ml-main"><span class="nl-title">{{if .Favorite}}<span class="ml-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</span>{{with .Description}}<span class="ml-desc">{{.}}</span>{{end}}</span>
+      <span class="ml-main"><span class="nl-title">{{if .Favorite}}<span class="ml-star" title="Starred">{{icon "star"}}</span>{{end}}{{shownTitle .Title}}</span>{{with .Description}}<span class="ml-desc">{{.}}</span>{{end}}</span>
       {{- range .Plans}}
-      <span class="lib-plan-chip"{{with .Title}} title="{{.}}"{{end}}>{{icon "map"}}<span class="mono">plan:{{.Slug}}</span>{{if .Status}} <span class="badge {{.Tone}}">{{.Status}}</span>{{end}}</span>
+      <span class="lib-plan-chip"{{with .Title}} title="{{shownTitle .}}"{{end}}>{{icon "map"}}<span class="mono">plan:{{.Slug}}</span>{{if .Status}} <span class="badge {{.Tone}}">{{.Status}}</span>{{end}}</span>
       {{- end}}
       {{- range .Labels}}
       <span class="badge">{{.}}</span>
@@ -131,7 +131,7 @@
         {{if .Delete.Offered}}{{template "note-delete" .}}{{end}}
       </span>
     </div>
-    <h2 class="reader-title">{{.Title}}{{copyBtn .Title}}
+    <h2 class="reader-title">{{shownTitle .Title}}{{copyBtn .Title}}
       <form class="star-form" method="post" action="/console/favorites/note/{{.ID}}">
         <input type="hidden" name="favorite" value="{{if .Favorite}}0{{else}}1{{end}}">
         <input type="hidden" name="next" value="/console/notes/{{.ID}}{{.QS}}" data-lib-next>
@@ -156,7 +156,7 @@
 {{/* A note's tags as a person reads them (noteTags): each plan it belongs to
      as a link with the plan's status, the tags written for people, and the
      ones software stamps folded behind "+N". */}}
-{{define "note-tags"}}{{range .Plans}}<a class="lib-plan-chip" href="{{.Href}}"{{with .Title}} title="{{.}}"{{end}}>{{icon "map"}}<span class="mono">plan:{{.Slug}}</span>{{if .Status}} <span class="badge {{.Tone}}">{{.Status}}</span>{{end}}</a>{{end}}{{range .Tags}}<span class="badge">{{.}}</span>{{end}}{{with .Machine}}<details class="lib-tag-fold"><summary class="badge" title="Tags agents and hooks add for software">+{{len .}}</summary>{{range .}}<span class="badge faint">{{.}}</span>{{end}}</details>{{end}}{{end}}
+{{define "note-tags"}}{{range .Plans}}<a class="lib-plan-chip" href="{{.Href}}"{{with .Title}} title="{{shownTitle .}}"{{end}}>{{icon "map"}}<span class="mono">plan:{{.Slug}}</span>{{if .Status}} <span class="badge {{.Tone}}">{{.Status}}</span>{{end}}</a>{{end}}{{range .Tags}}<span class="badge">{{.}}</span>{{end}}{{with .Machine}}<details class="lib-tag-fold"><summary class="badge" title="Tags agents and hooks add for software">+{{len .}}</summary>{{range .}}<span class="badge faint">{{.}}</span>{{end}}</details>{{end}}{{end}}
 
 {{/* A note's Delete (noteDelete): asked in the page first. A plan's narrative
      says so in the question and needs its box ticked as well, since without
@@ -164,7 +164,7 @@
 {{define "note-delete"}}<form method="post" action="/console/notes/{{.ID}}/delete">
           <input type="hidden" name="next" value="/console/notes{{.QS}}">
           {{range .Delete.Narrative}}<label class="ract-check" title="This note is plan:{{.}}'s narrative: agents that pick up the plan read it first. Tick to delete it anyway."><input type="checkbox" name="narrative" value="{{.}}" required>Delete the narrative of plan:{{.}}</label>{{end}}
-          <button class="ract danger" type="submit" data-confirm="Delete {{.Title}} for good? Its file and index rows go, and nothing brings it back.{{range .Delete.Narrative}} This is plan:{{.}}'s narrative.{{end}}" data-confirm-label="Delete it">{{icon "trash-2"}}Delete</button>
+          <button class="ract danger" type="submit" data-confirm="Delete {{shownTitle .Title}} for good? Its file and index rows go, and nothing brings it back.{{range .Delete.Narrative}} This is plan:{{.}}'s narrative.{{end}}" data-confirm-label="Delete it">{{icon "trash-2"}}Delete</button>
         </form>{{end}}
 
 {{/* A note's own page: the blocks item_shared.html's item-frame asks the
@@ -215,7 +215,7 @@
       {{- range .PartOf}}
       <section class="item-card" data-item-card="part-of" data-plan="{{.Slug}}">
         <h2 class="item-card-hd">Part of</h2>
-        <a class="item-card-title" href="{{.Href}}">{{.Title}}</a>
+        <a class="item-card-title" href="{{.Href}}">{{shownTitle .Title}}</a>
         <p class="item-card-sub">{{if .Total}}{{.Done}}/{{.Total}} steps done{{else}}no steps yet{{end}}{{if not .Moved.IsZero}} &middot; moved {{agoTime .Moved}}{{end}}{{if .Status}} <span class="badge {{.Tone}}">{{.Status}}</span>{{end}}</p>
         {{- if .Total}}
         <div class="item-bar" aria-hidden="true"><span class="done" style="width:{{.Pct}}%"></span></div>
@@ -227,7 +227,7 @@
         <h2 class="item-card-hd">{{$n.MoreTitle}}</h2>
         <ul class="item-list">
           {{- range .}}
-          <li><a href="/console/notes/{{.ID}}">{{.Title}}</a></li>
+          <li><a href="/console/notes/{{.ID}}">{{shownTitle .Title}}</a></li>
           {{- end}}
         </ul>
         <a class="item-all" href="{{$n.MoreAll.Href}}">{{$n.MoreAll.Label}}{{icon "arrow-right"}}</a>

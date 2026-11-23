@@ -108,7 +108,7 @@
   <section class="reader-links">
     <h3>Attached notes <span class="count">{{len .Attached}}</span></h3>
     <ul class="peek-refs">
-      {{range .Attached}}<li><a href="/console/notes/{{.ID}}">{{.Title}}</a> {{if .IsAgent}}<span class="badge">agent-cache</span>{{end}} <span class="muted">{{agoTime .Updated}}</span></li>{{end}}
+      {{range .Attached}}<li><a href="/console/notes/{{.ID}}">{{shownTitle .Title}}</a> {{if .IsAgent}}<span class="badge">agent-cache</span>{{end}} <span class="muted">{{agoTime .Updated}}</span></li>{{end}}
     </ul>
   </section>
   {{end}}
@@ -215,7 +215,7 @@
         <h2 class="item-card-hd">Attached notes <span class="count">{{len .}}</span></h2>
         <ul class="item-list">
           {{- range .}}
-          <li><a href="/console/notes/{{.ID}}">{{.Title}}</a>{{if .IsAgent}} <span class="badge">agent-cache</span>{{end}} <span class="muted">{{agoTime .Updated}}</span></li>
+          <li><a href="/console/notes/{{.ID}}">{{shownTitle .Title}}</a>{{if .IsAgent}} <span class="badge">agent-cache</span>{{end}} <span class="muted">{{agoTime .Updated}}</span></li>
           {{- end}}
         </ul>
       </section>

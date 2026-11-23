@@ -1,7 +1,7 @@
 {{define "peek-body"}}
 <article class="peek-entity" data-panel-project="{{.Project}}">
   <header class="peek-head"><span class="kind">note</span>{{agentPill "" .Model}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{with .MayContain}} <span class="kind faint" data-may-contain title="Provenance stamp: the agent that wrote this held content from these confidential or sealed projects. It names projects and approvals, never content.">{{mayContain .}}</span>{{end}}</header>
-  <h2 class="peek-title">{{.Title}}{{copyBtn .Title}}</h2>
+  <h2 class="peek-title">{{shownTitle .Title}}{{copyBtn .Title}}</h2>
   {{if .Description}}<p class="peek-desc">{{.Description}}</p>{{end}}
   {{template "detail-body" .}}
 </article>
@@ -26,7 +26,7 @@
     {{if .Delete.Offered}}
     <form method="post" action="/console/notes/{{.ID}}/delete">
       {{range .Delete.Narrative}}<label class="ract-check" title="This note is plan:{{.}}'s narrative: agents that pick up the plan read it first. Tick to delete it anyway."><input type="checkbox" name="narrative" value="{{.}}" required>the narrative of plan:{{.}}</label> {{end}}
-      <button class="link-act danger" type="submit" data-confirm="Delete {{.Title}} for good? Its file and index rows go, and nothing brings it back.{{range .Delete.Narrative}} This is plan:{{.}}'s narrative.{{end}}" data-confirm-label="delete it">delete</button>
+      <button class="link-act danger" type="submit" data-confirm="Delete {{shownTitle .Title}} for good? Its file and index rows go, and nothing brings it back.{{range .Delete.Narrative}} This is plan:{{.}}'s narrative.{{end}}" data-confirm-label="delete it">delete</button>
     </form>
     {{else}}{{with .Delete.Blocked}}<span class="muted" title="{{.}}">held: <a href="/console/held">open Held</a></span>{{end}}
     {{end}}

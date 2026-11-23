@@ -86,14 +86,14 @@
   <summary class="step-row">
     <span class="marker"><span class="dot"></span><span class="rail"></span></span>
     <span class="body">
-      <span class="t">{{.Title}}</span>
+      <span class="t">{{shownTitle .Title}}</span>
       <span class="meta">
         <span class="mono">{{shortID .ID}}</span>{{copyBtn .ID}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}
         {{if .IsGate}}<span class="gate-kind" data-gate title="A gate: a person, or an event outside Seamless, must act before what depends on it goes ahead. Nobody claims a gate.">{{icon "flag"}}Gate</span>{{end}}
         {{if .ClaimedBy}}<span class="claim" title="The session that holds the claim">{{icon "terminal"}}{{if .ClaimedByID}}<a href="/console/sessions/{{.ClaimedByID}}">{{.ClaimedBy}}</a>{{else}}{{.ClaimedBy}}{{end}}</span>{{end}}
         {{if .LeaseExp}}<span class="lease{{if .LeaseLapsed}} lease-lapsed{{end}}" data-lease-exp="{{.LeaseExp}}" title="{{if .LeaseLapsed}}The claim's lease ran out{{else}}The claim's lease: time left{{end}}">{{icon "timer"}}<span class="v">{{.LeaseLeft}}</span></span>{{end}}
         {{range .Waits}}<span class="edge" data-gate-who="{{.Who}}" title="waits on {{.Who}}: {{.What}}">{{icon "flag"}}<span class="edge-t">waits on {{.Who}}: {{.What}}</span></span>{{end}}
-        {{range .Chain}}<a class="edge" href="{{if .OnPage}}#{{.ID}}{{else}}/console/tasks/{{.ID}}{{end}}"{{if .OnPage}} data-jump{{end}} title="blocked by {{.Title}} &middot; {{.Word.Text}}">{{icon "link"}}<span class="edge-t">{{.Title}}</span></a>{{end}}{{range .LockedIn}}<span class="edge" data-locked-blocker="{{.}}" title="Unlock {{.}} in the console to see the task">{{icon "lock"}}<span class="edge-t">a task in locked project {{.}} blocks this one</span></span>{{end}}
+        {{range .Chain}}<a class="edge" href="{{if .OnPage}}#{{.ID}}{{else}}/console/tasks/{{.ID}}{{end}}"{{if .OnPage}} data-jump{{end}} title="blocked by {{shownTitle .Title}} &middot; {{.Word.Text}}">{{icon "link"}}<span class="edge-t">{{shownTitle .Title}}</span></a>{{end}}{{range .LockedIn}}<span class="edge" data-locked-blocker="{{.}}" title="Unlock {{.}} in the console to see the task">{{icon "lock"}}<span class="edge-t">a task in locked project {{.}} blocks this one</span></span>{{end}}
         {{if .Unblocks}}{{if .IsGate}}<span class="edge ok" data-unblocks title="holds {{.UnblocksTitle}}">{{icon "arrow-right"}}{{.HoldsText}}</span>{{else}}<span class="edge ok" data-unblocks title="unblocks {{.UnblocksTitle}}">{{icon "arrow-right"}}unblocks {{len .Unblocks}}</span>{{end}}{{end}}
       </span>
     </span>

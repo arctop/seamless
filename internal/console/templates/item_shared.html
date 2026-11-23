@@ -23,12 +23,12 @@
     <nav class="item-place" aria-label="Place in the list">
       <span class="item-pos" data-item-pos>{{.Text}}</span>
       {{- with .Prev}}
-      <a class="item-step" href="{{.Href}}" rel="prev" data-item-step="prev" data-seam-query title="Previous: {{.Label}}"><kbd>k</kbd>previous</a>
+      <a class="item-step" href="{{.Href}}" rel="prev" data-item-step="prev" data-seam-query title="Previous: {{shownTitle .Label}}"><kbd>k</kbd>previous</a>
       {{- else}}
       <span class="item-step" aria-disabled="true"><kbd>k</kbd>previous</span>
       {{- end}}
       {{- with .Next}}
-      <a class="item-step" href="{{.Href}}" rel="next" data-item-step="next" data-seam-query title="Next: {{.Label}}">next<kbd>j</kbd></a>
+      <a class="item-step" href="{{.Href}}" rel="next" data-item-step="next" data-seam-query title="Next: {{shownTitle .Label}}">next<kbd>j</kbd></a>
       {{- else}}
       <span class="item-step" aria-disabled="true">next<kbd>j</kbd></span>
       {{- end}}
@@ -41,7 +41,7 @@
       {{- range $i, $c := .Crumbs}}{{if $i}}<span class="item-crumb-sep" aria-hidden="true">&rsaquo;</span>{{end}}<a href="{{.Href}}"{{if .Mono}} class="mono"{{else if .Accent}} class="item-crumb-kind"{{end}}>{{.Label}}</a>{{end -}}
     </nav>
     <div class="item-titlerow">
-      <h1 class="item-title{{if .Mono}} mono{{end}}">{{.Title}}{{copyBtn .Title}}
+      <h1 class="item-title{{if .Mono}} mono{{end}}">{{shownTitle .Title}}{{copyBtn .Title}}
         {{- with .Star}}{{if .Action}}
         <form class="star-form" method="post" action="{{.Action}}">
           <input type="hidden" name="favorite" value="{{if .On}}0{{else}}1{{end}}">

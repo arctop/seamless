@@ -951,8 +951,12 @@ type overviewData struct {
 	// judged vitals. Each list is empty rather than zero-filled when its bucket
 	// is empty, so the template can drop the whole strip.
 	Attention []attnCard
-	Motion    *workMotion `json:",omitempty"`
-	Live      []liveSessionRow
+	// NeedsTotal is the strip's head, the items its cards stand for, and
+	// NeedsTip says what it adds up (needsTotal).
+	NeedsTotal int
+	NeedsTip   string      `json:"-"`
+	Motion     *workMotion `json:",omitempty"`
+	Live       []liveSessionRow
 	// LiveTotal is every live agent; LiveMore those the chips leave out.
 	LiveTotal   int
 	LiveMore    int
@@ -1287,6 +1291,7 @@ func (s *Service) overview(w http.ResponseWriter, r *http.Request) {
 		now: now, next: overviewNext(r), work: work, pending: pending,
 		staleUnseen: staleUnseen, staleDays: staleDays, offer: offer,
 	})
+	data.NeedsTotal, data.NeedsTip = needsTotal(data.Attention)
 	data.Motion = motionOf(work, offer)
 	if analytics {
 		data.Vitals = overviewVitals(data, report, covTrend, prior, hasPrior, win)
@@ -1468,7 +1473,7 @@ func liveChips(work nowData, limit int) ([]liveSessionRow, int) {
 		}
 		row := liveSessionRow{ID: a.ID, Name: a.Name, Project: a.Project, Lead: a.Project, Age: ago(a.Beat)}
 		if len(a.Claims) > 0 && a.Claims[0].Title != "" {
-			row.Lead, row.Held = a.Claims[0].Title, true
+			row.Lead, row.Held = shownTitle(a.Claims[0].Title), true
 		}
 		out = append(out, row)
 	}

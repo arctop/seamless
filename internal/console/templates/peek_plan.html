@@ -22,7 +22,7 @@
         <tbody>
           {{range .Tasks}}
           <tr class="row-link" data-href="/console/tasks/{{.ID}}" data-peek>
-            <td><a href="/console/tasks/{{.ID}}" data-peek>{{.Title}}</a> <span class="mono-id">{{shortID .ID}}</span>{{copyBtn .ID}}</td>
+            <td><a href="/console/tasks/{{.ID}}" data-peek>{{shownTitle .Title}}</a> <span class="mono-id">{{shortID .ID}}</span>{{copyBtn .ID}}</td>
             <td>{{taskBadge .Word}}{{if or .Holder .Waits}}<div class="desc">{{with .Holder}}held by {{.}}{{end}}{{range .Waits}} waits on {{.Who}}: {{.What}}{{end}}</div>{{end}}</td>
           </tr>
           {{end}}
@@ -55,7 +55,7 @@
         <tbody>
           {{range .Attached}}
           <tr class="row-link" data-href="/console/notes/{{.ID}}" data-peek>
-            <td class="mem-name"><strong><a href="/console/notes/{{.ID}}" data-peek>{{.Title}}</a></strong><div class="desc mono">{{.Slug}}</div></td>
+            <td class="mem-name"><strong><a href="/console/notes/{{.ID}}" data-peek>{{shownTitle .Title}}</a></strong><div class="desc mono">{{.Slug}}</div></td>
             <td>{{if .IsAgent}}<span class="badge">agent-cache</span>{{else}}<span class="badge">note</span>{{end}}</td>
             <td class="muted">{{agoTime .Updated}}</td>
           </tr>

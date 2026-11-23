@@ -1190,13 +1190,13 @@ func rowSummary(kind string, c proposalCard) (title, detail string) {
 		return "Retire stale plan", ""
 	case store.ProposalShipPlan:
 		if c.ShipPlan != nil {
-			return "Mark plan shipped", c.ShipPlan.Title + " · " +
+			return "Mark plan shipped", shownTitle(c.ShipPlan.Title) + " · " +
 				plural(c.ShipPlan.MatchedCount, "matching commit", "matching commits")
 		}
 		return "Mark plan shipped", ""
 	case store.ProposalMergePlans:
 		if c.MergePlans != nil {
-			return "Fold plan into another", c.MergePlans.Title + " → " + c.MergePlans.IntoSlug
+			return "Fold plan into another", shownTitle(c.MergePlans.Title) + " → " + c.MergePlans.IntoSlug
 		}
 		return "Fold plan into another", ""
 	case store.ProposalMemoryWanted:

@@ -308,6 +308,7 @@ var funcs = template.FuncMap{
 	"sub":            func(a, b int) int { return a - b },
 	"hasPrefix":      strings.HasPrefix,
 	"copyBtn":        copyBtn,
+	"shownTitle":     shownTitle,
 	"agentPill":      agentPill,
 	"planHref":       planHref,
 	"mayContain":     core.MayContainLine,
@@ -1110,6 +1111,15 @@ func compactNum(n int) string {
 	}
 	return strconv.Itoa(n) // unreachable: the last unit always returns
 }
+
+// shownTitle is an agent-written title as the console shows it: each spaced
+// double hyphen a colon ("Retire the v1 port: after the cutover"), since the
+// owner reads no double hyphen and no em or en dash in its place
+// (console-copy-no-dashes). It is display only: the stored title, what a copy
+// button copies and what a JSON answer carries stay as the agent wrote them.
+// The body of a note or a task is never touched; a command in it keeps its
+// " -- ".
+func shownTitle(s string) string { return strings.ReplaceAll(s, " -- ", ": ") }
 
 // codeSpans renders one line of agent-written text with its `code` spans as
 // <code>, escaping everything else: a mishap report quotes commands in

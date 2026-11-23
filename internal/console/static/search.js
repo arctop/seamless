@@ -25,6 +25,10 @@
   var list = document.getElementById('cmdk-list');
   var allLink = document.getElementById('cmdk-all');
 
+  // A title as the console shows it (render.go's shownTitle): its spaced
+  // double hyphen a colon. The search answer carries the stored title.
+  function shownTitle(t) { return String(t || '').replace(/ -{2} /g, ': '); }
+
   var MIN_CHARS = 2;      // matches the server's floor (store's ftsQuery drops 1-char tokens)
   var DEBOUNCE_MS = 180;
   var PER_GROUP = 5;
@@ -225,7 +229,7 @@
           if (r.matchedId) bits.push(r.matchedId);
           bits.push(r.project || 'global');
           bits.push(r.age);
-          return { title: r.title, desc: r.description || '', snippetHtml: r.snippetHtml, meta: bits.join(' · '), href: r.href };
+          return { title: shownTitle(r.title), desc: r.description || '', snippetHtml: r.snippetHtml, meta: bits.join(' · '), href: r.href };
         });
         // A cut kind: its count is a floor, and its last row opens the page
         // that shows the rest.

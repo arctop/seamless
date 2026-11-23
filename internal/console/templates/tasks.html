@@ -108,7 +108,7 @@
     <div class="tl-row row-link" id="tl-{{.ID}}" data-href="{{.Href}}" data-mark="{{.Mark}}"{{with .Need}} data-need="{{.}}"{{end}}>
       <span class="tl-mark" aria-hidden="true"></span>
       <span class="tl-main">
-        <a class="tl-title" id="tl-a-{{.ID}}" href="{{.Href}}" data-peek data-list-row>{{if .Favorite}}<span class="ml-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</a>
+        <a class="tl-title" id="tl-a-{{.ID}}" href="{{.Href}}" data-peek data-list-row>{{if .Favorite}}<span class="ml-star" title="Starred">{{icon "star"}}</span>{{end}}{{shownTitle .Title}}</a>
         <span class="tl-line"{{with .Tone}} data-tone="{{.}}"{{end}} data-word="{{.Word.Key}}">{{template "task-row-line" .}}</span>
       </span>
       <button type="button" class="copy-btn tl-id" data-copy="{{.ID}}" title="Copies the whole id" aria-label="Copy the whole id"><span class="mono">{{shortID .ID}}</span></button>
@@ -134,8 +134,8 @@
 {{- else if eq .Need "claimless"}}in progress, but nobody holds a claim{{with .Since}} &middot; {{timeAs . (print "started " (agoPhrase .))}}{{end}}
 {{- else if eq .Mark "live"}}{{with .Holder}}{{.Name}}{{end}}{{with .LeaseLeft}} &middot; {{timeAs $.LeaseExpiry (print "lease " .)}}{{end}}{{with .Since}} &middot; {{timeAs . (print "started " (agoPhrase .))}}{{end}}
 {{- else if eq .Mark "ready"}}{{if .Untouched}}{{timeAs .Updated (print "untouched " (ago .Updated))}}{{else}}{{.InState}}{{end}}
-{{- else if eq .Mark "blocked"}}{{with .FirstBlocker}}blocked by <a href="/console/tasks/{{.ID}}" data-first-blocker="{{.ID}}">{{.Title}}</a>{{if $.MoreBlockers}} (+{{$.MoreBlockers}}){{end}}{{end}}{{range .LockedIn}}{{if $.FirstBlocker}} &middot; {{end}}<span data-locked-blocker="{{.}}" title="Unlock {{.}} in the console to see the task">{{icon "lock"}} a task in locked project {{.}} blocks this one</span>{{end}}
-{{- else if eq .Mark "waiting"}}{{if .Kind}}gate &middot; {{end}}{{if and .Gate .Gate.Open}}<span data-gate-who="{{.Gate.Who}}">waits on {{.Gate.Who}}: {{.Gate.What}}</span>{{else}}{{with .WaitsOn}}waits on {{joinAnd .}}{{end}}{{with .FirstBlocker}} &middot; after <a href="/console/tasks/{{.ID}}" data-first-blocker="{{.ID}}">{{.Title}}</a>{{end}}{{end}}{{if .Holds}} &middot; holds {{.Holds}} task{{if ne .Holds 1}}s{{end}}{{end}}{{range .LockedIn}} &middot; <span data-locked-blocker="{{.}}" title="Unlock {{.}} in the console to see the task">{{icon "lock"}} a task in locked project {{.}} blocks this one</span>{{end}}
+{{- else if eq .Mark "blocked"}}{{with .FirstBlocker}}blocked by <a href="/console/tasks/{{.ID}}" data-first-blocker="{{.ID}}">{{shownTitle .Title}}</a>{{if $.MoreBlockers}} (+{{$.MoreBlockers}}){{end}}{{end}}{{range .LockedIn}}{{if $.FirstBlocker}} &middot; {{end}}<span data-locked-blocker="{{.}}" title="Unlock {{.}} in the console to see the task">{{icon "lock"}} a task in locked project {{.}} blocks this one</span>{{end}}
+{{- else if eq .Mark "waiting"}}{{if .Kind}}gate &middot; {{end}}{{if and .Gate .Gate.Open}}<span data-gate-who="{{.Gate.Who}}">waits on {{.Gate.Who}}: {{.Gate.What}}</span>{{else}}{{with .WaitsOn}}waits on {{joinAnd .}}{{end}}{{with .FirstBlocker}} &middot; after <a href="/console/tasks/{{.ID}}" data-first-blocker="{{.ID}}">{{shownTitle .Title}}</a>{{end}}{{end}}{{if .Holds}} &middot; holds {{.Holds}} task{{if ne .Holds 1}}s{{end}}{{end}}{{range .LockedIn}} &middot; <span data-locked-blocker="{{.}}" title="Unlock {{.}} in the console to see the task">{{icon "lock"}} a task in locked project {{.}} blocks this one</span>{{end}}
 {{- else}}{{with .Closed}}{{timeAs . (print $.Word.Text " " (agoPhrase .))}}{{else}}{{.Word.Text}}{{end}}
 {{- end}}
 {{- end}}
@@ -161,7 +161,7 @@
       {{if .Project}}<a class="chip-parent" href="/console/projects/{{.Project}}">{{icon "git-branch"}}{{.Project}}</a>{{else}}<span class="chip-parent">{{icon "git-branch"}}global</span>{{end}}
       <span class="reader-actions task-acts" data-task-actions>{{template "task-actions" .}}</span>
     </div>
-    <h2 class="reader-title">{{.Title}}{{copyBtn .Title}}
+    <h2 class="reader-title">{{shownTitle .Title}}{{copyBtn .Title}}
       <form class="star-form" method="post" action="/console/favorites/task/{{.ID}}">
         <input type="hidden" name="favorite" value="{{if .Favorite}}0{{else}}1{{end}}">
         <input type="hidden" name="next" value="{{if .Next}}{{.Next}}{{else}}/console/tasks/{{.ID}}{{end}}" data-lib-next>
@@ -186,7 +186,7 @@
   <section class="reader-links">
     <h3>Depends on <span class="count">{{.DependsOn}}</span></h3>
     <ul class="peek-refs task-refs">
-      {{range .Deps}}<li><a href="/console/tasks/{{.ID}}">{{.Title}}</a> {{taskBadge .Word}}{{template "task-ref-gate" .}}{{copyBtn .ID}}</li>{{end}}{{range .LockedIn}}
+      {{range .Deps}}<li><a href="/console/tasks/{{.ID}}">{{shownTitle .Title}}</a> {{taskBadge .Word}}{{template "task-ref-gate" .}}{{copyBtn .ID}}</li>{{end}}{{range .LockedIn}}
       <li data-locked-blocker="{{.}}" title="Unlock {{.}} in the console to see the task">{{icon "lock"}} a task in locked project {{.}} blocks this one</li>{{end}}
     </ul>
   </section>
@@ -195,7 +195,7 @@
   <section class="reader-links">
     <h3>Blocks <span class="count">{{len .Blocks}}</span></h3>
     <ul class="peek-refs task-refs">
-      {{range .Blocks}}<li><a href="/console/tasks/{{.ID}}">{{.Title}}</a> {{taskBadge .Word}}{{copyBtn .ID}}</li>{{end}}
+      {{range .Blocks}}<li><a href="/console/tasks/{{.ID}}">{{shownTitle .Title}}</a> {{taskBadge .Word}}{{copyBtn .ID}}</li>{{end}}
     </ul>
   </section>
   {{end}}
@@ -249,12 +249,12 @@
       {{- with .Plan}}
       <section class="item-card item-plan" data-item-card="plan" data-plan="{{.Slug}}">
         <h2 class="item-card-hd">The plan</h2>
-        <a class="item-card-title" href="{{.Href}}">{{.Title}}</a>
+        <a class="item-card-title" href="{{.Href}}">{{shownTitle .Title}}</a>
         <p class="item-card-sub" data-plan-summary>{{.Done}}/{{.Total}} done{{range .Counts}} &middot; <span data-count="{{.Key}}">{{.Text}}</span>{{end}}</p>
         <div class="item-bar" aria-hidden="true"><span class="done" style="width:{{.DonePct}}%"></span><span class="doing" style="width:{{.DoingPct}}%"></span></div>
         <ol class="item-steps">
           {{- range .Steps}}
-          <li{{if .Current}} aria-current="step"{{end}}>{{if .Current}}<span class="item-step-t">{{.Title}}</span>{{else}}<a class="item-step-t" href="/console/tasks/{{.ID}}">{{.Title}}</a>{{end}}{{taskChip .Word}}</li>
+          <li{{if .Current}} aria-current="step"{{end}}>{{if .Current}}<span class="item-step-t">{{shownTitle .Title}}</span>{{else}}<a class="item-step-t" href="/console/tasks/{{.ID}}">{{shownTitle .Title}}</a>{{end}}{{taskChip .Word}}</li>
           {{- end}}
         </ol>
         <a class="item-all" href="{{.Href}}">Open the plan{{icon "arrow-right"}}</a>
@@ -265,7 +265,7 @@
         <h2 class="item-card-hd">Depends on <span class="count">{{.DependsOn}}</span></h2>
         <ul class="item-list task-refs">
           {{- range .Deps}}
-          <li><a href="/console/tasks/{{.ID}}">{{.Title}}</a> {{taskBadge .Word}}{{template "task-ref-gate" .}}</li>
+          <li><a href="/console/tasks/{{.ID}}">{{shownTitle .Title}}</a> {{taskBadge .Word}}{{template "task-ref-gate" .}}</li>
           {{- end}}
           {{- range .LockedIn}}
           <li data-locked-blocker="{{.}}" title="Unlock {{.}} in the console to see the task">{{icon "lock"}} a task in locked project {{.}} blocks this one</li>
@@ -278,7 +278,7 @@
         <h2 class="item-card-hd">Blocks <span class="count">{{len .}}</span></h2>
         <ul class="item-list task-refs">
           {{- range .}}
-          <li><a href="/console/tasks/{{.ID}}">{{.Title}}</a> {{taskBadge .Word}}</li>
+          <li><a href="/console/tasks/{{.ID}}">{{shownTitle .Title}}</a> {{taskBadge .Word}}</li>
           {{- end}}
         </ul>
       </section>

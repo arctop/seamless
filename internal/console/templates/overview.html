@@ -61,7 +61,9 @@
        and a link (plain text where the level hides the screen), and, where one
        action settles it, that action: a form posting to the route the item's
        own screen posts to, with next back here at #needs, so the shared
-       in-place path follows it and the strip morphs without a reload.
+       in-place path follows it and the strip morphs without a reload. The
+       head's number is the items the cards stand for, not the cards
+       (needsTotal): 36 gates waiting are 36.
 
        One scroll-snap rail, never a wrapping grid: a second ragged row would
        push the work below the fold. The chevrons ship hidden; the page script
@@ -70,7 +72,7 @@
   {{if .Attention}}
   <section class="ov2-attn" id="needs" aria-label="Needs you">
     <header class="ov2-attn-head">
-      <span class="ov2-attn-label">Needs you<strong>{{len .Attention}}</strong></span>
+      <span class="ov2-attn-label">Needs you{{if .NeedsTotal}}<strong title="{{.NeedsTip}}">{{compactNum .NeedsTotal}}</strong>{{end}}</span>
       <span class="ov2-attn-nav" hidden>
         <button type="button" class="ov2-attn-btn" data-attn-prev aria-label="Scroll to earlier cards">{{icon "chevron-left"}}</button>
         <button type="button" class="ov2-attn-btn" data-attn-next aria-label="Scroll to later cards">{{icon "chevron-right"}}</button>
@@ -149,7 +151,7 @@
         <ul class="ov2-motion-list">
           {{range .Loose}}
           <li id="mo-lo-{{.ID}}">
-            <span class="ov2-motion-t" title="{{.Title}}">{{if .Linked}}<a href="{{.Href}}">{{.Title}}</a>{{else}}<span>{{.Title}}</span>{{end}}</span>
+            <span class="ov2-motion-t" title="{{shownTitle .Title}}">{{if .Linked}}<a href="{{.Href}}">{{shownTitle .Title}}</a>{{else}}<span>{{shownTitle .Title}}</span>{{end}}</span>
             <span class="ov2-motion-meta">{{with .Word}}{{taskChip .}} {{end}}{{if .Project}}{{.Project}}{{else}}global{{end}}{{with .PlanSlug}} &middot; plan:{{.}}{{end}}</span>
           </li>
           {{end}}
@@ -163,7 +165,7 @@
         <ul class="ov2-motion-list">
           {{range .Ready}}
           <li id="mo-rd-{{.ID}}">
-            <span class="ov2-motion-t" title="{{.Title}}">{{if .Linked}}<a href="{{.Href}}">{{.Title}}</a>{{else}}<span>{{.Title}}</span>{{end}}</span>
+            <span class="ov2-motion-t" title="{{shownTitle .Title}}">{{if .Linked}}<a href="{{.Href}}">{{shownTitle .Title}}</a>{{else}}<span>{{shownTitle .Title}}</span>{{end}}</span>
             <span class="ov2-motion-meta">{{if .Project}}{{.Project}}{{else}}global{{end}}{{with .PlanSlug}} &middot; plan:{{.}}{{end}}</span>
           </li>
           {{end}}

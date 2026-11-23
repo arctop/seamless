@@ -27,7 +27,6 @@ package console
 import (
 	"net/http"
 	"net/url"
-	"strings"
 )
 
 // planItemPage is a plan's own page: the frame every kind shares (itemPage,
@@ -62,13 +61,10 @@ func planStateWords(state string) (text, tone string) {
 	return "", ""
 }
 
-// planTitleText is a plan title as the frame's title shows it: each " -- "
-// a dash that stays with the word before it, as planTitleHTML draws it on
-// the board, in plain text (the frame escapes its title). The stored title
-// is untouched.
-func planTitleText(title string) string {
-	return strings.ReplaceAll(title, " -- ", ": ")
-}
+// planTitleText is a plan title as the frame's title shows it (shownTitle),
+// as planTitleHTML draws it on the board, in plain text (the frame escapes
+// its title). The stored title is untouched.
+func planTitleText(title string) string { return shownTitle(title) }
 
 // planBackLabel is the way back to a plan's project's plans.
 func planBackLabel(project string) string {

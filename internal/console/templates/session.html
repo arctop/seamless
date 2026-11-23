@@ -156,7 +156,7 @@
             <h3>Claimed tasks <span>{{len .ClaimedTasks}}</span></h3>
             <div class="session-entity-list">
               {{range .ClaimedTasks}}
-              <a id="{{.ID}}" href="/console/tasks/{{.ID}}" data-peek><span>{{.Title}}</span><small>{{if .PlanSlug}}plan:{{.PlanSlug}}{{end}}{{if and .PlanSlug .LeaseLeft}} &middot; {{end}}{{if .LeaseLeft}}{{.LeaseLeft}}{{end}}</small></a>
+              <a id="{{.ID}}" href="/console/tasks/{{.ID}}" data-peek><span>{{shownTitle .Title}}</span><small>{{if .PlanSlug}}plan:{{.PlanSlug}}{{end}}{{if and .PlanSlug .LeaseLeft}} &middot; {{end}}{{if .LeaseLeft}}{{.LeaseLeft}}{{end}}</small></a>
               {{end}}
             </div>
           </div>
@@ -165,7 +165,7 @@
           <div class="session-work-section" id="session-tasks-moved">
             <h3>Tasks moved <span>{{len .TasksMoved}}</span></h3>
             <div class="session-entity-list">
-              {{range .TasksMoved}}<a id="moved-{{.ID}}" href="/console/tasks/{{.ID}}" data-peek title="{{if .PlanSlug}}plan:{{.PlanSlug}} &middot; {{end}}{{.MovesText}}"><span>{{.Title}}</span><small>{{.MovesText}}</small></a>{{end}}
+              {{range .TasksMoved}}<a id="moved-{{.ID}}" href="/console/tasks/{{.ID}}" data-peek title="{{if .PlanSlug}}plan:{{.PlanSlug}} &middot; {{end}}{{.MovesText}}"><span>{{shownTitle .Title}}</span><small>{{.MovesText}}</small></a>{{end}}
             </div>
           </div>
           {{end}}
@@ -173,7 +173,7 @@
           <div class="session-work-section" id="session-notes-written">
             <h3>Notes written <span>{{len .Notes}}</span></h3>
             <div class="session-entity-list">
-              {{range .Notes}}<a id="note-{{.ID}}" href="/console/notes/{{.ID}}" data-peek><span>{{.Title}}</span><small>{{.What}}</small></a>{{end}}
+              {{range .Notes}}<a id="note-{{.ID}}" href="/console/notes/{{.ID}}" data-peek><span>{{shownTitle .Title}}</span><small>{{.What}}</small></a>{{end}}
             </div>
           </div>
           {{end}}
@@ -189,7 +189,7 @@
           <div class="session-work-section">
             <h3>Trials recorded <span>{{len .Trials}}</span></h3>
             <div class="session-entity-list">
-              {{range .Trials}}<a id="{{.ID}}" href="/console/trials/{{.ID}}"><span>{{.Title}}</span><small>{{.Lab}}{{if .Outcome}} &middot; {{.Outcome}}{{end}}</small></a>{{end}}
+              {{range .Trials}}<a id="{{.ID}}" href="/console/trials/{{.ID}}"><span>{{shownTitle .Title}}</span><small>{{.Lab}}{{if .Outcome}} &middot; {{.Outcome}}{{end}}</small></a>{{end}}
             </div>
           </div>
           {{end}}
@@ -286,7 +286,7 @@
     <div class="conv-written" id="conv-w-{{.Key}}">
       <span class="conv-project">{{icon "folder-tree"}}{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}}</span>
       <div class="session-entity-list conv-items">
-        {{range .Items}}<a id="conv-{{.ID}}" href="{{.Href}}" data-peek><span>{{.Title}}{{with .MayContain}} <em class="conv-stamp" data-may-contain title="Provenance stamp: the agent that wrote this held content from these confidential or sealed projects. It names projects and approvals, never content.">{{mayContain .}}</em>{{end}}</span><small>{{.Kind}}</small></a>{{end}}
+        {{range .Items}}<a id="conv-{{.ID}}" href="{{.Href}}" data-peek><span>{{shownTitle .Title}}{{with .MayContain}} <em class="conv-stamp" data-may-contain title="Provenance stamp: the agent that wrote this held content from these confidential or sealed projects. It names projects and approvals, never content.">{{mayContain .}}</em>{{end}}</span><small>{{.Kind}}</small></a>{{end}}
       </div>
       {{if .More}}<p class="faint conv-more">{{.More}} more not shown</p>{{end}}
     </div>

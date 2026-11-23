@@ -528,7 +528,7 @@ func (s *Service) sessionHeadlines(ctx context.Context, sessions []core.Session,
 			}
 		}
 		if len(live) > 0 {
-			text := core.TruncateWords(live[0].Title, diary.AboutMaxRunes)
+			text := core.TruncateWords(shownTitle(live[0].Title), diary.AboutMaxRunes)
 			if len(live) > 1 {
 				text += ", and " + plural(len(live)-1, "more task", "more tasks")
 			}

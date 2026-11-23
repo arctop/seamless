@@ -254,13 +254,10 @@ func planAnchor(project, slug string) string {
 	return "plan-" + planProjectParam(project) + ":" + slug
 }
 
-// planTitleHTML is a plan title for display: escaped, with each " -- " shown
-// as a dash that stays with the word before it (a no-break space, then an en
-// dash) so a wrap never splits it in two. The stored title is untouched.
+// planTitleHTML is a plan title for display (shownTitle), escaped. The stored
+// title is untouched.
 func planTitleHTML(title string) template.HTML {
-	esc := template.HTMLEscapeString(title)
-	// Escaped first, so the only markup is the fixed entity pair.
-	return template.HTML(strings.ReplaceAll(esc, " -- ", ": "))
+	return template.HTML(template.HTMLEscapeString(shownTitle(title)))
 }
 
 // planSourceText names where a plan came from, in the owner's words.

@@ -727,7 +727,7 @@ func (s *Service) gateHolds(ctx context.Context, rows []planStepVM, pc planStepC
 			rows[i].Unblocks = append(rows[i].Unblocks, depChip(d, pc.onPage[d.ID]))
 			titles = append(titles, d.Title)
 		}
-		rows[i].UnblocksTitle = strings.Join(titles, " · ")
+		rows[i].UnblocksTitle = shownTitle(strings.Join(titles, " · "))
 	}
 	return nil
 }
@@ -966,7 +966,7 @@ func (s *Service) planStep(ctx context.Context, t core.Task, pc planStepCtx) pla
 		for _, u := range step.Unblocks {
 			titles = append(titles, u.Title)
 		}
-		step.UnblocksTitle = strings.Join(titles, " · ")
+		step.UnblocksTitle = shownTitle(strings.Join(titles, " · "))
 	}
 	return step
 }

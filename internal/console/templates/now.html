@@ -47,7 +47,7 @@
              The whole title is in the link's title when two lines cut it. */}}
         <header class="now-agent-head">
           <span class="now-beat" aria-hidden="true"><span class="live-dot"></span></span>
-          <a class="now-agent-name" href="/console/sessions/{{.ID}}" title="{{.Title}}">{{.Title}}</a>
+          <a class="now-agent-name" href="/console/sessions/{{.ID}}" title="{{shownTitle .Title}}">{{shownTitle .Title}}</a>
           <form class="star-form" method="post" action="/console/favorites/session/{{.ID}}">
             <input type="hidden" name="favorite" value="{{if .Favorite}}0{{else}}1{{end}}">
             <input type="hidden" name="next" value="/console/now">
@@ -69,7 +69,7 @@
           {{range .Claims}}
           <a class="now-claim" id="cl-{{.ID}}" href="/console/tasks/{{.ID}}">
             {{icon "list-checks"}}
-            <span class="t" title="{{.Title}}">{{.Title}}</span>
+            <span class="t" title="{{shownTitle .Title}}">{{shownTitle .Title}}</span>
             {{if .PlanSlug}}<span class="now-chip plan" title="plan:{{.PlanSlug}}">plan:{{.PlanSlug}}</span>{{end}}
             {{if .LeaseExp}}<span class="lease" data-lease-exp="{{.LeaseExp}}">{{icon "timer"}}<span class="v">{{.LeaseLeft}}</span></span>{{end}}
           </a>
@@ -80,7 +80,7 @@
         {{range .Lapsed}}
         <a class="now-lapsed" id="cl-lapsed-{{.ID}}" href="/console/tasks/{{.ID}}">
           <span class="w">{{taskChip .Word}}{{with .LapsedAt}} {{timeAs . (agoPhrase .)}}{{end}}:</span>
-          <span class="t" title="{{.Title}}">{{.Title}}</span>
+          <span class="t" title="{{shownTitle .Title}}">{{shownTitle .Title}}</span>
         </a>
         {{end}}
         {{if not (or .Claims .Lapsed)}}
@@ -120,7 +120,7 @@
            went quiet -- only that one still counts its lease down. */}}
       <div class="now-loose" data-state="{{.State}}" id="lo-{{.ID}}">
         {{icon "triangle-alert"}}
-        <a class="t" href="/console/tasks/{{.ID}}">{{.Title}}</a>
+        <a class="t" href="/console/tasks/{{.ID}}">{{shownTitle .Title}}</a>
         <span class="now-chip proj" title="{{.Project}}">{{.Project}}</span>
         {{if .PlanSlug}}<span class="now-chip plan" title="plan:{{.PlanSlug}}">plan:{{.PlanSlug}}</span>{{end}}
         <span class="now-state">{{taskChip .Word}}{{with .LapsedAt}} {{timeAs . (agoPhrase .)}}{{end}}</span>
@@ -177,7 +177,7 @@
         {{range .UpNext}}
         <div class="now-ready" id="up-{{.ID}}">
           <span class="dot"></span>
-          <a class="t" href="/console/tasks/{{.ID}}">{{.Title}}</a>
+          <a class="t" href="/console/tasks/{{.ID}}">{{shownTitle .Title}}</a>
           <span class="now-chip proj" title="{{.Project}}">{{.Project}}</span>
           {{if .PlanSlug}}<span class="now-chip plan" title="plan:{{.PlanSlug}}">plan:{{.PlanSlug}}</span>{{end}}
           {{if .Unblocks}}<span class="edge ok" title="closing this unblocks {{.Unblocks}} task{{if ne .Unblocks 1}}s{{end}}">{{icon "arrow-right"}}unblocks {{.Unblocks}}</span>{{end}}

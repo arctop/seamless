@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -310,7 +311,7 @@ func TestNdStrip_OrdersWhatNeedsYou(t *testing.T) {
 	require.Contains(t, body, `<div class="ov2-attn-card" data-sev="warn" data-need="gates" data-blocking>`)
 	require.Contains(t, body, `<form class="ov2-attn-act" method="post" action="/console/tasks/`+s.gateID+`/gate/clear">`)
 	require.Contains(t, body, `<input type="hidden" name="next" value="/console/#needs">`)
-	require.Contains(t, body, "Needs you<strong>12</strong>")
+	require.Contains(t, body, `Needs you<strong title="11 items on 11 cards; plans near the finish line are not counted">11</strong>`, "the finish line is not counted")
 }
 
 // An item whose optional feature is off does not exist, and a strip with
@@ -835,4 +836,44 @@ func TestNdReadyMore_SendsTheRestToTasks(t *testing.T) {
 	require.Contains(t, nowBody, `+2 more ready &middot; <a href="`+href+`">every ready task on Tasks</a>`)
 	scoped := getHTMLBody(t, c.mux, "/console/now?scope=example-ops")
 	require.Contains(t, scoped, `<a href="/console/tasks?project=example-ops&amp;ready=all&amp;steps=1">`, "a scoped Now keeps its project")
+}
+
+// The strip's head counts the items its cards stand for, not the cards: three
+// gates on the owner are three. A finish line is good news rather than
+// something waiting on the owner, so it is not counted, and a strip of finish
+// lines alone shows no number.
+func TestNdStrip_HeadCountsItemsNotCards(t *testing.T) {
+	c := ndNew(t, "advanced", ndAllOn)
+	ndFixture(t, c)
+	for _, title := range []string{"Approve the budget", "Renew the domain"} {
+		ndTask(t, c.db, core.Task{ProjectSlug: "example-ops", Title: title, Kind: core.TaskKindGate,
+			Gate: core.TaskGate{Who: "owner", What: "decide"}})
+	}
+	var ov struct {
+		Attention  []attnCard
+		NeedsTotal int
+	}
+	getJSON(t, c.mux, "/console/?format=json", &ov)
+	require.Equal(t, 3, ndCard(t, ov.Attention, needGates).Count)
+	ndCard(t, ov.Attention, needFinishLine)
+	want, cards := 0, 0
+	for _, card := range ov.Attention {
+		if card.Kind != needFinishLine {
+			want += card.Count
+			cards++
+		}
+	}
+	require.Equal(t, want, ov.NeedsTotal)
+	require.NotEqual(t, len(ov.Attention), ov.NeedsTotal, "the fixture tells items from cards")
+
+	body := getHTMLBody(t, c.mux, "/console/")
+	require.Contains(t, body, `Needs you<strong title="`+strconv.Itoa(want)+` items on `+strconv.Itoa(cards)+
+		` cards; plans near the finish line are not counted">`+strconv.Itoa(want)+`</strong>`)
+
+	n, tip := needsTotal([]attnCard{{Kind: needFinishLine, Count: 2}})
+	require.Zero(t, n)
+	require.Empty(t, tip)
+	n, tip = needsTotal([]attnCard{{Kind: needMishaps, Count: 1}})
+	require.Equal(t, 1, n)
+	require.Equal(t, "1 item on 1 card", tip)
 }

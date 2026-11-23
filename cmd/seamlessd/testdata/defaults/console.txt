@@ -729,7 +729,7 @@
   
   <section class="ov2-attn" id="needs" aria-label="Needs you">
     <header class="ov2-attn-head">
-      <span class="ov2-attn-label">Needs you<strong>1</strong></span>
+      <span class="ov2-attn-label">Needs you<strong title="1 item on 1 card">1</strong></span>
       <span class="ov2-attn-nav" hidden>
         <button type="button" class="ov2-attn-btn" data-attn-prev aria-label="Scroll to earlier cards"><svg class="ico ico-chevron-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
         <button type="button" class="ov2-attn-btn" data-attn-next aria-label="Scroll to later cards"><svg class="ico ico-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>

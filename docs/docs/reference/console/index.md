@@ -7,6 +7,12 @@ It is `html/template` plus vanilla JS plus SSE, served by `internal/console` fro
 the same binary as everything else - no node, no npm, no React, no build step. It
 is not how Seamless is driven; it is how you watch it.
 
+The console's own words use no double hyphen and no em or en dash. A title an
+agent wrote (a plan's, a task's, a note's, a trial's) shows its " -- " as a
+colon wherever the console draws it. That is display only: the stored title,
+what a copy button copies, the JSON answers and every body keep what the agent
+wrote, so a command such as `git checkout -- path` in a body stays intact.
+
 ## What the console can change
 
 The console is **read-mostly**. That is a design claim, so here is the whole
@@ -670,6 +676,9 @@ then whether stored knowledge is reaching your agents. Top to bottom:
 - **The level chooser** - on a fresh installation, the one-time welcome card
   (see [Choose how much you see](#choose-how-much-you-see)).
 - **Needs you** - one card per thing that waits on you, most urgent first.
+  The number beside the heading is how many items the cards stand for, their
+  counts added up (a card for 36 gates counts 36), plans at the finish line
+  aside; hover it for how many cards that is.
   First what an agent is blocked on right now: access requests waiting for
   you (while a project is locked or access requests are on), writes held for
   your review (with write screening on, or restricted accounts' proposals),
@@ -1870,8 +1879,8 @@ unlock page. `?project=<slug>` narrows the board to one (`global` names the
 global scope); a project that is not there, or that is locked and not
 unlocked in this browser, is a 400. `?q=`
 keeps the plans whose title or slug holds the text, in any case
-(`plan:<slug>` works too). A title holding " -- " shows it as a dash that never
-splits across lines; the stored title is untouched.
+(`plan:<slug>` works too). A title holding " -- " shows it as a colon, as
+every title does (see the top of this page); the stored title is untouched.
 
 A plan is keyed by its project and slug: the same slug in two projects is two
 plans, with their own steps and notes. `/console/plans/{slug}?project=<slug>`

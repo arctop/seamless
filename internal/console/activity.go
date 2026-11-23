@@ -225,7 +225,7 @@ func eventSummary(e core.Event) string {
 		if deleted, _ := p["deleted"].(bool); deleted {
 			return "deleted note " + payloadStr(p, "slug")
 		}
-		return "wrote note " + payloadStr(p, "title")
+		return "wrote note " + shownTitle(payloadStr(p, "title"))
 	case core.EventNoteRead:
 		// A read names its note by slug rather than the title the write side
 		// records: the tool takes an id or a slug, so the title is not
@@ -241,7 +241,7 @@ func eventSummary(e core.Event) string {
 		}
 		return verb + " " + payloadStr(p, "kind") + " " + payloadStr(p, "id")
 	case core.EventTrialRecorded:
-		return "recorded trial " + payloadStr(p, "title")
+		return "recorded trial " + shownTitle(payloadStr(p, "title"))
 	case core.EventMemoryFirstReuse:
 		// The momentum payoff line: the ideation copy, verbatim shape.
 		line := strings.TrimSpace(payloadStr(p, "kind") + " " + payloadStr(p, "name"))
@@ -636,9 +636,9 @@ func gardenerSummary(p map[string]any) string {
 		}
 		return "armed utility ranking"
 	case "digest_note":
-		return "wrote digest " + payloadStr(p, "title")
+		return "wrote digest " + shownTitle(payloadStr(p, "title"))
 	case "undo_digest_note":
-		return "withdrew digest " + payloadStr(p, "title")
+		return "withdrew digest " + shownTitle(payloadStr(p, "title"))
 	case "":
 		return "gardener activity"
 	default:

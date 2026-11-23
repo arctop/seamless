@@ -143,6 +143,32 @@ func (s *Service) needsFor(ctx context.Context, in needsInput) []attnCard {
 	return out
 }
 
+// needsTotal is the strip's head: the items its cards stand for, each card's
+// Count added up (36 gates waiting are 36, not one card), and the tooltip that
+// says so. The finish-line cards are good news rather than something waiting
+// on the owner, and their Count is a plan's steps left, so they are not
+// counted. Zero when the strip holds only finish lines: the head then shows
+// no number.
+func needsTotal(cards []attnCard) (int, string) {
+	n, counted, finish := 0, 0, 0
+	for _, c := range cards {
+		if c.Kind == needFinishLine {
+			finish++
+			continue
+		}
+		n += c.Count
+		counted++
+	}
+	if n == 0 {
+		return 0, ""
+	}
+	tip := plural(n, "item", "items") + " on " + plural(counted, "card", "cards")
+	if finish > 0 {
+		tip += "; plans near the finish line are not counted"
+	}
+	return n, tip
+}
+
 // overviewNext is where an inline action on the Overview returns: the
 // Overview as this request asked for it (its window kept; its format and
 // one-shot flash not), at the strip.
@@ -306,11 +332,11 @@ func (s *Service) needOpenGates(ctx context.Context, next string) []attnCard {
 		card := attnCard{
 			Kind: needGates, Sev: "warn", Icon: "flag", Count: len(mine), Blocking: true,
 			Title: plural(len(mine), "gate waits on you", "gates wait on you"),
-			Sub:   "oldest: " + oldest.Title + " · " + agoPhrase(oldest.CreatedAt),
+			Sub:   "oldest: " + shownTitle(oldest.Title) + " · " + agoPhrase(oldest.CreatedAt),
 			Href:  "/console/tasks",
 		}
 		if len(mine) == 1 {
-			card.Sub = oldest.Title
+			card.Sub = shownTitle(oldest.Title)
 			if oldest.Gate.What != "" {
 				card.Sub += ": " + oldest.Gate.What
 			}
@@ -331,7 +357,7 @@ func (s *Service) needOpenGates(ctx context.Context, next string) []attnCard {
 			Href:  "/console/tasks",
 		}
 		if len(others) == 1 {
-			card.Sub = others[0].Title
+			card.Sub = shownTitle(others[0].Title)
 			card.Href = "/console/tasks/" + url.PathEscape(others[0].ID)
 		}
 		out = append(out, card)
@@ -452,7 +478,7 @@ func needClaims(loose []nowLooseVM, next string) []attnCard {
 		}
 		if len(rows) == 1 {
 			l := rows[0]
-			card.Sub = l.Title
+			card.Sub = shownTitle(l.Title)
 			if l.LapsedAt != nil {
 				card.Sub += " · lapsed " + agoPhrase(*l.LapsedAt)
 			}
@@ -622,7 +648,7 @@ func (s *Service) needKnowledge(ctx context.Context, in needsInput) []attnCard {
 			out = append(out, attnCard{
 				Kind: needFinishLine, Sev: "ok", Icon: "flag", Count: p.StepsLeft(),
 				Title: p.Slug + ": " + p.FinishLinePhrase(),
-				Sub:   "left: " + strings.Join(p.Remaining, " · "),
+				Sub:   "left: " + shownTitle(strings.Join(p.Remaining, " · ")),
 				Href:  planHref(p.Project, p.Slug),
 				Bar:   finishBar(p.PlanRollup),
 			})

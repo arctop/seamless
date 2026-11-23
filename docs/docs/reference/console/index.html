@@ -253,6 +253,11 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
 It is <code>html/template</code> plus vanilla JS plus SSE, served by <code>internal/console</code> from
 the same binary as everything else - no node, no npm, no React, no build step. It
 is not how Seamless is driven; it is how you watch it.</p>
+<p>The console's own words use no double hyphen and no em or en dash. A title an
+agent wrote (a plan's, a task's, a note's, a trial's) shows its &quot; -- &quot; as a
+colon wherever the console draws it. That is display only: the stored title,
+what a copy button copies, the JSON answers and every body keep what the agent
+wrote, so a command such as <code>git checkout -- path</code> in a body stays intact.</p>
 <h2 id="what-the-console-can-change">What the console can change</h2>
 <p>The console is <strong>read-mostly</strong>. That is a design claim, so here is the whole
 list - every write it is capable of, taken from the <code>POST</code> routes in
@@ -1606,6 +1611,9 @@ then whether stored knowledge is reaching your agents. Top to bottom:</p>
 <li><strong>The level chooser</strong> - on a fresh installation, the one-time welcome card
 (see <a href="#choose-how-much-you-see">Choose how much you see</a>).</li>
 <li><strong>Needs you</strong> - one card per thing that waits on you, most urgent first.
+The number beside the heading is how many items the cards stand for, their
+counts added up (a card for 36 gates counts 36), plans at the finish line
+aside; hover it for how many cards that is.
 First what an agent is blocked on right now: access requests waiting for
 you (while a project is locked or access requests are on), writes held for
 your review (with write screening on, or restricted accounts' proposals),
@@ -2901,8 +2909,8 @@ unlock page. <code>?project=&lt;slug&gt;</code> narrows the board to one (<code>
 global scope); a project that is not there, or that is locked and not
 unlocked in this browser, is a 400. <code>?q=</code>
 keeps the plans whose title or slug holds the text, in any case
-(<code>plan:&lt;slug&gt;</code> works too). A title holding &quot; -- &quot; shows it as a dash that never
-splits across lines; the stored title is untouched.</p>
+(<code>plan:&lt;slug&gt;</code> works too). A title holding &quot; -- &quot; shows it as a colon, as
+every title does (see the top of this page); the stored title is untouched.</p>
 <p>A plan is keyed by its project and slug: the same slug in two projects is two
 plans, with their own steps and notes. <code>/console/plans/{slug}?project=&lt;slug&gt;</code>
 is one plan's <a href="#item-page">own page</a>, read as a memory, a note or a task is:

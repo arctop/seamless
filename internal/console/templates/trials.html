@@ -38,8 +38,8 @@
         <header class="rail-group-hd"><span class="hd-label">{{.Lab}}</span> <span class="n">{{.Count}}</span></header>
         <div class="rail-items">
           {{range .Trials}}
-          <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/trials/{{.ID}}{{$qs}}" data-title="{{.Title}}" data-context="Lab / {{.Lab}}"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
-            <span class="ri-title">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{.Title}}</span>
+          <a class="rail-item{{if and $sel (eq .ID $sel.ID)}} selected{{end}}" id="ri-{{.ID}}" href="/console/trials/{{.ID}}{{$qs}}" data-title="{{shownTitle .Title}}" data-context="Lab / {{.Lab}}"{{if and $sel (eq .ID $sel.ID)}} aria-current="page"{{end}}>
+            <span class="ri-title">{{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}{{shownTitle .Title}}</span>
             <span class="ri-meta">{{if .Outcome}}<span class="t-{{outcomeTone .Outcome}}">{{.Outcome}}</span> &middot; {{end}}{{if .Project}}{{.Project}}{{else}}global{{end}}{{if .Metrics}} &middot; {{.Metrics}} metric{{if ne .Metrics 1}}s{{end}}{{end}} &middot; {{agoTime .Created}}{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}</span>
           </a>
           {{end}}
@@ -74,7 +74,7 @@
       <a class="kind" href="{{labPath .Lab}}">lab:{{.Lab}}</a>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}
       {{if .Project}}<a class="chip-parent" href="/console/projects/{{.Project}}">{{icon "git-branch"}}{{.Project}}</a>{{else}}<span class="chip-parent">{{icon "git-branch"}}global</span>{{end}}
     </div>
-    <h2 class="reader-title">{{.Title}}{{copyBtn .Title}}
+    <h2 class="reader-title">{{shownTitle .Title}}{{copyBtn .Title}}
       <form class="star-form" method="post" action="/console/favorites/trial/{{.ID}}">
         <input type="hidden" name="favorite" value="{{if .Favorite}}0{{else}}1{{end}}">
         <input type="hidden" name="next" value="/console/trials/{{.ID}}">

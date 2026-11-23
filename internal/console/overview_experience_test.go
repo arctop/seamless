@@ -131,7 +131,7 @@ func TestOverview_AttentionStripOrdersBySeverityAndLinksOut(t *testing.T) {
 	require.Contains(t, body, `class="ov2-attn-nav" hidden`)
 	require.Contains(t, body, `data-attn-prev`)
 	require.Contains(t, body, `data-attn-next`)
-	require.Contains(t, body, "Needs you<strong>2</strong>")
+	require.Contains(t, body, `Needs you<strong title="2 items on 2 cards">2</strong>`)
 }
 
 func TestOverview_LiveStripListsHeartbeatingSessions(t *testing.T) {

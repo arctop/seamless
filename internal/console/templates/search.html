@@ -84,7 +84,7 @@
       <article class="search-result row-link" data-search-kind="{{.Kind}}" data-href="{{.Href}}"{{if .Peek}} data-peek{{end}}{{with .Retired}} data-retired="{{.}}"{{end}}>
         <div class="search-result-body">
           <div class="search-result-titleline">
-            {{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}<strong><a href="{{.Href}}"{{if .Peek}} data-peek{{end}}>{{.Title}}</a></strong>{{copyBtn .Title}}
+            {{if .Favorite}}<span class="ri-star" title="Starred">{{icon "star"}}</span>{{end}}<strong><a href="{{.Href}}"{{if .Peek}} data-peek{{end}}>{{shownTitle .Title}}</a></strong>{{copyBtn .Title}}
           </div>
           {{if .SnippetHTML}}<div class="search-result-desc">{{.SnippetHTML}}</div>{{else if .Description}}<div class="search-result-desc">{{.Description}}</div>{{end}}
           <div class="search-result-meta">

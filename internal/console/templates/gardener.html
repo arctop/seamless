@@ -318,7 +318,7 @@
       <span>by {{if .ByHref}}<a href="{{.ByHref}}" data-peek{{with .ByTitle}} title="{{.}}"{{end}}>{{.By}}</a>{{else}}<span{{with .ByTitle}} title="{{.}}"{{end}}>{{.By}}</span>{{end}}</span>
       {{timeAs .ResolvedAt (agoPhrase .ResolvedAt)}}
       {{with .Settled}}<span class="gdl-settled">{{.}}</span>{{end}}
-      {{range .Produced}}<a class="gdl-produced" href="{{.Href}}" data-peek title="{{.Title}}">{{if eq .Label "note"}}{{icon "file-text"}}{{else}}{{icon "list-checks"}}{{end}}{{.Label}}: {{.Title}}</a>{{end}}
+      {{range .Produced}}<a class="gdl-produced" href="{{.Href}}" data-peek title="{{shownTitle .Title}}">{{if eq .Label "note"}}{{icon "file-text"}}{{else}}{{icon "list-checks"}}{{end}}{{.Label}}: {{shownTitle .Title}}</a>{{end}}
     </span>
   </span>
   {{if and .CanAct .CanUndo}}
@@ -516,7 +516,7 @@
   {{end}}
   <div class="proposal-assurance">{{icon "link"}} The superseded memory stays readable and points to the kept memory.</div>
 {{else if eq .Kind "digest"}}
-  <div class="proposal-document-head"><span class="proposal-object-icon ok">{{icon "file-text"}}</span><div><span>New note</span><strong>{{.Title}}</strong><small>{{.SessionCount}} session{{if ne .SessionCount 1}}s{{end}} &middot; {{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}} &middot; {{.Month}}</small></div></div>
+  <div class="proposal-document-head"><span class="proposal-object-icon ok">{{icon "file-text"}}</span><div><span>New note</span><strong>{{shownTitle .Title}}</strong><small>{{.SessionCount}} session{{if ne .SessionCount 1}}s{{end}} &middot; {{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}} &middot; {{.Month}}</small></div></div>
   <div class="prose proposal-prose">{{.Body}}</div>
   {{if .MayContain}}<div class="proposal-assurance">{{icon "lock"}} The note records that it {{.MayContain}}, as the findings it summarizes do.</div>{{end}}
   <div class="proposal-assurance">{{icon "check"}} Creates a digest note; the source sessions remain unchanged.</div>
@@ -588,7 +588,7 @@
   {{with .AbandonPlan}}
   <div class="proposal-object">
     <span class="proposal-object-icon warn">{{icon "archive"}}</span>
-    <div><span>Captured plan leaving the active horizon</span><a href="{{planHref .Project .Slug}}">{{.Title}}</a><p>{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}} &middot; currently {{.Status}}</p></div>
+    <div><span>Captured plan leaving the active horizon</span><a href="{{planHref .Project .Slug}}">{{shownTitle .Title}}</a><p>{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}} &middot; currently {{.Status}}</p></div>
     <span class="badge {{planTone .Status}}">{{.Status}}</span>
   </div>
   {{end}}
@@ -597,7 +597,7 @@
   {{with .ShipPlan}}
   <div class="proposal-object">
     <span class="proposal-object-icon ok">{{icon "git-commit-horizontal"}}</span>
-    <div><span>Captured plan whose work already landed</span><a href="{{planHref .Project .Slug}}">{{.Title}}</a><p>{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}} &middot; currently {{.Status}}</p></div>
+    <div><span>Captured plan whose work already landed</span><a href="{{planHref .Project .Slug}}">{{shownTitle .Title}}</a><p>{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}} &middot; currently {{.Status}}</p></div>
     <span class="badge {{planTone .Status}}">{{.Status}}</span>
   </div>
   {{if .Commits}}<div class="proposal-query-list"><span>Commits since the capture that match the plan</span><div>{{range .Commits}}<em>{{.}}</em>{{end}}</div></div>{{end}}
@@ -607,7 +607,7 @@
   {{with .MergePlans}}
   <div class="proposal-object">
     <span class="proposal-object-icon warn">{{icon "git-merge"}}</span>
-    <div><span>Captured plan with no steps of its own</span><a href="{{planHref .Project .Slug}}">{{.Title}}</a><p>{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}} &middot; currently {{.Status}}</p></div>
+    <div><span>Captured plan with no steps of its own</span><a href="{{planHref .Project .Slug}}">{{shownTitle .Title}}</a><p>{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}} &middot; currently {{.Status}}</p></div>
     <span class="badge {{planTone .Status}}">{{.Status}}</span>
   </div>
   <div class="proposal-object outcome">

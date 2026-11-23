@@ -396,7 +396,7 @@ func refLink(ref diary.Ref, class string) template.HTML {
 // refLinkAs is refLink with its own text, and a title for a link (an item
 // that no longer exists keeps that title instead).
 func refLinkAs(ref diary.Ref, class, text, linkTitle string) template.HTML {
-	name := template.HTMLEscapeString(text)
+	name := template.HTMLEscapeString(shownTitle(text))
 	cls := ""
 	if class != "" {
 		cls = ` class="` + template.HTMLEscapeString(class) + `"`
@@ -406,7 +406,7 @@ func refLinkAs(ref diary.Ref, class, text, linkTitle string) template.HTML {
 		if ref.Kind == diary.RefPlan && !ref.HasPage {
 			peek = ` title="Plans &amp; tasks in ` + template.HTMLEscapeString(ref.Project) + `"`
 		} else if linkTitle != "" {
-			peek += ` title="` + template.HTMLEscapeString(linkTitle) + `"`
+			peek += ` title="` + template.HTMLEscapeString(shownTitle(linkTitle)) + `"`
 		}
 		return template.HTML(`<a` + cls + ` href="` + href + `"` + peek + `>` + name + `</a>`)
 	}
