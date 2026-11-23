@@ -15,6 +15,29 @@ bumps) filtered out. Each heading links the release's downloads and checksums.
 Install with one command ([quickstart](/quickstart/)), or update an existing
 install in place with `seamlessd update`.
 
+## v0.11.1 {#v0-11-1}
+
+Released 2026-11-23 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.11.1)
+
+### Features
+
+- feat(console): Interactions opens with the five newest interactions
+
+### Fixes
+
+- fix(console): Needs you counts items, and agent titles read without " -- "
+- fix(console): no double hyphens, em dashes or en dashes on screen
+- fix(console): one meaning per count across Overview, Now and Projects
+- fix(console): the review's small issues
+- fix(console): the sidebar's account row names the server by its machine name
+- fix(console): Privacy shows a restricted account's name as spelled
+- fix(console): the Trials head counts every trial, not the rail's newest 200
+- fix(console): the Mishaps review line dates the report it reviewed through, not the mark
+- fix(console): Retrieval's quiet rows keep "updated" on their line, and the list scrolls in its panel
+- fix(console): Ready next's "+N more" leads to every ready task, and Up next says how many it leaves out
+- fix(console): the needs strip's gate card names three holders, not all of them
+- fix(console): counts past a billion read "1.8B", not "1808.1M"
+
 ## v0.11.0 {#v0-11-0}
 
 Released 2026-11-23 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.11.0)
