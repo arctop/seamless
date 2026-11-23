@@ -8,6 +8,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -804,4 +805,26 @@ func TestGateHolders_NamesAFewAndCountsTheRest(t *testing.T) {
 	require.Equal(t, "lee, dana and 3 others", gateHolders([]core.Task{
 		gate("dana"), gate("lee"), gate("kim"), gate("lee"), gate("ash"), gate("bo"),
 	}))
+}
+
+// Ready next and Up next send what they have no room for to the Tasks list
+// that holds every ready task: the Overview said "+222 more on Now" while
+// Now drew twelve under "Up next 12", so the promised rest was nowhere on it.
+func TestNdReadyMore_SendsTheRestToTasks(t *testing.T) {
+	c := ndNew(t, "advanced", ndAllOn)
+	for i := range 14 {
+		ndTask(t, c.db, core.Task{ProjectSlug: "example-ops", Title: fmt.Sprintf("Ready chore %02d", i)})
+	}
+	var now nowData
+	getJSON(t, c.mux, "/console/now?format=json", &now)
+	require.Equal(t, 14, now.ReadyTotal)
+	require.Len(t, now.UpNext, 12)
+
+	href := `/console/tasks?ready=all&amp;steps=1`
+	ov := ndMain(t, getHTMLBody(t, c.mux, "/console/"))
+	require.Contains(t, ov, `+11 more on <a href="`+href+`">Tasks</a>`, "three drawn of fourteen")
+	nowBody := getHTMLBody(t, c.mux, "/console/now")
+	require.Contains(t, nowBody, `+2 more ready &middot; <a href="`+href+`">every ready task on Tasks</a>`)
+	scoped := getHTMLBody(t, c.mux, "/console/now?scope=example-ops")
+	require.Contains(t, scoped, `<a href="/console/tasks?project=example-ops&amp;ready=all&amp;steps=1">`, "a scoped Now keeps its project")
 }

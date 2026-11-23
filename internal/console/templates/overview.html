@@ -168,7 +168,7 @@
           </li>
           {{end}}
         </ul>
-        {{if gt .ReadyN (len .Ready)}}<p class="ov2-motion-more">+{{sub .ReadyN (len .Ready)}} more{{if $m.NowLinked}} on <a href="/console/now">Now</a>{{end}}</p>{{end}}
+        {{if gt .ReadyN (len .Ready)}}<p class="ov2-motion-more">+{{sub .ReadyN (len .Ready)}} more on <a href="{{readyTasksHref ""}}">Tasks</a></p>{{end}}
         {{else}}<p class="ov2-motion-none">Nothing is claimable right now.</p>{{end}}
       </div>
     </div>

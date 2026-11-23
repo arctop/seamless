@@ -437,6 +437,14 @@ func (q taskQuery) QS() string { return encodeQS(q.values()) }
 // href is path with the state's query.
 func (q taskQuery) href(path string) string { return path + q.QS() }
 
+// readyTasksHref is the Tasks list of every task claimable now, plan steps
+// included, in a project ("" for every project, "global" for the global
+// scope): what the Overview's Ready next and Now's Up next count, where
+// each sends the ones it has no room to list.
+func readyTasksHref(project string) string {
+	return taskQuery{Project: project, Steps: true, ReadyAll: true, Sort: taskSortOldest}.href("/console/tasks")
+}
+
 // narrowed reports a filter that keeps some tasks out: a project, a plan or
 // text. The steps toggle only lets more in.
 func (q taskQuery) narrowed() bool { return q.Project != "" || q.Plan != "" || q.Q != "" }

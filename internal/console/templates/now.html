@@ -185,6 +185,7 @@
         </div>
         {{end}}
       </div>
+      {{if gt .ReadyTotal (len .UpNext)}}<p class="now-ready-more">+{{sub .ReadyTotal (len .UpNext)}} more ready &middot; <a href="{{readyTasksHref .Scope}}">every ready task on Tasks</a></p>{{end}}
       {{else}}
       <div class="now-empty">{{icon "list-checks"}}<span>Nothing is claimable right now &mdash; every open task is blocked or already held.</span></div>
       {{end}}

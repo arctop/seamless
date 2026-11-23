@@ -4998,10 +4998,13 @@ a.checkin-chip:hover { border-color: var(--brand); color: var(--brand); text-dec
   font-size: var(--text-xs);
 }
 .now-ready .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--warn); }
-.now-ready .t { font-weight: 600; color: var(--text-primary); text-decoration: none; }
+/* The title never wraps away from its dot: a long unbreakable word (a test
+   name) once sent the whole title to the next line, leaving the dot alone. */
+.now-ready .t { max-width: calc(100% - 16px); overflow-wrap: anywhere; font-weight: 600; color: var(--text-primary); text-decoration: none; }
 .now-ready .t:hover { text-decoration: underline; }
 .now-ready time { margin-left: auto; color: var(--faint); }
 .now-ready .edge.ok { display: inline-flex; align-items: center; gap: 3px; font-size: var(--text-2xs); color: var(--ok); }
+.now-ready-more { margin: 8px 0 0; font-size: var(--text-xs); color: var(--text-muted); }
 .now-ready .edge.ok .ico { width: 11px; height: 11px; }
 
 /* the wire */
