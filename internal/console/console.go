@@ -930,6 +930,7 @@ type overviewData struct {
 	ActiveMemories   int                 // total active memories (reach denominator)
 	ReachRate        int                 // MemoriesSurfaced / ActiveMemories, %
 	SessionsReached  int                 // distinct sessions that received an injection
+	SessInWindow     int                 // sessions active (updated) in the window, as the Sessions screen counts its view
 	Window           string              // selected retrieval window key ("24h"|"7d"|"30d"|"all")
 	WindowLabel      string              // human label for the selected window
 	Windows          []windowOption      // the window selector entries
@@ -1163,6 +1164,7 @@ func (s *Service) overview(w http.ResponseWriter, r *http.Request) {
 		report   store.RetrievalReport
 		cov      store.SessionCoverage
 		covTrend []store.CoverageBucket
+		inWindow int
 		board    []store.ProjectBoardRow
 	)
 	if analytics {
@@ -1171,6 +1173,13 @@ func (s *Service) overview(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if cov, err = store.GetSessionCoverage(ctx, s.db(ctx), win.Since); err != nil {
+			s.serverError(w, r, err)
+			return
+		}
+		// The window's sessions as the Sessions screen counts them (active:
+		// updated in the window), which the header names and links to and
+		// Sessions reached is a part of.
+		if inWindow, err = store.CountSessionsWhere(ctx, s.db(ctx), store.SessionFilter{Since: win.Since}); err != nil {
 			s.serverError(w, r, err)
 			return
 		}
@@ -1254,6 +1263,7 @@ func (s *Service) overview(w http.ResponseWriter, r *http.Request) {
 		ActiveMemories:   report.ActiveMemories,
 		ReachRate:        report.ReachRate,
 		SessionsReached:  report.SessionsReached,
+		SessInWindow:     inWindow,
 		Window:           win.Key,
 		WindowLabel:      win.Label,
 		Windows:          windowOptions(win.Key),
@@ -1392,12 +1402,12 @@ func overviewVitals(d overviewData, report store.RetrievalReport, covTrend []sto
 		reach.Spark = spark{Points: report.SurfacedTrend, Label: "Distinct memories surfaced per period"}
 	}
 
-	continuity := vital{Label: "Knowledge continuity", Icon: "brain", Sub: "no sessions observed in this window",
+	continuity := vital{Label: "Knowledge continuity", Icon: "brain", Sub: "no session started in this window",
 		Href: "/console/sessions?w=" + win.Key + "&retained=no", HrefTitle: "Sessions that retained nothing"}
 	if d.CovTotal > 0 {
 		continuity.Value = strconv.Itoa(d.Coverage) + "%"
 		continuity.Delta = pointDelta(d.Coverage, prior.Coverage, hasPrior && prior.CovTotal > 0, riseGood)
-		continuity.Sub = fmt.Sprintf("%d of %d sessions retained knowledge", d.Covered, d.CovTotal)
+		continuity.Sub = fmt.Sprintf("%d of the %s started retained knowledge", d.Covered, plural(d.CovTotal, "session", "sessions"))
 		continuity.Band = floorBand(d.Coverage, continuityTargetPct, true)
 		// A rate plots against 100, never against its own peak.
 		continuity.Spark = spark{Points: coverageRateSeries(covTrend), Tone: "ok", Max: 100, Label: "Share of sessions retaining knowledge per period"}
@@ -1418,7 +1428,14 @@ func overviewVitals(d overviewData, report store.RetrievalReport, covTrend []sto
 	if d.SessionsReached > 0 {
 		reached.Value = compactNum(d.SessionsReached)
 		reached.Delta = volumeDelta(d.SessionsReached, prior.SessionsReached, hasPrior, noJudgment)
-		reached.Sub = fmt.Sprintf("received shared context, of %d recorded", d.SessTotal)
+		// Its denominator is the window's active sessions, the header's count
+		// (it said "of 3973 recorded", an all-time total beside a window's
+		// count). A session reached by an injection is active then, so the
+		// part never outgrows the whole; if it ever did, no denominator.
+		reached.Sub = "received shared context"
+		if d.SessInWindow >= d.SessionsReached {
+			reached.Sub = fmt.Sprintf("of %s received shared context", plural(d.SessInWindow, "active session", "active sessions"))
+		}
 		reached.Band = note
 		reached.Spark = spark{Points: report.SessionTrend, Label: "Distinct sessions reached per period"}
 	}

@@ -49,7 +49,7 @@
 <section class="project-summary-grid" id="projects-summary" aria-label="Project portfolio summary">
   <article class="project-summary-card{{if .Working}} live{{end}}">
     <span class="project-summary-icon">{{icon "terminal"}}</span>
-    <div class="project-summary-copy"><span>Agents live</span><strong>{{.Working}}</strong><small>{{if .Working}}across {{.LiveScopes}} project{{if ne .LiveScopes 1}}s{{end}}{{else}}{{.Sessions}} sessions recorded{{end}}{{if .TokensTotal}} &middot; {{compactNum .TokensTotal}} tokens{{end}}</small></div>
+    <div class="project-summary-copy"><span>Agents live</span><strong>{{.Working}}</strong><small>{{if .Working}}across {{.LiveScopes}} project{{if ne .LiveScopes 1}}s{{end}}{{else}}{{.Sessions}} sessions recorded{{end}}{{if .TokensTotal}} &middot; {{compactNum .TokensTotal}} tokens all time{{end}}</small></div>
   </article>
   <article class="project-summary-card{{if or .Lapsed .Unclaimed .GatesOpen}} warn{{end}}">
     <span class="project-summary-icon">{{icon "list-checks"}}</span>
@@ -57,15 +57,15 @@
   </article>
   <article class="project-summary-card">
     <span class="project-summary-icon">{{icon "map"}}</span>
-    <div class="project-summary-copy"><span>Plans in motion</span><strong>{{.PlansMoving}}</strong><small>{{.PlanLine}}</small></div>
+    <div class="project-summary-copy"><span>Plans moving</span><strong>{{.PlansMoving}}</strong><small>{{.PlanLine}}</small></div>
   </article>
   <article class="project-summary-card">
     <span class="project-summary-icon">{{icon "database"}}</span>
-    <div class="project-summary-copy"><span>Knowledge base</span><strong>{{.Memories}}</strong><small>active memories &middot; {{.Notes}} notes</small></div>
+    <div class="project-summary-copy"><span>Knowledge base</span><strong>{{.Memories}}</strong><small>active memories{{with .LockedMemories}} ({{.}} in locked projects){{end}} &middot; {{.Notes}} notes</small></div>
   </article>
   <article class="project-summary-card">
     <span class="project-summary-icon">{{icon "gauge"}}</span>
-    <div class="project-summary-copy"><span>Knowledge reach</span><strong>{{if .HasReach}}{{.ReachRate}}%{{else}}&mdash;{{end}}</strong><small>{{if .HasReach}}{{.Surfaced}} of {{.Active}} surfaced &middot; {{.WindowLabel}}{{else}}no active memories yet{{end}}</small>{{with bandLine .ReachBand}}<div class="project-summary-band">{{.}}</div>{{end}}</div>
+    <div class="project-summary-copy"><span>Knowledge reach</span><strong>{{if .HasReach}}{{.ReachRate}}%{{else}}&mdash;{{end}}</strong><small>{{if .HasReach}}{{.Surfaced}} of {{.Active}} surfaced{{if .LockedMemories}} outside locked projects{{end}} &middot; {{.WindowLabel}}{{else}}no active memories yet{{end}}</small>{{with bandLine .ReachBand}}<div class="project-summary-band">{{.}}</div>{{end}}</div>
   </article>
 </section>
 {{with .Global}}<a class="project-global-line" href="/console/context" title="The global scope: knowledge every project&rsquo;s briefing draws on">{{icon "database"}}<span><strong>Shared context:</strong> {{.Line}}</span></a>{{end}}

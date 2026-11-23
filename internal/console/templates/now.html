@@ -143,10 +143,10 @@
   {{end}}
 
   {{if .Plans}}
-  <section class="now-zone" aria-label="Plans in motion">
+  <section class="now-zone" aria-label="Plans moved in 24h">
     <header class="now-zone-head">
-      <h2>Plans in motion<strong>{{.Moving}}</strong></h2>
-      <span class="now-zone-note">moved within 24h; dimmed cards are resting</span>
+      <h2>Plans moved in 24h<strong>{{.Moving}}</strong></h2>
+      <span class="now-zone-note">every open plan, freshest first; dimmed ones have not moved in 24h</span>
       <span class="now-rail-nav" hidden>
         <button type="button" class="now-rail-btn" data-now-prev aria-label="Scroll to earlier plans">{{icon "chevron-left"}}</button>
         <button type="button" class="now-rail-btn" data-now-next aria-label="Scroll to later plans">{{icon "chevron-right"}}</button>

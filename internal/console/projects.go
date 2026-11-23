@@ -181,15 +181,21 @@ type projectsData struct {
 	PlanLine      string `json:"-"` // "of 4 with open steps · 1 stalled" under the Plans tile
 	Memories      int
 	Notes         int
-	TokensTotal   int
-	Surfaced      int
-	Active        int
-	ReachRate     int
-	HasReach      bool
-	ReachBand     band `json:"-"`
-	Attention     int  // projects shown that need attention (projectNeedsAttention)
-	Unregistered  int
-	Retired       int
+	// LockedTasks and LockedMemories are the parts of OpenTasks and Memories
+	// that sit in locked projects: counted in the totals, as their rows show
+	// them, but never in the task breakdown or the reach, which read work a
+	// locked project hides. The tiles name them so the parts add up.
+	LockedTasks    int `json:"lockedTasks,omitempty"`
+	LockedMemories int `json:"lockedMemories,omitempty"`
+	TokensTotal    int
+	Surfaced       int
+	Active         int
+	ReachRate      int
+	HasReach       bool
+	ReachBand      band `json:"-"`
+	Attention      int  // projects shown that need attention (projectNeedsAttention)
+	Unregistered   int
+	Retired        int
 	// Locked are the locked projects this request cannot read (peer_auth.
 	// locked): name, counts and last activity only, aggregates taken on the
 	// main handle. Each is also a Locked row in the view's groupings, sorted
@@ -356,6 +362,8 @@ func (s *Service) projectsList(w http.ResponseWriter, r *http.Request) {
 			data.Locked = append(data.Locked, t)
 			vm := newLockedRowVM(t)
 			count(vm)
+			data.LockedTasks += vm.OpenTasks
+			data.LockedMemories += vm.Memories
 			rows = append(rows, vm)
 			data.Projects++
 		}
@@ -771,6 +779,9 @@ func boardTaskLine(d projectsData) string {
 	}
 	if d.Unclaimed > 0 {
 		parts = append(parts, plural(d.Unclaimed, "unclaimed", "unclaimed"))
+	}
+	if d.LockedTasks > 0 {
+		parts = append(parts, fmt.Sprintf("%d in locked projects", d.LockedTasks))
 	}
 	if len(parts) == 0 {
 		return "nothing open"

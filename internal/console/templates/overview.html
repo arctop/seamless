@@ -12,7 +12,7 @@
     <nav class="ov2-window-tabs" aria-label="Observation window" data-seam-query>
       {{range .Windows}}<a class="{{if .Active}}active{{end}}"{{if .Active}} aria-current="page"{{end}} href="?w={{.Key}}">{{.Label}}</a>{{end}}
     </nav>
-    <span class="ov2-observed"><strong>{{.CovTotal}}</strong>session{{if ne .CovTotal 1}}s{{end}} observed</span>
+    {{if .Links "/console/sessions"}}<a class="ov2-observed" href="/console/sessions?w={{.Window}}" title="The sessions active in this window, as Sessions lists them"><strong>{{.SessInWindow}}</strong>session{{if ne .SessInWindow 1}}s{{end}} active</a>{{else}}<span class="ov2-observed"><strong>{{.SessInWindow}}</strong>session{{if ne .SessInWindow 1}}s{{end}} active</span>{{end}}
     {{end}}
   </header>
 

@@ -4198,6 +4198,8 @@ button.star.on .ico { fill: currentColor; }
 .ov2-window-tabs a.active { background: var(--surface); color: var(--brand); font-weight: 600; box-shadow: var(--shadow-xs); }
 .ov2-observed { font-size: var(--text-xs); color: var(--faint); white-space: nowrap; }
 .ov2-observed strong { margin-right: 4px; font-family: var(--font-display); font-size: var(--text-md); color: var(--text-primary); }
+a.ov2-observed { text-decoration: none; }
+a.ov2-observed:hover { color: var(--brand); }
 
 /* attention strip -- severity-ordered, one card per non-empty bucket. The rail
    scroll-snaps horizontally instead of wrapping: the finish-line bucket is

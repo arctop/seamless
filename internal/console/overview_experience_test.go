@@ -28,7 +28,7 @@ func TestOverview_IsAStatusPageNotAPitch(t *testing.T) {
 	require.Contains(t, body, `class="ov2-titlebar topbar"`)
 	require.Contains(t, body, `class="live ov2-title-live"`)
 	require.Contains(t, body, `class="active" aria-current="page" href="?w=7d"`)
-	require.Contains(t, body, "sessions observed")
+	require.Contains(t, body, "sessions active")
 
 	// The landing-page furniture is gone: no pitch, no calls to action.
 	require.NotContains(t, body, "Shared context,")
@@ -257,7 +257,7 @@ func TestOverview_BasicHomeIsHealthFirst(t *testing.T) {
 	require.Contains(t, body, `aria-label="Sessions live now"`)
 
 	for _, gone := range []string{
-		`class="ov2-vitals"`, `class="ov2-window-tabs"`, "sessions observed",
+		`class="ov2-vitals"`, `class="ov2-window-tabs"`, "sessions active",
 		`aria-label="Recently active projects"`, `class="ov2-rail"`, "Most reused knowledge",
 		`class="ov-health quiet"`,
 	} {
@@ -273,7 +273,7 @@ func TestOverview_AdvancedKeepsTheAnalyticsAndAQuietHealthLine(t *testing.T) {
 	_, mux := newHealthConsole(t, "advanced", EmbeddingRuntime{Provider: "openai", Reason: "api_key is empty"})
 	body := getPeek(t, mux, "/console/?w=7d").Body.String()
 	for _, want := range []string{
-		`class="ov2-vitals"`, `class="ov2-window-tabs"`, "sessions observed",
+		`class="ov2-vitals"`, `class="ov2-window-tabs"`, "sessions active",
 		`aria-label="Recently active projects"`, `class="ov2-rail"`, "Most reused knowledge",
 		`<footer class="ov-health quiet" aria-label="Is it working">`,
 	} {

@@ -1760,9 +1760,10 @@ in the words every task screen uses: &quot;claim lapsed 12m ago&quot;, &quot;unc
 lapsed claim offers <strong>release claim</strong> with no confirmation - the lease is
 already dead, so there is no live holder to interrupt, only a stale claim to
 clear.</li>
-<li><strong>Plans in motion</strong> - a horizontally scrolling rail of every incomplete plan
-across every project, done/in-flight progress bars and ready counts, cards
-dimmed once a plan has rested for 24h. Each links to its plan's page, or,
+<li><strong>Plans moved in 24h</strong> - a horizontally scrolling rail of every incomplete
+plan across every project, done/in-flight progress bars and ready counts,
+headed by how many moved in the last 24 hours, cards dimmed once a plan has
+rested for 24h. Each links to its plan's page, or,
 for a plan with no narrative note in its project, to that project's Plans &amp;
 tasks tab (the Plans board for the global scope).</li>
 <li><strong>Up next</strong> - the cross-project ready queue: claimable this instant, plan
@@ -2214,12 +2215,16 @@ longer resolves or its feature is off. A day still to come answers
 <code>&quot;future&quot;: true</code> with every list empty.</p>
 <h2 id="projects">Projects</h2>
 <p><code>/console/projects</code></p>
-<p>The board leads with work. Its summary tiles count the agents live, the open
-tasks (in progress, ready, blocked, waiting on people, and any lapsed or
-unclaimed claims), the plans in motion (a plan with a step still open that
-moved in the last 7 days, out of every plan with a step open, the rest
-stalled), then the knowledge base and its reach, judged against its 55% target
-over the <strong>Reach window</strong> the header picks (<code>?w=</code>).</p>
+<p>The board leads with work. Its summary tiles count the agents live (with every
+model token its projects' sessions used, all time), the open tasks (in
+progress, ready, blocked, waiting on people, any lapsed or unclaimed claims,
+and those in locked projects, so the parts add up to the total), the plans
+moving (a plan with a step still open that moved in the last 7 days, out of
+every plan with a step open, the rest stalled), then the knowledge base and
+its reach, judged against its 55% target over the <strong>Reach window</strong> the header
+picks (<code>?w=</code>). A locked project's memories count in the knowledge base, which
+says how many, but not in the reach, which reads only what is outside locked
+projects.</p>
 <p>Each project is one compact row: its name, with its star and badges
 (isolation, a lock, live agents, and what needs attention), a work line in the
 <a href="#tasks">task words</a> - &quot;2 plans moving · 1 plan stalled · 1 in progress · 3

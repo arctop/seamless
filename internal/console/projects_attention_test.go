@@ -350,7 +350,7 @@ func TestBdRowsLeadWithWork(t *testing.T) {
 	tiles := body[strings.Index(body, `class="project-summary-grid"`):]
 	tiles = tiles[:strings.Index(tiles, "</section>")]
 	var order []int
-	for _, label := range []string{"<span>Agents live</span>", "<span>Open tasks</span>", "<span>Plans in motion</span>", "<span>Knowledge base</span>", "<span>Knowledge reach</span>"} {
+	for _, label := range []string{"<span>Agents live</span>", "<span>Open tasks</span>", "<span>Plans moving</span>", "<span>Knowledge base</span>", "<span>Knowledge reach</span>"} {
 		at := strings.Index(tiles, label)
 		require.NotEqual(t, -1, at, label)
 		order = append(order, at)
@@ -426,4 +426,17 @@ func TestBdLockedProjectKeepsToCounts(t *testing.T) {
 	require.Contains(t, row, "Name, counts and last activity only: 1 mem &middot; 2 notes &middot; 1 session.")
 	require.NotContains(t, row, "data-need=")
 	require.NotContains(t, row, "data-word=")
+
+	// The tiles count the locked row in their totals and name its part, so
+	// the parts add up: the open tasks' breakdown left a locked project's
+	// tasks out of a total that held them, and the knowledge base counted
+	// memories the reach beside it did not.
+	require.Equal(t, 4, data.LockedTasks)
+	require.Equal(t, 1, data.LockedMemories)
+	require.Equal(t, data.OpenTasks, data.InProgress+data.Ready+data.Blocked+data.Waiting+data.LockedTasks,
+		"the breakdown, locked part included, is the total")
+	require.Contains(t, html, "4 in locked projects</small>")
+	require.Equal(t, data.Memories-data.LockedMemories, data.Active, "the reach reads every memory outside locked projects")
+	require.Contains(t, html, "active memories (1 in locked projects)")
+	require.Contains(t, html, "surfaced outside locked projects")
 }

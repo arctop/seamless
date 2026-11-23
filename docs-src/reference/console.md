@@ -768,9 +768,10 @@ Top to bottom:
   lapsed claim offers **release claim** with no confirmation - the lease is
   already dead, so there is no live holder to interrupt, only a stale claim to
   clear.
-- **Plans in motion** - a horizontally scrolling rail of every incomplete plan
-  across every project, done/in-flight progress bars and ready counts, cards
-  dimmed once a plan has rested for 24h. Each links to its plan's page, or,
+- **Plans moved in 24h** - a horizontally scrolling rail of every incomplete
+  plan across every project, done/in-flight progress bars and ready counts,
+  headed by how many moved in the last 24 hours, cards dimmed once a plan has
+  rested for 24h. Each links to its plan's page, or,
   for a plan with no narrative note in its project, to that project's Plans &
   tasks tab (the Plans board for the global scope).
 - **Up next** - the cross-project ready queue: claimable this instant, plan
@@ -1136,12 +1137,16 @@ longer resolves or its feature is off. A day still to come answers
 
 `/console/projects`
 
-The board leads with work. Its summary tiles count the agents live, the open
-tasks (in progress, ready, blocked, waiting on people, and any lapsed or
-unclaimed claims), the plans in motion (a plan with a step still open that
-moved in the last 7 days, out of every plan with a step open, the rest
-stalled), then the knowledge base and its reach, judged against its 55% target
-over the **Reach window** the header picks (`?w=`).
+The board leads with work. Its summary tiles count the agents live (with every
+model token its projects' sessions used, all time), the open tasks (in
+progress, ready, blocked, waiting on people, any lapsed or unclaimed claims,
+and those in locked projects, so the parts add up to the total), the plans
+moving (a plan with a step still open that moved in the last 7 days, out of
+every plan with a step open, the rest stalled), then the knowledge base and
+its reach, judged against its 55% target over the **Reach window** the header
+picks (`?w=`). A locked project's memories count in the knowledge base, which
+says how many, but not in the reach, which reads only what is outside locked
+projects.
 
 Each project is one compact row: its name, with its star and badges
 (isolation, a lock, live agents, and what needs attention), a work line in the

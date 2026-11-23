@@ -379,3 +379,42 @@ func TestSidebarNamesTheServerHost(t *testing.T) {
 	require.NotContains(t, svc.host, "this machine")
 	require.NotContains(t, svc.host, "server ")
 }
+
+// The Overview's session counts are one set: the header counts the sessions
+// active in the window exactly as the Sessions screen's view does (and links
+// there), Sessions reached is a part of that set ("of 3 active sessions", not
+// an all-time "of N recorded"), and Knowledge continuity says its sessions
+// are the ones started in the window. The header said "24 sessions observed"
+// (started) beside "26 reached ... of 3973 recorded".
+func TestOverview_SessionCountsAreOneSet(t *testing.T) {
+	db, mux := newConsole(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	old := now.Add(-72 * time.Hour)
+	for _, s := range []core.Session{
+		{ID: "act-new", Name: "cc/new", Status: core.SessionCompleted, Findings: "kept", CreatedAt: now.Add(-time.Hour), UpdatedAt: now.Add(-time.Hour)},
+		{ID: "act-old", Name: "cc/old", Status: core.SessionCompleted, CreatedAt: old, UpdatedAt: now.Add(-2 * time.Hour)}, // started before the window, active in it
+		{ID: "act-gone", Name: "cc/gone", Status: core.SessionCompleted, CreatedAt: old, UpdatedAt: old},                   // not in the window
+		{ID: "act-mid", Name: "cc/mid", Status: core.SessionCompleted, CreatedAt: now.Add(-3 * time.Hour), UpdatedAt: now.Add(-3 * time.Hour)},
+	} {
+		require.NoError(t, store.CreateSession(ctx, db, s))
+	}
+
+	var data overviewData
+	getJSON(t, mux, "/console/?w=24h&format=json", &data)
+	require.Equal(t, 3, data.SessInWindow, "updated in the window, as Sessions counts its view")
+	require.Equal(t, 2, data.CovTotal, "continuity counts the sessions started in the window")
+	var list sessionsData
+	getJSON(t, mux, "/console/sessions?w=24h&format=json", &list)
+	require.Len(t, list.Sessions, data.SessInWindow, "the header equals the Sessions screen it links to")
+
+	body := getHTMLBody(t, mux, "/console/?w=24h")
+	require.Contains(t, body, `<a class="ov2-observed" href="/console/sessions?w=24h"`)
+	require.Contains(t, body, "<strong>3</strong>sessions active</a>")
+	require.Contains(t, body, "1 of the 2 sessions started retained knowledge")
+	require.NotContains(t, body, "recorded</p>")
+
+	data.SessionsReached, data.SessInWindow = 2, 3
+	vitals := overviewVitals(data, store.RetrievalReport{}, nil, store.WindowVitals{}, false, store.RetrievalWindow{Key: "24h"})
+	require.Equal(t, "of 3 active sessions received shared context", vitals[3].Sub)
+}
