@@ -351,18 +351,7 @@ func intPtr(n int) *int { return &n }
 
 func countWord(n int) string {
 	if n >= 10000 {
-		return compactNumber(n)
-	}
-	return fmt.Sprintf("%d", n)
-}
-
-// compactNumber writes 12400 as "12.4k".
-func compactNumber(n int) string {
-	switch {
-	case n >= 1000000:
-		return fmt.Sprintf("%.1fM", float64(n)/1e6)
-	case n >= 1000:
-		return fmt.Sprintf("%.1fk", float64(n)/1e3)
+		return compactNum(n)
 	}
 	return fmt.Sprintf("%d", n)
 }

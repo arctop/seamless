@@ -56,6 +56,14 @@ func TestCompactNum(t *testing.T) {
 	require.Equal(t, "12.4k", compactNum(12400))
 	require.Equal(t, "999.9k", compactNum(999949))
 	require.Equal(t, "1.2M", compactNum(1_200_000))
+	// A value that rounds to the next unit's 1000 moves up a unit.
+	require.Equal(t, "1M", compactNum(999_950))
+	require.Equal(t, "1B", compactNum(999_950_000))
+	// Billions get their own unit: the Diary's and the Projects tiles' token
+	// totals passed 1000M and read "1808.1M".
+	require.Equal(t, "1.8B", compactNum(1_808_100_000))
+	require.Equal(t, "59.3B", compactNum(59_295_900_000))
+	require.Equal(t, "1500B", compactNum(1_500_000_000_000))
 }
 
 // Every event kind the log can record reads as words, and a kind added later

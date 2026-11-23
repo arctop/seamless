@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"math"
 	"net/http"
 	"slices"
 	"strconv"
@@ -1084,21 +1085,28 @@ func shortID(id string) string {
 }
 
 // compactNum renders a count for dense stat rows: plain below 1000, then one
-// decimal with a k/M suffix ("12.4k", "1.2M"), dropping a trailing ".0".
+// decimal with a k/M/B suffix ("12.4k", "1.2M", "1.8B"), dropping a trailing
+// ".0". A value that rounds up to the next unit's 1000 moves to that unit, so
+// 999,950 reads "1M", never "1000k".
 func compactNum(n int) string {
-	format := func(v float64, suffix string) string {
-		s := strconv.FormatFloat(v, 'f', 1, 64)
-		s = strings.TrimSuffix(s, ".0")
-		return s + suffix
+	if n < 0 {
+		return "-" + compactNum(-n)
 	}
-	switch {
-	case n >= 1_000_000:
-		return format(float64(n)/1_000_000, "M")
-	case n >= 1000:
-		return format(float64(n)/1000, "k")
-	default:
+	if n < 1000 {
 		return strconv.Itoa(n)
 	}
+	units := []struct {
+		div    float64
+		suffix string
+	}{{1e3, "k"}, {1e6, "M"}, {1e9, "B"}}
+	for i, u := range units {
+		v := math.Round(float64(n)/u.div*10) / 10
+		if v >= 1000 && i < len(units)-1 {
+			continue
+		}
+		return strings.TrimSuffix(strconv.FormatFloat(v, 'f', 1, 64), ".0") + u.suffix
+	}
+	return strconv.Itoa(n) // unreachable: the last unit always returns
 }
 
 // percent computes n/d as a rounded whole percentage (0 when d == 0).
