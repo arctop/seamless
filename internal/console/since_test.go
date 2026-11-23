@@ -88,7 +88,12 @@ func TestGardenerSummary_CoversEveryProposalKind(t *testing.T) {
 	for _, k := range store.ProposalKinds {
 		_, ok := proposalWork[k]
 		require.True(t, ok, "proposal kind %q has no ledger phrase", k)
+		_, ok = proposalDone[k]
+		require.True(t, ok, "proposal kind %q has no applied phrase", k)
 	}
+	require.Equal(t, "archived a memory", gardenerSummary(map[string]any{"action": "apply", "kind": "archive"}),
+		"an applied proposal says what it did, not \"applied archiving a memory\"")
+	require.Equal(t, "merged duplicate memories", gardenerSummary(map[string]any{"action": "apply", "kind": "merge"}))
 	require.Equal(t, "proposed archiving a memory", gardenerSummary(map[string]any{"action": "propose", "kind": "archive"}))
 	require.Equal(t, "armed utility ranking for orbital", gardenerSummary(map[string]any{"action": "utility_armed", "project": "orbital"}))
 	require.Equal(t, "dismissed a proposal", gardenerSummary(map[string]any{"action": "dismiss"}))

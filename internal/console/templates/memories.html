@@ -21,7 +21,7 @@
   {{if .Filtered}}<a class="lib-clear" href="{{.ClearHref}}" data-seam-query title="Show every memory again">{{icon "x"}}Clear</a>{{end}}
   <form class="search lib-query" method="get" action="/console/memories" data-seam-query>
     {{icon "search"}}
-    <input name="q" aria-label="Filter memories by name, description, kind, tag, or project" placeholder="Filter by name, description, kind, tag or project" value="{{.Query}}">
+    <input name="q" aria-label="Filter memories by name, description, kind, tag, or project" placeholder="Filter by name, tag, kind or project" value="{{.Query}}">
     {{range .Keep}}<input type="hidden" name="{{.Name}}" value="{{.Value}}">{{end}}
     <kbd class="ml-slash" aria-hidden="true">/</kbd>
   </form>

@@ -562,6 +562,26 @@ var proposalWork = map[string]string{
 	store.ProposalMergePlans:   "merging duplicate plans",
 }
 
+// proposalDone says what applying a gardener proposal kind did, as a past
+// tense phrase of its own: "applied archiving a memory" read badly, so an
+// applied proposal reads "archived a memory". An unlisted kind reads
+// "applied a <kind> proposal".
+var proposalDone = map[string]string{
+	store.ProposalMerge:        "merged duplicate memories",
+	store.ProposalArchive:      "archived a memory",
+	store.ProposalDigest:       "wrote a digest",
+	store.ProposalConsolidate:  "consolidated memories",
+	store.ProposalReproject:    "moved a memory to another project",
+	store.ProposalSplit:        "split a project",
+	store.ProposalAbandonPlan:  "settled a stale plan as abandoned",
+	store.ProposalMemoryWanted: "filled a knowledge gap",
+	store.ProposalToolError:    "fixed a recurring tool error",
+	store.ProposalRekind:       "re-kinded a memory",
+	store.ProposalShipPlan:     "settled a plan as shipped",
+	store.ProposalRelocate:     "relocated a memory",
+	store.ProposalMergePlans:   "merged duplicate plans",
+}
+
 // gardenerSummary says what the gardener did, in words: the ledger reads
 // "proposed archiving a memory", not "gardener propose (archive)".
 func gardenerSummary(p map[string]any) string {
@@ -577,6 +597,9 @@ func gardenerSummary(p map[string]any) string {
 	case "propose":
 		return "proposed " + work
 	case "apply":
+		if done, ok := proposalDone[kind]; ok {
+			return done
+		}
 		return "applied " + work
 	case "dismiss":
 		return "dismissed a proposal"

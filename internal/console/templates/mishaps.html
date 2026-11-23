@@ -60,7 +60,7 @@
       <div class="sess-main">
         {{if .Type}}<span class="badge mishap-type" data-mishap-type="{{.Type}}" title="{{.Meaning}}">{{.Type}}</span>{{else}}<span class="badge mishap-type is-untyped" data-mishap-type="untyped" title="This report named no type">untyped</span>{{end}}{{if .New}}<span class="badge warn mishap-new" title="Reported after you last marked the reports reviewed">new</span>{{end}}
         <div class="sess-copy">
-          <a class="mishap-text" href="/console/events/{{.ID}}" data-peek>{{if .Text}}{{.Text}}{{else}}(no text){{end}}</a>
+          <a class="mishap-text" href="/console/events/{{.ID}}" data-peek>{{if .Text}}{{codeSpans .Text}}{{else}}(no text){{end}}</a>
           <div class="mishap-meta">{{if .SessionID}}<a class="mono-id" href="/console/sessions/{{.SessionID}}" data-peek title="The session that reported it">{{if .Session}}{{.Session}}{{else}}{{shortID .SessionID}}{{end}}</a>{{agentPill .Harness .Model}}{{end}}{{range .Memories}}<span class="mishap-named">{{icon "database"}}{{if .Missing}}<span title="This memory is no longer in the index">{{shortID .ID}}</span>{{else}}<a href="/console/memories/{{.ID}}" data-peek title="A memory this report named">{{.Name}}</a>{{end}}</span>{{end}}</div>
         </div>
       </div>

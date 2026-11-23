@@ -1,6 +1,7 @@
 package console
 
 import (
+	"html/template"
 	"testing"
 	"time"
 
@@ -88,4 +89,13 @@ func TestEvtLabel_HumanNames(t *testing.T) {
 	require.Equal(t, "Project matured", evtLabel("project.stage_reached"))
 	require.Equal(t, "Widget spun up", evtLabel("widget.spun_up"))
 	require.Equal(t, "Event", evtLabel(""))
+}
+
+// A mishap report's `code` spans render as <code>, everything else escaped,
+// and an unpaired backtick stays as written.
+func TestCodeSpans(t *testing.T) {
+	require.Equal(t, template.HTML("<code>HOME=&lt;scratch&gt; go run</code> made go write"), codeSpans("`HOME=<scratch> go run` made go write"))
+	require.Equal(t, template.HTML("a <code>b</code> c <code>d</code>"), codeSpans("a `b` c `d`"))
+	require.Equal(t, template.HTML("one ` left &lt;b&gt;"), codeSpans("one ` left <b>"))
+	require.Equal(t, template.HTML("empty  pair"), codeSpans("empty `` pair"))
 }

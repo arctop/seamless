@@ -182,7 +182,10 @@
           {{if .TotalPending}}
           <div class="rail-none">No proposal matches this filter. <a href="/console/gardener">Clear filters</a></div>
           {{else}}
-          <div class="rail-none">{{.Status.Empty}}</div>
+          {{/* The reader beside it says how the garden stands (Status.Empty);
+               the queue only says it is empty, so the page does not say the
+               same sentence twice. */}}
+          <div class="rail-none">No proposals waiting.</div>
           {{end}}
         {{end}}
 

@@ -1865,7 +1865,12 @@
     });
     list.sort(function (a, b) { return a.pri - b.pri || a.s.w - b.s.w; });
     var placed = [];
+    // A label hangs above its anchor, so one near an edge would be cut by
+    // the canvas ("LLM provider", high in the sky): each is held inside the
+    // view, 4px from its edges.
+    var right = W - (self.clipRight || 0);
     list.forEach(function (it) {
+      it.s = { x: O.clamp(it.s.x, it.n.w / 2 + 4, Math.max(it.n.w / 2 + 4, right - it.n.w / 2 - 4)), y: Math.max(it.s.y, it.n.h + 4), w: it.s.w };
       var x0 = it.s.x - it.n.w / 2 - 3, y0 = it.s.y - it.n.h - 3, x1 = x0 + it.n.w + 6, y1 = it.s.y + 3;
       var clash = it.pri && placed.some(function (q) { return x0 < q[2] && x1 > q[0] && y0 < q[3] && y1 > q[1]; });
       var b = it.b;

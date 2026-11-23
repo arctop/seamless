@@ -3456,7 +3456,11 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
 .retrieval-panel-head h3 { margin: 1px 0 0; font-family: var(--font-display); font-size: var(--text-md); line-height: 1.2; }
 .retrieval-panel-head > small { color: var(--faint); font-size: var(--text-2xs); text-align: right; white-space: nowrap; }
 .retrieval-panel-head > small strong { color: var(--brand); font-family: var(--font-mono); }
-.retrieval-chart { min-height: 230px; padding: 24px 22px 17px; }
+/* The traffic card stretches to Memory mix's height beside it; its chart
+   keeps its aspect, so it sits in the middle of the room rather than leaving
+   all of it under the axis. */
+.retrieval-analysis-grid > .retrieval-panel:has(> .retrieval-chart) { display: flex; flex-direction: column; }
+.retrieval-chart { flex: 1; display: flex; flex-direction: column; justify-content: center; min-height: 230px; padding: 24px 22px 17px; }
 .retrieval-chart .area { padding-bottom: 0; }
 .retrieval-kind-panel .kindbars { min-height: 190px; justify-content: center; padding: 22px 18px 6px; }
 .retrieval-kind-panel .kindbar-legend { margin: 5px 18px 18px; }
@@ -5530,6 +5534,7 @@ a:focus-visible, button:focus-visible, summary:focus-visible, [tabindex]:focus-v
   -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 26px), transparent);
   mask-image: linear-gradient(to bottom, black calc(100% - 26px), transparent);
 }
+.sky-scopes-more { margin: 2px 0 0; color: var(--muted); font-size: var(--text-2xs); text-align: center; }
 .sky-scope {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px 10px;
   width: 100%; padding: 7px 8px 8px; border: 0; border-radius: var(--radius-sm); background: none;
@@ -7399,6 +7404,7 @@ body:has(.build-notice-card:not([hidden])) .main { padding-bottom: calc(112px + 
 .mishap-row .sess-main { align-items: baseline; }
 .mishap-row .badge.mishap-type { flex: none; }
 .mishap-text { display: block; color: var(--ink-2); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.mishap-text code { padding: 1px 5px; border-radius: var(--radius-xs); background: var(--surface-3); color: var(--ink); }
 .mishap-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 4px; color: var(--muted); font-size: var(--text-xs); }
 .mishap-named { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); }
 .mishap-named .ico, .mishap-mem-name .ico { width: 12px; height: 12px; color: var(--faint); }
@@ -7762,6 +7768,10 @@ a.sess-headline.is-prompt::after { content: "\201D"; }
   overflow: hidden; white-space: normal; overflow-wrap: anywhere;
 }
 .now-agent-name { flex: 1 1 0; }
+/* The rail stretches its plan cards to one height; the bar and its counts sit
+   at each card's foot, so a two-line plan name no longer drops its bar below
+   its neighbours'. */
+.now-plan > .now-bar { margin-top: auto; }
 .now-agent-who {
   flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 0;
   font-size: var(--text-xs); color: var(--text-muted);

@@ -785,17 +785,17 @@
         <ul class="ov2-motion-list">
           
           <li id="mo-rd-<id:10>">
-            <span class="ov2-motion-t"><a href="/console/tasks/<id:10>">Example: promote the deploy</a></span>
+            <span class="ov2-motion-t" title="Example: promote the deploy"><a href="/console/tasks/<id:10>">Example: promote the deploy</a></span>
             <span class="ov2-motion-meta">example-open-alpha</span>
           </li>
           
           <li id="mo-rd-<id:12>">
-            <span class="ov2-motion-t"><a href="/console/tasks/<id:12>">Example: wave one</a></span>
+            <span class="ov2-motion-t" title="Example: wave one"><a href="/console/tasks/<id:12>">Example: wave one</a></span>
             <span class="ov2-motion-meta">example-open-alpha &middot; plan:example-rollout</span>
           </li>
           
           <li id="mo-rd-<id:23>">
-            <span class="ov2-motion-t"><a href="/console/tasks/<id:23>">Example: close the confidential ledger</a></span>
+            <span class="ov2-motion-t" title="Example: close the confidential ledger"><a href="/console/tasks/<id:23>">Example: close the confidential ledger</a></span>
             <span class="ov2-motion-meta">example-confidential</span>
           </li>
           
@@ -912,6 +912,7 @@
             </button>
             
           </div>
+          <p class="sky-scopes-more" data-sky-scopes-more hidden></p>
         </div>
       </aside>
     </div>
@@ -3785,7 +3786,7 @@
   
   <form class="search lib-query" method="get" action="/console/memories" data-seam-query>
     <svg class="ico ico-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-    <input name="q" aria-label="Filter memories by name, description, kind, tag, or project" placeholder="Filter by name, description, kind, tag or project" value="">
+    <input name="q" aria-label="Filter memories by name, description, kind, tag, or project" placeholder="Filter by name, tag, kind or project" value="">
     
     <kbd class="ml-slash" aria-hidden="true">/</kbd>
   </form>

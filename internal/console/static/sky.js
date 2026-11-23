@@ -783,6 +783,28 @@
     observer.observe(root);
   }
 
+  // The project list scrolls inside its panel, and macOS draws no scrollbar
+  // until it moves, so a list cut between two rows looked complete. Under
+  // it, "N more below" counts the rows that start in or past its faded
+  // bottom edge, and goes once the list is scrolled to its end.
+  var SCOPES_FADE = 26;
+  function syncScopesMore() {
+    var root = sky();
+    var list = root && root.querySelector('.sky-scopes');
+    var more = root && root.querySelector('[data-sky-scopes-more]');
+    if (!list || !more) return;
+    var edge = list.getBoundingClientRect().bottom - SCOPES_FADE, n = 0;
+    for (var i = 0; i < list.children.length; i++) {
+      if (list.children[i].getBoundingClientRect().top > edge) n++;
+    }
+    more.hidden = n === 0;
+    more.textContent = n ? n + ' more below' : '';
+  }
+  document.addEventListener('scroll', function (e) {
+    if (e.target.classList && e.target.classList.contains('sky-scopes')) syncScopesMore();
+  }, { passive: true, capture: true });
+  window.addEventListener('resize', syncScopesMore);
+
   function refresh(initial) {
     dropCTM();
     collect();
@@ -794,6 +816,7 @@
     stars.forEach(function (s) { known[s.id] = true; });
     watch();
     render(true);
+    syncScopesMore();
   }
 
   document.addEventListener('seam:content-updated', function () { refresh(false); });

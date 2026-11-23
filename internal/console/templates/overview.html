@@ -134,7 +134,7 @@
         <ul class="ov2-motion-list">
           {{range .Plans}}
           <li id="mo-pl-{{.Project}}-{{.Slug}}">
-            <span class="ov2-motion-t">{{if .Linked}}<a class="mono" href="{{.Href}}">plan:{{.Slug}}</a>{{else}}<span class="mono">plan:{{.Slug}}</span>{{end}}</span>
+            <span class="ov2-motion-t" title="plan:{{.Slug}}">{{if .Linked}}<a class="mono" href="{{.Href}}">plan:{{.Slug}}</a>{{else}}<span class="mono">plan:{{.Slug}}</span>{{end}}</span>
             <span class="now-bar"><i class="done" style="width:{{.DonePct}}%"></i><i class="doing" style="width:{{.DoingPct}}%"></i></span>
             <span class="ov2-motion-meta">{{if .Project}}{{.Project}}{{else}}global{{end}} &middot; {{.Done}}/{{.Total}} done &middot; held by {{range $i, $h := .Holders}}{{if $i}}, {{end}}<a href="/console/sessions/{{$h.ID}}">{{$h.Name}}</a>{{end}}</span>
           </li>
@@ -149,7 +149,7 @@
         <ul class="ov2-motion-list">
           {{range .Loose}}
           <li id="mo-lo-{{.ID}}">
-            <span class="ov2-motion-t">{{if .Linked}}<a href="{{.Href}}">{{.Title}}</a>{{else}}<span>{{.Title}}</span>{{end}}</span>
+            <span class="ov2-motion-t" title="{{.Title}}">{{if .Linked}}<a href="{{.Href}}">{{.Title}}</a>{{else}}<span>{{.Title}}</span>{{end}}</span>
             <span class="ov2-motion-meta">{{with .Word}}{{taskChip .}} {{end}}{{if .Project}}{{.Project}}{{else}}global{{end}}{{with .PlanSlug}} &middot; plan:{{.}}{{end}}</span>
           </li>
           {{end}}
@@ -163,7 +163,7 @@
         <ul class="ov2-motion-list">
           {{range .Ready}}
           <li id="mo-rd-{{.ID}}">
-            <span class="ov2-motion-t">{{if .Linked}}<a href="{{.Href}}">{{.Title}}</a>{{else}}<span>{{.Title}}</span>{{end}}</span>
+            <span class="ov2-motion-t" title="{{.Title}}">{{if .Linked}}<a href="{{.Href}}">{{.Title}}</a>{{else}}<span>{{.Title}}</span>{{end}}</span>
             <span class="ov2-motion-meta">{{if .Project}}{{.Project}}{{else}}global{{end}}{{with .PlanSlug}} &middot; plan:{{.}}{{end}}</span>
           </li>
           {{end}}
@@ -243,7 +243,7 @@
         <header class="ov2-panel-head"><h2>Most reused knowledge</h2></header>
         {{if .TopInjected}}
         <ol class="ov2-reuse">
-          {{range .TopInjected}}<li><a href="/console/memories/{{.ID}}">{{.Name}}</a><strong>{{.Count}}&times;</strong></li>{{end}}
+          {{range .TopInjected}}<li><a href="/console/memories/{{.ID}}" title="{{.Name}}">{{.Name}}</a><strong>{{.Count}}&times;</strong></li>{{end}}
         </ol>
         {{else}}<div class="ov2-panel-empty">{{icon "brain"}}<span>No memory has been surfaced yet.</span></div>{{end}}
       </section>
@@ -335,6 +335,7 @@
             </button>
             {{end}}
           </div>
+          <p class="sky-scopes-more" data-sky-scopes-more hidden></p>
         </div>{{end}}
       </aside>
     </div>

@@ -332,6 +332,7 @@ var funcs = template.FuncMap{
 	"icon":           icon,
 	"compactNum":     compactNum,
 	"readyTasksHref": readyTasksHref,
+	"codeSpans":      codeSpans,
 	"digits":         groupDigits,
 	"kindLegend":     kindLegend,
 	"kindBars":       kindBars,
@@ -1108,6 +1109,32 @@ func compactNum(n int) string {
 		return strings.TrimSuffix(strconv.FormatFloat(v, 'f', 1, 64), ".0") + u.suffix
 	}
 	return strconv.Itoa(n) // unreachable: the last unit always returns
+}
+
+// codeSpans renders one line of agent-written text with its `code` spans as
+// <code>, escaping everything else: a mishap report quotes commands in
+// backticks, and the list showed the backticks raw. A backtick with no
+// partner stays as written.
+func codeSpans(s string) template.HTML {
+	var b strings.Builder
+	for {
+		open := strings.IndexByte(s, '`')
+		if open < 0 {
+			break
+		}
+		end := strings.IndexByte(s[open+1:], '`')
+		if end < 0 {
+			break
+		}
+		end += open + 1
+		b.WriteString(template.HTMLEscapeString(s[:open]))
+		if code := s[open+1 : end]; code != "" {
+			b.WriteString("<code>" + template.HTMLEscapeString(code) + "</code>")
+		}
+		s = s[end+1:]
+	}
+	b.WriteString(template.HTMLEscapeString(s))
+	return template.HTML(b.String()) //nolint:gosec // every part is escaped above
 }
 
 // percent computes n/d as a rounded whole percentage (0 when d == 0).
