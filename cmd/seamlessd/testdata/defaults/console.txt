@@ -740,7 +740,7 @@
       <div class="ov2-attn-card" data-sev="danger" data-need="mishaps">
         <a class="ov2-attn-main" href="/console/mishaps">
           <span class="ov2-attn-ico"><svg class="ico ico-triangle-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span>
-          <span class="ov2-attn-copy"><strong>1 mishap to review</strong><span title="latest <age> in example-open-alpha · review recurrence, then mark them reviewed">latest <age> in example-open-alpha · review recurrence, then mark them reviewed</span></span>
+          <span class="ov2-attn-copy"><strong title="1 mishap to review">1 mishap to review</strong><span title="latest <age> in example-open-alpha · review recurrence, then mark them reviewed">latest <age> in example-open-alpha · review recurrence, then mark them reviewed</span></span>
           <svg class="ico ico-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
         </a>
         

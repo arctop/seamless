@@ -81,7 +81,7 @@
       <div class="ov2-attn-card" data-sev="{{.Sev}}" data-need="{{.Kind}}"{{if .Blocking}} data-blocking{{end}}>
         {{if .Linked}}<a class="ov2-attn-main" href="{{.Href}}">{{else}}<span class="ov2-attn-main">{{end}}
           <span class="ov2-attn-ico">{{icon .Icon}}</span>
-          <span class="ov2-attn-copy"><strong>{{.Title}}</strong><span title="{{.Sub}}">{{.Sub}}</span>{{.Bar}}</span>
+          <span class="ov2-attn-copy"><strong title="{{.Title}}">{{.Title}}</strong><span title="{{.Sub}}">{{.Sub}}</span>{{.Bar}}</span>
           {{if .Linked}}{{icon "arrow-right"}}{{end}}
         {{if .Linked}}</a>{{else}}</span>{{end}}
         {{with .Action}}

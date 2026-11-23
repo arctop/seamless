@@ -788,3 +788,20 @@ func TestNdItems_CarryAKindAndACount(t *testing.T) {
 		require.True(t, strings.HasPrefix(card.Href, "/console/"), card.Kind)
 	}
 }
+
+// The others card's title names at most three holders, most gates first,
+// counts a name spelled two ways once, and counts the rest: a deployment with
+// gates on fourteen holders once listed all of them, and the card grew to
+// twenty lines and stretched every card in the strip with it.
+func TestGateHolders_NamesAFewAndCountsTheRest(t *testing.T) {
+	gate := func(who string) core.Task { return core.Task{Gate: core.TaskGate{Who: who}} }
+	require.Equal(t, "dana", gateHolders([]core.Task{gate("dana")}))
+	require.Equal(t, "people", gateHolders([]core.Task{gate("")}), "a gate with no holder waits on people")
+	require.Equal(t, "dana and lee", gateHolders([]core.Task{gate("dana"), gate("lee"), gate("Dana")}),
+		"a name spelled two ways is one holder, under its first spelling")
+	require.Equal(t, "lee, dana and kim", gateHolders([]core.Task{gate("dana"), gate("lee"), gate("kim"), gate("lee")}),
+		"the holder with the most gates comes first; ties keep their order")
+	require.Equal(t, "lee, dana and 3 others", gateHolders([]core.Task{
+		gate("dana"), gate("lee"), gate("kim"), gate("lee"), gate("ash"), gate("bo"),
+	}))
+}

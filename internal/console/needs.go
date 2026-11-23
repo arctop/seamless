@@ -324,16 +324,9 @@ func (s *Service) needOpenGates(ctx context.Context, next string) []attnCard {
 		out = append(out, card)
 	}
 	if len(others) > 0 {
-		var who []string
-		for _, t := range others {
-			name := cmp.Or(t.Gate.Who, "people")
-			if !slices.Contains(who, name) {
-				who = append(who, name)
-			}
-		}
 		card := attnCard{
 			Kind: needGatesOthers, Sev: "info", Icon: "flag", Count: len(others), Blocking: true,
-			Title: plural(len(others), "gate waits on ", "gates wait on ") + approval.JoinAnd(who),
+			Title: plural(len(others), "gate waits on ", "gates wait on ") + gateHolders(others),
 			Sub:   "the work behind them waits until they are handled",
 			Href:  "/console/tasks",
 		}
@@ -344,6 +337,47 @@ func (s *Service) needOpenGates(ctx context.Context, next string) []attnCard {
 		out = append(out, card)
 	}
 	return out
+}
+
+// gateHoldersNamed is how many holders the others card names before it
+// counts the rest: the title is one line of a strip card, and a deployment
+// with many gates on many people once named 14 there.
+const gateHoldersNamed = 3
+
+// gateHolders names who the gates wait on, for the others card's title: the
+// holders with the most gates first, a name spelled two ways counted once
+// (the first spelling wins), and past gateHoldersNamed the first two named
+// and the rest counted ("dana, lee and 5 others").
+func gateHolders(gates []core.Task) string {
+	type holder struct {
+		name string
+		n    int
+	}
+	var hs []holder
+	at := map[string]int{}
+	for _, t := range gates {
+		name := cmp.Or(strings.TrimSpace(t.Gate.Who), "people")
+		key := strings.ToLower(name)
+		if i, ok := at[key]; ok {
+			hs[i].n++
+			continue
+		}
+		at[key] = len(hs)
+		hs = append(hs, holder{name: name, n: 1})
+	}
+	slices.SortStableFunc(hs, func(a, b holder) int { return cmp.Compare(b.n, a.n) })
+	names := make([]string, 0, gateHoldersNamed)
+	for _, h := range hs {
+		names = append(names, h.name)
+		if len(names) == gateHoldersNamed {
+			break
+		}
+	}
+	if len(hs) > gateHoldersNamed {
+		rest := len(hs) - (gateHoldersNamed - 1)
+		return strings.Join(names[:gateHoldersNamed-1], ", ") + " and " + strconv.Itoa(rest) + " others"
+	}
+	return approval.JoinAnd(names)
 }
 
 // needPlanApprovals is the captured Claude Code plans presented and awaiting

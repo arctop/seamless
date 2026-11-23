@@ -7884,6 +7884,12 @@ a.ov2-attn-main:focus-visible { outline: none; box-shadow: var(--shadow-focus); 
 .ov2-attn-main > .ico-arrow-right { flex: none; width: 14px; height: 14px; color: var(--faint); transition: transform var(--dur-fast) var(--ease-out); }
 a.ov2-attn-main:hover > .ico-arrow-right { transform: translateX(2px); }
 .ov2-attn-act { flex: none; margin: 0; }
+/* A card's title holds to two lines (its full text in the tooltip): the rail
+   stretches every card to its tallest, so one long title once made the whole
+   strip twenty lines tall. A card with an inline action starts wider, or the
+   button squeezed its title into a column one word wide. */
+.ov2-attn-copy strong { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ov2-attn-card:has(> .ov2-attn-act) { flex-basis: min(400px, 82vw); }
 .ov2-attn-act .btn { white-space: nowrap; }
 .ov2-attn-act .btn .ico { width: 13px; height: 13px; }
 
