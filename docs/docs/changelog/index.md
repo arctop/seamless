@@ -10,6 +10,88 @@ bumps) filtered out. Each heading links the release's downloads and checksums.
 Install with one command ([quickstart](https://thereisnospoon.org/docs/quickstart/)), or update an existing
 install in place with `seamlessd update`.
 
+## v0.11.0 {#v0-11-0}
+
+Released 2026-11-23 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.11.0)
+
+### Features
+
+- feat(console): Briefing sits beside its preview, and Knowledge engine lists only the projects that rank
+- feat(console): Updates, Backups and Your setup say what is true first, then the switches, and one alert when something needs you
+- feat(console): Gardener is a Settings section of its own, at Basic, beside the Gardener screen
+- feat(console): Features are one row each that save at once, and the level cards compare at a glance
+- feat(console): Workspaces finds a project as you type, and shows the routed ones first
+- feat(console): Tasks is the backlog as one list, what needs you first, with the one action each row needs
+- feat(console): Access shows what waits and what is open now, and a request is decided on one page
+- feat(console): Settings shows each section's state in its sub-nav, a one-line head, and the source chip in place of the precedence sentence
+- feat(console): Notes is one paged list, with tags and plans as filters and agent working copies folded
+- feat(console): Approvers as key cards with adding in three steps, and one sign-in card
+- feat(console): a locked project's door: the unlock and lock pages as one card, with plain steps for the terminal way
+- feat(console): read in place: a click on an item link opens it in one wide panel over the page, and Esc goes back
+- feat(console): Memories is one paged list, newest first by day, regrouped by kind when a project is chosen
+- feat(console): the shared parts for Settings and the lock screens: hints, the source chip, rows, steps, time left and switches that save at once
+- feat(console): a plan opens in the item frame, and the Plans board takes the project switcher
+- feat(demoseed): -review -scale seeds the review fixture at the owner's size
+- feat(console): a memory, a note and a task open on their own page
+- feat(console): a project switcher on Memories and Notes
+- feat(console): the sidebar puts Access first and work before knowledge
+- feat(console): Plans is a board of cards by state, and a plan opens on its own page
+- feat(console): the sidebar fits the screen, and its numbers say what waits on the owner
+- feat(console): plan cards say what each plan is, what holds it and whether it stalled
+- feat(console): the Overview leads with what needs you, then the work in motion
+- feat(console): Tasks is a backlog you can filter, read and triage, with a history and a way to say a task waits on someone
+- feat(console): the project tab lists all of its off-plan work, grouped, and a claimed task no longer disappears
+- feat(console): Gardener triage gives evidence to decide on, keys, apply-all for the undoable, and the queue first
+- feat(gardener): a switch for agents applying proposals, and opt-in automatic apply for the four safe kinds
+- feat(console): the project Sessions tab and Now title a session as the Sessions screen does
+- feat(console): the project page opens on Plans &amp; tasks and loads one tab at a time
+- feat(console): sessions you can tell apart, that say what they did, and filter by project
+- feat(console): restore an archived or orphaned memory, and delete a note, from the library
+- feat(console): Now and event pages say what happened in plain words
+- feat(console): project board rows lead with work, and needs attention means something waits or is stuck
+- feat(console): the owner marks a task done, drops, reopens, clears its gate and releases any claim
+- feat(console): a confirmation can ask in the page, with a two-step button
+- feat(gardener): upkeep runs whatever gardener.enabled says, every decision records who made it, and the screen shows what ran
+- feat(console): the memory and note libraries open on what is new, filter by kind, project and star, and keep their place
+- feat(console): search counts honestly, filters starred before the cap, and finds retired memories
+- feat(console): task rows say what a task is in plain words, name its holder, and copy its whole id
+- feat(console): stale means one thing, the configured staleness horizon, and Held shows what a release would change
+- feat(console): the projects board opens on activity, global becomes one line, and locked projects sort with the rest
+- feat(demoseed): -review seeds the states the console must show
+
+### Fixes
+
+- fix(lint): golangci-lint gets 10m, not 5m
+- fix(make): fmt and fmt-check run go.mod's toolchain gofmt
+- fix(console): the final walk's fixes, docs reconciled, landing shots recaptured
+- fix(console): Workspaces' row count stays on one line at phone width
+- fix(console): Undo on Settings &gt; Gardener's switches puts the change back
+- fix(console): Settings' old links open their section again
+- fix(console): keys behind the read-in-place panel leave the page alone, the ? sheet lists p and Enter, and a panel's hints keep their own ids
+- fix(console): the Filters fold lets go of its rise, so its menus sit on top
+- fix(console): confirms in the page, local times, and screens that say what they do
+- fix(console): sign-in keeps the whole link, and the shell stops repeating itself
+- fix(console): every plan link names its project
+- fix(console): a step's long blocker chips end in an ellipsis
+- fix(console): a plan's star lands on its own project's plan
+- fix(demokit): the Diary fixture seeds at any time of night
+- fix(console): the kind colors paint the kind dots only
+- fix(console): the one Memories list's kind chip reads its kind again
+- fix(console): a tab holds its live stream only while it is in sight, and a live refresh can no longer hang
+- fix(store): the project board counts a started step a gate holds as waiting, as the Tasks page does
+- fix(console): small findings from wave cux1122, fixed where found
+- fix(console): a session headline keeps its sans face on the project tab, and a Now claim reads as a task, not a lock
+- fix(mcp): notes_delete removes the note under its file's lock, and never another note at its path
+- fix(console): search kinds wear their color everywhere, and an unlocked browser counts past a still-locked project
+
+### Other
+
+- refactor(console): Settings draws each section from a partial of its own
+- refactor(console): a note's and a task's item page and list place in files of their own
+- refactor(console): placeholders for read in place and the Settings kit, and the item frame beside Plans
+- refactor(console): the library helpers in library.go, and placeholders for the item page and the project switcher
+- build(make): shard each package's tests across processes, run the static steps at once, and build with -trimpath
+
 ## v0.10.6 {#v0-10-6}
 
 Released 2026-11-22 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.10.6)
