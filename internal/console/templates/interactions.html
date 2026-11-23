@@ -432,7 +432,7 @@ window.SEAM_NO_LIVE_REFRESH = true; // this screen is the live feed -- it owns i
             ? 'Added ' + unique.length + ' older event' + (unique.length === 1 ? '' : 's')
             : 'Added ' + unique.length + ' event' + (unique.length === 1 ? '' : 's') + ' from ' + label, 'ok');
         } else if (cursor) {
-          showHistoryStatus('No visible events in this batch — more remain', 'neutral');
+          showHistoryStatus('No visible events in this batch; more remain', 'neutral');
         } else {
           showHistoryStatus(continueWindow ? 'That window is fully loaded' : 'No additional events in ' + label, 'neutral');
         }
@@ -441,7 +441,7 @@ window.SEAM_NO_LIVE_REFRESH = true; // this screen is the live feed -- it owns i
         setHistoryBusy(false);
       })
       .catch(function () {
-        showHistoryStatus('Could not add history — live streaming is unchanged', 'danger');
+        showHistoryStatus('Could not add history; live streaming is unchanged', 'danger');
         setHistoryBusy(false);
       });
   }

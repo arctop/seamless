@@ -417,11 +417,11 @@ func TestGardenerReader_ConfirmsOnlyIrreversibleApplies(t *testing.T) {
 
 	ok := getPeek(t, mux, "/console/gardener/"+undoable.ID+"?reader=1").Body.String()
 	require.NotContains(t, ok, "confirm(", "an undoable apply needs no interstitial")
-	require.Contains(t, ok, "undoable from Recently decided")
+	require.Contains(t, ok, "can be undone from Recently decided")
 
 	gated := getPeek(t, mux, "/console/gardener/"+irreversible.ID+"?reader=1").Body.String()
 	require.Contains(t, gated, "This cannot be undone from the console.")
-	require.NotContains(t, gated, "undoable from Recently decided")
+	require.NotContains(t, gated, "can be undone from Recently decided")
 }
 
 // The ?format=json shape the seam CLI reads is fixed: the inbox projections are

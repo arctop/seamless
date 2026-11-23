@@ -45,8 +45,8 @@
     <div class="m"><div class="k">Active memories</div><div class="v">{{.Metrics.Memories}}</div></div>
     <div class="m"><div class="k">Sessions</div><div class="v">{{.Metrics.Sessions}}{{if .Metrics.Live}} <small>&middot; {{.Metrics.Live}} live</small>{{end}}</div></div>
     <div class="m"><div class="k">Open tasks</div><div class="v">{{.Metrics.OpenTasks}}{{if .Metrics.Blocked}} <small>&middot; {{.Metrics.Blocked}} blocked</small>{{end}}{{if .Metrics.Waiting}} <small>&middot; {{.Metrics.Waiting}} waiting on people</small>{{end}}</div></div>
-    <div class="m"><div class="k">Reach</div><div class="v brand judged-row">{{if .Metrics.HasReach}}{{.Metrics.ReachRate}}%{{else}}&mdash;{{end}}{{deltaChip .Metrics.ReachDelta}}</div><div class="judged-band" title="{{.Metrics.PriorLabel}}">{{bandLine .Metrics.ReachBand}}</div></div>
-    <div class="m"><div class="k">Coverage</div><div class="v ok judged-row">{{if .Metrics.HasCoverage}}{{.Metrics.Coverage}}%{{else}}&mdash;{{end}}{{deltaChip .Metrics.CoverageDelta}}</div><div class="judged-band" title="{{.Metrics.PriorLabel}}">{{bandLine .Metrics.CoverageBand}}</div></div>
+    <div class="m"><div class="k">Reach</div><div class="v brand judged-row">{{if .Metrics.HasReach}}{{.Metrics.ReachRate}}%{{else}}n/a{{end}}{{deltaChip .Metrics.ReachDelta}}</div><div class="judged-band" title="{{.Metrics.PriorLabel}}">{{bandLine .Metrics.ReachBand}}</div></div>
+    <div class="m"><div class="k">Coverage</div><div class="v ok judged-row">{{if .Metrics.HasCoverage}}{{.Metrics.Coverage}}%{{else}}n/a{{end}}{{deltaChip .Metrics.CoverageDelta}}</div><div class="judged-band" title="{{.Metrics.PriorLabel}}">{{bandLine .Metrics.CoverageBand}}</div></div>
   </div>
   <div class="two">
     <div class="card">
@@ -192,7 +192,7 @@
         <tr id="{{.ID}}" class="row-link" data-href="/console/memories/{{.ID}}"><td class="mem-name"><a href="/console/memories/{{.ID}}"><strong>{{.Name}}</strong></a>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{with .MayContain}} <span class="kind faint" data-may-contain title="Provenance stamp: the agent that wrote this held content from these confidential or sealed projects. It names projects and approvals, never content.">{{mayContain .}}</span>{{end}}{{if .Desc}}<div class="desc">{{.Desc}}</div>{{end}}</td><td><span class="kind">{{.Kind}}</span></td><td>{{.Lineage}}</td><td class="num">{{.Injects}}</td><td class="num">{{.Reads}}</td><td class="muted">{{ago .Updated}}</td></tr>
         {{else}}<tr><td colspan="6"><div class="empty">No memories in {{.Slug}}{{with .CameFrom}}{{with .Active}} may contain content from {{.}}{{end}}{{end}}</div></td></tr>{{end}}
         {{if .Inherited}}
-        <tr class="subhead-row"><td colspan="6">Inherited &mdash; counted in parent/global scope, not {{.Slug}}</td></tr>
+        <tr class="subhead-row"><td colspan="6">Inherited: counted in parent/global scope, not {{.Slug}}</td></tr>
         {{range .Inherited}}
         <tr id="{{.ID}}" class="row-link" data-href="/console/memories/{{.ID}}"><td class="mem-name"><a href="/console/memories/{{.ID}}"><strong>{{.Name}}</strong></a>{{with .Account}} <span class="kind faint" data-account="{{.}}" title="Written by a restricted local account (peer_auth.restricted)">written by account {{.}}</span>{{end}}{{if .Desc}}<div class="desc">{{.Desc}}</div>{{end}}</td><td><span class="kind">{{.Kind}}</span></td><td>{{.Lineage}}</td><td class="num">{{.Injects}}</td><td class="num">{{.Reads}}</td><td class="muted">{{ago .Updated}}</td></tr>
         {{end}}
@@ -330,9 +330,9 @@
        Unknown (see isolationGlobalProvenance) prints neither. */}}
   {{if .Provenance.Known}}
   {{if .Provenance.Count}}
-  <p class="iso-confirm-line">{{.Provenance.Count}} global memor{{if eq .Provenance.Count 1}}y{{else}}ies{{end}} originated in this project&rsquo;s sessions &mdash; relocation proposals will be filed in the <a href="/console/gardener">Gardener inbox</a>.</p>
+  <p class="iso-confirm-line">{{.Provenance.Count}} global memor{{if eq .Provenance.Count 1}}y{{else}}ies{{end}} originated in this project&rsquo;s sessions, so relocation proposals will be filed in the <a href="/console/gardener">Gardener inbox</a>.</p>
   {{else}}
-  <p class="iso-confirm-line muted">No global memories originated in this project&rsquo;s sessions &mdash; nothing to relocate.</p>
+  <p class="iso-confirm-line muted">No global memories originated in this project&rsquo;s sessions, so there is nothing to relocate.</p>
   {{end}}
   {{end}}
   <div class="iso-confirm-actions">

@@ -106,7 +106,7 @@
 </section>
 <p class="ml-keys" aria-hidden="true"><span><kbd>j</kbd> <kbd>k</kbd> move</span><span><kbd>Enter</kbd> opens the memory</span><span><kbd>/</kbd> filters</span><span><kbd>p</kbd> picks a project</span></p>
 {{else}}
-<div class="empty dotgrid"><span class="empty-ico">{{icon "brain"}}</span><div>No active memories yet &mdash; durable knowledge agents write with memory_write shows up here.</div></div>
+<div class="empty dotgrid"><span class="empty-ico">{{icon "brain"}}</span><div>No active memories yet. Durable knowledge agents write with memory_write shows up here.</div></div>
 {{end}}
 </div><!-- .lib-page -->
 {{end}}
@@ -166,7 +166,7 @@
   {{else if .BodyIsEcho}}
   <div class="mv2-nobody">
     {{icon "file-text"}}
-    <span>No body beyond the description yet &mdash; captured mid-session.{{if .SourceID}} <a href="/console/sessions/{{.SourceID}}">Open source session {{.Source}}</a> for the full context, or{{end}} <a href="{{.EditURL}}" title="{{.AbsPath}}">edit in editor</a> to expand it.</span>
+    <span>No body beyond the description yet: captured mid-session.{{if .SourceID}} <a href="/console/sessions/{{.SourceID}}">Open source session {{.Source}}</a> for the full context, or{{end}} <a href="{{.EditURL}}" title="{{.AbsPath}}">edit in editor</a> to expand it.</span>
   </div>
   {{else}}<div class="prose doc">{{.Body}}</div>{{end}}
   {{if .ReplacedByID}}
@@ -215,7 +215,7 @@
 
 {{/* The utility score, a Standard-level fact (screens.go's surface "the
      utility score in the reader"), in the reader and on the memory's page. */}}
-{{define "memory-utility"}}{{if $.Level.AtLeast "standard"}}<span class="mv2-fact-hi" title="Time-decayed demand score in [0,1): recall hits, prompt matches, explicit reads. Feeds briefing ordering and recall ranking.{{with .UtilityParts}} Breakdown &mdash; read {{printf "%.1f" .Read}} &middot; recall {{printf "%.1f" .Recall}} &middot; prompt {{printf "%.1f" .Prompt}}{{end}}">{{printf "%.2f" .Utility}}<span>utility</span></span>{{end}}{{end}}
+{{define "memory-utility"}}{{if $.Level.AtLeast "standard"}}<span class="mv2-fact-hi" title="Time-decayed demand score in [0,1): recall hits, prompt matches, explicit reads. Feeds briefing ordering and recall ranking.{{with .UtilityParts}} Breakdown: read {{printf "%.1f" .Read}} &middot; recall {{printf "%.1f" .Recall}} &middot; prompt {{printf "%.1f" .Prompt}}{{end}}">{{printf "%.2f" .Utility}}<span>utility</span></span>{{end}}{{end}}
 
 {{/* A memory's own page: the blocks item_shared.html's item-frame asks the
      Memories screen for (itempage.go's memoryItem). Every action returns to
@@ -250,7 +250,7 @@
       {{- else if .BodyIsEcho}}
       <div class="mv2-nobody">
         {{icon "file-text"}}
-        <span>No body beyond the description yet &mdash; captured mid-session.{{if .SourceID}} <a href="/console/sessions/{{.SourceID}}">Open source session {{.Source}}</a> for the full context, or{{end}} <a href="{{.EditURL}}" title="{{.AbsPath}}">edit in editor</a> to expand it.</span>
+        <span>No body beyond the description yet: captured mid-session.{{if .SourceID}} <a href="/console/sessions/{{.SourceID}}">Open source session {{.Source}}</a> for the full context, or{{end}} <a href="{{.EditURL}}" title="{{.AbsPath}}">edit in editor</a> to expand it.</span>
       </div>
       {{- else}}<div class="prose doc">{{.Body}}</div>{{end}}
 {{end}}{{end}}

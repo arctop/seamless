@@ -8,7 +8,7 @@
   <h2 class="peek-title">{{.Name}}{{copyBtn .Name}}</h2>
   {{if .Description}}<p class="peek-desc">{{.Description}}</p>{{end}}
   <div class="mv2-facts">
-    <span class="mv2-fact-hi" title="Time-decayed demand score in [0,1): recall hits, prompt matches, explicit reads.{{with .UtilityParts}} Breakdown &mdash; read {{printf "%.1f" .Read}} &middot; recall {{printf "%.1f" .Recall}} &middot; prompt {{printf "%.1f" .Prompt}}{{end}}">{{printf "%.2f" .Utility}}<span>utility</span></span>
+    <span class="mv2-fact-hi" title="Time-decayed demand score in [0,1): recall hits, prompt matches, explicit reads.{{with .UtilityParts}} Breakdown: read {{printf "%.1f" .Read}} &middot; recall {{printf "%.1f" .Recall}} &middot; prompt {{printf "%.1f" .Prompt}}{{end}}">{{printf "%.2f" .Utility}}<span>utility</span></span>
     <span class="mv2-fact-hi"{{if .SurfacedTone}} data-tone="{{.SurfacedTone}}"{{end}} title="{{if .LastInjected}}Last entered agent context {{ts .LastInjected}}{{else}}Has never entered an agent context{{end}}">{{if .LastInjected}}{{.SurfacedAge}}<span>since surfaced</span>{{else}}never<span>surfaced</span>{{end}}</span>
   </div>
   {{template "detail-body" .}}

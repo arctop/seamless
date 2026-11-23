@@ -645,9 +645,9 @@ func calendarGrid(days []store.CoverageBucket, start time.Time, selected string)
 		if d.Total > 0 && maxN > 0 {
 			lvl = min(4, 1+(d.Total*4-1)/maxN)
 		}
-		title := day.Format("Mon, Jan 02") + " -- no sessions"
+		title := day.Format("Mon, Jan 02") + ": no sessions"
 		if d.Total > 0 {
-			title = fmt.Sprintf("%s -- %s, %d captured", day.Format("Mon, Jan 02"),
+			title = fmt.Sprintf("%s: %s, %d captured", day.Format("Mon, Jan 02"),
 				plural(d.Total, "session", "sessions"), d.Covered)
 		}
 		key := day.Format("2006-01-02")

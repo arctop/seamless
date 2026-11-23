@@ -351,7 +351,7 @@ func TestRhythmChart(t *testing.T) {
 
 		require.Contains(t, got, `<ul class="chart-key"><li class="series-1"><i class="chart-swatch" aria-hidden="true"></i>Claude Code / example-model</li><li class="series-2">`)
 		require.Contains(t, got, `<span class="chart-cap" style="left:60.27%;top:14.29%">1h</span>`, "the busiest hour's figure rides its cap")
-		require.Contains(t, got, `aria-label="Agent time by hour, 24 hours: 1h 40m in total; busiest 14:00–15:00 with 1h."`)
+		require.Contains(t, got, `aria-label="Agent time by hour, 24 hours: 1h 40m in total; busiest 14:00-15:00 with 1h."`)
 	})
 
 	t.Run("hover: a readout per hour, on its column, every series listed", func(t *testing.T) {
@@ -360,7 +360,7 @@ func TestRhythmChart(t *testing.T) {
 		require.Len(t, hov.Marks, 24)
 		require.Equal(t, 14, hov.Start, "the keyboard walk lands on the busiest hour")
 		m := hov.Marks[14]
-		require.Equal(t, "14:00–15:00", m.Label)
+		require.Equal(t, "14:00-15:00", m.Label)
 		require.Equal(t, "1h", m.Value)
 		require.Equal(t, []markRow{
 			{Tone: "series-1", Value: "20m", Name: "Claude Code / example-model"},
@@ -409,13 +409,13 @@ func TestRhythmChart(t *testing.T) {
 		got := string(rhythmChart(r))
 		require.Len(t, chartsTags(got, `<rect class="chart-hit"`), 25)
 		hov := chartsMarkPayload(t, got)
-		require.Equal(t, "00:00–01:00 PDT", hov.Marks[0].Label)
-		require.Equal(t, "01:00 PDT–01:00 PST", hov.Marks[1].Label)
-		require.Equal(t, "01:00 PST–02:00", hov.Marks[2].Label)
-		require.Equal(t, "23:00–00:00", hov.Marks[24].Label)
+		require.Equal(t, "00:00-01:00 PDT", hov.Marks[0].Label)
+		require.Equal(t, "01:00 PDT-01:00 PST", hov.Marks[1].Label)
+		require.Equal(t, "01:00 PST-02:00", hov.Marks[2].Label)
+		require.Equal(t, "23:00-00:00", hov.Marks[24].Label)
 		require.Equal(t, 4, strings.Count(got, `%">`)-strings.Count(got, `chart-cap`), "still four ticks: 00, 06, 12, 18")
 		require.Contains(t, got, ", 25 hours:")
-		require.Contains(t, string(rhythmTable(r)), `<th scope="row">01:00 PDT–01:00 PST</th>`)
+		require.Contains(t, string(rhythmTable(r)), `<th scope="row">01:00 PDT-01:00 PST</th>`)
 		require.Equal(t, 25, strings.Count(string(rhythmTable(r)), `<tr><th scope="row">`)-1, "a row per hour, plus the total")
 
 		spring, sdt := time.FixedZone("PST", -8*3600), time.FixedZone("PDT", -7*3600)
@@ -430,7 +430,7 @@ func TestRhythmChart(t *testing.T) {
 		}
 		got = string(rhythmChart(rhythmSpec{Unit: unitMinutes, Hours: short, Series: []rhythmSeries{{Name: "a", Slot: 1, Values: []int64{0, 0, 4}}}}))
 		require.Len(t, chartsTags(got, `<rect class="chart-hit"`), 23)
-		require.Equal(t, "03:00–04:00", chartsMarkPayload(t, got).Marks[2].Label, "the skipped hour is simply not there")
+		require.Equal(t, "03:00-04:00", chartsMarkPayload(t, got).Marks[2].Label, "the skipped hour is simply not there")
 	})
 
 	t.Run("names are escaped in the key, the readout and the table", func(t *testing.T) {
@@ -622,9 +622,9 @@ func TestPresenceStrip(t *testing.T) {
 		require.Contains(t, got, `<i class="chart-presence-notch" style="left:`+left+`%"></i>`)
 	}
 	require.Equal(t, 3, strings.Count(got, "chart-presence-notch"))
-	require.Contains(t, got, `aria-label="When it was worked: 06:00–12:15, 23:30–00:00; 6h 45m in all." tabindex="0"`)
+	require.Contains(t, got, `aria-label="When it was worked: 06:00-12:15, 23:30-00:00; 6h 45m in all." tabindex="0"`)
 	hov := chartsMarkPayload(t, got)
-	require.Equal(t, markReadout{Label: "06:00–12:15", Value: "6h 15m"}, hov.Marks[0])
+	require.Equal(t, markReadout{Label: "06:00-12:15", Value: "6h 15m"}, hov.Marks[0])
 
 	// A 25-hour day keeps the rhythm's axis: its last hour ends at 100%.
 	long := chartsHours(mid, 25)
@@ -657,7 +657,7 @@ func TestStatTile(t *testing.T) {
 	for _, a := range []string{"/console/tasks", "javascript:alert(1)", "#bad id", "#"} {
 		require.True(t, strings.HasPrefix(string(statTile(tileSpec{Label: "x", Anchor: a})), `<div `), "%q is no in-page anchor", a)
 	}
-	require.Contains(t, string(statTile(tileSpec{Label: "Kept"})), "<strong>&mdash;</strong>")
+	require.Contains(t, string(statTile(tileSpec{Label: "Kept"})), "<strong>n/a</strong>")
 	got = string(statTile(tileSpec{Label: chartsNasty, Value: chartsNasty, Sub: chartsNasty}))
 	require.NotContains(t, got, "<script")
 	require.Equal(t, 3, strings.Count(got, "&lt;script&gt;"))

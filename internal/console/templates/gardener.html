@@ -67,10 +67,10 @@
     <form class="gardener-request-card" method="post" action="/console/gardener/request" id="req-form">
       <label class="gardener-request-label" for="req-text">
         <span>What should be tidied?</span>
-        <small>Plain language. Name the memories, topic, or project when you know it &mdash; or ask for a project split.</small>
+        <small>Plain language. Name the memories, topic, or project when you know it, or ask for a project split.</small>
       </label>
       <textarea class="field gardener-request-input" name="request" id="req-text" rows="3"
-        placeholder="For example: the two auth-flow memories overlap — keep the newer one and archive anything that still refers to port 8080">{{.SplitReq}}</textarea>
+        placeholder="For example: the two auth-flow memories overlap; keep the newer one and archive anything that still refers to port 8080">{{.SplitReq}}</textarea>
 
       <div class="gardener-examples" aria-label="Request examples">
         <span>Try a pattern</span>
@@ -96,7 +96,7 @@
       {{if .SplitReq}}
       <div class="gardener-split-followup" role="status">
         <span class="gardener-followup-icon">{{icon "split"}}</span>
-        <div><strong>One detail before the split can be planned</strong><span>This reads like a project split &mdash; which project should be split?</span></div>
+        <div><strong>One detail before the split can be planned</strong><span>This reads like a project split. Which project should be split?</span></div>
       </div>
       {{end}}
     </form>
@@ -232,7 +232,7 @@
               </span>
               {{if $.Data.CanAct}}
               <form method="post" action="/console/gardener/{{.ID}}/unhide">
-                <button class="btn small" type="submit" title="Stop blocking this pattern. It is not returned to the queue -- the gardener may propose it again if it recurs.">{{icon "eye"}} Unhide</button>
+                <button class="btn small" type="submit" title="Stop blocking this pattern. It is not returned to the queue; the gardener may propose it again if it recurs.">{{icon "eye"}} Unhide</button>
               </form>
               {{end}}
             </div>
@@ -291,7 +291,7 @@
   {{if or .Prev .Next}}
   <nav class="gardener-decision-pager" aria-label="Decision history pages">
     {{if .Prev}}<a class="btn small" href="{{.Prev}}" rel="prev">{{icon "chevron-left"}} Newer</a>{{end}}
-    <span>{{.From}}&ndash;{{.To}} of {{.Total}}</span>
+    <span>{{.From}}-{{.To}} of {{.Total}}</span>
     {{if .Next}}<a class="btn small" href="{{.Next}}" rel="next">Older {{icon "chevron-right"}}</a>{{end}}
   </nav>
   {{end}}
@@ -404,7 +404,7 @@
     <span class="gfn-icon">{{icon "lock"}}</span>
     <div>
       <span>This proposal touches {{range $i, $p := .Fenced}}{{if $i}}, {{end}}<a href="/console/projects/{{$p.Slug}}" data-peek>{{$p.Slug}}</a> ({{$p.State}}){{end}}</span>
-      <p>Isolation may have been raised after this was proposed, so the evidence can predate the fence. Agents are refused this proposal; you are not &mdash; read what it changes before applying.</p>
+      <p>Isolation may have been raised after this was proposed, so the evidence can predate the fence. Agents are refused this proposal; you are not, so read what it changes before applying.</p>
     </div>
   </div>
   {{end}}
@@ -424,7 +424,7 @@
 
   {{if .CanAct}}
   <footer class="gardener-reader-actions">
-    <span>{{icon "lock"}} Knowledge changes only if applied{{if .CanUndoApply}} &mdash; and undoable from Recently decided{{end}}</span>
+    <span>{{icon "lock"}} Knowledge changes only if applied{{if .CanUndoApply}}, and can be undone from Recently decided{{end}}</span>
     <div class="btn-row">
       {{/* Two rejection strengths. Dismiss answers the evidence so far, so the
            pattern comes back if it keeps happening; Hide answers the pattern
@@ -562,7 +562,7 @@
        always the global scope, and the evidence is the provenance stamp that
        traced this memory back to the newly fenced project. */}}
   {{with .Relocate}}
-  <div class="proposal-signal">This global memory was written by a session bound to {{.To}}, which is now {{.Isolation}} &mdash; it stayed outside the fence.</div>
+  <div class="proposal-signal">This global memory was written by a session bound to {{.To}}, which is now {{.Isolation}}: it stayed outside the fence.</div>
   <div class="proposal-moving-memory">{{icon "brain"}} <a href="/console/memories/{{.ID}}" data-peek>{{.Name}}</a>{{if .Kind}} <small>{{.Kind}}</small>{{end}}</div>
   {{if .Description}}<div class="proposal-reason"><span>What it says</span><p>{{.Description}}</p></div>{{end}}
   <div class="proposal-move-map">

@@ -1775,7 +1775,7 @@
     <div class="project-row-title">
       <a class="project-row-name" href="/console/projects/example-confidential">example-confidential</a>
       
-      <span class="kind accent iso-pill" title="Confidential — nothing leaves. Agents in other projects never see this project&#39;s knowledge, and agents here cannot write outside it."><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>confidential</span>
+      <span class="kind accent iso-pill" title="Confidential: nothing leaves. Agents in other projects never see this project&#39;s knowledge, and agents here cannot write outside it."><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>confidential</span>
       
       
     </div>
@@ -1800,7 +1800,7 @@
   </div>
   <div class="project-row-fig project-row-tasks"><strong>1</strong><span>open task</span></div>
   <div class="project-row-fig project-row-when"><strong><time datetime="<time>" data-clock="title" title="<time> UTC"><age></time></strong><span>last activity</span></div>
-  <div class="project-row-fig project-row-reach" title="No active memories"><strong>&mdash;</strong><span>reach &middot; 0 mem</span></div>
+  <div class="project-row-fig project-row-reach" title="No active memories"><strong>n/a</strong><span>reach &middot; 0 mem</span></div>
 </article>
 
 <article id="p-example-sealed" class="project-row row-link" data-href="/console/projects/example-sealed">
@@ -1809,7 +1809,7 @@
     <div class="project-row-title">
       <a class="project-row-name" href="/console/projects/example-sealed">example-sealed</a>
       
-      <span class="kind warn iso-pill" title="Sealed — nothing in or out. Agents here see only this project: no global memories, no family, no cross-project reads."><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>sealed</span>
+      <span class="kind warn iso-pill" title="Sealed: nothing in or out. Agents here see only this project: no global memories, no family, no cross-project reads."><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>sealed</span>
       
       
     </div>
@@ -1855,7 +1855,7 @@
   </div>
   <div class="project-row-fig project-row-tasks"><strong>0</strong><span>open tasks</span></div>
   <div class="project-row-fig project-row-when"><strong>-</strong><span>last activity</span></div>
-  <div class="project-row-fig project-row-reach" title="No active memories"><strong>&mdash;</strong><span>reach &middot; 0 mem</span></div>
+  <div class="project-row-fig project-row-reach" title="No active memories"><strong>n/a</strong><span>reach &middot; 0 mem</span></div>
 </article>
 
 <article id="p-example-open-gamma" class="project-row row-link" data-href="/console/projects/example-open-gamma">
@@ -1872,7 +1872,7 @@
   </div>
   <div class="project-row-fig project-row-tasks"><strong>0</strong><span>open tasks</span></div>
   <div class="project-row-fig project-row-when"><strong>-</strong><span>last activity</span></div>
-  <div class="project-row-fig project-row-reach" title="No active memories"><strong>&mdash;</strong><span>reach &middot; 0 mem</span></div>
+  <div class="project-row-fig project-row-reach" title="No active memories"><strong>n/a</strong><span>reach &middot; 0 mem</span></div>
 </article>
 </div>
       </details>
@@ -3546,7 +3546,7 @@
         
         
         
-        <span class="kind accent iso-pill" title="Confidential — nothing leaves. Agents in other projects never see this project&#39;s knowledge, and agents here cannot write outside it."><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>confidential</span>
+        <span class="kind accent iso-pill" title="Confidential: nothing leaves. Agents in other projects never see this project&#39;s knowledge, and agents here cannot write outside it."><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>confidential</span>
         <span class="chip-parent"><svg class="ico ico-git-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>root project</span>
         <form class="star-form" method="post" action="/console/favorites/project/example-confidential">
           <input type="hidden" name="favorite" value="1">
@@ -3690,7 +3690,7 @@
         
         
         
-        <span class="kind warn iso-pill" title="Sealed — nothing in or out. Agents here see only this project: no global memories, no family, no cross-project reads."><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>sealed</span>
+        <span class="kind warn iso-pill" title="Sealed: nothing in or out. Agents here see only this project: no global memories, no family, no cross-project reads."><svg class="ico ico-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>sealed</span>
         <span class="chip-parent"><svg class="ico ico-git-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>root project</span>
         <form class="star-form" method="post" action="/console/favorites/project/example-sealed">
           <input type="hidden" name="favorite" value="1">
@@ -5198,7 +5198,7 @@
 <section class="feature-off" data-feature-off="screening">
   <span class="feature-off-icon"><svg class="ico ico-power" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/></svg></span>
   <h1>Write screening is switched off</h1>
-  <p class="feature-off-blurb">Screens every agent write to memories and notes for secrets, injection markers, hidden characters, encoded blobs and unlisted links, and holds suspicious ones -- with any change to a binding rule by a session that read outside text -- out of briefings and recall until you release them. It also reviews the existing corpus on this machine, keeps files changed outside Seamless out of briefings until you accept them, and adds a lockdown switch.</p>
+  <p class="feature-off-blurb">Screens every agent write to memories and notes for secrets, injection markers, hidden characters, encoded blobs and unlisted links, and holds suspicious ones (with any change to a binding rule by a session that read outside text) out of briefings and recall until you release them. It also reviews the existing corpus on this machine, keeps files changed outside Seamless out of briefings until you accept them, and adds a lockdown switch.</p>
   <p class="feature-off-kept">Nothing was deleted. The data is preserved exactly as it was and this screen returns the moment the feature is switched back on.</p>
   <a class="btn primary" href="/console/settings?s=features"><svg class="ico ico-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg> Turn it on in Settings</a>
 </section>
@@ -5921,7 +5921,7 @@ window.SEAM_NO_LIVE_REFRESH = true;
 
 <div class="settings-page" data-settings data-section="experience">
   <header class="mv2-bar">
-    <h1><svg class="ico ico-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>Settings</h1><details class="page-about"><summary aria-label="About this page" title="About this page"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary><p class="page-about-pop" role="note">One section at a time: how much of the console you see, what is switched on, how this installation is set up, and -- at the levels that show them -- what agents are briefed with and how the knowledge engine runs.</p></details>
+    <h1><svg class="ico ico-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>Settings</h1><details class="page-about"><summary aria-label="About this page" title="About this page"><svg class="ico ico-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></summary><p class="page-about-pop" role="note">One section at a time: how much of the console you see, what is switched on, how this installation is set up, and (at the levels that show them) what agents are briefed with and how the knowledge engine runs.</p></details>
   </header>
 
   <div class="settings-layout">
@@ -6381,8 +6381,8 @@ window.SEAM_NO_LIVE_REFRESH = true;
   }
   function enhanceSettings() {
     followReembed();
-    enhanceDirtyForm('[data-briefing-form]', 'brief-state', 'Unsaved changes — save to use them for new sessions.');
-    enhanceDirtyForm('[data-backups-form]', 'backups-state', 'Unsaved changes — save to use them from the next backup.');
+    enhanceDirtyForm('[data-briefing-form]', 'brief-state', 'Unsaved changes: save to use them for new sessions.');
+    enhanceDirtyForm('[data-backups-form]', 'backups-state', 'Unsaved changes: save to use them from the next backup.');
     enhanceFamilies();
     refreshPreview(true);
   }
@@ -7866,7 +7866,7 @@ Wave one is the staging ... </div>
       <div class="retrieval-zone-index">04</div>
       <div>
         <div class="retrieval-zone-kicker">Knowledge pressure</div>
-        <h2 id="retrieval-pressure-title">What is hot &mdash; and what is quiet</h2>
+        <h2 id="retrieval-pressure-title">What is hot, and what is quiet</h2>
         <p>Frequent retrieval reveals trusted context; long silence marks knowledge worth reviewing.</p>
       </div>
       <span class="retrieval-zone-meta" title="The gardener's staleness horizon (gardener.staleness_days): it proposes archiving what passes it">stale = no update, injection, or read in 90d</span>
@@ -7935,7 +7935,7 @@ Wave one is the staging ... </div>
       <div>
         <div class="retrieval-zone-kicker">Loop health</div>
         <h2 id="retrieval-loop-title">Push versus pull</h2>
-        <p>Briefings push context; demand is an agent pulling it back &mdash; a recall hit, a prompt match, an explicit read. Healthy retrieval pushes what gets pulled.</p>
+        <p>Briefings push context; demand is an agent pulling it back: a recall hit, a prompt match, an explicit read. Healthy retrieval pushes what gets pulled.</p>
       </div>
       <span class="retrieval-zone-meta">24h</span>
     </header>

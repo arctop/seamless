@@ -93,7 +93,7 @@
 {{- else if $v.StepsOnly}}
 <div class="empty dotgrid"><span class="empty-ico">{{icon "list-checks"}}</span><div>Every task is a plan step: this list shows the tasks outside a plan. <a href="{{$v.Steps.Href}}" data-seam-query>Show plan steps</a></div></div>
 {{- else}}
-<div class="empty dotgrid"><span class="empty-ico">{{icon "list-checks"}}</span><div>No tasks yet &mdash; add work with tasks_add; a task appears in the ready queue once its blockers clear.</div></div>
+<div class="empty dotgrid"><span class="empty-ico">{{icon "list-checks"}}</span><div>No tasks yet. Add work with tasks_add; a task appears in the ready queue once its blockers clear.</div></div>
 {{- end}}
 {{- end}}
 

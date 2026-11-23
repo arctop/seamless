@@ -128,14 +128,14 @@ func (s *Service) versionFact(now time.Time) (healthFact, bool) {
 	if a := st.Applying; a != nil && st.Confirming() {
 		return healthFact{
 			Icon: "refresh-cw", Tone: "ok", Href: updatesSectionHref,
-			Text:  "v" + a.To.String() + " -- confirming the update",
+			Text:  "v" + a.To.String() + ", confirming the update",
 			Title: "Updated from v" + a.From.String() + "; the updater is confirming that v" + a.To.String() + " answers",
 		}, true
 	}
 	if a := st.Applying; a != nil {
 		return healthFact{
 			Icon: "refresh-cw", Href: updatesSectionHref,
-			Text:  "v" + a.From.String() + " -- updating to v" + a.To.String(),
+			Text:  "v" + a.From.String() + ", updating to v" + a.To.String(),
 			Title: "Updating to v" + a.To.String() + ": " + stageWords(a.Stage),
 		}, true
 	}
@@ -144,14 +144,14 @@ func (s *Service) versionFact(now time.Time) (healthFact, bool) {
 		tone, then := newestFate(st, now)
 		return healthFact{
 			Icon: "refresh-cw", Tone: tone, Href: updatesSectionHref,
-			Text:  "v" + cur.String() + " -- v" + newest + " available",
+			Text:  "v" + cur.String() + ", v" + newest + " available",
 			Title: "Seamless v" + newest + " was published " + day(st.Newest.PublishedAt) + "; " + then,
 		}, true
 	}
 	if u := recentUpgrade(st, now); u != nil {
 		return healthFact{
 			Icon: "refresh-cw", Tone: "ok", Href: updatesSectionHref,
-			Text:  "v" + u.To.String() + " -- updated " + agoPhrase(u.At),
+			Text:  "v" + u.To.String() + ", updated " + agoPhrase(u.At),
 			Title: "Updated from v" + u.From.String() + " at " + ts(u.At),
 		}, true
 	}

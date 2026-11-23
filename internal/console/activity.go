@@ -270,7 +270,7 @@ func eventSummary(e core.Event) string {
 	case core.EventRecordBroken:
 		if label := payloadStr(p, "label"); label != "" {
 			if n, ok := p["n"].(float64); ok {
-				return fmt.Sprintf("new record: %s -- %d", label, int(n))
+				return fmt.Sprintf("new record: %s (%d)", label, int(n))
 			}
 			return "new record: " + label
 		}

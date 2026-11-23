@@ -75,7 +75,7 @@ func TestOverview_EmptyDatabaseRendersNoHollowPanels(t *testing.T) {
 	require.NotContains(t, body, `class="ov2-spark"`, "a metric with no series draws no sparkline")
 	// The vitals themselves stay, showing an em dash rather than a confident 0.
 	require.Contains(t, body, `class="ov2-vitals"`)
-	require.Contains(t, body, "&mdash;")
+	require.Contains(t, body, "n/a")
 	require.Contains(t, body, "no active memories to reach yet")
 	// Empty-state cards keep their drill-down link: the destination explains
 	// why there is nothing, which a dead card cannot.

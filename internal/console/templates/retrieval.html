@@ -21,7 +21,7 @@
 
   <section class="retrieval-instrument" aria-label="{{if .ActiveMemories}}{{.ReachRate}} percent knowledge reach in the {{.WindowLabel}} window{{else}}No active memories to measure{{end}}">
     <div class="retrieval-reach-ring" style="--reach:{{.ReachRate}}">
-      <div class="retrieval-reach-core"><strong>{{if .ActiveMemories}}{{.ReachRate}}%{{else}}&mdash;{{end}}</strong><span>reach</span></div>
+      <div class="retrieval-reach-core"><strong>{{if .ActiveMemories}}{{.ReachRate}}%{{else}}n/a{{end}}</strong><span>reach</span></div>
     </div>
     <div class="retrieval-instrument-copy">
       <span>Window reach</span>
@@ -32,7 +32,7 @@
     <div class="retrieval-instrument-metrics" aria-label="Retrieval volume and cost">
       <div><div class="judged-row"><strong>{{.Injections}}</strong>{{deltaChip .InjectionsDelta}}</div><span>memory injections</span><div class="judged-band">{{bandLine .VolumeBand}}</div></div>
       <div><div class="judged-row"><strong>{{.SessionsReached}}</strong>{{deltaChip .SessionsDelta}}</div><span>sessions reached</span><div class="judged-band">{{bandLine .VolumeBand}}</div></div>
-      <div><div class="judged-row"><strong>{{if .Injections}}~{{compactNum .InjectedTokens}}{{else}}&mdash;{{end}}</strong>{{deltaChip .TokensDelta}}</div><span>est. tokens injected</span><div class="judged-band">{{if .Injections}}{{bandLine .VolumeBand}}{{end}}</div></div>
+      <div><div class="judged-row"><strong>{{if .Injections}}~{{compactNum .InjectedTokens}}{{else}}n/a{{end}}</strong>{{deltaChip .TokensDelta}}</div><span>est. tokens injected</span><div class="judged-band">{{if .Injections}}{{bandLine .VolumeBand}}{{end}}</div></div>
     </div>
   </section>
 
@@ -71,7 +71,7 @@
       <div class="retrieval-coverage">
         <div class="retrieval-coverage-copy">
           <span>Knowledge-base coverage</span>
-          {{if .ActiveMemories}}<strong>{{.ReachRate}}%</strong><small>{{sub .ActiveMemories .MemoriesSurfaced}} active memor{{if eq (sub .ActiveMemories .MemoriesSurfaced) 1}}y is{{else}}ies are{{end}} still waiting to surface</small>{{else}}<strong>&mdash;</strong><small>Add active memories to establish a reach baseline</small>{{end}}
+          {{if .ActiveMemories}}<strong>{{.ReachRate}}%</strong><small>{{sub .ActiveMemories .MemoriesSurfaced}} active memor{{if eq (sub .ActiveMemories .MemoriesSurfaced) 1}}y is{{else}}ies are{{end}} still waiting to surface</small>{{else}}<strong>n/a</strong><small>Add active memories to establish a reach baseline</small>{{end}}
         </div>
         <div class="retrieval-coverage-meter" role="img" aria-label="{{if .ActiveMemories}}{{.MemoriesSurfaced}} of {{.ActiveMemories}} active memories surfaced{{else}}No active memories{{end}}"><span style="width:{{.ReachRate}}%"></span></div>
         <div class="retrieval-coverage-end"><strong>{{.ActiveMemories}}</strong><span>active total</span></div>
@@ -161,7 +161,7 @@
       <div class="retrieval-zone-index">04</div>
       <div>
         <div class="retrieval-zone-kicker">Knowledge pressure</div>
-        <h2 id="retrieval-pressure-title">What is hot &mdash; and what is quiet</h2>
+        <h2 id="retrieval-pressure-title">What is hot, and what is quiet</h2>
         <p>Frequent retrieval reveals trusted context; long silence marks knowledge worth reviewing.</p>
       </div>
       <span class="retrieval-zone-meta" title="The gardener's staleness horizon (gardener.staleness_days): it proposes archiving what passes it">stale = no update, injection, or read in {{.StaleDays}}d</span>
@@ -216,7 +216,7 @@
       <div>
         <div class="retrieval-zone-kicker">Loop health</div>
         <h2 id="retrieval-loop-title">Push versus pull</h2>
-        <p>Briefings push context; demand is an agent pulling it back &mdash; a recall hit, a prompt match, an explicit read. Healthy retrieval pushes what gets pulled.</p>
+        <p>Briefings push context; demand is an agent pulling it back: a recall hit, a prompt match, an explicit read. Healthy retrieval pushes what gets pulled.</p>
       </div>
       <span class="retrieval-zone-meta">{{.WindowLabel}}</span>
     </header>
@@ -227,7 +227,7 @@
           <span class="retrieval-panel-icon brand">{{icon "trending-up"}}</span>
           <div><span>{{.WindowLabel}}</span><h3>Demand rate</h3></div>
         </header>
-        <div class="retrieval-loop-value"><strong>{{if .BriefingSurfaced}}{{.DemandRate}}%{{else}}&mdash;{{end}}</strong><div class="judged-band">{{bandLine .DemandBand}}</div></div>
+        <div class="retrieval-loop-value"><strong>{{if .BriefingSurfaced}}{{.DemandRate}}%{{else}}n/a{{end}}</strong><div class="judged-band">{{bandLine .DemandBand}}</div></div>
         <p>{{if .BriefingSurfaced}}{{.DemandedOfSurfaced}} of {{.BriefingSurfaced}} briefed memories were also pulled by a query. Rising = briefings carry what agents want.{{else}}No briefing injections in this window yet.{{end}}</p>
       </article>
 
@@ -236,7 +236,7 @@
           <span class="retrieval-panel-icon pop">{{icon "gauge"}}</span>
           <div><span>vs 30d demand</span><h3>Waste share</h3></div>
         </header>
-        <div class="retrieval-loop-value"><strong>{{if .InjectedTokens}}{{.WasteShare}}%{{else}}&mdash;{{end}}</strong><div class="judged-band">{{bandLine .WasteBand}}</div></div>
+        <div class="retrieval-loop-value"><strong>{{if .InjectedTokens}}{{.WasteShare}}%{{else}}n/a{{end}}</strong><div class="judged-band">{{bandLine .WasteBand}}</div></div>
         <p>{{if .InjectedTokens}}Share of injected tokens spent on memories with no query-gated demand in 30 days. Falling = less irrelevant context.{{else}}No injected tokens in this window yet.{{end}}</p>
       </article>
 
@@ -245,7 +245,7 @@
           <span class="retrieval-panel-icon warn">{{icon "triangle-alert"}}</span>
           <div><span>{{.WindowLabel}}</span><h3>Recall-miss rate</h3></div>
         </header>
-        <div class="retrieval-loop-value"><strong>{{if or .RecallMisses .PromptMatches}}{{.MissRate}}%{{else}}&mdash;{{end}}</strong><div class="judged-band">{{bandLine .MissBand}}</div></div>
+        <div class="retrieval-loop-value"><strong>{{if or .RecallMisses .PromptMatches}}{{.MissRate}}%{{else}}n/a{{end}}</strong><div class="judged-band">{{bandLine .MissBand}}</div></div>
         <p>{{if or .RecallMisses .PromptMatches}}{{.RecallMisses}} prompts matched nothing vs {{.PromptMatches}} that matched. Falling = the knowledge base covers what gets asked.{{else}}No prompt-recall activity in this window yet.{{end}}</p>
       </article>
 
@@ -254,7 +254,7 @@
           <span class="retrieval-panel-icon pop">{{icon "search"}}</span>
           <div><span>{{.WindowLabel}}</span><h3>Agent search misses</h3></div>
         </header>
-        <div class="retrieval-loop-value"><strong>{{if .ToolMisses}}{{.ToolMisses}}{{else}}&mdash;{{end}}</strong></div>
+        <div class="retrieval-loop-value"><strong>{{.ToolMisses}}</strong></div>
         <p>{{if .ToolMisses}}Recall calls that found nothing. Recurring misses become the gardener's memory-wanted proposals.{{else}}No zero-hit recall calls in this window.{{end}}</p>
       </article>
     </div>
@@ -270,7 +270,7 @@
         <div class="retrieval-funnel-row">
           <div class="retrieval-funnel-copy"><strong>{{.Surface}}</strong><span>{{.Injections}} injection{{if ne .Injections 1}}s{{end}} &middot; {{.Items}} distinct memor{{if eq .Items 1}}y{{else}}ies{{end}}</span></div>
           <div class="retrieval-scope-meter" role="img" aria-label="{{.ReadRate}} percent of memories injected via {{.Surface}} were pulled back"><span style="width:{{.ReadRate}}%"></span></div>
-          <div class="retrieval-funnel-metrics"><strong>{{if .Items}}{{.ReadRate}}%{{else}}&mdash;{{end}}</strong><span>{{.ItemsRead}} of {{.Items}} pulled</span></div>
+          <div class="retrieval-funnel-metrics"><strong>{{if .Items}}{{.ReadRate}}%{{else}}n/a{{end}}</strong><span>{{.ItemsRead}} of {{.Items}} pulled</span></div>
         </div>
         {{end}}
       </div>

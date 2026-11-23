@@ -129,7 +129,7 @@ func refusedTranscriptReader(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	writeJSON(w, http.StatusForbidden, map[string]string{"error": "a session's transcript copy is read only by the " +
-		"owner on this server: the console's key or cookie, or the owner's own account on this server's socket -- " +
+		"owner on this server: the console's key or cookie, or the owner's own account on this server's socket, " +
 		"never through a relay or a paired device"})
 	return true
 }

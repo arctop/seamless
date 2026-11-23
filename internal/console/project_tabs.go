@@ -1446,7 +1446,7 @@ func (s *Service) memLineage(ctx context.Context, m core.Memory, resolve func(st
 		return template.HTML(`<span class="lineage">` + string(icon("git-commit-horizontal")) +
 			`from ` + template.HTMLEscapeString(sourceSessionLabel(resolve, m.SourceSession)) + `</span>`)
 	}
-	return template.HTML(`<span class="lineage faint">&mdash;</span>`)
+	return template.HTML(`<span class="lineage faint">none</span>`)
 }
 
 // fillNotesTab loads the Notes panel: the project's notes (a Go-side filter of

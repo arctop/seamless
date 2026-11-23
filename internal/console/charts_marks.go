@@ -625,7 +625,7 @@ func rhythmChart(r rhythmSpec) template.HTML {
 		// The whole hour's slot, full height, is the hit target: the pointer
 		// aims at an hour, never at a 10px column.
 		fmt.Fprintf(&hits, `<rect class="chart-hit" data-i="%d" x="%.2f" y="0" width="%.2f" height="%g"></rect>`, h, x, slot, rhythmH)
-		m := markReadout{Label: labels[h] + "–" + labels[h+1], Value: r.Unit.figure(totals[h]), At: markAt(cx, tops[h])}
+		m := markReadout{Label: labels[h] + "-" + labels[h+1], Value: r.Unit.figure(totals[h]), At: markAt(cx, tops[h])}
 		for _, p := range parts {
 			if p.values[h] > 0 {
 				m.Rows = append(m.Rows, markRow{Tone: p.tone, Value: r.Unit.figure(p.values[h]), Name: p.name})
@@ -1034,7 +1034,7 @@ func presenceStrip(p presenceSpec) template.HTML {
 			i, float64(s.From.Sub(start))/span*100, float64(s.To.Sub(s.From))/span*100)
 		mins := int64(math.Round(s.To.Sub(s.From).Minutes()))
 		sum += mins
-		when := s.From.Format("15:04") + "–" + s.To.Format("15:04")
+		when := s.From.Format("15:04") + "-" + s.To.Format("15:04")
 		parts = append(parts, when)
 		marks = append(marks, markReadout{Label: when, Value: chartMinutes(mins)})
 	}
@@ -1069,7 +1069,7 @@ func statTile(t tileSpec) template.HTML {
 	}
 	value := template.HTMLEscapeString(t.Value)
 	if t.Value == "" {
-		value = "&mdash;"
+		value = "n/a"
 	}
 	label := string(icon(t.Icon)) + template.HTMLEscapeString(t.Label)
 	open, end := `<div class="ov2-vital chart-tile">`, `</div>`
@@ -1187,7 +1187,7 @@ func rhythmTable(r rhythmSpec) template.HTML {
 	sums := make([]int64, len(parts))
 	var all int64
 	for h := range n {
-		cells := []string{labels[h] + "–" + labels[h+1]}
+		cells := []string{labels[h] + "-" + labels[h+1]}
 		var tot int64
 		for k, p := range parts {
 			cells = append(cells, r.Unit.figure(p.values[h]))

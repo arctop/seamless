@@ -184,7 +184,7 @@ func (c captureStreak) Ember() bool { return c.Current >= StreakEmberFloor }
 // EmberTitle is the ember's tooltip: the verbatim run beside the floor it
 // cleared, so the glyph's claim is verifiable on the surface.
 func (c captureStreak) EmberTitle() string {
-	return fmt.Sprintf("%d covered days running -- the ember lights at %d", c.Current, StreakEmberFloor)
+	return fmt.Sprintf("%d covered days running; the ember lights at %d", c.Current, StreakEmberFloor)
 }
 
 func (s *Service) sessionsList(w http.ResponseWriter, r *http.Request) {

@@ -256,14 +256,14 @@ func TestOverviewFinishLineCard_FollowsTheMomentumFeature(t *testing.T) {
 
 	require.NoError(t, store.SetFeaturesConfig(ctx, db, config.Features{Momentum: true}))
 	page = getPeek(t, mux, "/console/").Body.String()
-	require.Contains(t, page, "nearly -- one step from shipped")
+	require.Contains(t, page, "nearly: one step from shipped")
 	require.Contains(t, page, "left: write the docs")
 	require.Contains(t, page, `href="/console/plans/nearly?project=demo"`, "the plan's page, its project named")
 	require.Contains(t, page, `data-sev="ok"`)
 	require.Contains(t, page, `class="mom-fin-bar"`, "the card carries the progress draw")
 	require.Contains(t, page, `<line class="mom-fin-fill" x1="0" x2="80" y1="2" y2="2" pathLength="1"/>`,
 		"the fill's width is the rollup's real done/total share")
-	require.Contains(t, page, "<title>4 of 5 steps done -- 80%</title>",
+	require.Contains(t, page, "<title>4 of 5 steps done (80%)</title>",
 		"the percent is verifiable on the surface, done and total named verbatim")
 
 	// A plan under the line earns nothing even with the feature on: no card is
@@ -271,7 +271,7 @@ func TestOverviewFinishLineCard_FollowsTheMomentumFeature(t *testing.T) {
 	seed("midway", "first of many", core.TaskOpen, 20)
 	seed("midway", "second of many", core.TaskDone, 21)
 	page = getPeek(t, mux, "/console/").Body.String()
-	require.NotContains(t, page, "midway -- ", "no finish-line card: Work in motion may still list its ready steps")
+	require.NotContains(t, page, "midway: ", "no finish-line card: Work in motion may still list its ready steps")
 }
 
 // The maturity-stage pills are a momentum surface on the project board and
@@ -319,7 +319,7 @@ func TestProjectStages_FollowTheMomentumFeature(t *testing.T) {
 	require.NoError(t, store.SetFeaturesConfig(ctx, db, config.Features{Momentum: true}))
 	board := getPeek(t, mux, "/console/projects").Body.String()
 	require.Contains(t, board, `data-stage="sprouting"`)
-	require.Contains(t, board, "sprouting -- established at 30d, 15 memories, 250 events",
+	require.Contains(t, board, "sprouting: established at 30d, 15 memories, 250 events",
 		"the pill's tooltip names the next stage's bars beside where the project stands")
 	require.Equal(t, 1, stageEvents(), "the crossing is minted exactly once")
 

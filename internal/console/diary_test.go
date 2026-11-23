@@ -946,10 +946,10 @@ func TestDiaryRail_QuietRunsAndDaysBeforeTheLedger(t *testing.T) {
 	for _, r := range rail.Rows {
 		labels = append(labels, r.Label)
 	}
-	require.Equal(t, []string{"Sat 31", "Fri 30", "Thu 1 – Thu 29"}, labels,
+	require.Equal(t, []string{"Sat 31", "Fri 30", "Thu 1 to Thu 29"}, labels,
 		"a quiet run of 29 days reads as its oldest and its newest day")
 	require.True(t, rail.Rows[2].Quiet)
-	require.Equal(t, "—", rail.Rows[1].Minutes, "agent time before the ledger is not recorded, which is not 0m")
+	require.Equal(t, "n/a", rail.Rows[1].Minutes, "agent time before the ledger is not recorded, which is not 0m")
 	require.Contains(t, rail.Rows[1].Title, "agent time not recorded before the usage ledger")
 	require.True(t, rail.Rows[1].Selected)
 }

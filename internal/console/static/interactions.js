@@ -476,9 +476,9 @@
     if (isNaN(from) || isNaN(to)) return '';
     var seconds = sliceMs < 60000;
     if (sameDay(from, to)) {
-      return fmtDay(from) + ', ' + fmtClock(from, seconds) + '\u2013' + fmtClock(to, seconds);
+      return fmtDay(from) + ', ' + fmtClock(from, seconds) + '-' + fmtClock(to, seconds);
     }
-    return fmtDay(from) + ', ' + fmtClock(from, false) + ' \u2013 ' +
+    return fmtDay(from) + ', ' + fmtClock(from, false) + ' to ' +
       fmtDay(to) + ', ' + fmtClock(to, false);
   }
 

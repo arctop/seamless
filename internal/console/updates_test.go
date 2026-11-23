@@ -661,19 +661,19 @@ func TestHealthStrip_VersionFactFollowsTheUpdateCheck(t *testing.T) {
 	}{
 		{name: "no update check here", noCheck: true, wantText: "version 0.7.2", wantHref: "/console/settings?s=setup"},
 		{name: "up to date", wantText: "version 0.7.2", wantHref: updatesSectionHref},
-		{name: "a newer release", mutate: availableNow, wantText: "v0.7.2 -- v0.7.3 available", wantTone: "warn", wantHref: updatesSectionHref},
+		{name: "a newer release", mutate: availableNow, wantText: "v0.7.2, v0.7.3 available", wantTone: "warn", wantHref: updatesSectionHref},
 		{name: "a newer release, but checks are off", mutate: func(st *update.Status) {
 			availableNow(st)
 			st.Settings.Check = false
 		}, wantText: "version 0.7.2", wantHref: updatesSectionHref},
 		{name: "upgraded 5h ago", mutate: upgraded(5*time.Hour, update.DirectionUpgrade),
-			wantText: "v0.7.2 -- updated 5h ago", wantTone: "ok", wantHref: updatesSectionHref},
+			wantText: "v0.7.2, updated 5h ago", wantTone: "ok", wantHref: updatesSectionHref},
 		{name: "upgraded 25h ago", mutate: upgraded(25*time.Hour, update.DirectionUpgrade), wantText: "version 0.7.2", wantHref: updatesSectionHref},
 		{name: "downgraded an hour ago", mutate: upgraded(time.Hour, update.DirectionDowngrade), wantText: "version 0.7.2", wantHref: updatesSectionHref},
 		{name: "a newer release outranks a recent upgrade", mutate: func(st *update.Status) {
 			upgraded(time.Hour, update.DirectionUpgrade)(st)
 			availableNow(st)
-		}, wantText: "v0.7.2 -- v0.7.3 available", wantTone: "warn", wantHref: updatesSectionHref},
+		}, wantText: "v0.7.2, v0.7.3 available", wantTone: "warn", wantHref: updatesSectionHref},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -703,7 +703,7 @@ func TestHealthStrip_VersionFactFollowsTheUpdateCheck(t *testing.T) {
 	_, mux, _ := newUpdatesConsole(t, config.Update{}, &st)
 	body := getPeek(t, mux, "/console/").Body.String()
 	require.Contains(t, body, `<a class="ov-health-fact" data-tone="warn" href="/console/settings?s=updates" title="Seamless v0.7.3 was published 2026-10-08; updating is your call">`)
-	require.Contains(t, body, "<span>v0.7.2 -- v0.7.3 available</span>")
+	require.Contains(t, body, "<span>v0.7.2, v0.7.3 available</span>")
 }
 
 // For a day after an upgrade every page carries the banner, built from parsed

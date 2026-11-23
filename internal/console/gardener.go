@@ -2033,7 +2033,7 @@ func (s *Service) gardenerGroupDismiss(w http.ResponseWriter, r *http.Request) {
 	}
 	if firstErr != "" {
 		gardenerRedirect(w, r, "", "error",
-			fmt.Sprintf("dismissed %d of %d -- first error: %s", dismissed, len(batch), firstErr))
+			fmt.Sprintf("dismissed %d of %d; first error: %s", dismissed, len(batch), firstErr))
 		return
 	}
 	gardenerRedirect(w, r, "", "notice",
@@ -2139,7 +2139,7 @@ func (s *Service) gardenerGroupApply(w http.ResponseWriter, r *http.Request) {
 	}
 	if firstErr != "" {
 		gardenerRedirect(w, r, "", "error",
-			fmt.Sprintf("applied %d of %d in %s -- first error: %s", applied, len(batch), sec.Label, firstErr))
+			fmt.Sprintf("applied %d of %d in %s; first error: %s", applied, len(batch), sec.Label, firstErr))
 		return
 	}
 	msg := fmt.Sprintf("Applied %s from %s.", plural(applied, "proposal", "proposals"), sec.Label)
@@ -2288,7 +2288,7 @@ func (s *Service) gardenerRequest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if sres.Total == 0 {
-			redirectNotice(w, r, fmt.Sprintf("Recognized a split of %s, but no proposals matched -- try naming the child projects.", res.SplitSource))
+			redirectNotice(w, r, fmt.Sprintf("Recognized a split of %s, but no proposals matched; try naming the child projects.", res.SplitSource))
 			return
 		}
 		redirectNotice(w, r, fmt.Sprintf("Recognized a split of %s: %d proposal(s) below.", res.SplitSource, sres.Total))
@@ -2301,10 +2301,10 @@ func (s *Service) gardenerRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if res.Total == 0 {
-		redirectNotice(w, r, "No proposals matched that request -- try rephrasing.")
+		redirectNotice(w, r, "No proposals matched that request; try rephrasing.")
 		return
 	}
-	redirectNotice(w, r, fmt.Sprintf("Generated %d proposal(s) -- review below.", res.Total))
+	redirectNotice(w, r, fmt.Sprintf("Generated %d proposal(s); review them below.", res.Total))
 }
 
 // gardenerSplit interprets a project-split request into a plan batch of pending
@@ -2327,7 +2327,7 @@ func (s *Service) gardenerSplit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if res.Total == 0 {
-		redirectNotice(w, r, "No split proposals matched -- try naming the child projects.")
+		redirectNotice(w, r, "No split proposals matched; try naming the child projects.")
 		return
 	}
 	redirectNotice(w, r, fmt.Sprintf("Planned split of %s: %d proposal(s) below.", source, res.Total))
@@ -2416,7 +2416,7 @@ func (s *Service) gardenerApplyPlan(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if firstErr != "" {
-		redirectFlash(w, r, fmt.Sprintf("applied %d of %d -- first error: %s", applied, len(batch), firstErr))
+		redirectFlash(w, r, fmt.Sprintf("applied %d of %d; first error: %s", applied, len(batch), firstErr))
 		return
 	}
 	if settled > 0 {

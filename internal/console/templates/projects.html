@@ -65,7 +65,7 @@
   </article>
   <article class="project-summary-card">
     <span class="project-summary-icon">{{icon "gauge"}}</span>
-    <div class="project-summary-copy"><span>Knowledge reach</span><strong>{{if .HasReach}}{{.ReachRate}}%{{else}}&mdash;{{end}}</strong><small>{{if .HasReach}}{{.Surfaced}} of {{.Active}} surfaced{{if .LockedMemories}} outside locked projects{{end}} &middot; {{.WindowLabel}}{{else}}no active memories yet{{end}}</small>{{with bandLine .ReachBand}}<div class="project-summary-band">{{.}}</div>{{end}}</div>
+    <div class="project-summary-copy"><span>Knowledge reach</span><strong>{{if .HasReach}}{{.ReachRate}}%{{else}}n/a{{end}}</strong><small>{{if .HasReach}}{{.Surfaced}} of {{.Active}} surfaced{{if .LockedMemories}} outside locked projects{{end}} &middot; {{.WindowLabel}}{{else}}no active memories yet{{end}}</small>{{with bandLine .ReachBand}}<div class="project-summary-band">{{.}}</div>{{end}}</div>
   </article>
 </section>
 {{with .Global}}<a class="project-global-line" href="/console/context" title="The global scope: knowledge every project&rsquo;s briefing draws on">{{icon "database"}}<span><strong>Shared context:</strong> {{.Line}}</span></a>{{end}}
@@ -135,7 +135,7 @@
   </div>
   <div class="project-row-fig project-row-tasks"><strong>{{.OpenTasks}}</strong><span>open task{{if ne .OpenTasks 1}}s{{end}}</span></div>
   <div class="project-row-fig project-row-when"><strong>{{agoTime .LastActive}}</strong><span>{{if .Working}}active now{{else}}last activity{{end}}</span></div>
-  <div class="project-row-fig project-row-reach" title="{{if .HasReach}}{{.Surfaced}} of {{.Active}} active memories surfaced{{else}}No active memories{{end}}"><strong>{{if .HasReach}}{{.ReachRate}}%{{else}}&mdash;{{end}}</strong><span>reach &middot; {{.Memories}} mem</span></div>
+  <div class="project-row-fig project-row-reach" title="{{if .HasReach}}{{.Surfaced}} of {{.Active}} active memories surfaced{{else}}No active memories{{end}}"><strong>{{if .HasReach}}{{.ReachRate}}%{{else}}n/a{{end}}</strong><span>reach &middot; {{.Memories}} mem</span></div>
 </article>
 {{end}}{{end}}
 

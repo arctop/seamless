@@ -91,7 +91,7 @@
               <div class="workspace-route-list">
                 {{range .Repos}}<div class="workspace-route" title="{{.Path}}{{if .Host}} on {{.Host}}{{end}}"><span class="repo-path-icon">{{icon "folder-open"}}</span><span class="mono">{{.Path}}</span>{{if $.Level.AtLeast "advanced"}}<span class="kind faint" title="Machine this checkout lives on">{{if .Host}}{{.Host}}{{else}}unknown host{{end}}</span>{{end}}{{copyBtn .Path}}</div>{{end}}
               </div>
-              {{else}}<span class="workspace-empty-mark" title="No repo route">&mdash;</span>{{end}}
+              {{else}}<span class="workspace-empty-mark" title="No repo route">none</span>{{end}}
             </div>
 
             {{if $dir.Family}}
@@ -100,7 +100,7 @@
               {{if or .ParentSlug .Families}}<div class="workspace-tags">
                 {{if .ParentSlug}}<span class="workspace-tag parent" title="Inherits parent memories">{{icon "git-branch"}}{{if .ParentRegistered}}<a class="mono" href="/console/projects/{{.ParentSlug}}">{{.ParentSlug}}</a>{{else}}<span class="mono referenced">{{.ParentSlug}}</span>{{end}}</span>{{end}}
                 {{range .Families}}<span class="workspace-tag family" title="{{.MemberCount}} projects in this family">{{icon "git-fork"}}<span class="mono">{{.Name}}</span></span>{{end}}
-              </div>{{else}}<span class="workspace-empty-mark" title="No family membership">&mdash;</span>{{end}}
+              </div>{{else}}<span class="workspace-empty-mark" title="No family membership">none</span>{{end}}
             </div>
             {{end}}
           </article>

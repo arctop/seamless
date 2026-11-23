@@ -102,7 +102,7 @@
       {{end}}
     </div>
     {{else}}
-    <div class="now-empty">{{icon "radar"}}<span>All quiet &mdash; no agent is live: none has a heartbeat inside the idle window or a live claim.
+    <div class="now-empty">{{icon "radar"}}<span>All quiet: no agent is live, none has a heartbeat inside the idle window or a live claim.
       Sessions appear here the moment one starts working.</span></div>
     {{end}}
   </section>
@@ -187,7 +187,7 @@
       </div>
       {{if gt .ReadyTotal (len .UpNext)}}<p class="now-ready-more">+{{sub .ReadyTotal (len .UpNext)}} more ready &middot; <a href="{{readyTasksHref .Scope}}">every ready task on Tasks</a></p>{{end}}
       {{else}}
-      <div class="now-empty">{{icon "list-checks"}}<span>Nothing is claimable right now &mdash; every open task is blocked or already held.</span></div>
+      <div class="now-empty">{{icon "list-checks"}}<span>Nothing is claimable right now: every open task is blocked or already held.</span></div>
       {{end}}
     </section>
 
@@ -200,7 +200,7 @@
           <li class="now-record{{if .Today}} today{{end}}" id="rec-{{.Key}}">
             <strong>{{.N}}</strong>
             <span class="l">{{.Label}}</span>
-            {{if .Day}}<small>{{if .Today}}set today{{else}}{{.Day}}{{end}}</small>{{else}}<small>unset &mdash; today could be the day</small>{{end}}
+            {{if .Day}}<small>{{if .Today}}set today{{else}}{{.Day}}{{end}}</small>{{else}}<small>unset, so today could be the day</small>{{end}}
           </li>
           {{end}}
         </ul>

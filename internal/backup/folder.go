@@ -286,9 +286,9 @@ func (f folders) privateFileProblem(path string) error {
 	}
 	switch {
 	case int(facts.UID) != f.guard.EUID:
-		return &unsafeFileError{fmt.Sprintf("files written to %s come out owned by uid %d, not the daemon's account (uid %d): the disk does not keep ownership (exFAT, a network share) -- choose a folder on a disk that does", filepath.Dir(path), facts.UID, f.guard.EUID)}
+		return &unsafeFileError{fmt.Sprintf("files written to %s come out owned by uid %d, not the daemon's account (uid %d): the disk does not keep ownership (exFAT, a network share); choose a folder on a disk that does", filepath.Dir(path), facts.UID, f.guard.EUID)}
 	case facts.Mode.Perm()&0o077 != 0:
-		return &unsafeFileError{fmt.Sprintf("files written to %s come out mode %04o, readable by other accounts: the disk does not keep permissions (exFAT, a network share) -- choose a folder on a disk that does", filepath.Dir(path), facts.Mode.Perm())}
+		return &unsafeFileError{fmt.Sprintf("files written to %s come out mode %04o, readable by other accounts: the disk does not keep permissions (exFAT, a network share); choose a folder on a disk that does", filepath.Dir(path), facts.Mode.Perm())}
 	}
 	return nil
 }

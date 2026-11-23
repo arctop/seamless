@@ -255,7 +255,7 @@ func (s *Service) settingsBriefingSave(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w, r, err)
 		return
 	}
-	settingsBriefingNotice(w, r, "Briefing settings saved -- they apply from the next session start.")
+	settingsBriefingNotice(w, r, "Briefing settings saved. They apply from the next session start.")
 }
 
 // briefingIntFields are the briefing form's whole-number knobs, by form field.
@@ -322,7 +322,7 @@ func (s *Service) settingsBriefingReset(w http.ResponseWriter, r *http.Request) 
 		s.serverError(w, r, err)
 		return
 	}
-	settingsBriefingNotice(w, r, "Briefing overrides cleared -- back to the file/env configuration.")
+	settingsBriefingNotice(w, r, "Briefing overrides cleared: back to the file/env configuration.")
 }
 
 func settingsBriefingFlash(w http.ResponseWriter, r *http.Request, msg string) {

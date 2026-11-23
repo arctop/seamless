@@ -390,7 +390,7 @@ func privacySteps(d privacyData) []privacyStep {
 // ("Open — shares normally. ..." reads "Shares normally. ..."), for a card
 // that already names the state.
 func promiseBody(state core.Isolation) string {
-	body := strings.TrimPrefix(isolationPromise(state), isolationLabels[state]+" — ")
+	body := strings.TrimPrefix(isolationPromise(state), isolationLabels[state]+": ")
 	if body == "" {
 		return body
 	}

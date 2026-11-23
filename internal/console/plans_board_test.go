@@ -513,20 +513,21 @@ func TestPvbBoard_PageWeightWithTwentyActivePlans(t *testing.T) {
 	require.Equal(t, 10, strings.Count(page, `<details class="plan-lazy"`), "the stalled and ready cards load their steps when opened")
 }
 
-// A " -- " in a title is shown as a dash that does not split across lines;
-// the stored title, and the JSON, are untouched.
+// A " -- " in a title is shown as a colon (the owner wants neither the double
+// hyphen nor an en or em dash on screen); the stored title, and the JSON, are
+// untouched.
 func TestPvbPlanTitle_DashNeverSplits(t *testing.T) {
 	db, mgr, mux := newConsoleWithFiles(t)
 	now := time.Now().UTC()
 	pvbNote(t, mgr, "example-web", "plan-css", "Generate CSS vars -- tokens.json", "css-vars", now)
 	pvbStep(t, db, "example-web", "css-vars", "emit", now, nil)
 	page := getHTMLBody(t, mux, "/console/plans")
-	require.Contains(t, page, ">Generate CSS vars&nbsp;&ndash; tokens.json</a>")
+	require.Contains(t, page, ">Generate CSS vars: tokens.json</a>")
 	require.NotContains(t, page, "vars -- tokens")
 	var data plansData
 	getJSON(t, mux, "/console/plans?format=json", &data)
 	require.Equal(t, "Generate CSS vars -- tokens.json", data.Rows[0].Title)
-	require.Equal(t, `a &lt;b&gt;&nbsp;&ndash; c`, string(planTitleHTML("a <b> -- c")), "escaped first")
+	require.Equal(t, `a &lt;b&gt;: c`, string(planTitleHTML("a <b> -- c")), "escaped first")
 }
 
 // A plan says where it came from in words: captured from plan mode, or from

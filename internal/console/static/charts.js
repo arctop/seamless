@@ -232,11 +232,11 @@
     var cal = calOf(cell);
     if (!cal) return;
     var raw = cell.getAttribute('data-t') || '';
-    var cut = raw.indexOf(' -- ');
+    var cut = raw.indexOf(': ');
     var tip = tipOf(cal);
     tip.textContent = '';
     tip.appendChild(div('hov-t', cut < 0 ? raw : raw.slice(0, cut)));
-    tip.appendChild(div('hov-v', cut < 0 ? '' : raw.slice(cut + 4)));
+    tip.appendChild(div('hov-v', cut < 0 ? '' : raw.slice(cut + 2)));
     tip.appendChild(div('hov-s', cell.classList.contains('sel')
       ? 'Click to clear the day focus'
       : 'Click to focus the session map on this day'));

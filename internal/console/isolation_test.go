@@ -335,8 +335,8 @@ func TestIsolationConfirmPanel_ProvenanceLine(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, svc.pages["projectdetail"].ExecuteTemplate(&buf, "isolation-confirm", vm))
 	panel := buf.String()
-	require.Contains(t, panel, "4 global memories originated in this project&rsquo;s sessions "+
-		"&mdash; relocation proposals will be filed in the "+
+	require.Contains(t, panel, "4 global memories originated in this project&rsquo;s sessions, "+
+		"so relocation proposals will be filed in the "+
 		`<a href="/console/gardener">Gardener inbox</a>.`)
 
 	// A PROVEN zero is a finding worth stating -- but never with the filing
@@ -414,7 +414,7 @@ func TestProjectIsolation_TightenFilesRelocationProposals(t *testing.T) {
 	require.Contains(t, reader, "written by a session bound to acme, which is now confidential")
 	require.Contains(t, reader, "Traced by provenance")
 	require.Contains(t, reader, "cc/acme1")
-	require.Contains(t, reader, "undoable from Recently decided",
+	require.Contains(t, reader, "can be undone from Recently decided",
 		"a relocate is a move, so the gate promises the undo rather than a confirm")
 	require.NotContains(t, reader, "cannot be undone from the console")
 

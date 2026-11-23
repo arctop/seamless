@@ -715,7 +715,7 @@
     if (!items.length) {
       lead.appendChild(document.createTextNode('Quiet since you were last here '));
       lead.appendChild(when);
-      lead.appendChild(document.createTextNode(' \u2014 nothing new was recorded.'));
+      lead.appendChild(document.createTextNode(': nothing new was recorded.'));
       body.appendChild(lead);
     } else {
       lead.appendChild(document.createTextNode('Since you were last here '));

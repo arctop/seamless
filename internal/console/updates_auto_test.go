@@ -924,35 +924,35 @@ func TestHealthStrip_VersionFactUnderAutomaticUpdates(t *testing.T) {
 	}{
 		{name: "installs by itself, waiting", mutate: func(st *update.Status) {
 			st.Target, st.WaitCode, st.Waiting = st.Newest, update.WaitSessions, "waiting for 1 live agent session to go idle"
-		}, wantText: "v0.7.2 -- v0.7.3 available", wantTitle: lead + "it installs by itself: waiting for 1 live agent session to go idle"},
+		}, wantText: "v0.7.2, v0.7.3 available", wantTitle: lead + "it installs by itself: waiting for 1 live agent session to go idle"},
 		{name: "installs by itself at the next tick", mutate: func(st *update.Status) { st.Target = st.Newest },
-			wantText: "v0.7.2 -- v0.7.3 available", wantTitle: lead + "it installs by itself within a minute"},
+			wantText: "v0.7.2, v0.7.3 available", wantTitle: lead + "it installs by itself within a minute"},
 		{name: "soaking", mutate: func(st *update.Status) {
 			st.Newest.PublishedAt = now.Add(-6 * time.Hour)
-		}, wantText: "v0.7.2 -- v0.7.3 available", wantTitle: "Seamless v0.7.3 was published " + day(now.Add(-6*time.Hour)) + "; it installs by itself once it is 24h old"},
+		}, wantText: "v0.7.2, v0.7.3 available", wantTitle: "Seamless v0.7.3 was published " + day(now.Add(-6*time.Hour)) + "; it installs by itself once it is 24h old"},
 		{name: "blocked: the owner's call", mutate: func(st *update.Status) {
 			st.Blocked = []update.Block{{Version: ver(0, 7, 3), Reason: update.BlockVerify, At: now}}
-		}, wantText: "v0.7.2 -- v0.7.3 available", wantTone: "warn",
+		}, wantText: "v0.7.2, v0.7.3 available", wantTone: "warn",
 			wantTitle: lead + "automatic updates skip it (it did not pass verification), so updating to it is your call"},
 		{name: "held: the owner's own pin", mutate: func(st *update.Status) {
 			st.Hold = &update.Hold{Through: ver(0, 7, 3), From: ver(0, 7, 3), At: now}
-		}, wantText: "v0.7.2 -- v0.7.3 available", wantTitle: lead + "this install went back from v0.7.3, so automatic updates skip it until they are resumed"},
+		}, wantText: "v0.7.2, v0.7.3 available", wantTitle: lead + "this install went back from v0.7.3, so automatic updates skip it until they are resumed"},
 		{name: "unsigned", mutate: func(st *update.Status) { st.Newest.ChecksumsBundle = false },
-			wantText: "v0.7.2 -- v0.7.3 available", wantTone: "warn", wantTitle: lead + "it carries no signed checksums bundle, so updating to it is your call"},
+			wantText: "v0.7.2, v0.7.3 available", wantTone: "warn", wantTitle: lead + "it carries no signed checksums bundle, so updating to it is your call"},
 		{name: "paused", mutate: func(st *update.Status) { st.Paused = &update.Pause{Reason: update.PauseRollbacks, At: now} },
-			wantText: "v0.7.2 -- v0.7.3 available", wantTone: "warn", wantTitle: lead + "automatic updates paused themselves, so updating is your call"},
+			wantText: "v0.7.2, v0.7.3 available", wantTone: "warn", wantTitle: lead + "automatic updates paused themselves, so updating is your call"},
 		{name: "updating", mutate: func(st *update.Status) {
 			st.Applying = &update.Applying{From: ver(0, 7, 2), To: ver(0, 7, 3), Why: update.WhyNow, Stage: update.StageInstall, SpawnedAt: now}
-		}, wantText: "v0.7.2 -- updating to v0.7.3", wantTitle: "Updating to v0.7.3: running the installer"},
+		}, wantText: "v0.7.2, updating to v0.7.3", wantTitle: "Updating to v0.7.3: running the installer"},
 		{name: "confirming: the new version already runs", mutate: func(st *update.Status) {
 			st.Version, st.Available = "0.7.3", false
 			st.Applying = &update.Applying{From: ver(0, 7, 2), To: ver(0, 7, 3), Why: update.WhyAuto, Stage: update.StageConfirm, SpawnedAt: now}
-		}, wantText: "v0.7.3 -- confirming the update", wantTone: "ok",
+		}, wantText: "v0.7.3, confirming the update", wantTone: "ok",
 			wantTitle: "Updated from v0.7.2; the updater is confirming that v0.7.3 answers"},
 		{name: "rolling back from the new version is no confirmation", mutate: func(st *update.Status) {
 			st.Version, st.Available = "0.7.3", false
 			st.Applying = &update.Applying{From: ver(0, 7, 2), To: ver(0, 7, 3), Why: update.WhyAuto, Stage: update.StageRollback, SpawnedAt: now}
-		}, wantText: "v0.7.2 -- updating to v0.7.3", wantTitle: "Updating to v0.7.3: rolling back"},
+		}, wantText: "v0.7.2, updating to v0.7.3", wantTitle: "Updating to v0.7.3: rolling back"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			st := autoStatus(now)

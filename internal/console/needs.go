@@ -621,7 +621,7 @@ func (s *Service) needKnowledge(ctx context.Context, in needsInput) []attnCard {
 		for _, p := range finish {
 			out = append(out, attnCard{
 				Kind: needFinishLine, Sev: "ok", Icon: "flag", Count: p.StepsLeft(),
-				Title: p.Slug + " -- " + p.FinishLinePhrase(),
+				Title: p.Slug + ": " + p.FinishLinePhrase(),
 				Sub:   "left: " + strings.Join(p.Remaining, " · "),
 				Href:  planHref(p.Project, p.Slug),
 				Bar:   finishBar(p.PlanRollup),

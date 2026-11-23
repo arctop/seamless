@@ -69,7 +69,7 @@
                     <td>{{.Dims}}</td>
                     <td>{{.Memories}}</td>
                     <td>{{.Notes}}</td>
-                    <td>{{if .Updated.IsZero}}&mdash;{{else}}{{agoTime .Updated}}{{end}}</td>
+                    <td>{{if .Updated.IsZero}}never{{else}}{{agoTime .Updated}}{{end}}</td>
                   </tr>
                   {{end}}
                 </tbody>

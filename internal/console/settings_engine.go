@@ -548,13 +548,13 @@ func (s *Service) settingsEmbeddingsMode(w http.ResponseWriter, r *http.Request)
 	}
 	switch {
 	case mode == store.EmbedderModeOff && s.cfg.Embedding.Enabled:
-		settingsEmbeddingsNotice(w, r, "Embeddings switched off -- restart the daemon to apply.")
+		settingsEmbeddingsNotice(w, r, "Embeddings switched off. Restart the daemon to apply.")
 	case mode == store.EmbedderModeOff:
 		settingsEmbeddingsNotice(w, r, "Embeddings switched off.")
 	case s.cfg.Embedding.OverriddenOff:
-		settingsEmbeddingsNotice(w, r, "Embeddings switch cleared -- restart the daemon to re-enable them.")
+		settingsEmbeddingsNotice(w, r, "Embeddings switch cleared. Restart the daemon to re-enable them.")
 	default:
-		settingsEmbeddingsNotice(w, r, "Embeddings switch cleared -- back to the configured provider.")
+		settingsEmbeddingsNotice(w, r, "Embeddings switch cleared: back to the configured provider.")
 	}
 }
 
@@ -569,7 +569,7 @@ func (s *Service) settingsEmbeddingsReembed(w http.ResponseWriter, r *http.Reque
 	total, err := s.cfg.Files.StartReembed(r.Context())
 	switch {
 	case errors.Is(err, files.ErrNoEmbedder):
-		settingsEmbeddingsFlash(w, r, "embeddings are disabled -- configure a provider (and restart) before re-embedding")
+		settingsEmbeddingsFlash(w, r, "embeddings are disabled; configure a provider (and restart) before re-embedding")
 		return
 	case errors.Is(err, files.ErrReembedRunning):
 		settingsEmbeddingsFlash(w, r, "a re-embed pass is already running")

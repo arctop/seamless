@@ -481,7 +481,7 @@ func TestGardenerRequest_SplitIntentNoSource_ShowsPicker(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+testKey)
 	body := do(mux, req).Body.String()
 	require.Contains(t, body, `id="split-form"`, "the picker follow-up form renders")
-	require.Contains(t, body, "which project should be split")
+	require.Contains(t, body, "Which project should be split")
 }
 
 func TestGardenerRetarget_ChangesTarget(t *testing.T) {

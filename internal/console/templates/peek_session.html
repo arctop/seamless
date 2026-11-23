@@ -20,8 +20,8 @@
     <h2 class="peek-title">{{if .Session.Name}}{{.Session.Name}}{{else}}{{shortID .Session.ID}}{{end}}{{copyBtn .Session.ID}}</h2>
     <div class="session-peek-facts">
       <span><small>Project</small><strong>{{if .Session.ProjectSlug}}<a href="/console/projects/{{.Session.ProjectSlug}}" data-peek>{{.Session.ProjectSlug}}</a>{{else}}global{{end}}</strong></span>
-      <span><small>Source</small><strong>{{if .Session.Source}}{{.Session.Source}}{{else}}&mdash;{{end}}</strong></span>
-      <span><small>Duration</small><strong>{{if .Duration}}{{.Duration}}{{else}}&mdash;{{end}}</strong></span>
+      <span><small>Source</small><strong>{{if .Session.Source}}{{.Session.Source}}{{else}}none{{end}}</strong></span>
+      <span><small>Duration</small><strong>{{if .Duration}}{{.Duration}}{{else}}none{{end}}</strong></span>
     </div>
   </div>
 
@@ -57,7 +57,7 @@
     </div>
     <div class="session-peek-metric">
       <span>Model tokens</span>
-      <strong>{{if .Session.Tokens.Total}}{{compactNum .Session.Tokens.Total}}{{else}}&mdash;{{end}}</strong>
+      <strong>{{if .Session.Tokens.Total}}{{compactNum .Session.Tokens.Total}}{{else}}n/a{{end}}</strong>
       <small>{{if .Session.Tokens.Total}}{{compactNum .Session.Tokens.Output}} output{{else}}not harvested{{end}}</small>
     </div>
   </section>

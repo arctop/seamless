@@ -32,9 +32,9 @@ import (
 // confirm panel's headline, and the `promise` field the CLI prints -- one
 // sentence per state, quoted from one place so the surfaces cannot drift.
 var isolationPromises = map[core.Isolation]string{
-	core.IsolationOpen:         "Open — shares normally. Global knowledge flows in; family surfaces may include it.",
-	core.IsolationConfidential: "Confidential — nothing leaves. Agents in other projects never see this project's knowledge, and agents here cannot write outside it.",
-	core.IsolationSealed:       "Sealed — nothing in or out. Agents here see only this project: no global memories, no family, no cross-project reads.",
+	core.IsolationOpen:         "Open: shares normally. Global knowledge flows in; family surfaces may include it.",
+	core.IsolationConfidential: "Confidential: nothing leaves. Agents in other projects never see this project's knowledge, and agents here cannot write outside it.",
+	core.IsolationSealed:       "Sealed: nothing in or out. Agents here see only this project: no global memories, no family, no cross-project reads.",
 }
 
 // isolationLabels are the option labels on the segmented control.

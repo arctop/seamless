@@ -196,7 +196,7 @@
     {{range .Vitals}}
     {{if .Linked}}<a class="ov2-vital" href="{{.Href}}" title="{{.HrefTitle}}">{{else}}<div class="ov2-vital">{{end}}
       <span class="ov2-vital-label">{{icon .Icon}}{{.Label}}{{if .Linked}}{{icon "arrow-right"}}{{end}}</span>
-      <div class="ov2-vital-num"><strong>{{if .Value}}{{.Value}}{{else}}&mdash;{{end}}</strong>{{deltaChip .Delta}}</div>
+      <div class="ov2-vital-num"><strong>{{if .Value}}{{.Value}}{{else}}n/a{{end}}</strong>{{deltaChip .Delta}}</div>
       <span class="ov2-vital-sub">{{.Sub}}</span>
       <div class="ov2-vital-foot">{{bandLine .Band}}{{sparkLine .Spark}}</div>
     {{if .Linked}}</a>{{else}}</div>{{end}}
@@ -224,7 +224,7 @@
               </td>
               <td>
                 <span class="ov2-reach">
-                  <span class="ov2-reach-row"><strong>{{if .HasReach}}{{.ReachRate}}%{{else}}&mdash;{{end}}</strong><span>{{.Memories}} memories</span></span>
+                  <span class="ov2-reach-row"><strong>{{if .HasReach}}{{.ReachRate}}%{{else}}n/a{{end}}</strong><span>{{.Memories}} memories</span></span>
                   <span class="ov2-track"><i style="width:{{if .HasReach}}{{.ReachRate}}{{else}}0{{end}}%"></i></span>
                 </span>
               </td>
@@ -235,7 +235,7 @@
           </tbody>
         </table>
       </div>
-      {{else}}<div class="ov2-panel-empty">{{icon "folder-tree"}}<span>No project activity yet &mdash; projects appear as agents begin working.</span></div>{{end}}
+      {{else}}<div class="ov2-panel-empty">{{icon "folder-tree"}}<span>No project activity yet. Projects appear as agents begin working.</span></div>{{end}}
     </section>
 
     <aside class="ov2-rail">
@@ -262,7 +262,7 @@
       {{if not .Sky}}
       <section class="ov2-panel" aria-label="Memory fabric">
         <header class="ov2-panel-head"><h2>Memory fabric</h2>{{if .Memories}}<span class="ov2-panel-total">{{.Memories}} active</span>{{end}}</header>
-        {{if .MemByKind}}{{kindBar .MemByKind}}{{else}}<div class="ov2-panel-empty">{{icon "database"}}<span>No memories yet &mdash; agents write them with memory_write.</span></div>{{end}}
+        {{if .MemByKind}}{{kindBar .MemByKind}}{{else}}<div class="ov2-panel-empty">{{icon "database"}}<span>No memories yet. Agents write them with memory_write.</span></div>{{end}}
       </section>
       {{end}}
     </aside>
@@ -372,7 +372,7 @@
       </a>
       {{end}}
     </div>
-    {{else}}<div class="ov2-panel-empty">{{icon "activity"}}<span>No activity yet &mdash; sessions, memory writes, and injections land here.</span></div>{{end}}
+    {{else}}<div class="ov2-panel-empty">{{icon "activity"}}<span>No activity yet. Sessions, memory writes, and injections land here.</span></div>{{end}}
   </section>
 
 </div><!-- .overview-page -->

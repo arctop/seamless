@@ -842,7 +842,7 @@ func (s *Service) renderErrorPage(w http.ResponseWriter, r *http.Request, status
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(status)
 		fmt.Fprintf(w,
-			`<article class="peek-entity"><div class="peek-head"><span class="badge danger">%d</span></div><h2 class="peek-title">%s</h2><p class="peek-desc">%s</p><p class="peek-note">The row may be stale &mdash; reload the list.</p></article>`,
+			`<article class="peek-entity"><div class="peek-head"><span class="badge danger">%d</span></div><h2 class="peek-title">%s</h2><p class="peek-desc">%s</p><p class="peek-note">The row may be stale: reload the list.</p></article>`,
 			status, template.HTMLEscapeString(heading), template.HTMLEscapeString(msg))
 		return
 	}

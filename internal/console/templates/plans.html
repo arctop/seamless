@@ -54,7 +54,7 @@
   {{if $v.Filtered}}
   <div class="empty dotgrid" data-plans-none><span class="empty-ico">{{icon "map"}}</span><div>No plan matches{{with $v.Query.Q}} &ldquo;{{.}}&rdquo;{{end}}{{if $v.Query.Project}} in {{$v.ProjectLabel}}{{end}}. <a href="{{$v.ClearHref}}" data-seam-query>Show every plan</a>.</div></div>
   {{else}}
-  <div class="empty dotgrid"><span class="empty-ico">{{icon "map"}}</span><div>No plans yet &mdash; Claude Code plan-mode captures and plan:&lt;slug&gt; compositions land here.</div></div>
+  <div class="empty dotgrid"><span class="empty-ico">{{icon "map"}}</span><div>No plans yet. Claude Code plan-mode captures and plan:&lt;slug&gt; compositions land here.</div></div>
   {{end}}
 {{else}}
   {{range .Groups}}

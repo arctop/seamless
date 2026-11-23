@@ -147,7 +147,7 @@ func TestSnSessionsList_LiveRowsReadDifferently(t *testing.T) {
 	require.Contains(t, page, `<span class="mono">cc/7c31a9e2</span> · holds this task`, "the name is the second line")
 	require.Contains(t, page, `<span class="mono">cc/7c31a9e4</span> · its first prompt`)
 	require.Contains(t, page, `<a href="/console/sessions/`+quiet.ID+`" data-peek>cc/7c31a9e5</a>`, "no headline: the name stays the title")
-	require.Equal(t, 1, strings.Count(page, "Work in progress — no findings yet"), "only the untitled live row says it")
+	require.Equal(t, 1, strings.Count(page, "Work in progress: no findings yet"), "only the untitled live row says it")
 }
 
 // A locked project's claims and prompts are absent from the headline reads

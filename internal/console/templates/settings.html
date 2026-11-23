@@ -2,7 +2,7 @@
 {{with .Data}}
 <div class="settings-page" data-settings data-section="{{.Section}}">
   <header class="mv2-bar">
-    <h1>{{icon "settings"}}Settings</h1>{{about "One section at a time: how much of the console you see, what is switched on, how this installation is set up, and -- at the levels that show them -- what agents are briefed with and how the knowledge engine runs."}}
+    <h1>{{icon "settings"}}Settings</h1>{{about "One section at a time: how much of the console you see, what is switched on, how this installation is set up, and (at the levels that show them) what agents are briefed with and how the knowledge engine runs."}}
   </header>
 
   <div class="settings-layout">
@@ -374,8 +374,8 @@ window.SEAM_NO_LIVE_REFRESH = true; // preserve unsaved form state on this contr
   }
   function enhanceSettings() {
     followReembed();
-    enhanceDirtyForm('[data-briefing-form]', 'brief-state', 'Unsaved changes — save to use them for new sessions.');
-    enhanceDirtyForm('[data-backups-form]', 'backups-state', 'Unsaved changes — save to use them from the next backup.');
+    enhanceDirtyForm('[data-briefing-form]', 'brief-state', 'Unsaved changes: save to use them for new sessions.');
+    enhanceDirtyForm('[data-backups-form]', 'backups-state', 'Unsaved changes: save to use them from the next backup.');
     enhanceFamilies();
     refreshPreview(true);
   }

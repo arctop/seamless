@@ -73,7 +73,7 @@
         <div class="session-review-metric"><span>Interactions</span><strong>{{len .Interactions}}</strong><small>{{.ToolCalls}} tool call{{if ne .ToolCalls 1}}s{{end}}</small></div>
         <div class="session-review-metric"><span>Context used</span><strong>{{.Injected}}</strong><small>{{if .Injected}}{{.ReadBack}} read back &middot; {{pct .ReadBack .Injected}}%{{else}}none injected{{end}}</small></div>
         <div class="session-review-metric"><span>Memory activity</span><strong>{{add .Reads .Writes}}</strong><small>{{.Writes}} writes &middot; {{.Reads}} reads</small></div>
-        <div class="session-review-metric"><span>Model tokens</span><strong>{{if .Session.Tokens.Total}}{{compactNum .Session.Tokens.Total}}{{else}}&mdash;{{end}}</strong><small>{{if .Session.Tokens.Total}}{{compactNum .Session.Tokens.Output}} output{{else}}not harvested{{end}}</small></div>
+        <div class="session-review-metric"><span>Model tokens</span><strong>{{if .Session.Tokens.Total}}{{compactNum .Session.Tokens.Total}}{{else}}n/a{{end}}</strong><small>{{if .Session.Tokens.Total}}{{compactNum .Session.Tokens.Output}} output{{else}}not harvested{{end}}</small></div>
       </div>
     </aside>
     {{end}}
@@ -204,15 +204,15 @@
         <header class="session-card-head"><div><span class="session-card-eyebrow">Provenance</span><h2>Session details</h2></div></header>
         <dl class="session-meta-list">
           <div><dt>Project</dt><dd class="mono">{{if .Session.ProjectSlug}}<a href="/console/projects/{{.Session.ProjectSlug}}" data-peek>{{.Session.ProjectSlug}}</a>{{else}}global{{end}}</dd></div>
-          <div><dt>Source</dt><dd class="mono">{{if .Session.Source}}{{.Session.Source}}{{else}}&mdash;{{end}}</dd></div>
-          <div><dt title="Machine the agent ran on; blank for sessions recorded before host scoping">Host</dt><dd class="mono">{{if .Session.Host}}{{.Session.Host}}{{else}}&mdash;{{end}}</dd></div>
-          <div><dt title="LLM powering this session's agent, as the provider names it">Model</dt><dd class="mono">{{if .Session.Model}}{{.Session.Model}}{{else}}&mdash;{{end}}</dd></div>
+          <div><dt>Source</dt><dd class="mono">{{if .Session.Source}}{{.Session.Source}}{{else}}none{{end}}</dd></div>
+          <div><dt title="Machine the agent ran on; blank for sessions recorded before host scoping">Host</dt><dd class="mono">{{if .Session.Host}}{{.Session.Host}}{{else}}none{{end}}</dd></div>
+          <div><dt title="LLM powering this session's agent, as the provider names it">Model</dt><dd class="mono">{{if .Session.Model}}{{.Session.Model}}{{else}}none{{end}}</dd></div>
           <div><dt>Mode</dt><dd>{{if .Session.Ambient}}ambient{{else}}explicit{{end}}</dd></div>
-          <div><dt>Duration</dt><dd>{{if .Duration}}{{.Duration}}{{else}}&mdash;{{end}}</dd></div>
+          <div><dt>Duration</dt><dd>{{if .Duration}}{{.Duration}}{{else}}none{{end}}</dd></div>
           <div><dt>Started</dt><dd>{{agoTime .Session.CreatedAt}}</dd></div>
           <div><dt>Updated</dt><dd>{{agoTime .Session.UpdatedAt}}</dd></div>
-          <div class="session-meta-wide"><dt>CWD</dt><dd class="mono">{{if .Session.CWD}}{{.Session.CWD}}{{copyBtn .Session.CWD}}{{else}}&mdash;{{end}}</dd></div>
-          <div><dt>Agent</dt><dd class="mono">{{if .Session.ExternalSessionID}}{{shortID .Session.ExternalSessionID}}{{copyBtn .Session.ExternalSessionID}}{{else}}&mdash;{{end}}</dd></div>
+          <div class="session-meta-wide"><dt>CWD</dt><dd class="mono">{{if .Session.CWD}}{{.Session.CWD}}{{copyBtn .Session.CWD}}{{else}}none{{end}}</dd></div>
+          <div><dt>Agent</dt><dd class="mono">{{if .Session.ExternalSessionID}}{{shortID .Session.ExternalSessionID}}{{copyBtn .Session.ExternalSessionID}}{{else}}none{{end}}</dd></div>
         </dl>
       </section>
 

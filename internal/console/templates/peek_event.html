@@ -93,7 +93,7 @@
         <div><dt>ID</dt><dd class="mono"><span title="{{.Event.ID}}">{{shortID .Event.ID}}</span>{{copyBtn .Event.ID}}</dd></div>
         <div><dt>Recorded</dt><dd>{{clockDate .Event.When}} <span class="muted">&middot; {{agoTime .Event.When}}</span></dd></div>
         <div><dt>Project</dt><dd>{{if .Event.Project}}<a href="/console/projects/{{.Event.Project}}" data-peek>{{.Event.Project}}</a>{{else}}global{{end}}</dd></div>
-        <div><dt>Session</dt><dd>{{if .Event.SessionID}}<a href="/console/sessions/{{.Event.SessionID}}" data-peek>{{if .Trace.SessionName}}{{.Trace.SessionName}}{{else}}{{shortID .Event.SessionID}}{{end}}</a>{{copyBtn .Event.SessionID}}{{else}}&mdash;{{end}}</dd></div>
+        <div><dt>Session</dt><dd>{{if .Event.SessionID}}<a href="/console/sessions/{{.Event.SessionID}}" data-peek>{{if .Trace.SessionName}}{{.Trace.SessionName}}{{else}}{{shortID .Event.SessionID}}{{end}}</a>{{copyBtn .Event.SessionID}}{{else}}none{{end}}</dd></div>
         {{if .Event.ItemID}}<div><dt>Item</dt><dd>{{with .ItemLink}}<a href="{{.Href}}"{{if .Peek}} data-peek{{end}}>{{.Name}}</a> {{end}}<span class="mono" title="{{.Event.ItemID}}">{{shortID .Event.ItemID}}</span>{{copyBtn .Event.ItemID}}</dd></div>{{end}}
       </dl>
     </section>

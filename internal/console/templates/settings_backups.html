@@ -148,7 +148,7 @@
             <table class="bk-projects">
               <thead><tr><th scope="col">Project</th><th scope="col">Memories</th><th scope="col">Notes</th><th scope="col">Tasks</th><th scope="col">Sessions</th><th scope="col" title="How many more (+) or fewer (&minus;) memories and notes the project holds now than in this backup">vs now</th></tr></thead>
               <tbody>
-                {{range .Projects}}<tr{{if .OnlyNow}} class="is-now"{{end}}><th scope="row">{{.Name}}</th>{{if .OnlyNow}}<td>&ndash;</td><td>&ndash;</td><td>&ndash;</td><td>&ndash;</td>{{else}}<td>{{.Memories}}</td><td>{{.Notes}}</td><td>{{.Tasks}}</td><td>{{.Sessions}}</td>{{end}}<td class="bk-vs">{{.VsNow}}</td></tr>{{end}}
+                {{range .Projects}}<tr{{if .OnlyNow}} class="is-now"{{end}}><th scope="row">{{.Name}}</th>{{if .OnlyNow}}<td>none</td><td>none</td><td>none</td><td>none</td>{{else}}<td>{{.Memories}}</td><td>{{.Notes}}</td><td>{{.Tasks}}</td><td>{{.Sessions}}</td>{{end}}<td class="bk-vs">{{.VsNow}}</td></tr>{{end}}
               </tbody>
             </table>
           </div>{{with .Omitted}}<p class="bk-foot">And {{.}} more projects, not counted one by one.</p>{{end}}{{else}}<p class="bk-foot">This backup does not say what each project holds.</p>{{end}}

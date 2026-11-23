@@ -166,7 +166,7 @@ var registry = []Feature{
 	{
 		Key:           Research,
 		Label:         "Research labs & trials",
-		Blurb:         "Systematic investigations recorded as trials -- expected vs actual, shared across agents working the same lab.",
+		Blurb:         "Systematic investigations recorded as trials (expected vs actual), shared across agents working the same lab.",
 		Line:          "Experiments with expected and actual results, shared across agents.",
 		Tools:         []string{"lab_open", "trial_record", "trial_query"},
 		NavIDs:        []string{"labs", "trials"},
@@ -179,7 +179,7 @@ var registry = []Feature{
 	{
 		Key:   Momentum,
 		Label: "Momentum",
-		Blurb: "Gentle progress cues on existing screens -- plan finish lines, capture streaks, knowledge payoffs, and project growth -- judged from real activity, never invented.",
+		Blurb: "Gentle progress cues on existing screens (plan finish lines, capture streaks, knowledge payoffs, and project growth), judged from real activity, never invented.",
 		Line:  "Quiet progress cues: finish lines, streaks and payoffs.",
 		Surfaces: []string{
 			"the plan finish-line cards on Overview (and their agent-briefing emphasis)",
@@ -198,7 +198,7 @@ var registry = []Feature{
 	{
 		Key:   Gamification,
 		Label: "Gamification",
-		Blurb: "An arcade layer on the Now screen -- the day tape, personal records, the hot-streak pulse, and celebration moments -- every number judged from real recorded activity, never invented.",
+		Blurb: "An arcade layer on the Now screen (the day tape, personal records, the hot-streak pulse, and celebration moments), every number judged from real recorded activity, never invented.",
 		Line:  "An arcade layer on Now: the day tape, records and streaks.",
 		Surfaces: []string{
 			"the day tape on Now",
@@ -213,7 +213,7 @@ var registry = []Feature{
 	{
 		Key:           Screening,
 		Label:         "Write screening",
-		Blurb:         "Screens every agent write to memories and notes for secrets, injection markers, hidden characters, encoded blobs and unlisted links, and holds suspicious ones -- with any change to a binding rule by a session that read outside text -- out of briefings and recall until you release them. It also reviews the existing corpus on this machine, keeps files changed outside Seamless out of briefings until you accept them, and adds a lockdown switch.",
+		Blurb:         "Screens every agent write to memories and notes for secrets, injection markers, hidden characters, encoded blobs and unlisted links, and holds suspicious ones (with any change to a binding rule by a session that read outside text) out of briefings and recall until you release them. It also reviews the existing corpus on this machine, keeps files changed outside Seamless out of briefings until you accept them, and adds a lockdown switch.",
 		Line:          "Holds a suspicious agent write until you release it.",
 		NavIDs:        []string{"held"},
 		RoutePrefixes: []string{"/console/held"},
@@ -227,7 +227,7 @@ var registry = []Feature{
 	{
 		Key:           RepoLocks,
 		Label:         "Repo locks",
-		Blurb:         "Locks on a repository's refs -- its main branch, or a tag pattern -- that agents declare once and hold while they land changes, so landings happen one at a time across machines.",
+		Blurb:         "Locks on a repository's refs (its main branch, or a tag pattern) that agents declare once and hold while they land changes, so landings happen one at a time across machines.",
 		Line:          "Agents take turns landing on a repository branch.",
 		Tools:         []string{"locks_list", "locks_declare", "locks_acquire", "locks_release"},
 		NavIDs:        []string{"locks"},

@@ -65,9 +65,9 @@ func (s *Service) settingsFeaturesSave(w http.ResponseWriter, r *http.Request) {
 			s.logger.Warn("console: record features event", "error", err)
 		}
 	}
-	msg := "Optional features saved -- all of them are off."
+	msg := "Optional features saved: all of them are off."
 	if len(on) > 0 {
-		msg = "Optional features saved -- " + strings.Join(on, ", ") +
+		msg = "Optional features saved: " + strings.Join(on, ", ") +
 			" on. Agents pick the change up on their next session."
 	}
 	settingsFeaturesNotice(w, r, msg)
@@ -90,7 +90,7 @@ func (s *Service) settingsFeaturesReset(w http.ResponseWriter, r *http.Request) 
 			s.logger.Warn("console: record features event", "error", err)
 		}
 	}
-	settingsFeaturesNotice(w, r, "Feature override cleared -- back to the file/env configuration.")
+	settingsFeaturesNotice(w, r, "Feature override cleared: back to the file/env configuration.")
 }
 
 func settingsFeaturesFlash(w http.ResponseWriter, r *http.Request, msg string) {

@@ -67,7 +67,7 @@ func planStateWords(state string) (text, tone string) {
 // the board, in plain text (the frame escapes its title). The stored title
 // is untouched.
 func planTitleText(title string) string {
-	return strings.ReplaceAll(title, " -- ", "\u00a0\u2013 ")
+	return strings.ReplaceAll(title, " -- ", ": ")
 }
 
 // planBackLabel is the way back to a plan's project's plans.

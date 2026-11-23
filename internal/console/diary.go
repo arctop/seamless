@@ -1300,10 +1300,10 @@ func buildRail(m diary.MonthView, c dyViewContext) dyRail {
 			if n := len(rail.Rows); n > 0 && rail.Rows[n-1].Quiet && !rail.Rows[n-1].Today && !row.Today {
 				last := &rail.Rows[n-1]
 				newest := last.Label
-				if _, after, ok := strings.Cut(last.Label, " – "); ok {
+				if _, after, ok := strings.Cut(last.Label, " to "); ok {
 					newest = after
 				}
-				last.Label = d.Format("Mon 2") + " – " + newest
+				last.Label = d.Format("Mon 2") + " to " + newest
 				last.Selected = last.Selected || row.Selected
 				continue
 			}
@@ -1316,7 +1316,7 @@ func buildRail(m diary.MonthView, c dyViewContext) dyRail {
 		if md.Facts.Minutes == 0 && md.Facts.Approximate {
 			// From before the usage ledger: its agent time was never recorded,
 			// which is not the same as none.
-			row.Minutes = "—"
+			row.Minutes = "n/a"
 			row.Title += " · agent time not recorded before the usage ledger"
 		}
 		row.Word, row.Rule = md.Character.Word, md.Character.Rule

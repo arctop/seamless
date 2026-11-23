@@ -54,7 +54,7 @@ func finishBar(p store.PlanRollup) template.HTML {
 		return ""
 	}
 	pct := p.Done * 100 / p.Total
-	title := template.HTMLEscapeString(fmt.Sprintf("%d of %d steps done -- %d%%", p.Done, p.Total, pct))
+	title := template.HTMLEscapeString(fmt.Sprintf("%d of %d steps done (%d%%)", p.Done, p.Total, pct))
 	return template.HTML(fmt.Sprintf(
 		`<svg class="mom-fin-bar" viewBox="0 0 100 4" preserveAspectRatio="none" role="img" aria-label="%s"><title>%s</title><line class="mom-fin-track" x1="0" x2="100" y1="2" y2="2"/><line class="mom-fin-fill" x1="0" x2="%d" y1="2" y2="2" pathLength="1"/></svg>`,
 		title, title, pct))
@@ -103,17 +103,17 @@ func stageTitle(info store.ProjectStageInfo, now time.Time) string {
 	}
 	switch info.Stage {
 	case store.StageDeepRooted:
-		return "deep-rooted -- " + state
+		return "deep-rooted: " + state
 	case store.StageEstablished:
-		return fmt.Sprintf("established -- deep-rooted at %dd, %d memories, %d events, %d%%+ reach (%s)",
+		return fmt.Sprintf("established: deep-rooted at %dd, %d memories, %d events, %d%%+ reach (%s)",
 			store.StageDeepRootedMinAgeDays, store.StageDeepRootedMinMemories,
 			store.StageDeepRootedMinEvents, store.StageDeepRootedMinReachPct, state)
 	case store.StageSprouting:
-		return fmt.Sprintf("sprouting -- established at %dd, %d memories, %d events (%s)",
+		return fmt.Sprintf("sprouting: established at %dd, %d memories, %d events (%s)",
 			store.StageEstablishedMinAgeDays, store.StageEstablishedMinMemories,
 			store.StageEstablishedMinEvents, state)
 	default:
-		return fmt.Sprintf("seedling -- sprouting at %dd, %d memories, %d events (%s)",
+		return fmt.Sprintf("seedling: sprouting at %dd, %d memories, %d events (%s)",
 			store.StageSproutingMinAgeDays, store.StageSproutingMinMemories,
 			store.StageSproutingMinEvents, state)
 	}

@@ -260,7 +260,7 @@ func planAnchor(project, slug string) string {
 func planTitleHTML(title string) template.HTML {
 	esc := template.HTMLEscapeString(title)
 	// Escaped first, so the only markup is the fixed entity pair.
-	return template.HTML(strings.ReplaceAll(esc, " -- ", "&nbsp;&ndash; "))
+	return template.HTML(strings.ReplaceAll(esc, " -- ", ": "))
 }
 
 // planSourceText names where a plan came from, in the owner's words.

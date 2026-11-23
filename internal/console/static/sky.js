@@ -431,7 +431,7 @@
     fact(dl, 'Last surfaced', s.t ? ago(s.t) : 'never');
     fact(dl, 'Surfaced', count(s.i) + '\u00d7');
     fact(dl, 'Read by agents', count(s.r) + '\u00d7');
-    fact(dl, 'Written', s.c ? ago(s.c) : '\u2014');
+    fact(dl, 'Written', s.c ? ago(s.c) : 'unknown');
     c.appendChild(dl);
 
     if (s.fav || s.stale) {
@@ -516,7 +516,7 @@
     });
     wrap.appendChild(rows);
     if (listed.length > LIST_MAX) {
-      wrap.appendChild(node('p', 'sky-results-more', count(listed.length - LIST_MAX) + ' more not listed \u2014 narrow with a search, a ring, or a kind.'));
+      wrap.appendChild(node('p', 'sky-results-more', count(listed.length - LIST_MAX) + ' more not listed; narrow with a search, a ring, or a kind.'));
     }
     return wrap;
   }

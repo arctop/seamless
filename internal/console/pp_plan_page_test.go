@@ -117,7 +117,7 @@ func TestPpPlanPageIsTheFrame(t *testing.T) {
 		ppCrumbs(t, frame), "project, then Plans")
 
 	title := ppBlock(t, frame, `<h1 class="item-title">`, "</h1>")
-	require.Contains(t, title, "Storage migration\u00a0\u2013 the cut-over<button", "the narrative's title, its dash kept whole")
+	require.Contains(t, title, "Storage migration: the cut-over<button", "the narrative's title, its \" -- \" shown as a colon")
 	require.NotContains(t, title, "migration -- the")
 	require.Contains(t, title, `<form class="star-form" method="post" action="/console/favorites/plan/storage?project=example-ops">`)
 	require.Contains(t, title, `<input type="hidden" name="next" value="`+strings.ReplaceAll(page, "&", "&amp;")+`">`,
@@ -157,7 +157,7 @@ func TestPpPlanPageIsTheFrame(t *testing.T) {
 	require.Greater(t, strings.Index(frame, `<aside class="item-side"`), strings.Index(frame, "The narrative of Storage migration"),
 		"the context column follows the narrative, as it stacks on a narrow screen")
 	require.Contains(t, side, `data-item-card="narrative"`)
-	require.Regexp(t, `<a class="item-card-title" href="/console/notes/[0-9A-Z]{26}">Storage migration&nbsp;&ndash; the cut-over</a>`, side)
+	require.Regexp(t, `<a class="item-card-title" href="/console/notes/[0-9A-Z]{26}">Storage migration: the cut-over</a>`, side)
 	attached := ppBlock(t, side, `data-item-card="attached"`, "</section>")
 	require.Contains(t, attached, `Attached notes <span class="count">2</span>`)
 	require.Contains(t, attached, ">Storage research</a>")

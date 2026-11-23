@@ -735,7 +735,7 @@ func (s *Service) nowArcade(ctx context.Context, now, dayStart time.Time, liveAg
 		}
 		arc.Moments = append(arc.Moments, nowMomentVM{
 			ID:   "record-" + r.Key + "-" + dayKey,
-			Copy: fmt.Sprintf("New record today: %s -- %d", r.Label, r.N),
+			Copy: fmt.Sprintf("New record today: %s (%d)", r.Label, r.N),
 		})
 	}
 	for _, p := range shippedToday {
