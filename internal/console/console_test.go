@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -363,13 +364,18 @@ func TestSecureCookiesUnderTLS(t *testing.T) {
 }
 
 // The sidebar names the SERVER, not "this machine": the console may be open on
-// a different device than the daemon.
+// a different device than the daemon. It shows the machine's bare name (the
+// owner's call: the name matters, the word "server" did not fit), and its
+// tooltip says whose name it is.
 func TestSidebarNamesTheServerHost(t *testing.T) {
 	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	svc, err := New(Config{DB: db, APIKey: testKey})
 	require.NoError(t, err)
-	require.True(t, strings.HasPrefix(svc.host, "server"), "got %q", svc.host)
+	if name, herr := os.Hostname(); herr == nil {
+		require.Equal(t, strings.TrimSpace(name), svc.host)
+	}
 	require.NotContains(t, svc.host, "this machine")
+	require.NotContains(t, svc.host, "server ")
 }

@@ -6054,8 +6054,6 @@ html:not(.js) [data-form-discard] { display: none; }
 .level-welcome-line { color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
 .level-welcome-foot { margin: 10px 0 0; color: var(--faint); font-size: var(--text-xs); }
 
-.account-copy small a.account-level { color: var(--brand); font-family: var(--font-sans); font-weight: 600; }
-.account-copy small a.account-level:hover { text-decoration: underline; }
 
 @media (max-width: 1100px) {
   .level-cards { grid-template-columns: minmax(0, 1fr); }

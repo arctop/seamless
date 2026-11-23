@@ -324,8 +324,8 @@ in this order:
 That is the full list, at the Advanced [level](#choose-how-much-you-see); a
 lower level shows a subset, in the same order and under the same names.
 Above the groups, a **Search or jump to** field opens the command palette;
-Settings and the account row (your console level, the theme, sign out) close
-the sidebar. Only the groups scroll, with a fade at an edge that has more
+Settings and the account row (the server the console runs on, by its machine
+name, the theme, sign out) close the sidebar. Only the groups scroll, with a fade at an edge that has more
 beyond it, so the search field, Settings and the account row stay on screen
 at any window height. The sidebar collapses to an icon rail (the header
 button, or `[`) and remembers that per browser; under 720px it becomes a
@@ -517,10 +517,10 @@ back, on any device. Beside the levels the card offers one optional feature as
 an unchecked box, **Also turn on write screening**: it rides with whichever
 button you press, and unticked it changes nothing at any level. It is a
 feature, not part of a level, because it changes what your agents receive (see
-[Held](#held)); once the card is gone, Settings > Features is the way in. The sidebar's account row names the level you are on and
-links to **Settings > Experience**, where the three levels sit side by side with
-the list of what each one shows. The palette's **Change experience level** action
-goes there too.
+[Held](#held)); once the card is gone, Settings > Features is the way in.
+**Settings > Experience** shows the level you are on, with the three levels side
+by side and the list of what each one shows. The palette's **Change experience
+level** action goes there too.
 
 **Hidden, not locked.** A level removes screens from the sidebar, the palette,
 and the shortcut map; it never locks them. A link to a screen above your level -

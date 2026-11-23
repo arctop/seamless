@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -718,14 +719,18 @@ func TestExperienceSection_CardsAreGenerated(t *testing.T) {
 		"the upgrade's sentence is the chip's hint")
 }
 
-// The sidebar's account row names the level as a link to the picker, stays one
-// row, and the level switch reaches it on the no-reload path.
-func TestSidebar_NamesTheLevel(t *testing.T) {
-	db, mux := newConsoleLevel(t, config.Features{}, "basic")
+// The sidebar's account row names the server the console runs on, by the
+// machine's own name alone (it read "Advanced · server example-host", cut to
+// "Advanced · ..." at the sidebar's width, so the name never showed), and the
+// level switch still reaches the row on the no-reload path.
+func TestSidebar_NamesTheServer(t *testing.T) {
+	_, mux := newConsoleLevel(t, config.Features{}, "basic")
 	page := getPeek(t, mux, "/console/").Body.String()
-	require.Contains(t, page, `<a class="account-level" href="/console/settings?s=experience" title="Console level: Basic. Change it in Settings." aria-label="Console level: Basic">Basic</a>`)
-	setLevel(t, db, "advanced")
-	require.Contains(t, getPeek(t, mux, "/console/").Body.String(), `aria-label="Console level: Advanced">Advanced</a>`)
+	if host, err := os.Hostname(); err == nil && strings.TrimSpace(host) != "" {
+		host = strings.TrimSpace(host)
+		require.Contains(t, page, `<span class="account-copy"><strong>Owner</strong><small title="The server this console runs on: `+template.HTMLEscapeString(host)+`">`+template.HTMLEscapeString(host)+`</small></span>`)
+	}
+	require.NotContains(t, page, "account-level", "the level is Settings > Experience's, not the account row's")
 
 	require.Contains(t, string(navigationJS), "morphNode(currentAccount, freshAccount)",
 		"a level switch must re-render the account row in place")

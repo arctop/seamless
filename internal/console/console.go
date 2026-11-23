@@ -262,9 +262,11 @@ func New(cfg Config) (*Service, error) {
 		return nil, fmt.Errorf("console: parse locks: %w", err)
 	}
 	pages["locks"] = locksPage
-	host, hostName := "server", ""
+	// host is the machine's own name as the OS gives it ("" when it gives
+	// none): the sidebar's account row and Settings > Your setup show it.
+	host, hostName := "", ""
 	if name, herr := os.Hostname(); herr == nil && strings.TrimSpace(name) != "" {
-		host = "server " + strings.TrimSpace(name)
+		host = strings.TrimSpace(name)
 		hostName = normHost(name)
 	}
 	return &Service{

@@ -81,7 +81,7 @@
     <div class="side-foot">
       <div class="account">
         <span class="account-dot" aria-hidden="true"></span>
-        {{block "chrome-account" .}}<span class="account-copy"><strong>Owner</strong><small title="{{.Host}}"><a class="account-level" href="/console/settings?s=experience" title="Console level: {{.Level.Label}}. Change it in Settings." aria-label="Console level: {{.Level.Label}}">{{.Level.Label}}</a> &middot; {{.Host}}</small></span>{{end}}
+        {{block "chrome-account" .}}<span class="account-copy"><strong>Owner</strong>{{with .Host}}<small title="The server this console runs on: {{.}}">{{.}}</small>{{end}}</span>{{end}}
         {{/* Icon-only, fixed width: the old buttons carried their state as text
              ("Light theme" / "Dark theme"), so every theme flip resized the
              sidebar footer under the cursor that had just clicked it. */}}

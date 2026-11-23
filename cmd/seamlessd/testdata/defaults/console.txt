@@ -61,7 +61,7 @@
     <div class="side-foot">
       <div class="account">
         <span class="account-dot" aria-hidden="true"></span>
-        <span class="account-copy"><strong>Owner</strong><small title="server <hostname>"><a class="account-level" href="/console/settings?s=experience" title="Console level: Basic. Change it in Settings." aria-label="Console level: Basic">Basic</a> &middot; server <hostname></small></span>
+        <span class="account-copy"><strong>Owner</strong><small title="The server this console runs on: <hostname>"><hostname></small></span>
         
         <button class="account-act theme-toggle" type="button" id="theme-toggle" aria-label="Toggle theme" title="Toggle theme"><span class="tt-ico ico-light"><svg class="ico ico-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></span><span class="tt-ico ico-dark"><svg class="ico ico-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></span></button>
         <form method="post" action="/console/logout">

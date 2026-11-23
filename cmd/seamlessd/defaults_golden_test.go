@@ -34,6 +34,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"html/template"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -1155,8 +1156,12 @@ func dgNewNormalizer(d *dgDaemon) *dgNormalizer {
 	add(strings.TrimPrefix(d.base, "http://"), "<base-host>")
 	// The console names the machine it runs on (os.Hostname, console.New):
 	// it differs from machine to machine, and is no business of the golden.
+	// It shows the bare name, so only its two places are rewritten, never the
+	// name wherever else it might occur.
 	if h, err := os.Hostname(); err == nil && strings.TrimSpace(h) != "" {
-		add("server "+strings.TrimSpace(h), "server <hostname>")
+		h = template.HTMLEscapeString(strings.TrimSpace(h))
+		add(`<small title="The server this console runs on: `+h+`">`+h+`</small>`, `<small title="The server this console runs on: <hostname>"><hostname></small>`)
+		add(`<dt>Running on</dt><dd><span>`+h+`</span>`, `<dt>Running on</dt><dd><span><hostname></span>`)
 	}
 	return n
 }
