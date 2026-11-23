@@ -199,7 +199,7 @@
           <div class="retrieval-stale-row">
             <span class="retrieval-stale-mark"></span>
             <div class="retrieval-memory-copy"><a href="/console/memories/{{.ID}}" data-peek>{{.Name}}</a><span><i class="kind">{{.Kind}}</i>{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}}{{with .Proposal}}<a class="retrieval-proposal" href="{{.Href}}" title="Waiting in the gardener: {{.Label}}">{{icon "sprout"}}proposal waiting</a>{{end}}</span></div>
-            updated {{agoTime .Updated}}
+            <span class="retrieval-stale-when">updated {{agoTime .Updated}}</span>
           </div>
           {{end}}
         </div>
@@ -289,7 +289,7 @@
           <span class="retrieval-stale-mark"></span>
           <div class="retrieval-memory-copy"><a href="/console/memories/{{.ID}}" data-peek>{{.Name}}</a><span><i class="kind">{{.Kind}}</i>{{if .Project}}<a href="/console/projects/{{.Project}}" data-peek>{{.Project}}</a>{{else}}global{{end}}{{with .Proposal}}<a class="retrieval-proposal" href="{{.Href}}" title="Waiting in the gardener: {{.Label}}">{{icon "sprout"}}proposal waiting</a>{{end}}</span></div>
           <div class="retrieval-memory-metrics"><strong>{{.Injects}}</strong><span>briefed</span></div>
-          updated {{agoTime .Updated}}
+          <span class="retrieval-stale-when">updated {{agoTime .Updated}}</span>
         </div>
         {{end}}
       </div>

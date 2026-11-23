@@ -3524,7 +3524,13 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
 .retrieval-stale-panel.healthy { border-color: color-mix(in oklab, var(--ok) 25%, var(--border)); }
 .retrieval-stale-list { min-width: 0; }
 .retrieval-stale-mark { width: 8px; height: 8px; margin-left: 8px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 4px var(--warn-soft); }
-.retrieval-stale-row time { color: var(--muted); font-size: var(--text-2xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* "updated <time>" is one grid cell: as a bare text node beside its <time>
+   it made two, and the time wrapped under the row's mark. */
+.retrieval-stale-when { color: var(--muted); font-size: var(--text-2xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Quiet knowledge lists every stale memory (the Overview's "going stale"
+   leads here), so it scrolls inside its panel at about Most injected's
+   twelve rows instead of running thousands of pixels past it. */
+.retrieval-stale-panel .retrieval-stale-list { max-height: 46rem; overflow-y: auto; overscroll-behavior: contain; }
 .retrieval-healthy-state { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 255px; padding: 30px; text-align: center; background: radial-gradient(circle at 50% 45%, color-mix(in oklab, var(--ok) 7%, transparent), transparent 42%); }
 .retrieval-healthy-mark { display: inline-flex; align-items: center; justify-content: center; width: 58px; height: 58px; margin-bottom: 12px; border: 1px solid color-mix(in oklab, var(--ok) 28%, var(--border)); border-radius: 50%; color: var(--ok); background: var(--ok-soft); box-shadow: 0 0 0 10px color-mix(in oklab, var(--ok) 4%, transparent); }
 .retrieval-healthy-mark .ico { width: 24px; height: 24px; }
@@ -3600,7 +3606,7 @@ a.kind:hover { color: var(--brand); border-color: var(--border-strong); text-dec
   .retrieval-scope-reach, .retrieval-scope-volume { grid-column: 1; grid-row: auto; }
   .retrieval-scope-volume { align-items: flex-start; padding: 10px 0 0; border-top: 1px solid var(--border); border-left: 0; }
   .retrieval-memory-list li, .retrieval-stale-row { grid-template-columns: 25px minmax(0, 1fr); }
-  .retrieval-memory-metrics, .retrieval-stale-row time { grid-column: 2; justify-self: start; text-align: left; }
+  .retrieval-memory-metrics, .retrieval-stale-when { grid-column: 2; justify-self: start; text-align: left; }
 }
 
 /* ---------------------------------------------------------------------------
