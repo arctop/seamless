@@ -12627,6 +12627,30 @@ Seamless instead (`addr`, and `server_url`). A process you do not recognize,
 under another account, is what this refusal exists for: find out what it is
 first.
 
+## Windows: the installer fell back to a Startup shortcut {#windows-startup-shortcut-fallback}
+
+**What is happening.** The installer could not register your Scheduled Task
+(`Seamless-<your SID>`), so it put `Seamless.lnk` in your Startup folder and
+started the daemon itself. Its `service` row reads `Startup shortcut (no
+Scheduled Task rights)`, after a warning that says why. The shortcut starts the
+daemon when you sign in, and `seamlessd start`, `stop`, `restart` and `status`
+act on it, but such an install does not update itself: `seamlessd update
+--check` says `mode notify`.
+
+**Fix.** It depends on the warning's reason:
+
+- `group policy may bar task creation for standard users`: the PC does not let
+  standard users create Scheduled Tasks. The shortcut is the service there;
+  update by re-running the installer.
+- `could not replace the Seamless Scheduled Task an earlier release registered
+  ... only an admin may delete it`: an earlier install ran in an elevated
+  PowerShell (Run as administrator), which made its `Seamless` task
+  Administrators'. Delete it once from an elevated PowerShell, `schtasks
+  /delete /tn Seamless /f`, then re-run the installer from an ordinary one.
+
+Once the cause is gone, re-run the installer: it registers the task and removes
+the shortcut.
+
 ## An agent on another computer gets no briefing {#an-agent-on-another-computer-gets-no-briefing}
 
 **What is happening.** A [Client](/concepts/networked/) keeps no data and
