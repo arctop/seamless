@@ -138,7 +138,13 @@ $TaskName = 'Seamless'
 # The task's Description, and the Windows analog of the comment docs/install
 # writes into its plist and systemd unit: seamlessd's update check looks for it
 # to tell a task this script registered from one set up by hand.
+# seamlessd install-service writes the same one (service_install.go), and a
+# test holds the two together.
 $TaskDescription = 'Written by https://thereisnospoon.org/install.ps1. Re-run it to update.'
+# The line `seamlessd install-service -h` prints: a release that has it
+# registers the task itself (Register-Service), and one without it gets the
+# Task Scheduler cmdlets, as before.
+$ServiceProtocol = 'service protocol: 1'
 $DocsUrl = 'https://thereisnospoon.org/docs/'
 
 # Canonical paths, kept identical to the POSIX installer so the config the daemon
@@ -934,18 +940,88 @@ function Get-ConfigValue {
 # logged in. A task action is a bare exec, not a shell string, so --config and
 # --log-file carry what a plist/unit would put in an env prefix: the config to
 # pin and the log file the task's process would otherwise write nowhere.
+#
+# `seamlessd install-service` registers it (cmd/seamlessd/service_install.go):
+# the task's XML through schtasks.exe, which works from any token, where the
+# Task Scheduler cmdlets go through a CIM provider that a session with a
+# reduced token (SSH, a management agent's run as the user) cannot reach. A
+# release without it -- a pinned older SEAMLESS_VERSION -- gets the cmdlets, as
+# before. A task that cannot be registered either way falls back to the Startup
+# folder.
 function Register-Service {
     param([string]$InstallDir)
     $seamlessd = Join-Path $InstallDir 'seamlessd.exe'
     New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
 
+    if (Test-ServiceVerb $seamlessd) {
+        $why = Invoke-InstallService $seamlessd
+    } else {
+        $why = Register-ServiceCim $seamlessd
+    }
+    if ($why) {
+        Register-ServiceFallback $seamlessd $why
+        return
+    }
+    Step 'service' "$TaskName (Scheduled Task, at logon)"
+}
+
+# Test-ServiceVerb: whether this seamlessd.exe registers the task itself.
+# `install-service -h` prints $ServiceProtocol and returns before anything is
+# read or written; a release without the verb answers with its usage instead.
+# 2>&1 on a native command can surface as a terminating NativeCommandError
+# under $ErrorActionPreference='Stop', so the probe relaxes it and catches.
+function Test-ServiceVerb {
+    param([string]$Seamlessd)
+    $probe = ''
+    $prevEap = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $probe = (& $Seamlessd install-service -h 2>&1 | Out-String)
+    } catch {
+        $probe = ''
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+    return $probe.Contains($ServiceProtocol)
+}
+
+# Invoke-InstallService registers and starts the task through the binary, and
+# returns '' when it runs, or why not: install-service says it in one line,
+# for the fallback's warning. It leaves no task behind when it fails, so the
+# Startup shortcut never starts a second daemon beside one.
+function Invoke-InstallService {
+    param([string]$Seamlessd)
+    $said = ''
+    $code = 1
+    $prevEap = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $said = ((& $Seamlessd install-service --config $Config --log-file $LogFile 2>&1) |
+            ForEach-Object { "$_" }) -join ' '
+        $code = $LASTEXITCODE
+    } catch {
+        $said = $_.Exception.Message
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+    if ($code -eq 0) { return '' }
+    $said = $said.Trim()
+    if (-not $said) { $said = "seamlessd install-service failed (exit $code)" }
+    return $said
+}
+
+# Register-ServiceCim registers the task the way every release before
+# install-service had it registered: the Task Scheduler cmdlets. It returns ''
+# when the task runs, or why it could not be registered.
+function Register-ServiceCim {
+    param([string]$Seamlessd)
     $arg = 'serve --config "{0}" --log-file "{1}"' -f $Config, $LogFile
     # The New-ScheduledTask* cmdlets build their objects through the same CIM
     # provider Register-ScheduledTask writes to, so a session that cannot reach
     # it fails on the first of them: all of them sit inside the try, and that
     # failure takes the fallback too instead of aborting the install.
     try {
-        $action = New-ScheduledTaskAction -Execute $seamlessd -Argument $arg
+        $action = New-ScheduledTaskAction -Execute $Seamlessd -Argument $arg
         # The canonical account identity (COMPUTERNAME\user, or DOMAIN\user on a
         # domain-joined box). $env:USERDOMAIN can read back as "WORKGROUP" on a local
         # account, which is not a valid principal, so ask Windows for the real name.
@@ -966,34 +1042,33 @@ function Register-Service {
         Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
             -Principal $principal -Settings $settings -Description $TaskDescription -Force | Out-Null
     } catch {
-        Register-ServiceFallback $seamlessd $_
-        return
+        $err = $_
+        $owner = $null
+        try { $owner = (Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop).Principal.UserId } catch {}
+        if ($owner -and -not (Test-CurrentUser $owner)) {
+            return ("could not register the $TaskName Scheduled Task: it belongs to $owner, and replacing it needs admin " +
+                "(one-time fix: an elevated 'schtasks /delete /tn $TaskName /f', then re-run this installer)")
+        }
+        return ("could not register the $TaskName Scheduled Task ($($err.Exception.Message)); " +
+            'group policy may bar task creation for standard users, or this session (SSH, remote management) cannot reach the Task Scheduler')
     }
-    Start-ScheduledTask -TaskName $TaskName
-    Step 'service' "$TaskName (Scheduled Task, at logon)"
+    Start-ScheduledTask -TaskName $TaskName | Out-Null
+    return ''
 }
 
 # Managed machines can close the task store to a standard user: group policy can
 # bar task creation outright, and the task name is global, so a \Seamless task
 # registered by ANOTHER user of the machine cannot be replaced without admin,
-# and a session with a reduced token (SSH, a management agent's run as the
-# user) cannot reach the Task Scheduler at all. None of them should abort an
-# otherwise complete install. Fall back to the per-user
-# Startup folder -- always writable, no special rights -- and start the daemon
-# directly so this session still comes up and the health check still means
-# something. The shortcut routes through a hidden powershell because a console
-# exe launched straight from a shortcut keeps a visible window for its lifetime.
+# and through the cmdlets a session with a reduced token cannot reach the Task
+# Scheduler at all. None of them should abort an otherwise complete install;
+# $Why says which it was, for the warning. Fall back to the per-user Startup
+# folder -- always writable, no special rights -- and start the daemon directly
+# so this session still comes up and the health check still means something.
+# The shortcut routes through a hidden powershell because a console exe
+# launched straight from a shortcut keeps a visible window for its lifetime.
 function Register-ServiceFallback {
-    param([string]$Seamlessd, $Err)
-    $owner = $null
-    try { $owner = (Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop).Principal.UserId } catch {}
-    if ($owner -and -not (Test-CurrentUser $owner)) {
-        Warn ("the $TaskName Scheduled Task belongs to $owner and replacing it needs admin " +
-            "(one-time fix: an elevated 'schtasks /delete /tn $TaskName /f', then re-run this installer)")
-    } else {
-        Warn ("could not register the $TaskName Scheduled Task ($($Err.Exception.Message)); " +
-            'group policy may bar task creation for standard users, or this session (SSH, remote management) cannot reach the Task Scheduler')
-    }
+    param([string]$Seamlessd, [string]$Why)
+    Warn $Why
 
     $sq = { param([string]$s) "'" + ($s -replace "'", "''") + "'" }
     $inner = '& {0} serve --config {1} --log-file {2}' -f (& $sq $Seamlessd), (& $sq $Config), (& $sq $LogFile)

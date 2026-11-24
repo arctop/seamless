@@ -40,7 +40,7 @@ These act on the already-installed service and print a hint if it was never
 installed. The platform-native commands below are what they wrap - you need
 them only when you want to talk to the service manager directly.
 
-## The service on your OS
+## The service on your OS {#the-service-on-your-os}
 
 ::: when os=macos
 
@@ -85,10 +85,13 @@ there.
 ::: when os=windows
 
 An at-logon Scheduled Task named `Seamless`, running as you (`LogonType
-Interactive`, no admin), logging to `~/.seamless/seamlessd.log`. The task
-action is a bare exec - `seamlessd.exe serve --config <path> --log-file
-<path>` - because a task cannot carry the `SEAMLESS_CONFIG` env prefix a plist
-or systemd unit does; the two flags pass exactly what that prefix would have:
+Interactive`, no admin), logging to `~/.seamless/seamlessd.log`. The installer
+registers it with
+[`seamlessd install-service`](/reference/cli-seamlessd/#seamlessd_install_service),
+which also puts back a task that was deleted. The task action is a bare exec -
+`seamlessd.exe serve --config <path> --log-file <path>` - because a task cannot
+carry the `SEAMLESS_CONFIG` env prefix a plist or systemd unit does; the two
+flags pass exactly what that prefix would have:
 
 ```powershell
 Get-ScheduledTask Seamless | Get-ScheduledTaskInfo   # state, last run, last result

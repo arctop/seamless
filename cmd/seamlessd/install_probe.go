@@ -680,10 +680,11 @@ func unitExecStart(data []byte) string {
 }
 
 // taskDefinition is the sliver of a Task Scheduler XML definition the probe
-// reads.
+// and install-service read.
 type taskDefinition struct {
 	Description string `xml:"RegistrationInfo>Description"`
 	Command     string `xml:"Actions>Exec>Command"`
+	Arguments   string `xml:"Actions>Exec>Arguments"`
 	UserID      string `xml:"Principals>Principal>UserId"`
 }
 
@@ -700,6 +701,7 @@ func parseTaskXML(raw []byte) (taskDefinition, error) {
 		return taskDefinition{}, err
 	}
 	def.Command = strings.Trim(strings.TrimSpace(def.Command), `"`)
+	def.Arguments = strings.TrimSpace(def.Arguments)
 	def.Description = strings.TrimSpace(def.Description)
 	def.UserID = strings.TrimSpace(def.UserID)
 	return def, nil

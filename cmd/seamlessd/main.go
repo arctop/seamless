@@ -131,6 +131,8 @@ func main() {
 		err = runSetup(args)
 	case "install-hooks":
 		err = runInstallHooks(args)
+	case "install-service":
+		err = runInstallService(args)
 	case "install-summary":
 		err = runInstallSummary(args)
 	case "client-config":
@@ -182,7 +184,8 @@ func main() {
 	if err != nil {
 		// A refusal seamlessd approve words for the owner (approve.go's
 		// ownerError) is that one line, not a log record: seam approve runs
-		// this command through sudo on the owner's own terminal.
+		// this command through sudo on the owner's own terminal. So is
+		// install-service's, which install.ps1 shows as it is.
 		var said *ownerError
 		if errors.As(err, &said) {
 			fmt.Fprintln(os.Stderr, said.Error())
@@ -209,6 +212,9 @@ usage:
   seamlessd setup          ask how this computer uses Seamless, or offer to change it (the installers
                            run it; SEAMLESS_SETUP answers it for a script)
   seamlessd install-hooks  install Claude Code/Codex hooks, MCP, and maintained skills
+  seamlessd install-service
+                           Windows: register and start the at-logon Scheduled Task the daemon runs
+                           from (the installer runs it; --config PATH --log-file PATH)
   seamlessd client-config  print the commands that pair another machine as a client (run on the SERVER;
                            --redact masks the key so the output is safe to paste into a ticket)
   seamlessd uninstall      remove Seamless: service, hooks, MCP, skills, binaries

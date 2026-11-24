@@ -92,19 +92,7 @@ func writeTaskDefinition(dataDir string, def []byte) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("create %s: %w", dir, err)
 	}
-	f, err := os.CreateTemp(dir, "update-task-*.xml")
-	if err != nil {
-		return "", fmt.Errorf("write the update task definition: %w", err)
-	}
-	_, werr := f.Write(def)
-	if cerr := f.Close(); werr == nil {
-		werr = cerr
-	}
-	if werr != nil {
-		_ = os.Remove(f.Name()) //nolint:errcheck // the write already failed; a leftover partial file is inert
-		return "", fmt.Errorf("write the update task definition: %w", werr)
-	}
-	return f.Name(), nil
+	return writeTaskFile(dir, "update-task-*.xml", def)
 }
 
 // taskArguments joins args into the one argument string a task action

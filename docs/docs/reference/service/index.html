@@ -330,9 +330,13 @@ there.</p>
 </div>
 <div class="ctx-variant" data-ctx-os="windows">
 <p class="ctx-label"><span class="ctx-chip">Windows</span></p>
-<p>An at-logon Scheduled Task named <code>Seamless</code>, running as you (<code>LogonType Interactive</code>, no admin), logging to <code>~/.seamless/seamlessd.log</code>. The task
-action is a bare exec - <code>seamlessd.exe serve --config &lt;path&gt; --log-file &lt;path&gt;</code> - because a task cannot carry the <code>SEAMLESS_CONFIG</code> env prefix a plist
-or systemd unit does; the two flags pass exactly what that prefix would have:</p>
+<p>An at-logon Scheduled Task named <code>Seamless</code>, running as you (<code>LogonType Interactive</code>, no admin), logging to <code>~/.seamless/seamlessd.log</code>. The installer
+registers it with
+<a href="../../reference/cli-seamlessd/#seamlessd_install_service"><code>seamlessd install-service</code></a>,
+which also puts back a task that was deleted. The task action is a bare exec -
+<code>seamlessd.exe serve --config &lt;path&gt; --log-file &lt;path&gt;</code> - because a task cannot
+carry the <code>SEAMLESS_CONFIG</code> env prefix a plist or systemd unit does; the two
+flags pass exactly what that prefix would have:</p>
 <div class="code-block" data-lang="powershell"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nb">Get-ScheduledTask</span> <span class="n">Seamless</span> <span class="p">|</span> <span class="nb">Get-ScheduledTaskInfo</span>   <span class="c"># state, last run, last result</span>
 </span></span><span class="line"><span class="cl"><span class="nb">Get-Content</span> <span class="p">~/.</span><span class="n">seamless</span><span class="p">/</span><span class="n">seamlessd</span><span class="p">.</span><span class="py">log</span> <span class="n">-Wait</span>          <span class="c"># follow the log</span>
 </span></span><span class="line"><span class="cl"><span class="nb">Restart-ScheduledTask</span> <span class="n">Seamless</span>                        <span class="c"># stop + start</span>

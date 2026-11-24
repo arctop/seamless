@@ -1,6 +1,6 @@
 ---
 title: seamlessd CLI
-description: The daemon and operator CLI - serve, doctor, export, import, backups, restore, setup, install-hooks, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, devices, relay, console-open, start/stop/restart/status, and version.
+description: The daemon and operator CLI - serve, doctor, export, import, backups, restore, setup, install-hooks, install-service, client-config, uninstall, update, map-repo, unmap-repo, retire-project, family, devices, relay, console-open, start/stop/restart/status, and version.
 ---
 
 `seamlessd` is both the server and the operator CLI. `serve` runs the daemon;
@@ -715,6 +715,39 @@ often be lost. The Codex profile is five shell-string command hooks. Both
 profiles include safe constraint injection and parent-only lifecycle handling
 for subagents; the [hooks reference](/reference/hooks/) has both tables.
 
+## seamlessd install-service {#seamlessd_install_service}
+
+```powershell
+seamlessd install-service --config PATH --log-file PATH
+```
+
+Windows only. Registers and starts the Windows service: the at-logon Scheduled
+Task `Seamless`, running this `seamlessd.exe serve --config PATH --log-file
+PATH` as you, with no admin. The [Windows installer](/install/) runs it; run it
+yourself to put back a task that was deleted, with the installer's paths:
+
+```powershell
+seamlessd install-service --config $HOME\.config\seamless\seamless.yaml --log-file $HOME\.seamless\seamlessd.log
+```
+
+The task is the one [the service reference](/reference/service/#the-service-on-your-os)
+describes. It is registered from its XML definition with `schtasks /Create
+/XML`, which works from any Windows session, including SSH and a remote
+management agent's, where PowerShell's Task Scheduler cmdlets cannot reach the
+Task Scheduler. A task it registered but could not start is removed again, and
+it refuses to replace a `Seamless` task that belongs to another user of the
+computer, which needs an administrator. Either way it exits 1 with one line
+saying why; the installer shows that line and falls back to a Startup-folder
+shortcut.
+
+The task's definition gives your account full control of it, so a task an
+elevated PowerShell (Run as administrator) created is still yours to replace
+from an ordinary one. One an earlier release's installer created that way is
+not: install-service starts it as it is when it already runs this
+`seamlessd.exe` with the same paths, and otherwise exits 1 asking you to delete
+it once from an elevated PowerShell (`schtasks /delete /tn Seamless /f`) and
+re-run the installer.
+
 ## seamlessd client-config {#seamlessd_client_config}
 
 ```bash
@@ -1383,9 +1416,10 @@ service manager. `start`, `stop`, and `restart` act on the LaunchAgent (macOS),
 the systemd `--user` unit (Linux), or the Scheduled Task (Windows); `status`
 prints that manager's own state output.
 
-These control an **already-installed** service - they do not create one. If it
-was never installed, they exit with a hint to run the installer (or `make
-install` from a clone) rather than a cryptic launchctl/systemctl/schtasks error.
+These control an **already-installed** service - they do not create one (on
+Windows, [`install-service`](#seamlessd_install_service) does). If it was never
+installed, they exit with a hint to run the installer (or `make install` from a
+clone) rather than a cryptic launchctl/systemctl/schtasks error.
 
 `restart` is in-place and fast (on macOS `launchctl kickstart -k`, falling back
 to a fresh load if the job was unloaded). `stop` fully stops the service - on

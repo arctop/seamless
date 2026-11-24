@@ -312,19 +312,26 @@ type updateTaskPlan struct {
 // arguments: the updater's arguments already escaped and joined into the one
 // string a task action carries (taskArguments).
 func newUpdateTaskPlan(sid, exe, arguments string) (updateTaskPlan, error) {
-	vals := []string{updateTaskDescription, sid, exe, arguments}
+	def, err := taskDefinitionXML(updateTaskTemplate, updateTaskDescription, sid, exe, arguments)
+	if err != nil {
+		return updateTaskPlan{}, fmt.Errorf("escape the update task definition: %w", err)
+	}
+	return updateTaskPlan{name: updateTaskName(sid), definition: def}, nil
+}
+
+// taskDefinitionXML fills a task XML template with vals, each XML-escaped, and
+// encodes it the way schtasks /XML reads it (utf16WithBOM). The Seamless task
+// (service_install.go) and the update task both come from it.
+func taskDefinitionXML(template string, vals ...string) ([]byte, error) {
 	esc := make([]any, len(vals))
 	for i, v := range vals {
 		var b strings.Builder
 		if err := xml.EscapeText(&b, []byte(v)); err != nil {
-			return updateTaskPlan{}, fmt.Errorf("escape the update task definition: %w", err)
+			return nil, err
 		}
 		esc[i] = b.String()
 	}
-	return updateTaskPlan{
-		name:       updateTaskName(sid),
-		definition: utf16WithBOM(fmt.Sprintf(updateTaskTemplate, esc...)),
-	}, nil
+	return utf16WithBOM(fmt.Sprintf(template, esc...)), nil
 }
 
 // create is the schtasks command that registers the task from the definition
