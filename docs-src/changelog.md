@@ -15,6 +15,26 @@ bumps) filtered out. Each heading links the release's downloads and checksums.
 Install with one command ([quickstart](/quickstart/)), or update an existing
 install in place with `seamlessd update`.
 
+## v0.11.2 {#v0-11-2}
+
+Released 2026-11-24 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.11.2)
+
+### Features
+
+- feat(seamlessd): install-service registers the Windows task with schtasks /XML
+
+### Fixes
+
+- fix(windows): an install with nobody signed in says the task starts at sign-in
+- fix(windows): start, stop, status and uninstall know the Startup-shortcut fallback
+- fix(windows): each user's service is a task of their own, Seamless-&lt;SID&gt;
+- fix(seamlessd): -h exits 0 instead of logging a failed command
+- fix(seamlessd): the Scheduled Task's daemon closes its console window
+- fix(install): remove a stale Startup shortcut once the task registers
+- fix(install): a session that cannot reach the Task Scheduler installs instead of aborting
+- fix(install): a failed Windows install no longer closes the PowerShell window
+- fix(install): the Windows health wait gives up after 30s, not six minutes
+
 ## v0.11.1 {#v0-11-1}
 
 Released 2026-11-23 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.11.1)
