@@ -70,8 +70,12 @@ func realInstallProbeEnv() installProbeEnv {
 		sameFile: sameFile,
 		writable: dirWritable,
 		// Read once: the service probe and gate 9 both parse it.
+		// No console window: a serve the task started has none to lend it
+		// (detachTaskConsole), so schtasks would open one of its own.
 		taskXML: sync.OnceValues(func() ([]byte, error) {
-			return exec.Command("schtasks", "/Query", "/TN", scheduledTask, "/XML").Output()
+			cmd := exec.Command("schtasks", "/Query", "/TN", scheduledTask, "/XML")
+			cmd.SysProcAttr = handoffProcAttr()
+			return cmd.Output()
 		}),
 		parentImage:   parentImageName,
 		isCurrentUser: isCurrentUser,

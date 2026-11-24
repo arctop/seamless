@@ -266,11 +266,15 @@ func runServe(args []string) error {
 		return err
 	}
 
-	closeLog, err := applyServeEnv(*cfgPath, *logFile)
+	detached := detachTaskConsole()
+	closeLog, err := applyServeEnv(*cfgPath, *logFile, detached)
 	if err != nil {
 		return err
 	}
 	defer closeLog()
+	if detached {
+		slog.Info("gave back the console window the Scheduled Task opened for this daemon; its output goes to the log file")
+	}
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -1052,7 +1056,12 @@ func runServe(args []string) error {
 // does not, so the task passes --log-file to reach the same file every doc and the
 // installer's health-check message point at. stderr stays wired, so an interactive
 // `serve` still prints and a foreground run tees to the file.
-func applyServeEnv(cfgPath, logFile string) (func(), error) {
+//
+// detached says serve gave back the console the task opened for it
+// (detachTaskConsole): it has no stderr left to tee to, so the log file gets
+// the logs alone, and stdout and stderr point at the file too (serveStdioTo),
+// so a panic is in the log the task's serve writes.
+func applyServeEnv(cfgPath, logFile string, detached bool) (func(), error) {
 	noop := func() {}
 	if cfgPath != "" {
 		if err := os.Setenv("SEAMLESS_CONFIG", cfgPath); err != nil {
@@ -1066,10 +1075,18 @@ func applyServeEnv(cfgPath, logFile string) (func(), error) {
 	if err != nil {
 		return noop, fmt.Errorf("seamlessd.serve: open log file: %w", err)
 	}
-	slog.SetDefault(slog.New(slog.NewTextHandler(io.MultiWriter(os.Stderr, f),
-		&slog.HandlerOptions{Level: slog.LevelInfo})))
+	out := io.MultiWriter(os.Stderr, f)
+	if detached {
+		serveStdioTo(f)
+		out = f
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(out, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	return func() { _ = f.Close() }, nil
 }
+
+// serveStdioTo is redirectStdio, a seam a test swaps: pointing the test
+// binary's own standard handles at a temp file would take its output along.
+var serveStdioTo = redirectStdio
 
 // routeRegistrar mounts its own routes on a mux (the hook handler, the
 // console).

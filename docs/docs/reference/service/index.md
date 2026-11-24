@@ -88,7 +88,10 @@ registers it with
 which also puts back a task that was deleted. The task action is a bare exec -
 `seamlessd.exe serve --config <path> --log-file <path>` - because a task cannot
 carry the `SEAMLESS_CONFIG` env prefix a plist or systemd unit does; the two
-flags pass exactly what that prefix would have:
+flags pass exactly what that prefix would have. Windows opens a console window
+for the task's daemon as it starts, and the daemon closes it at once: its
+output, a crash's included, goes to the log file. A `seamlessd serve` you start
+yourself keeps its window.
 
 ```powershell
 Get-ScheduledTask Seamless | Get-ScheduledTaskInfo   # state, last run, last result
