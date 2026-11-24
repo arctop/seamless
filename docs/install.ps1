@@ -103,8 +103,10 @@
 # the setup knobs does exactly what it did before they existed. Every update
 # seamlessd makes runs this script that way.
 
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue' # no per-request progress bar spam
+# irm | iex runs this script in the caller's own session, not a script scope of
+# its own, so nothing at the top level may change that session for good: the
+# preferences the install runs under ($ErrorActionPreference = 'Stop', no
+# progress bars) are set in Main, where they end with it, and Die never exits.
 
 # Windows PowerShell 5.1 does not negotiate TLS 1.2 by default, and GitHub
 # requires it. Harmless on PowerShell 7. Best-effort: some hosts lock it down.
@@ -191,7 +193,20 @@ Ch5rFPci7MLq8DZr6w4FAAAAAQ==
 function Say { param([string]$Message) Write-Host "  $Message" }
 function Step { param([string]$Key, [string]$Message) Write-Host ('  {0,-12} {1}' -f $Key, $Message) }
 function Warn { param([string]$Message) Write-Warning $Message }
-function Die { param([string]$Message) [Console]::Error.WriteLine("`nerror: $Message"); exit 1 }
+# Die prints the error and stops the install. Under irm | iex an exit would
+# close the user's PowerShell window, and the error with it, so Die throws: the
+# script stops, the window stays open with the error on screen, and a run under
+# -Command or -File still exits 1 on the uncaught error. A script read from
+# redirected input -- seamlessd's updater pipes it to `powershell -Command -`,
+# which reads it line by line like a prompt -- keeps exit 1, the exit code its
+# caller reads. A throw stops at the first catch: never call Die inside a try
+# whose catch does not rethrow.
+function Die {
+    param([string]$Message)
+    [Console]::Error.WriteLine("`nerror: $Message")
+    if ([Console]::IsInputRedirected) { exit 1 }
+    throw 'the Seamless installer stopped (the error is above)'
+}
 
 # Target selection, kept in step with docs/install and the interactive
 # `seamlessd install-hooks` menu: the two hook clients plus the Claude app chat
@@ -1079,6 +1094,9 @@ function Test-ServerHealth {
 }
 
 function Main {
+    # Local to Main, and so to everything it calls: see the note at the top.
+    $ErrorActionPreference = 'Stop'
+    $ProgressPreference = 'SilentlyContinue' # no per-request progress bar spam
     $InstallDir = if ($env:SEAMLESS_INSTALL_DIR) { $env:SEAMLESS_INSTALL_DIR } else { Join-Path $HOME '.local\bin' }
     $checksumsPin = Get-ChecksumsPin
     # Client mode: no daemon here, so no Scheduled Task and no data dir. The
