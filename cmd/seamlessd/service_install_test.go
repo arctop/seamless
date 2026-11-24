@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -163,6 +164,10 @@ func TestServiceTaskDescription_IsTheInstallers(t *testing.T) {
 	require.NotNil(t, m, "docs/install.ps1 sets $LegacyTaskName")
 	require.Equal(t, legacyServiceTask, string(m[1]))
 
+	m = regexp.MustCompile(`(?m)^\$ServiceDeferredExit = (\d+)`).FindSubmatch(raw)
+	require.NotNil(t, m, "docs/install.ps1 sets $ServiceDeferredExit")
+	require.Equal(t, strconv.Itoa(serviceDeferredExit), string(m[1]), "install.ps1 reads install-service's exit code for a task that starts at sign-in")
+
 	m = regexp.MustCompile(`(?m)^\$ServiceProtocol = '([^']*)'`).FindSubmatch(raw)
 	require.NotNil(t, m, "docs/install.ps1 sets $ServiceProtocol")
 	require.Equal(t, serviceProtocolLine, string(m[1]), "install.ps1 looks for the line install-service -h prints")
@@ -193,6 +198,7 @@ type fakeServiceTaskEnv struct {
 	runErr   map[string]error
 	runOut   map[string]string
 	writeErr error
+	notRun   bool // Windows did not start a task /Run asked for: nobody is signed in
 
 	ran     [][]string
 	written []byte
@@ -226,6 +232,7 @@ func (f *fakeServiceTaskEnv) env() serviceTaskEnv {
 			key := argv[1] + " " + argv[3]
 			return []byte(f.runOut[key]), f.runErr[key]
 		},
+		started: func(string) bool { return !f.notRun },
 	}
 }
 
@@ -391,6 +398,22 @@ func TestRegisterServiceTask(t *testing.T) {
 		_, err := register(f)
 		require.ErrorContains(t, err, "group policy")
 		require.Equal(t, [][]string{create}, f.ran)
+	})
+
+	t.Run("registered, but nobody is signed in to start it: kept, deferred to the next sign-in", func(t *testing.T) {
+		f := &fakeServiceTaskEnv{tasks: map[string][]byte{"Seamless": same}, notRun: true}
+		got, err := register(f)
+		require.NoError(t, err)
+		require.Equal(t, registeredService{name: task, migrated: true, deferred: true}, got)
+		require.Equal(t, [][]string{create, endOld, removeOld, run}, f.ran,
+			"never removed: it starts the daemon at the next sign-in, and a fallback would not start sooner")
+	})
+
+	t.Run("kept, and nobody is signed in: deferred", func(t *testing.T) {
+		f := (&fakeServiceTaskEnv{tasks: map[string][]byte{"Seamless": same}, notRun: true}).fails("/Create "+task, denied)
+		got, err := register(f)
+		require.NoError(t, err)
+		require.Equal(t, registeredService{name: "Seamless", kept: true, deferred: true}, got)
 	})
 
 	t.Run("registered but cannot start: removed again", func(t *testing.T) {

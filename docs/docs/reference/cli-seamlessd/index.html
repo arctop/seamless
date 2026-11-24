@@ -1210,6 +1210,11 @@ Task Scheduler. The name carries your SID because a task's name is the whole
 PC's: each user of the PC gets a task of their own. A task it registered but
 could not start is removed again, and it exits 1 with one line saying why; the
 installer shows that line and falls back to a Startup-folder shortcut.</p>
+<p>Windows starts the task only in your desktop session, so when nobody is signed
+in to Windows as you (an install over SSH, say), it cannot start yet. The task
+then stays registered and starts the daemon when you sign in, and
+install-service says so and exits 3; the installer reports the service that
+way and skips its health check.</p>
 <p>A release before the per-user name registered <code>Seamless</code>. Once the new task is
 registered, install-service ends and deletes a <code>Seamless</code> task of yours, and
 never touches another user's. The task's definition gives your account full

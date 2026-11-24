@@ -27,6 +27,16 @@ import (
 // PowerShell cmdlets, as before, for a release without it.
 const serviceProtocolLine = "service protocol: 1"
 
+// serviceDeferredExit is install-service's exit code for a task it
+// registered that Windows starts at the user's next sign-in, not now
+// (errServiceDeferred); install.ps1's $ServiceDeferredExit, which a test holds
+// to it, reads it as installed and skips the health check.
+const serviceDeferredExit = 3
+
+// errServiceDeferred is that outcome, after install-service said so: main
+// exits serviceDeferredExit for it.
+var errServiceDeferred = errors.New("the Seamless task starts at the next sign-in")
+
 // serviceTaskDescription is the task's description: it carries the
 // installer's marker (update.InstallerMarker), which install_probe.go reads
 // as "the installer wrote this", in the words install.ps1 has always written.
@@ -149,14 +159,19 @@ type serviceTaskEnv struct {
 	remove func(path string) error
 	// run runs one schtasks command and returns its combined output.
 	run func(argv []string) ([]byte, error)
+	// started reports whether Windows started the task name that schtasks
+	// /Run asked for (taskStarted).
+	started func(name string) bool
 }
 
 // registeredService is what registerServiceTask left registered and
 // running: the task's name, and whether it is a task it found and kept rather
-// than its own, and whether it removed this user's \Seamless.
+// than its own, and whether it removed this user's \Seamless. deferred says
+// Windows did not start it: nobody is signed in as this user, and it starts
+// at their next sign-in.
 type registeredService struct {
-	name           string
-	kept, migrated bool
+	name                     string
+	kept, migrated, deferred bool
 }
 
 // registerServiceTask registers this user's Seamless task for config and
@@ -174,6 +189,11 @@ type registeredService struct {
 // these arguments, and otherwise the error names the admin's one-time fix. It
 // is kept the same way when task creation is barred. Another user's
 // \Seamless is left alone.
+//
+// A task that /Run did not start because this user is not signed in to
+// Windows (an install over SSH, say) stays registered, reported as deferred:
+// it starts the daemon at their next sign-in, and the fallback would not
+// start sooner.
 func registerServiceTask(env serviceTaskEnv, config, logFile string) (registeredService, error) {
 	lookup := env.lookup()
 	name := serviceTaskName(env.sid)
@@ -221,7 +241,7 @@ func registerServiceTask(env serviceTaskEnv, config, logFile string) (registered
 		return registeredService{}, fmt.Errorf("registered the %s Scheduled Task, but it could not start, so it was removed again: schtasks /Run: %w",
 			name, withFirstLine(err, out))
 	}
-	return registeredService{name: name, migrated: migrated}, nil
+	return registeredService{name: name, migrated: migrated, deferred: !env.started(name)}, nil
 }
 
 // keepLegacyTask starts this user's \Seamless as it is: it already runs this
@@ -232,7 +252,7 @@ func keepLegacyTask(env serviceTaskEnv, old serviceTaskPlan) (registeredService,
 		return registeredService{}, fmt.Errorf("could not start the %s Scheduled Task already registered for this seamlessd.exe: schtasks /Run: %w",
 			old.name, withFirstLine(err, out))
 	}
-	return registeredService{name: old.name, kept: true}, nil
+	return registeredService{name: old.name, kept: true, deferred: !env.started(old.name)}, nil
 }
 
 // lookup reads registered tasks through env.
@@ -297,6 +317,11 @@ func runInstallService(args []string) error {
 	got, err := registerServiceTask(env, *config, *logFile)
 	if err != nil {
 		return &ownerError{msg: err.Error(), cause: err}
+	}
+	if got.deferred {
+		fmt.Printf("registered the %s Scheduled Task (at logon, as %s); Windows starts it when you sign in: "+
+			"nobody is signed in to Windows as %s now, so it could not start yet\n", got.name, env.account, env.account)
+		return errServiceDeferred
 	}
 	switch {
 	case got.kept:

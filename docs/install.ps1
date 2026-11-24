@@ -152,6 +152,10 @@ $TaskDescription = 'Written by https://thereisnospoon.org/install.ps1. Re-run it
 # registers the task itself (Register-Service), and one without it gets the
 # Task Scheduler cmdlets, as before.
 $ServiceProtocol = 'service protocol: 1'
+# install-service's exit code for a task it registered that Windows starts at
+# your next sign-in, not now: nobody is signed in to Windows as you (an install
+# over SSH, say). The task is in place; there is no daemon to health-check.
+$ServiceDeferredExit = 3
 $DocsUrl = 'https://thereisnospoon.org/docs/'
 
 # Canonical paths, kept identical to the POSIX installer so the config the daemon
@@ -995,6 +999,9 @@ function Register-Service {
     param([string]$InstallDir)
     $seamlessd = Join-Path $InstallDir 'seamlessd.exe'
     New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
+    # Set by Invoke-InstallService; under irm | iex a script variable outlives
+    # the run in the caller's session, so an earlier run's must not count.
+    $script:ServiceDeferred = ''
 
     if (Test-ServiceVerb $seamlessd) {
         $why = Invoke-InstallService $seamlessd
@@ -1004,6 +1011,9 @@ function Register-Service {
     if ($why) {
         Register-ServiceFallback $seamlessd $why
         return
+    }
+    if ($script:ServiceDeferred) {
+        Say $script:ServiceDeferred
     }
     # The Startup shortcut an earlier run fell back to would start a second
     # daemon beside the task at every logon, one that only waits for the data
@@ -1015,7 +1025,11 @@ function Register-Service {
     # registered that one for an older release.
     $shown = @(Get-OwnTaskNames) | Select-Object -First 1
     if (-not $shown) { $shown = $TaskName }
-    Step 'service' "$shown (Scheduled Task, at logon)"
+    if ($script:ServiceDeferred) {
+        Step 'service' "$shown (Scheduled Task, at logon; starts when you sign in to Windows)"
+    } else {
+        Step 'service' "$shown (Scheduled Task, at logon)"
+    }
 }
 
 # Test-ServiceVerb: whether this seamlessd.exe registers the task itself.
@@ -1041,7 +1055,11 @@ function Test-ServiceVerb {
 # Invoke-InstallService registers and starts the task through the binary, and
 # returns '' when it runs, or why not: install-service says it in one line,
 # for the fallback's warning. It leaves no task behind when it fails, so the
-# Startup shortcut never starts a second daemon beside one.
+# Startup shortcut never starts a second daemon beside one. A task Windows
+# starts only at your next sign-in ($ServiceDeferredExit) is installed too:
+# $script:ServiceDeferred keeps install-service's line, and Main skips the
+# health check, which would otherwise wait for a daemon that cannot start yet,
+# or be answered by another user's on the same port.
 function Invoke-InstallService {
     param([string]$Seamlessd)
     $said = ''
@@ -1058,6 +1076,10 @@ function Invoke-InstallService {
         $ErrorActionPreference = $prevEap
     }
     if ($code -eq 0) { return '' }
+    if ($code -eq $ServiceDeferredExit) {
+        $script:ServiceDeferred = $said.Trim()
+        return ''
+    }
     $said = $said.Trim()
     if (-not $said) { $said = "seamlessd install-service failed (exit $code)" }
     return $said
@@ -1342,7 +1364,11 @@ server and use the line it prints.
             Say "start it yourself: & `"$InstallDir\seamlessd.exe`" serve --config `"$Config`""
         } else {
             Register-Service $InstallDir
-            Wait-Healthy (Get-ConfiguredAddr) $version
+            if ($script:ServiceDeferred) {
+                Step 'healthz' 'skipped: the daemon starts when you sign in to Windows'
+            } else {
+                Wait-Healthy (Get-ConfiguredAddr) $version
+            }
         }
         if (-not $hooksFirst) {
             Invoke-WireHooks $tmp $InstallDir $agentClient $version $serverUrl $apiKey

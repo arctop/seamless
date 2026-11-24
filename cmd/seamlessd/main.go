@@ -181,6 +181,10 @@ func main() {
 	if errors.Is(err, errServeRestart) {
 		err = reexecSelf()
 	}
+	if errors.Is(err, errServiceDeferred) {
+		// install-service said why on stdout; install.ps1 reads the code.
+		os.Exit(serviceDeferredExit)
+	}
 	if errors.Is(err, flag.ErrHelp) {
 		// -h printed the usage it was asked for: no failure to log or exit
 		// 1 on. The installers' -h probes read the output, never the code.
