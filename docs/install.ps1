@@ -962,6 +962,11 @@ function Register-Service {
         Register-ServiceFallback $seamlessd $why
         return
     }
+    # The Startup shortcut an earlier run fell back to would start a second
+    # daemon beside the task at every logon, one that only waits for the data
+    # dir the task's daemon holds: the task replaces it.
+    $lnk = Join-Path ([Environment]::GetFolderPath('Startup')) 'Seamless.lnk'
+    if (Test-Path -LiteralPath $lnk) { Remove-Item -LiteralPath $lnk -Force -ErrorAction SilentlyContinue }
     Step 'service' "$TaskName (Scheduled Task, at logon)"
 }
 
