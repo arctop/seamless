@@ -616,10 +616,17 @@ function Test-CurrentUser {
 # Then wait for them to exit: Stop-Process returns before the image is released.
 function Stop-Daemon {
     param([string]$InstallDir)
-    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-    if ($task -and (Test-CurrentUser $task.Principal.UserId)) {
-        Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-    }
+    # A session with a reduced token -- SSH, a management agent's run as the
+    # user -- cannot reach the Task Scheduler, and that CIM failure is a
+    # terminating error -ErrorAction SilentlyContinue does not stop: it aborted
+    # the install here, before any binary went in. Caught, it is the same as no
+    # task, and the sweep below still stops this install's daemon.
+    try {
+        $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop
+        if (Test-CurrentUser $task.Principal.UserId) {
+            Stop-ScheduledTask -TaskName $TaskName -ErrorAction Stop
+        }
+    } catch {}
     $exe = Join-Path $InstallDir 'seamlessd.exe'
     $pattern = '^\s*"?' + [regex]::Escape($exe) + '"?\s+serve(\s|$)'
     try {
@@ -933,26 +940,29 @@ function Register-Service {
     New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
 
     $arg = 'serve --config "{0}" --log-file "{1}"' -f $Config, $LogFile
-    $action = New-ScheduledTaskAction -Execute $seamlessd -Argument $arg
-    # The canonical account identity (COMPUTERNAME\user, or DOMAIN\user on a
-    # domain-joined box). $env:USERDOMAIN can read back as "WORKGROUP" on a local
-    # account, which is not a valid principal, so ask Windows for the real name.
-    $userId = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-    # -User is load-bearing: without it -AtLogOn means "any user logs on", and
-    # registering an any-user logon trigger needs elevation (0x80070005 for a
-    # standard user) -- the same rule that makes `schtasks /create /sc onlogon`
-    # demand an admin prompt. Scoped to yourself it registers without admin.
-    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $userId
-    $principal = New-ScheduledTaskPrincipal -UserId $userId `
-        -LogonType Interactive -RunLevel Limited
-    # ExecutionTimeLimit 0 = never auto-kill a long-running daemon (the default is
-    # three days); restart-on-failure is the KeepAlive / Restart=always analog;
-    # IgnoreNew stops a second copy if the trigger somehow double-fires.
-    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-        -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero) `
-        -RestartInterval (New-TimeSpan -Minutes 1) -RestartCount 3 -MultipleInstances IgnoreNew
-
+    # The New-ScheduledTask* cmdlets build their objects through the same CIM
+    # provider Register-ScheduledTask writes to, so a session that cannot reach
+    # it fails on the first of them: all of them sit inside the try, and that
+    # failure takes the fallback too instead of aborting the install.
     try {
+        $action = New-ScheduledTaskAction -Execute $seamlessd -Argument $arg
+        # The canonical account identity (COMPUTERNAME\user, or DOMAIN\user on a
+        # domain-joined box). $env:USERDOMAIN can read back as "WORKGROUP" on a local
+        # account, which is not a valid principal, so ask Windows for the real name.
+        $userId = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+        # -User is load-bearing: without it -AtLogOn means "any user logs on", and
+        # registering an any-user logon trigger needs elevation (0x80070005 for a
+        # standard user) -- the same rule that makes `schtasks /create /sc onlogon`
+        # demand an admin prompt. Scoped to yourself it registers without admin.
+        $trigger = New-ScheduledTaskTrigger -AtLogOn -User $userId
+        $principal = New-ScheduledTaskPrincipal -UserId $userId `
+            -LogonType Interactive -RunLevel Limited
+        # ExecutionTimeLimit 0 = never auto-kill a long-running daemon (the default is
+        # three days); restart-on-failure is the KeepAlive / Restart=always analog;
+        # IgnoreNew stops a second copy if the trigger somehow double-fires.
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
+            -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero) `
+            -RestartInterval (New-TimeSpan -Minutes 1) -RestartCount 3 -MultipleInstances IgnoreNew
         Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
             -Principal $principal -Settings $settings -Description $TaskDescription -Force | Out-Null
     } catch {
@@ -965,8 +975,10 @@ function Register-Service {
 
 # Managed machines can close the task store to a standard user: group policy can
 # bar task creation outright, and the task name is global, so a \Seamless task
-# registered by ANOTHER user of the machine cannot be replaced without admin.
-# Neither should abort an otherwise complete install. Fall back to the per-user
+# registered by ANOTHER user of the machine cannot be replaced without admin,
+# and a session with a reduced token (SSH, a management agent's run as the
+# user) cannot reach the Task Scheduler at all. None of them should abort an
+# otherwise complete install. Fall back to the per-user
 # Startup folder -- always writable, no special rights -- and start the daemon
 # directly so this session still comes up and the health check still means
 # something. The shortcut routes through a hidden powershell because a console
@@ -980,7 +992,7 @@ function Register-ServiceFallback {
             "(one-time fix: an elevated 'schtasks /delete /tn $TaskName /f', then re-run this installer)")
     } else {
         Warn ("could not register the $TaskName Scheduled Task ($($Err.Exception.Message)); " +
-            'group policy may bar task creation for standard users')
+            'group policy may bar task creation for standard users, or this session (SSH, remote management) cannot reach the Task Scheduler')
     }
 
     $sq = { param([string]$s) "'" + ($s -replace "'", "''") + "'" }
