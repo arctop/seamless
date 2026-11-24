@@ -1284,6 +1284,11 @@ removes the installed skills, and deletes the binaries. Config and the data dir
 kept unless <code>--purge</code> is passed. Every external step is best-effort: an
 already-gone file or a missing client CLI is a note, never a failure, so
 uninstall is idempotent and safe to re-run.</p>
+<p>On Windows the service is your own Scheduled Task (<code>Seamless-&lt;your SID&gt;</code>, and a
+<code>Seamless</code> an earlier release registered when it runs as you; another user's is
+never touched) or the Startup-folder shortcut the installer falls back to. Both
+go, and so does a daemon still running from this install, however it was
+started.</p>
 <p>Hook removal uses the installer's same classifier: current, marked-stale, and
 recognizable legacy Seamless definitions are removed; foreign definitions are
 preserved. Seamless hooks in <a href="#seamlessd_install_hooks_managed">Claude Code's managed settings</a>
@@ -1940,6 +1945,14 @@ prints that manager's own state output.</p>
 Windows, <a href="#seamlessd_install_service"><code>install-service</code></a> does). If it was never
 installed, they exit with a hint to run the installer (or <code>make install</code> from a
 clone) rather than a cryptic launchctl/systemctl/schtasks error.</p>
+<p>On Windows the service is your own Scheduled Task, never another user's. On a
+PC where the installer could not register it and fell back to a Startup-folder
+shortcut (<code>Seamless.lnk</code>), the verbs act on that instead: <code>stop</code> ends the daemon
+running from this install, <code>start</code> starts it hidden with the shortcut's config
+and log file, <code>restart</code> does both, and <code>status</code> says whether it runs and with
+which PID. Such an install does not update itself; re-running the installer
+registers the task and removes the shortcut. When both are there, the task is
+the service, and the verbs say so.</p>
 <p><code>restart</code> is in-place and fast (on macOS <code>launchctl kickstart -k</code>, falling back
 to a fresh load if the job was unloaded). <code>stop</code> fully stops the service - on
 macOS the LaunchAgent has <code>KeepAlive</code>, so this unloads it rather than letting it

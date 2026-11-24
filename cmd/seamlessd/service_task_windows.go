@@ -25,30 +25,6 @@ func realTaskLookup() (taskLookup, error) {
 	return taskLookup{sid: sid, queryXML: queryTaskXML, isCurrentUser: isCurrentUser}, nil
 }
 
-// ownServiceTasks names this user's Seamless tasks (taskLookup.own): none when
-// this user's SID cannot be read.
-func ownServiceTasks() []string {
-	l, err := realTaskLookup()
-	if err != nil {
-		return nil
-	}
-	return taskNames(l.own())
-}
-
-// serviceTaskForControl is the task the service verbs act on: this user's own
-// (the per-user one first), else the per-user name, which reads as not
-// installed.
-func serviceTaskForControl() string {
-	l, err := realTaskLookup()
-	if err != nil {
-		return ""
-	}
-	if own := l.own(); len(own) > 0 {
-		return own[0].name
-	}
-	return serviceTaskName(l.sid)
-}
-
 // onceTaskXML reads the install probe's task (findServiceTaskXML) once: the
 // service probe and gate 9 both parse it. Without this user's SID only the
 // legacy name can be read.

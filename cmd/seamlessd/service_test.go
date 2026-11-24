@@ -23,6 +23,9 @@ import (
 // per-user name, as serviceTaskForControl resolves it.
 const testTask = "Seamless-S-1-5-21-1-2-3-1001"
 
+// testWin is a Windows PC whose service is that task.
+var testWin = windowsService{tasks: []string{testTask}, perUser: testTask}
+
 func TestServiceControl(t *testing.T) {
 	const (
 		home  = "/home/tester"
@@ -72,7 +75,7 @@ func TestServiceControl(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := serviceControl(tt.action, tt.goos, home, uid, testTask)
+			p := serviceControl(tt.action, tt.goos, home, uid, testWin)
 			require.Equal(t, tt.wantLabel, p.Label)
 			require.Equal(t, tt.wantCmds, argvs(p.Cmds))
 			require.Equal(t, tt.wantFall, argvs(p.Fallback))
@@ -85,15 +88,15 @@ func TestServiceControl(t *testing.T) {
 func TestServiceControlProbe(t *testing.T) {
 	const home = "/home/tester"
 
-	dar := serviceControl(actionStatus, "darwin", home, 501, testTask)
+	dar := serviceControl(actionStatus, "darwin", home, 501, testWin)
 	require.Equal(t, filepath.Join(home, "Library", "LaunchAgents", "com.arctop.seamless.plist"), dar.DefFile)
 	require.Nil(t, dar.ProbeCmd)
 
-	lin := serviceControl(actionStatus, "linux", home, 501, testTask)
+	lin := serviceControl(actionStatus, "linux", home, 501, testWin)
 	require.Equal(t, filepath.Join(home, ".config", "systemd", "user", "seamless.service"), lin.DefFile)
 	require.Nil(t, lin.ProbeCmd)
 
-	win := serviceControl(actionStatus, "windows", home, 501, testTask)
+	win := serviceControl(actionStatus, "windows", home, 501, testWin)
 	require.Empty(t, win.DefFile)
 	require.NotNil(t, win.ProbeCmd)
 	require.Equal(t, []string{"schtasks", "/Query", "/TN", testTask}, win.ProbeCmd.Args)
@@ -107,13 +110,13 @@ func TestServiceControl_LegacyLaunchdLabel(t *testing.T) {
 	agents := filepath.Join(home, "Library", "LaunchAgents")
 	require.NoError(t, os.MkdirAll(agents, 0o755))
 
-	none := serviceControl(actionRestart, "darwin", home, 501, testTask)
+	none := serviceControl(actionRestart, "darwin", home, 501, testWin)
 	require.Equal(t, "launchd (com.arctop.seamless)", none.Label)
 	require.False(t, serviceInstalled(none))
 
 	legacy := filepath.Join(agents, "org.thereisnospoon.seamless.plist")
 	require.NoError(t, os.WriteFile(legacy, []byte("x"), 0o644))
-	p := serviceControl(actionRestart, "darwin", home, 501, testTask)
+	p := serviceControl(actionRestart, "darwin", home, 501, testWin)
 	require.Equal(t, "launchd (org.thereisnospoon.seamless)", p.Label)
 	require.Equal(t, legacy, p.DefFile)
 	require.True(t, serviceInstalled(p))
@@ -122,7 +125,7 @@ func TestServiceControl_LegacyLaunchdLabel(t *testing.T) {
 
 	current := filepath.Join(agents, "com.arctop.seamless.plist")
 	require.NoError(t, os.WriteFile(current, []byte("x"), 0o644))
-	both := serviceControl(actionStop, "darwin", home, 501, testTask)
+	both := serviceControl(actionStop, "darwin", home, 501, testWin)
 	require.Equal(t, current, both.DefFile, "the current label wins once its plist exists")
 	require.Equal(t, [][]string{{"launchctl", "bootout", "gui/501/com.arctop.seamless"}}, argvs(both.Cmds))
 }
@@ -191,7 +194,7 @@ func TestServiceControl_SettlesOnlyWindowsStopAndRestart(t *testing.T) {
 			if goos == "windows" && (action == actionStop || action == actionRestart) {
 				want = 1
 			}
-			require.Equal(t, want, serviceControl(action, goos, "/home/tester", 501, testTask).SettleAfter, "%s %s", goos, action)
+			require.Equal(t, want, serviceControl(action, goos, "/home/tester", 501, testWin).SettleAfter, "%s %s", goos, action)
 		}
 	}
 }
@@ -260,7 +263,7 @@ func TestServiceControlPlanRun(t *testing.T) {
 			if tt.noSettle {
 				settle = nil
 			}
-			ok, out := serviceControl(tt.action, tt.goos, "/home/tester", 501, testTask).run(runCmds, settle)
+			ok, out := serviceControl(tt.action, tt.goos, "/home/tester", 501, testWin).run(runCmds, settle)
 			require.Equal(t, tt.wantSteps, steps)
 			require.Equal(t, tt.wantOK, ok)
 			require.Equal(t, tt.wantOut, out)
@@ -433,12 +436,12 @@ func TestDaemonSettle(t *testing.T) {
 	t.Setenv("SEAMLESS_CONFIG", filepath.Join(dir, "absent.yaml"))
 
 	var out bytes.Buffer
-	require.Nil(t, daemonSettle(serviceControl(actionRestart, "darwin", dir, 501, testTask), &out))
-	require.Nil(t, daemonSettle(serviceControl(actionRestart, "linux", dir, 501, testTask), &out))
-	require.Nil(t, daemonSettle(serviceControl(actionStart, "windows", dir, 501, testTask), &out))
+	require.Nil(t, daemonSettle(serviceControl(actionRestart, "darwin", dir, 501, testWin), &out))
+	require.Nil(t, daemonSettle(serviceControl(actionRestart, "linux", dir, 501, testWin), &out))
+	require.Nil(t, daemonSettle(serviceControl(actionStart, "windows", dir, 501, testWin), &out))
 	require.Empty(t, out.String(), "a plan that does not settle never loads the config")
 
-	require.Nil(t, daemonSettle(serviceControl(actionStop, "windows", dir, 501, testTask), &out),
+	require.Nil(t, daemonSettle(serviceControl(actionStop, "windows", dir, 501, testWin), &out),
 		"a config that does not load leaves the commands as they were")
 	require.Contains(t, out.String(), "not waiting for the old daemon to exit")
 	require.Contains(t, out.String(), "absent.yaml")
@@ -447,7 +450,7 @@ func TestDaemonSettle(t *testing.T) {
 	cfgPath := filepath.Join(dir, "seamless.yaml")
 	require.NoError(t, os.WriteFile(cfgPath, nil, 0o600))
 	t.Setenv("SEAMLESS_CONFIG", cfgPath)
-	settle := daemonSettle(serviceControl(actionRestart, "windows", dir, 501, testTask), &out)
+	settle := daemonSettle(serviceControl(actionRestart, "windows", dir, 501, testWin), &out)
 	require.NotNil(t, settle)
 	require.NoError(t, settle())
 	require.Contains(t, out.String(), "not running", "nothing holds the fresh data dir's lock")

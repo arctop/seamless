@@ -807,6 +807,12 @@ kept unless `--purge` is passed. Every external step is best-effort: an
 already-gone file or a missing client CLI is a note, never a failure, so
 uninstall is idempotent and safe to re-run.
 
+On Windows the service is your own Scheduled Task (`Seamless-<your SID>`, and a
+`Seamless` an earlier release registered when it runs as you; another user's is
+never touched) or the Startup-folder shortcut the installer falls back to. Both
+go, and so does a daemon still running from this install, however it was
+started.
+
 Hook removal uses the installer's same classifier: current, marked-stale, and
 recognizable legacy Seamless definitions are removed; foreign definitions are
 preserved. Seamless hooks in [Claude Code's managed settings](#seamlessd_install_hooks_managed)
@@ -1424,6 +1430,15 @@ These control an **already-installed** service - they do not create one (on
 Windows, [`install-service`](#seamlessd_install_service) does). If it was never
 installed, they exit with a hint to run the installer (or `make install` from a
 clone) rather than a cryptic launchctl/systemctl/schtasks error.
+
+On Windows the service is your own Scheduled Task, never another user's. On a
+PC where the installer could not register it and fell back to a Startup-folder
+shortcut (`Seamless.lnk`), the verbs act on that instead: `stop` ends the daemon
+running from this install, `start` starts it hidden with the shortcut's config
+and log file, `restart` does both, and `status` says whether it runs and with
+which PID. Such an install does not update itself; re-running the installer
+registers the task and removes the shortcut. When both are there, the task is
+the service, and the verbs say so.
 
 `restart` is in-place and fast (on macOS `launchctl kickstart -k`, falling back
 to a fresh load if the job was unloaded). `stop` fully stops the service - on

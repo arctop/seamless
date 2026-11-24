@@ -40,6 +40,13 @@ type serviceControlPlan struct {
 	Fallback    []*exec.Cmd // tried when Cmds fail (darwin restart -> bootstrap); nil elsewhere
 	InstallHint string      // shown when not installed: how to install on this OS
 
+	// Note, when set, is said beside the action: what it found that the
+	// commands do not show (a start with the daemon already running), or
+	// instead of them when there are none. Report, when set, is status's
+	// output in place of a command's.
+	Note   string
+	Report [][2]string
+
 	// SettleAfter, when non-zero, is how many leading Cmds stop a daemon whose
 	// process outlives them: run waits for that process to exit between them
 	// and the rest (daemonSettle). Cmds alone, back to back, are still the
@@ -52,10 +59,11 @@ type serviceControlPlan struct {
 // the only Go code that manages the service. The launchd/systemd/schtasks handles
 // are the shared consts from uninstall.go -- no new definition site. On darwin
 // the label is the installed job's (launchdJob, a stat under home), so a Mac
-// still on the legacy label is controlled under that one. On Windows task is
-// the Scheduled Task to act on, which the caller resolves (serviceTaskForControl):
-// this user's own, found by its principal, so another user's task is never
-// started or ended.
+// still on the legacy label is controlled under that one. On Windows win is
+// what the caller found runs this user's daemon (resolveWindowsService): this
+// user's own task, found by its principal, so another user's task is never
+// started or ended, or else the installer's Startup-shortcut fallback
+// (windowsServiceControl).
 //
 // darwin uses launchctl because the plist declares KeepAlive: bootout truly stops
 // the job (a plain kill would be resurrected), kickstart -k restarts a loaded job
@@ -64,7 +72,7 @@ type serviceControlPlan struct {
 // returns about a second before Task Scheduler terminates the task's process,
 // which holds the port, the data dir and its executable until then, so Windows
 // stop and restart settle after it (SettleAfter).
-func serviceControl(action serviceAction, goos, home string, uid int, task string) serviceControlPlan {
+func serviceControl(action serviceAction, goos, home string, uid int, win windowsService) serviceControlPlan {
 	switch goos {
 	case "darwin":
 		label := launchdJob(home, fileExists)
@@ -89,33 +97,7 @@ func serviceControl(action serviceAction, goos, home string, uid int, task strin
 		}
 		return p
 	case "windows":
-		// "" only when this user's SID could not be read: the query below
-		// then fails, which reads as not installed.
-		shown := task
-		if shown == "" {
-			shown = serviceTaskPrefix + "<your SID>"
-		}
-		p := serviceControlPlan{
-			Label:       "Scheduled Task (" + shown + ")",
-			ProbeCmd:    exec.Command("schtasks", "/Query", "/TN", task),
-			InstallHint: "run the installer: irm https://thereisnospoon.org/install.ps1 | iex",
-		}
-		switch action {
-		case actionStart:
-			p.Cmds = []*exec.Cmd{exec.Command("schtasks", "/Run", "/TN", task)}
-		case actionStop:
-			p.Cmds = []*exec.Cmd{exec.Command("schtasks", "/End", "/TN", task)}
-			p.SettleAfter = 1
-		case actionRestart:
-			p.Cmds = []*exec.Cmd{
-				exec.Command("schtasks", "/End", "/TN", task),
-				exec.Command("schtasks", "/Run", "/TN", task),
-			}
-			p.SettleAfter = 1
-		case actionStatus:
-			p.Cmds = []*exec.Cmd{exec.Command("schtasks", "/Query", "/TN", task, "/V", "/FO", "LIST")}
-		}
-		return p
+		return windowsServiceControl(action, win)
 	default: // linux and other unixes run the systemd --user unit
 		unit := filepath.Join(home, ".config", "systemd", "user", systemdUnit)
 		p := serviceControlPlan{
@@ -161,7 +143,7 @@ func runServiceAction(action serviceAction, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	plan := serviceControl(action, runtime.GOOS, homeDir(), os.Getuid(), serviceTaskForControl())
+	plan := serviceControl(action, runtime.GOOS, homeDir(), os.Getuid(), resolveWindowsService())
 
 	if !serviceInstalled(plan) {
 		where := plan.Label
@@ -177,6 +159,13 @@ func runServiceAction(action serviceAction, args []string) error {
 
 	fmt.Printf("\n%s %s\n", bold("Seamless"), dim(string(action)))
 	fieldRow("kind", plan.Label)
+	if len(plan.Cmds) == 0 && plan.Note != "" {
+		fieldRow(string(action), dim(plan.Note))
+		return nil
+	}
+	if plan.Note != "" {
+		fieldRow("note", dim(plan.Note))
+	}
 
 	ok, out := plan.run(runControlCmds, daemonSettle(plan, os.Stdout))
 	if !ok && len(plan.Fallback) > 0 {
@@ -373,9 +362,21 @@ func (w daemonExit) waitFree(tick <-chan time.Time, deadline time.Time) (bool, i
 // -- an installed-but-not-loaded service -- is a dim hint, not an error, because
 // status is informational.
 func reportServiceStatus(p serviceControlPlan) error {
+	if len(p.Report) > 0 {
+		fmt.Printf("\n%s %s\n", bold("Seamless"), dim("status"))
+		for _, row := range p.Report {
+			fieldRow(row[0], row[1])
+		}
+		return nil
+	}
 	if len(p.Cmds) == 0 {
 		return nil
 	}
+	defer func() {
+		if p.Note != "" {
+			fmt.Printf("%s %s\n", dim("note:"), dim(p.Note))
+		}
+	}()
 	out, err := p.Cmds[0].CombinedOutput()
 	if s := strings.TrimRight(string(out), "\n"); s != "" {
 		fmt.Println(s)

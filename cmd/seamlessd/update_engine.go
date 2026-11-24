@@ -142,8 +142,8 @@ func realUpdaterDeps(stdout io.Writer) updaterDeps {
 		restorePending: backup.RestorePending,
 		service: func(action serviceAction) (bool, string) {
 			// Resolved for each action: the installer may have moved the
-			// task to its per-user name in between.
-			plan := serviceControl(action, runtime.GOOS, home, os.Getuid(), serviceTaskForControl())
+			// task to its per-user name, or the daemon, in between.
+			plan := serviceControl(action, runtime.GOOS, home, os.Getuid(), resolveWindowsService())
 			ok, out := runControlCmds(plan.Cmds)
 			if !ok && len(plan.Fallback) > 0 {
 				ok, out = runControlCmds(plan.Fallback)

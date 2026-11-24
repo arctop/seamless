@@ -91,7 +91,7 @@ func TestServiceTeardown(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := serviceTeardown(tt.goos, home, 501, "/opt/bin", tt.updateTask, tt.serviceTasks)
+			p := serviceTeardown(tt.goos, home, 501, "/opt/bin", tt.updateTask, windowsService{tasks: tt.serviceTasks})
 			require.Equal(t, tt.wantLabel, p.Label)
 			require.Equal(t, tt.wantStop, argvs(p.StopCmds))
 			require.Equal(t, tt.wantRemove, p.RemoveFiles)

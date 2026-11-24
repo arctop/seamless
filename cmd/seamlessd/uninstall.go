@@ -196,7 +196,7 @@ func uninstallService(isClient bool, installDir string, dryRun bool) {
 		fieldRow("kind", dim("not installed (role: client -- this install runs no daemon)"))
 		return
 	}
-	runTeardown(serviceTeardown(runtime.GOOS, homeDir(), os.Getuid(), installDir, ownUpdateTask(), ownServiceTasks()), dryRun)
+	runTeardown(serviceTeardown(runtime.GOOS, homeDir(), os.Getuid(), installDir, ownUpdateTask(), resolveWindowsService()), dryRun)
 }
 
 // purgePaths is what --purge deletes: the config dir always, the data dir only
@@ -304,10 +304,12 @@ type serviceTeardownPlan struct {
 // service management lives in Go; install writes the plist/unit/task from the
 // Makefile and the two installer scripts, so the identifiers are re-derived here.
 //
-// On Windows serviceTasks names this user's Seamless tasks (ownServiceTasks):
-// the per-user one, and a \Seamless an earlier release registered when its
-// principal is this user. Another user's task is not this uninstall's to end
-// or delete, so it is never named.
+// On Windows win is what runs this user's daemon (resolveWindowsService):
+// this user's Seamless tasks -- the per-user one, and a \Seamless an earlier
+// release registered when its principal is this user; another user's task is
+// not this uninstall's to end or delete, so it is never named -- the
+// installer's Startup-shortcut fallback, and the daemon running from this
+// install however it was started (windowsTeardown).
 //
 // It also removes what the daemon's updater spawner leaves behind
 // (update_spawn.go): on Windows the per-user update task, updateTask ("" when
@@ -316,7 +318,7 @@ type serviceTeardownPlan struct {
 // cannot restart what this removes (--collect clears a finished one). The
 // darwin updater is a plain process in a session of its own, which leaves
 // nothing to remove.
-func serviceTeardown(goos, home string, uid int, installDir, updateTask string, serviceTasks []string) serviceTeardownPlan {
+func serviceTeardown(goos, home string, uid int, installDir, updateTask string, win windowsService) serviceTeardownPlan {
 	switch goos {
 	case "darwin":
 		// Both labels, the legacy one too: a Mac not yet migrated has only
@@ -329,24 +331,7 @@ func serviceTeardown(goos, home string, uid int, installDir, updateTask string, 
 		}
 		return p
 	case "windows":
-		var stop []*exec.Cmd
-		for _, task := range serviceTasks {
-			stop = append(stop,
-				exec.Command("schtasks", "/End", "/TN", task),
-				exec.Command("schtasks", "/Delete", "/TN", task, "/F"))
-		}
-		if updateTask != "" {
-			stop = append(stop, exec.Command("schtasks", "/Delete", "/TN", updateTask, "/F"))
-		}
-		label := "Scheduled Task (" + strings.Join(serviceTasks, ", ") + ")"
-		if len(serviceTasks) == 0 {
-			label = "Scheduled Task (none of yours registered)"
-		}
-		return serviceTeardownPlan{
-			Label:     label,
-			StopCmds:  stop,
-			PathEdits: []*exec.Cmd{exec.Command("powershell", "-NoProfile", "-Command", windowsPathRemoveScript(installDir))},
-		}
+		return windowsTeardown(win, installDir, updateTask)
 	default: // linux and other unixes run the systemd --user unit
 		unit := filepath.Join(home, ".config", "systemd", "user", systemdUnit)
 		return serviceTeardownPlan{
