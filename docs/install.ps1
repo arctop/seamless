@@ -1030,11 +1030,17 @@ function Get-ServedVersion {
 # the version, no credential is sent, and the certificate covers the host of
 # server_url rather than the bind address being dialed. Matches wait_healthy in
 # docs/install and serverReachable in cmd/seamlessd/console.go.
+#
+# The 30s is a deadline, not a count of rounds: on Windows a probe of a port
+# nothing listens on runs to its 1s timeout instead of failing at once (the
+# stack retries the refused connect), so 150 rounds of the two probes kept a
+# person whose daemon never started waiting over six minutes.
 function Wait-Healthy {
     param([string]$Addr, [string]$Version)
     $urls = @("http://$Addr/healthz", "https://$Addr/healthz")
     $seen = ''
-    for ($i = 0; $i -lt 150; $i++) {
+    $clock = [Diagnostics.Stopwatch]::StartNew()
+    while ($clock.Elapsed.TotalSeconds -lt 30) {
         foreach ($u in $urls) {
             try {
                 $r = Invoke-HealthProbe $u
