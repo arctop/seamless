@@ -721,9 +721,10 @@ seamlessd install-service --config PATH --log-file PATH
 ```
 
 Windows only. Registers and starts the Windows service: the at-logon Scheduled
-Task `Seamless`, running this `seamlessd.exe serve --config PATH --log-file
-PATH` as you, with no admin. The [Windows installer](https://thereisnospoon.org/docs/install/) runs it; run it
-yourself to put back a task that was deleted, with the installer's paths:
+Task `Seamless-<your SID>`, running this `seamlessd.exe serve --config PATH
+--log-file PATH` as you, with no admin. The [Windows installer](https://thereisnospoon.org/docs/install/) runs
+it; run it yourself to put back a task that was deleted, with the installer's
+paths:
 
 ```powershell
 seamlessd install-service --config $HOME\.config\seamless\seamless.yaml --log-file $HOME\.seamless\seamlessd.log
@@ -733,19 +734,22 @@ The task is the one [the service reference](https://thereisnospoon.org/docs/refe
 describes. It is registered from its XML definition with `schtasks /Create
 /XML`, which works from any Windows session, including SSH and a remote
 management agent's, where PowerShell's Task Scheduler cmdlets cannot reach the
-Task Scheduler. A task it registered but could not start is removed again, and
-it refuses to replace a `Seamless` task that belongs to another user of the
-computer, which needs an administrator. Either way it exits 1 with one line
-saying why; the installer shows that line and falls back to a Startup-folder
-shortcut.
+Task Scheduler. The name carries your SID because a task's name is the whole
+PC's: each user of the PC gets a task of their own. A task it registered but
+could not start is removed again, and it exits 1 with one line saying why; the
+installer shows that line and falls back to a Startup-folder shortcut.
 
-The task's definition gives your account full control of it, so a task an
-elevated PowerShell (Run as administrator) created is still yours to replace
-from an ordinary one. One an earlier release's installer created that way is
-not: install-service starts it as it is when it already runs this
-`seamlessd.exe` with the same paths, and otherwise exits 1 asking you to delete
-it once from an elevated PowerShell (`schtasks /delete /tn Seamless /f`) and
-re-run the installer.
+A release before the per-user name registered `Seamless`. Once the new task is
+registered, install-service ends and deletes a `Seamless` task of yours, and
+never touches another user's. The task's definition gives your account full
+control of it, so a task an elevated PowerShell (Run as administrator)
+registered is still yours to replace from an ordinary one. A `Seamless` an
+earlier release's installer created that way is not, and only an administrator
+may delete it: install-service then removes the new task again, so that two
+tasks never start two daemons at logon. It starts the old task as it is when
+it already runs this `seamlessd.exe` with the same paths, and otherwise exits 1
+asking you to delete it once from an elevated PowerShell (`schtasks /delete
+/tn Seamless /f`) and re-run the installer.
 
 ## seamlessd client-config {#seamlessd_client_config}
 

@@ -741,10 +741,13 @@ restart the relay ([after an update](#the-relays-root-step)).
 
 ## Windows: a second user on one box
 
-The Windows install is per-user in where it writes (`%USERPROFILE%`) but **not**
-isolated in what it registers: the Scheduled Task name (`Seamless`) is global
-and the port is shared, so the last installer to run wins and a task belonging
-to another account cannot be replaced without admin.
+The Windows install is per-user in where it writes (`%USERPROFILE%`) and in its
+Scheduled Task (`Seamless-<SID>`, one for each user), but **not** in its port:
+every user's daemon listens on `127.0.0.1:8081` by default, and while one of
+them holds it, another user's daemon cannot bind it, and the second user's
+installer health check can answer from the first user's daemon. A release
+before the per-user task name was not isolated in its task either: its
+`Seamless` task was the whole PC's, so the last installer to run won.
 
 The client role is the clean way out of that collision, because **a client
 install registers no Scheduled Task at all**. The first user runs the server;

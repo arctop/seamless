@@ -97,16 +97,17 @@ type serviceTaskPlan struct {
 	definition []byte
 }
 
-// newServiceTaskPlan plans the Seamless task for the user sid, whose account
-// name the logon trigger names, running exe with arguments: serviceTaskArgs
-// already escaped and joined into the one string a task action carries
-// (taskArguments).
+// newServiceTaskPlan plans the Seamless task of the user sid
+// (serviceTaskName), whose account name the logon trigger names, running exe
+// with arguments: serviceTaskArgs already escaped and joined into the one
+// string a task action carries (taskArguments).
 func newServiceTaskPlan(sid, account, exe, arguments string) (serviceTaskPlan, error) {
+	name := serviceTaskName(sid)
 	def, err := taskDefinitionXML(serviceTaskTemplate, sid, serviceTaskDescription, account, sid, exe, arguments)
 	if err != nil {
-		return serviceTaskPlan{}, fmt.Errorf("escape the %s task definition: %w", scheduledTask, err)
+		return serviceTaskPlan{}, fmt.Errorf("escape the %s task definition: %w", name, err)
 	}
-	return serviceTaskPlan{name: scheduledTask, definition: def}, nil
+	return serviceTaskPlan{name: name, definition: def}, nil
 }
 
 // create is the schtasks command that registers the task from the definition
@@ -115,8 +116,10 @@ func (p serviceTaskPlan) create(path string) []string {
 	return []string{"schtasks", "/Create", "/TN", p.name, "/XML", path, "/F"}
 }
 
-// run is the schtasks command that starts the task.
+// run is the schtasks command that starts the task, and end the one that
+// stops it.
 func (p serviceTaskPlan) run() []string { return []string{"schtasks", "/Run", "/TN", p.name} }
+func (p serviceTaskPlan) end() []string { return []string{"schtasks", "/End", "/TN", p.name} }
 
 // remove is the schtasks command that unregisters the task.
 func (p serviceTaskPlan) remove() []string {
@@ -136,10 +139,9 @@ type serviceTaskEnv struct {
 	// Windows does.
 	arguments func(args []string) string
 	splitArgs func(arguments string) ([]string, error)
-	// queryXML reads the registered task's definition (schtasks /Query /XML);
-	// an error means none could be read.
-	queryXML func() ([]byte, error)
-	// isCurrentUser reports whether a task principal names this user.
+	// queryXML and isCurrentUser read the tasks already registered
+	// (taskLookup).
+	queryXML      func(name string) ([]byte, error)
 	isCurrentUser func(account string) (bool, error)
 	// write writes a definition to a file of its own and returns its path;
 	// remove deletes that file again.
@@ -149,91 +151,93 @@ type serviceTaskEnv struct {
 	run func(argv []string) ([]byte, error)
 }
 
-// registerServiceTask registers the Seamless task for config and logFile and
-// starts it. It leaves either a task that is registered and running or none
-// of this run's: a task that cannot start is removed again, so the
-// installer's Startup-folder fallback never runs a second daemon beside it at
-// the next logon. The one exception, reported as kept: a task of this user's
-// that schtasks will not replace -- one an elevated PowerShell created
-// without the descriptor in serviceTaskTemplate -- but that already runs this
-// seamlessd.exe with these arguments is started as it is. It still starts the
-// daemon at logon, and this run cannot remove it, so the fallback would only
-// add a second starter. Every error is one line for the person installing,
-// which install.ps1 shows as it is.
-func registerServiceTask(env serviceTaskEnv, config, logFile string) (kept bool, err error) {
-	current := readRegisteredTask(env)
-	if current.foreign {
-		return false, fmt.Errorf("could not register the %s Scheduled Task: it belongs to %s, and replacing it needs admin "+
-			"(one-time fix: an elevated 'schtasks /delete /tn %s /f', then re-run the installer)", scheduledTask, current.def.UserID, scheduledTask)
+// registeredService is what registerServiceTask left registered and
+// running: the task's name, and whether it is a task it found and kept rather
+// than its own, and whether it removed this user's \Seamless.
+type registeredService struct {
+	name           string
+	kept, migrated bool
+}
+
+// registerServiceTask registers this user's Seamless task for config and
+// logFile and starts it. It leaves either a task that is registered and
+// running or none of this run's: a task that cannot start is removed again,
+// so the installer's Startup-folder fallback never runs a second daemon
+// beside it at the next logon. Every error is one line for the person
+// installing, which install.ps1 shows as it is.
+//
+// A \Seamless of this user's, which a release before the per-user name
+// registered, is ended and deleted once the new task is registered. Only an
+// admin may delete one an elevated PowerShell created, and two tasks would
+// start two daemons at every logon, so then the new task goes again: the old
+// one is started as it is (kept) when it already runs this seamlessd.exe with
+// these arguments, and otherwise the error names the admin's one-time fix. It
+// is kept the same way when task creation is barred. Another user's
+// \Seamless is left alone.
+func registerServiceTask(env serviceTaskEnv, config, logFile string) (registeredService, error) {
+	lookup := env.lookup()
+	name := serviceTaskName(env.sid)
+	if current := lookup.read(name); current.foreign {
+		return registeredService{}, fmt.Errorf("could not register the %s Scheduled Task: it belongs to %s, and replacing it needs admin "+
+			"(one-time fix: an elevated 'schtasks /delete /tn %s /f', then re-run the installer)", name, current.def.UserID, name)
 	}
+	legacy := lookup.read(legacyServiceTask)
 	args := serviceTaskArgs(config, logFile)
 	plan, err := newServiceTaskPlan(env.sid, env.account, env.exe, env.arguments(args))
 	if err != nil {
-		return false, err
+		return registeredService{}, err
 	}
 	path, err := env.write(plan.definition)
 	if err != nil {
-		return false, fmt.Errorf("could not register the %s Scheduled Task: %w", scheduledTask, err)
+		return registeredService{}, fmt.Errorf("could not register the %s Scheduled Task: %w", name, err)
 	}
 	defer func() {
 		_ = env.remove(path) //nolint:errcheck // a leftover definition is inert, and the next run writes its own
 	}()
+	old := serviceTaskPlan{name: legacyServiceTask}
 	if out, err := env.run(plan.create(path)); err != nil {
-		createErr := withFirstLine(err, out)
-		switch {
-		case current.runs(env, env.exe, args):
-			if out, err := env.run(plan.run()); err != nil {
-				return false, fmt.Errorf("could not start the %s Scheduled Task already registered for this seamlessd.exe: schtasks /Run: %w",
-					scheduledTask, withFirstLine(err, out))
-			}
-			return true, nil
-		case current.mine:
-			return false, fmt.Errorf("could not replace the %s Scheduled Task: schtasks /Create: %w "+
-				"(if an elevated PowerShell created it, only an admin may replace it; one-time fix: "+
-				"an elevated 'schtasks /delete /tn %s /f', then re-run the installer)", scheduledTask, createErr, scheduledTask)
-		default:
-			// A task this user may not read reads as none: the name may be
-			// another user's, as likely as task creation is barred.
-			return false, fmt.Errorf("could not register the %s Scheduled Task: schtasks /Create: %w "+
-				"(another user of this computer may hold the name %s, which only an admin may delete, "+
-				"or group policy bars task creation for standard users)", scheduledTask, createErr, scheduledTask)
+		if legacy.runs(env, env.exe, args) {
+			return keepLegacyTask(env, old)
 		}
+		return registeredService{}, fmt.Errorf("could not register the %s Scheduled Task: schtasks /Create: %w "+
+			"(group policy may bar task creation for standard users)", name, withFirstLine(err, out))
+	}
+	migrated := false
+	if legacy.mine {
+		_, _ = env.run(old.end()) //nolint:errcheck // best-effort: a task that is not running has nothing to end
+		if out, err := env.run(old.remove()); err != nil {
+			_, _ = env.run(plan.remove()) //nolint:errcheck // best-effort: the result below is the one to report
+			if legacy.runs(env, env.exe, args) {
+				return keepLegacyTask(env, old)
+			}
+			return registeredService{}, fmt.Errorf("could not replace the %s Scheduled Task an earlier release registered: schtasks /Delete: %w "+
+				"(if an elevated PowerShell created it, only an admin may delete it; one-time fix: "+
+				"an elevated 'schtasks /delete /tn %s /f', then re-run the installer)", legacyServiceTask, withFirstLine(err, out), legacyServiceTask)
+		}
+		migrated = true
 	}
 	if out, err := env.run(plan.run()); err != nil {
 		_, _ = env.run(plan.remove()) //nolint:errcheck // best-effort: the error below is the one to report
-		return false, fmt.Errorf("registered the %s Scheduled Task, but it could not start, so it was removed again: schtasks /Run: %w",
-			scheduledTask, withFirstLine(err, out))
+		return registeredService{}, fmt.Errorf("registered the %s Scheduled Task, but it could not start, so it was removed again: schtasks /Run: %w",
+			name, withFirstLine(err, out))
 	}
-	return false, nil
+	return registeredService{name: name, migrated: migrated}, nil
 }
 
-// registeredTask is the Seamless task already registered, as far as
-// install-service can read it.
-type registeredTask struct {
-	def taskDefinition
-	// mine and foreign say whose its principal is: this user's, or another
-	// account's -- the task name is the whole machine's, and only an admin may
-	// replace another user's task. Neither holds when there is no task, it
-	// cannot be read, or its principal cannot be matched to an account
-	// (schtasks /Create then has the last word).
-	mine, foreign bool
+// keepLegacyTask starts this user's \Seamless as it is: it already runs this
+// seamlessd.exe with these arguments and starts the daemon at logon, and this
+// run can neither register a task beside it nor delete it.
+func keepLegacyTask(env serviceTaskEnv, old serviceTaskPlan) (registeredService, error) {
+	if out, err := env.run(old.run()); err != nil {
+		return registeredService{}, fmt.Errorf("could not start the %s Scheduled Task already registered for this seamlessd.exe: schtasks /Run: %w",
+			old.name, withFirstLine(err, out))
+	}
+	return registeredService{name: old.name, kept: true}, nil
 }
 
-// readRegisteredTask reads the registered Seamless task.
-func readRegisteredTask(env serviceTaskEnv) registeredTask {
-	raw, err := env.queryXML()
-	if err != nil {
-		return registeredTask{}
-	}
-	def, err := parseTaskXML(raw)
-	if err != nil || def.UserID == "" {
-		return registeredTask{}
-	}
-	mine, err := env.isCurrentUser(def.UserID)
-	if err != nil {
-		return registeredTask{def: def}
-	}
-	return registeredTask{def: def, mine: mine, foreign: !mine}
+// lookup reads registered tasks through env.
+func (env serviceTaskEnv) lookup() taskLookup {
+	return taskLookup{sid: env.sid, queryXML: env.queryXML, isCurrentUser: env.isCurrentUser}
 }
 
 // runs reports whether the task is this user's and already runs exe with
@@ -256,9 +260,10 @@ func installServiceFlags(out io.Writer) (*flag.FlagSet, *string, *string) {
 	logFile := fs.String("log-file", "", "the log file the task's serve writes (`PATH`, absolute)")
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "usage: seamlessd install-service --config PATH --log-file PATH\n\n"+
-			"Registers and starts the Windows service: the at-logon Scheduled Task %s, running\n"+
-			"this seamlessd.exe as you, with no admin. The installer runs it; run it yourself\n"+
-			"to put back a task that was deleted. Windows only.\n\n", scheduledTask)
+			"Registers and starts the Windows service: the at-logon Scheduled Task %s<your SID>,\n"+
+			"running this seamlessd.exe as you, with no admin, in place of the %s task an earlier\n"+
+			"release registered. The installer runs it; run it yourself to put back a task that\n"+
+			"was deleted. Windows only.\n\n", serviceTaskPrefix, legacyServiceTask)
 		fs.PrintDefaults()
 		fmt.Fprintf(fs.Output(), "\n%s\n", serviceProtocolLine)
 	}
@@ -287,18 +292,22 @@ func runInstallService(args []string) error {
 	}
 	env, err := realServiceTaskEnv()
 	if err != nil {
-		return &ownerError{msg: "could not register the " + scheduledTask + " Scheduled Task: " + err.Error(), cause: err}
+		return &ownerError{msg: "could not register the Seamless Scheduled Task: " + err.Error(), cause: err}
 	}
-	kept, err := registerServiceTask(env, *config, *logFile)
+	got, err := registerServiceTask(env, *config, *logFile)
 	if err != nil {
 		return &ownerError{msg: err.Error(), cause: err}
 	}
-	if kept {
+	switch {
+	case got.kept:
 		fmt.Printf("started the %s Scheduled Task (at logon, as %s) as it was: it already runs this seamlessd.exe, "+
-			"and only an admin may replace it\n", scheduledTask, env.account)
-		return nil
+			"and only an admin may replace it\n", got.name, env.account)
+	case got.migrated:
+		fmt.Printf("registered and started the %s Scheduled Task (at logon, as %s) in place of the %s task an earlier release registered\n",
+			got.name, env.account, legacyServiceTask)
+	default:
+		fmt.Printf("registered and started the %s Scheduled Task (at logon, as %s)\n", got.name, env.account)
 	}
-	fmt.Printf("registered and started the %s Scheduled Task (at logon, as %s)\n", scheduledTask, env.account)
 	return nil
 }
 

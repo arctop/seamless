@@ -99,7 +99,7 @@ func TestServiceTaskPlan(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			p, err := newServiceTaskPlan(sid, tt.account, tt.exe, tt.arguments)
 			require.NoError(t, err)
-			require.Equal(t, scheduledTask, p.name)
+			require.Equal(t, "Seamless-"+sid, p.name, "the task is this user's alone: a task name is the whole computer's")
 			doc := decodeServiceTask(t, p.definition)
 
 			require.Equal(t, "D:(A;;FA;;;"+sid+")", doc.SecurityDescriptor,
@@ -138,10 +138,11 @@ func TestServiceTaskPlan(t *testing.T) {
 func TestServiceTaskPlan_Commands(t *testing.T) {
 	p, err := newServiceTaskPlan("S-1-5-21-9", `H\me`, `C:\s.exe`, "serve")
 	require.NoError(t, err)
-	require.Equal(t, []string{"schtasks", "/Create", "/TN", "Seamless", "/XML", `C:\t\seamless-task-1.xml`, "/F"},
+	require.Equal(t, []string{"schtasks", "/Create", "/TN", "Seamless-S-1-5-21-9", "/XML", `C:\t\seamless-task-1.xml`, "/F"},
 		p.create(`C:\t\seamless-task-1.xml`))
-	require.Equal(t, []string{"schtasks", "/Run", "/TN", "Seamless"}, p.run())
-	require.Equal(t, []string{"schtasks", "/Delete", "/TN", "Seamless", "/F"}, p.remove())
+	require.Equal(t, []string{"schtasks", "/Run", "/TN", "Seamless-S-1-5-21-9"}, p.run())
+	require.Equal(t, []string{"schtasks", "/End", "/TN", "Seamless-S-1-5-21-9"}, p.end())
+	require.Equal(t, []string{"schtasks", "/Delete", "/TN", "Seamless-S-1-5-21-9", "/F"}, p.remove())
 }
 
 // TestServiceTaskDescription_IsTheInstallers: install.ps1 still registers the
@@ -154,6 +155,13 @@ func TestServiceTaskDescription_IsTheInstallers(t *testing.T) {
 	require.NotNil(t, m, "docs/install.ps1 sets $TaskDescription")
 	require.Equal(t, serviceTaskDescription, string(m[1]))
 	require.Contains(t, serviceTaskDescription, update.InstallerMarker)
+
+	m = regexp.MustCompile(`(?m)^\$TaskName = '([^']*)' \+ `).FindSubmatch(raw)
+	require.NotNil(t, m, "docs/install.ps1 sets $TaskName to the per-user name")
+	require.Equal(t, serviceTaskPrefix, string(m[1]), "install.ps1 stops and reports the task install-service registers")
+	m = regexp.MustCompile(`(?m)^\$LegacyTaskName = '([^']*)'`).FindSubmatch(raw)
+	require.NotNil(t, m, "docs/install.ps1 sets $LegacyTaskName")
+	require.Equal(t, legacyServiceTask, string(m[1]))
 
 	m = regexp.MustCompile(`(?m)^\$ServiceProtocol = '([^']*)'`).FindSubmatch(raw)
 	require.NotNil(t, m, "docs/install.ps1 sets $ServiceProtocol")
@@ -179,9 +187,9 @@ func TestRunInstallService_RefusesOtherOSes(t *testing.T) {
 
 // fakeServiceTaskEnv records what registerServiceTask ran and wrote.
 type fakeServiceTaskEnv struct {
-	existing []byte // the registered task's XML; nil for none
-	mine     bool   // whether its principal is this user
-	mineErr  error  // isCurrentUser's error
+	tasks   map[string][]byte // the registered tasks' XML this user can read, by name
+	mineErr error             // isCurrentUser's error
+	// runErr and runOut answer one schtasks command, keyed "/Verb name".
 	runErr   map[string]error
 	runOut   map[string]string
 	writeErr error
@@ -191,18 +199,20 @@ type fakeServiceTaskEnv struct {
 	removed []string
 }
 
+const fakeSID = "S-1-5-21-1-2-3-1001"
+
 func (f *fakeServiceTaskEnv) env() serviceTaskEnv {
 	return serviceTaskEnv{
-		sid: "S-1-5-21-1-2-3-1001", account: `DESKTOP-1\me`, exe: `C:\Users\me\.local\bin\seamlessd.exe`,
+		sid: fakeSID, account: `DESKTOP-1\me`, exe: `C:\Users\me\.local\bin\seamlessd.exe`,
 		arguments: func(args []string) string { return strings.Join(args, " ") },
 		splitArgs: func(s string) ([]string, error) { return strings.Fields(s), nil },
-		queryXML: func() ([]byte, error) {
-			if f.existing == nil {
-				return nil, errors.New("exit status 1")
+		queryXML: func(name string) ([]byte, error) {
+			if raw, ok := f.tasks[name]; ok {
+				return raw, nil
 			}
-			return f.existing, nil
+			return nil, errors.New("exit status 1")
 		},
-		isCurrentUser: func(string) (bool, error) { return f.mine, f.mineErr },
+		isCurrentUser: func(account string) (bool, error) { return account == fakeSID, f.mineErr },
 		write: func(def []byte) (string, error) {
 			if f.writeErr != nil {
 				return "", f.writeErr
@@ -213,9 +223,20 @@ func (f *fakeServiceTaskEnv) env() serviceTaskEnv {
 		remove: func(path string) error { f.removed = append(f.removed, path); return nil },
 		run: func(argv []string) ([]byte, error) {
 			f.ran = append(f.ran, argv)
-			return []byte(f.runOut[argv[1]]), f.runErr[argv[1]]
+			key := argv[1] + " " + argv[3]
+			return []byte(f.runOut[key]), f.runErr[key]
 		},
 	}
+}
+
+// fails makes one schtasks command fail with out.
+func (f *fakeServiceTaskEnv) fails(key, out string) *fakeServiceTaskEnv {
+	if f.runErr == nil {
+		f.runErr, f.runOut = map[string]error{}, map[string]string{}
+	}
+	f.runErr[key] = errors.New("exit status 1")
+	f.runOut[key] = out
+	return f
 }
 
 // serviceTaskXML is a registered task's definition as schtasks /Query /XML
@@ -232,23 +253,28 @@ func TestRegisterServiceTask(t *testing.T) {
 		defPath = `C:\Users\me\AppData\Local\Temp\seamless-task-1.xml`
 		exe     = `C:\Users\me\.local\bin\seamlessd.exe`
 		args    = `serve --config C:\c.yaml --log-file C:\l.log`
+		task    = "Seamless-" + fakeSID
+		denied  = "ERROR: Access is denied.\r\n"
 	)
-	create := []string{"schtasks", "/Create", "/TN", "Seamless", "/XML", defPath, "/F"}
-	run := []string{"schtasks", "/Run", "/TN", "Seamless"}
-	remove := []string{"schtasks", "/Delete", "/TN", "Seamless", "/F"}
+	create := []string{"schtasks", "/Create", "/TN", task, "/XML", defPath, "/F"}
+	run := []string{"schtasks", "/Run", "/TN", task}
+	remove := []string{"schtasks", "/Delete", "/TN", task, "/F"}
+	endOld := []string{"schtasks", "/End", "/TN", "Seamless"}
+	removeOld := []string{"schtasks", "/Delete", "/TN", "Seamless", "/F"}
+	runOld := []string{"schtasks", "/Run", "/TN", "Seamless"}
+	// same is a task of this user's that runs this exe and args, quoted the
+	// way install.ps1's cmdlets quoted them; other is another user's.
+	same := serviceTaskXML(fakeSID, `"C:\USERS\me\.local\bin\seamlessd.exe"`, args)
 	other := serviceTaskXML("S-1-5-21-1-2-3-1002", exe, args)
-	same := serviceTaskXML("S-1-5-21-1-2-3-1001", `"C:\USERS\me\.local\bin\seamlessd.exe"`, args)
-	denied := func(f *fakeServiceTaskEnv) *fakeServiceTaskEnv {
-		f.runErr = map[string]error{"/Create": errors.New("exit status 1")}
-		f.runOut = map[string]string{"/Create": "ERROR: Access is denied.\r\n"}
-		return f
+	register := func(f *fakeServiceTaskEnv) (registeredService, error) {
+		return registerServiceTask(f.env(), `C:\c.yaml`, `C:\l.log`)
 	}
 
-	t.Run("no task yet: register, then start", func(t *testing.T) {
+	t.Run("no task yet: register the per-user task, then start it", func(t *testing.T) {
 		f := &fakeServiceTaskEnv{}
-		kept, err := registerServiceTask(f.env(), `C:\c.yaml`, `C:\l.log`)
+		got, err := register(f)
 		require.NoError(t, err)
-		require.False(t, kept)
+		require.Equal(t, registeredService{name: task}, got)
 		require.Equal(t, [][]string{create, run}, f.ran)
 		require.Equal(t, []string{defPath}, f.removed, "no definition is left behind")
 		doc := decodeServiceTask(t, f.written)
@@ -257,85 +283,119 @@ func TestRegisterServiceTask(t *testing.T) {
 	})
 
 	t.Run("this user's task: replaced", func(t *testing.T) {
-		f := &fakeServiceTaskEnv{existing: same, mine: true}
-		kept, err := registerServiceTask(f.env(), `C:\c.yaml`, `C:\l.log`)
+		f := &fakeServiceTaskEnv{tasks: map[string][]byte{task: same}}
+		got, err := register(f)
 		require.NoError(t, err)
-		require.False(t, kept, "a task schtasks replaces is registered afresh, descriptor and all")
+		require.Equal(t, registeredService{name: task}, got)
 		require.Equal(t, [][]string{create, run}, f.ran)
 	})
 
-	t.Run("another user's task: refused before schtasks, naming the fix", func(t *testing.T) {
-		f := &fakeServiceTaskEnv{existing: other}
-		_, err := registerServiceTask(f.env(), `C:\c.yaml`, `C:\l.log`)
+	t.Run("a task of this name with another principal: refused before schtasks", func(t *testing.T) {
+		f := &fakeServiceTaskEnv{tasks: map[string][]byte{task: other}}
+		_, err := register(f)
 		require.ErrorContains(t, err, "belongs to S-1-5-21-1-2-3-1002")
-		require.ErrorContains(t, err, "schtasks /delete /tn Seamless /f")
+		require.ErrorContains(t, err, "schtasks /delete /tn "+task+" /f")
 		require.Empty(t, f.ran)
 		require.Nil(t, f.written)
 	})
 
-	t.Run("an unreadable task: schtasks decides", func(t *testing.T) {
-		f := &fakeServiceTaskEnv{existing: []byte("not xml")}
-		_, err := registerServiceTask(f.env(), `C:\c.yaml`, `C:\l.log`)
+	t.Run("this user's Seamless from an earlier release: moved to the per-user name", func(t *testing.T) {
+		f := &fakeServiceTaskEnv{tasks: map[string][]byte{"Seamless": same}}
+		got, err := register(f)
 		require.NoError(t, err)
-		require.Equal(t, [][]string{create, run}, f.ran)
+		require.Equal(t, registeredService{name: task, migrated: true}, got)
+		require.Equal(t, [][]string{create, endOld, removeOld, run}, f.ran,
+			"the old task goes only once the new one is registered, and before it starts")
 	})
 
-	t.Run("create refused, no task: its message, nothing started", func(t *testing.T) {
-		f := denied(&fakeServiceTaskEnv{})
-		_, err := registerServiceTask(f.env(), `C:\c.yaml`, `C:\l.log`)
-		require.ErrorContains(t, err, "schtasks /Create: exit status 1: ERROR: Access is denied.")
-		require.ErrorContains(t, err, "group policy")
-		require.ErrorContains(t, err, "another user of this computer may hold the name Seamless", "a task this user may not read looks like none")
-		require.Equal(t, [][]string{create}, f.ran)
-		require.Equal(t, []string{defPath}, f.removed)
-	})
-
-	t.Run("create refused over this user's task that runs this exe and args: kept and started", func(t *testing.T) {
-		f := denied(&fakeServiceTaskEnv{existing: same, mine: true})
-		kept, err := registerServiceTask(f.env(), `C:\c.yaml`, `C:\l.log`)
+	t.Run("an old Seamless that is not running: deleted all the same", func(t *testing.T) {
+		f := (&fakeServiceTaskEnv{tasks: map[string][]byte{"Seamless": same}}).
+			fails("/End Seamless", "ERROR: The task is not running.\r\n")
+		got, err := register(f)
 		require.NoError(t, err)
-		require.True(t, kept)
-		require.Equal(t, [][]string{create, run}, f.ran, "never removed: this run could not, and it already starts the daemon at logon")
+		require.True(t, got.migrated)
+		require.Equal(t, [][]string{create, endOld, removeOld, run}, f.ran)
 	})
 
-	t.Run("kept, but it cannot start: the error, the task left alone", func(t *testing.T) {
-		f := denied(&fakeServiceTaskEnv{existing: same, mine: true})
-		f.runErr["/Run"] = errors.New("exit status 1")
-		f.runOut["/Run"] = "ERROR: The task has been disabled.\r\n"
-		_, err := registerServiceTask(f.env(), `C:\c.yaml`, `C:\l.log`)
+	for name, tasks := range map[string]map[string][]byte{
+		"another user's Seamless":                   {"Seamless": other},
+		"a Seamless this user may not read":         {},
+		"a Seamless whose principal cannot be told": {"Seamless": serviceTaskXML("NOBODY", exe, args)},
+	} {
+		t.Run(name+": left alone, the per-user task registered beside it", func(t *testing.T) {
+			f := &fakeServiceTaskEnv{tasks: tasks}
+			if name == "a Seamless whose principal cannot be told" {
+				f.mineErr = errors.New("no mapping")
+			}
+			got, err := register(f)
+			require.NoError(t, err)
+			require.Equal(t, registeredService{name: task}, got)
+			require.Equal(t, [][]string{create, run}, f.ran, "never ended or deleted: it is not this user's")
+		})
+	}
+
+	t.Run("an old Seamless only an admin may delete, running this exe: the new task goes, the old one is kept and started", func(t *testing.T) {
+		f := (&fakeServiceTaskEnv{tasks: map[string][]byte{"Seamless": same}}).fails("/Delete Seamless", denied)
+		got, err := register(f)
+		require.NoError(t, err)
+		require.Equal(t, registeredService{name: "Seamless", kept: true}, got)
+		require.Equal(t, [][]string{create, endOld, removeOld, remove, runOld}, f.ran,
+			"two tasks would start two daemons at every logon")
+	})
+
+	t.Run("kept, but the old task cannot start: the error", func(t *testing.T) {
+		f := (&fakeServiceTaskEnv{tasks: map[string][]byte{"Seamless": same}}).
+			fails("/Delete Seamless", denied).fails("/Run Seamless", "ERROR: The task has been disabled.\r\n")
+		_, err := register(f)
 		require.ErrorContains(t, err, "could not start the Seamless Scheduled Task already registered")
 		require.ErrorContains(t, err, "ERROR: The task has been disabled.")
-		require.Equal(t, [][]string{create, run}, f.ran)
+		require.Equal(t, [][]string{create, endOld, removeOld, remove, runOld}, f.ran)
 	})
 
 	for _, tt := range []struct{ name, command, arguments string }{
 		{"another exe", `D:\old\seamlessd.exe`, args},
 		{"other arguments", exe, `serve --config C:\other.yaml --log-file C:\l.log`},
 	} {
-		t.Run("create refused over this user's task with "+tt.name+": names the admin's fix", func(t *testing.T) {
-			f := denied(&fakeServiceTaskEnv{existing: serviceTaskXML("S-1-5-21-1-2-3-1001", tt.command, tt.arguments), mine: true})
-			_, err := registerServiceTask(f.env(), `C:\c.yaml`, `C:\l.log`)
-			require.ErrorContains(t, err, "could not replace the Seamless Scheduled Task")
+		t.Run("an old Seamless only an admin may delete, with "+tt.name+": names the admin's fix", func(t *testing.T) {
+			f := (&fakeServiceTaskEnv{tasks: map[string][]byte{"Seamless": serviceTaskXML(fakeSID, tt.command, tt.arguments)}}).
+				fails("/Delete Seamless", denied)
+			_, err := register(f)
+			require.ErrorContains(t, err, "could not replace the Seamless Scheduled Task an earlier release registered")
 			require.ErrorContains(t, err, "ERROR: Access is denied.")
-			require.ErrorContains(t, err, "an elevated 'schtasks /delete /tn Seamless /f', then re-run the installer",
-				"an elevated re-run would not do: replacing a task keeps its descriptor")
-			require.Equal(t, [][]string{create}, f.ran, "a task that would start something else is not started")
+			require.ErrorContains(t, err, "an elevated 'schtasks /delete /tn Seamless /f', then re-run the installer")
+			require.Equal(t, [][]string{create, endOld, removeOld, remove}, f.ran,
+				"neither task is started: the old one would start something else")
 		})
 	}
 
-	t.Run("create refused over a task whose principal cannot be told: not kept", func(t *testing.T) {
-		f := denied(&fakeServiceTaskEnv{existing: same, mineErr: errors.New("no mapping")})
-		_, err := registerServiceTask(f.env(), `C:\c.yaml`, `C:\l.log`)
+	t.Run("create refused, no task: its message, nothing started", func(t *testing.T) {
+		f := (&fakeServiceTaskEnv{}).fails("/Create "+task, denied)
+		_, err := register(f)
+		require.ErrorContains(t, err, "could not register the "+task+" Scheduled Task: schtasks /Create: exit status 1: ERROR: Access is denied.")
+		require.ErrorContains(t, err, "group policy")
+		require.Equal(t, [][]string{create}, f.ran)
+		require.Equal(t, []string{defPath}, f.removed)
+	})
+
+	t.Run("create refused, an old Seamless of this user's running this exe: kept and started", func(t *testing.T) {
+		f := (&fakeServiceTaskEnv{tasks: map[string][]byte{"Seamless": same}}).fails("/Create "+task, denied)
+		got, err := register(f)
+		require.NoError(t, err)
+		require.Equal(t, registeredService{name: "Seamless", kept: true}, got)
+		require.Equal(t, [][]string{create, runOld}, f.ran, "it already starts the daemon at logon")
+	})
+
+	t.Run("create refused, an old Seamless running something else: not kept", func(t *testing.T) {
+		f := (&fakeServiceTaskEnv{tasks: map[string][]byte{"Seamless": serviceTaskXML(fakeSID, `D:\old\seamlessd.exe`, args)}}).
+			fails("/Create "+task, denied)
+		_, err := register(f)
 		require.ErrorContains(t, err, "group policy")
 		require.Equal(t, [][]string{create}, f.ran)
 	})
 
 	t.Run("registered but cannot start: removed again", func(t *testing.T) {
-		f := &fakeServiceTaskEnv{
-			runErr: map[string]error{"/Run": errors.New("exit status 1")},
-			runOut: map[string]string{"/Run": "ERROR: The task image is corrupt.\r\n"},
-		}
-		_, err := registerServiceTask(f.env(), `C:\c.yaml`, `C:\l.log`)
+		f := (&fakeServiceTaskEnv{}).fails("/Run "+task, "ERROR: The task image is corrupt.\r\n")
+		_, err := register(f)
 		require.ErrorContains(t, err, "removed again")
 		require.ErrorContains(t, err, "ERROR: The task image is corrupt.")
 		require.Equal(t, [][]string{create, run, remove}, f.ran,
@@ -344,7 +404,7 @@ func TestRegisterServiceTask(t *testing.T) {
 
 	t.Run("definition not written: nothing run", func(t *testing.T) {
 		f := &fakeServiceTaskEnv{writeErr: errors.New("disk full")}
-		_, err := registerServiceTask(f.env(), `C:\c.yaml`, `C:\l.log`)
+		_, err := register(f)
 		require.ErrorContains(t, err, "disk full")
 		require.Empty(t, f.ran)
 		require.Empty(t, f.removed)

@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 
 	"golang.org/x/sys/windows"
 )
@@ -30,16 +29,12 @@ func realServiceTaskEnv() (serviceTaskEnv, error) {
 		account = trimAccount(domain, name)
 	}
 	return serviceTaskEnv{
-		sid:       sid.String(),
-		account:   account,
-		exe:       exe,
-		arguments: taskArguments,
-		splitArgs: splitTaskArguments,
-		queryXML: func() ([]byte, error) {
-			cmd := exec.Command("schtasks", "/Query", "/TN", scheduledTask, "/XML")
-			cmd.SysProcAttr = handoffProcAttr()
-			return cmd.Output()
-		},
+		sid:           sid.String(),
+		account:       account,
+		exe:           exe,
+		arguments:     taskArguments,
+		splitArgs:     splitTaskArguments,
+		queryXML:      queryTaskXML,
 		isCurrentUser: isCurrentUser,
 		write:         func(def []byte) (string, error) { return writeTaskFile("", "seamless-task-*.xml", def) },
 		remove:        os.Remove,

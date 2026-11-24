@@ -1037,10 +1037,13 @@ a fresh root step and paste its second block alone (a block printed before the
 update carries the old binary's hash, so its check refuses the new one), then
 restart the relay (<a href="#the-relays-root-step">after an update</a>).</p>
 <h2 id="windows-a-second-user-on-one-box">Windows: a second user on one box</h2>
-<p>The Windows install is per-user in where it writes (<code>%USERPROFILE%</code>) but <strong>not</strong>
-isolated in what it registers: the Scheduled Task name (<code>Seamless</code>) is global
-and the port is shared, so the last installer to run wins and a task belonging
-to another account cannot be replaced without admin.</p>
+<p>The Windows install is per-user in where it writes (<code>%USERPROFILE%</code>) and in its
+Scheduled Task (<code>Seamless-&lt;SID&gt;</code>, one for each user), but <strong>not</strong> in its port:
+every user's daemon listens on <code>127.0.0.1:8081</code> by default, and while one of
+them holds it, another user's daemon cannot bind it, and the second user's
+installer health check can answer from the first user's daemon. A release
+before the per-user task name was not isolated in its task either: its
+<code>Seamless</code> task was the whole PC's, so the last installer to run won.</p>
 <p>The client role is the clean way out of that collision, because <strong>a client
 install registers no Scheduled Task at all</strong>. The first user runs the server;
 every other user on the box pairs as a client against it. They do not even need

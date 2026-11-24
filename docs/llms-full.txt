@@ -9200,10 +9200,13 @@ restart the relay ([after an update](#the-relays-root-step)).
 
 ## Windows: a second user on one box
 
-The Windows install is per-user in where it writes (`%USERPROFILE%`) but **not**
-isolated in what it registers: the Scheduled Task name (`Seamless`) is global
-and the port is shared, so the last installer to run wins and a task belonging
-to another account cannot be replaced without admin.
+The Windows install is per-user in where it writes (`%USERPROFILE%`) and in its
+Scheduled Task (`Seamless-<SID>`, one for each user), but **not** in its port:
+every user's daemon listens on `127.0.0.1:8081` by default, and while one of
+them holds it, another user's daemon cannot bind it, and the second user's
+installer health check can answer from the first user's daemon. A release
+before the per-user task name was not isolated in its task either: its
+`Seamless` task was the whole PC's, so the last installer to run won.
 
 The client role is the clean way out of that collision, because **a client
 install registers no Scheduled Task at all**. The first user runs the server;
@@ -16425,9 +16428,10 @@ seamlessd install-service --config PATH --log-file PATH
 ```
 
 Windows only. Registers and starts the Windows service: the at-logon Scheduled
-Task `Seamless`, running this `seamlessd.exe serve --config PATH --log-file
-PATH` as you, with no admin. The [Windows installer](/install/) runs it; run it
-yourself to put back a task that was deleted, with the installer's paths:
+Task `Seamless-<your SID>`, running this `seamlessd.exe serve --config PATH
+--log-file PATH` as you, with no admin. The [Windows installer](/install/) runs
+it; run it yourself to put back a task that was deleted, with the installer's
+paths:
 
 ```powershell
 seamlessd install-service --config $HOME\.config\seamless\seamless.yaml --log-file $HOME\.seamless\seamlessd.log
@@ -16437,19 +16441,22 @@ The task is the one [the service reference](/reference/service/#the-service-on-y
 describes. It is registered from its XML definition with `schtasks /Create
 /XML`, which works from any Windows session, including SSH and a remote
 management agent's, where PowerShell's Task Scheduler cmdlets cannot reach the
-Task Scheduler. A task it registered but could not start is removed again, and
-it refuses to replace a `Seamless` task that belongs to another user of the
-computer, which needs an administrator. Either way it exits 1 with one line
-saying why; the installer shows that line and falls back to a Startup-folder
-shortcut.
+Task Scheduler. The name carries your SID because a task's name is the whole
+PC's: each user of the PC gets a task of their own. A task it registered but
+could not start is removed again, and it exits 1 with one line saying why; the
+installer shows that line and falls back to a Startup-folder shortcut.
 
-The task's definition gives your account full control of it, so a task an
-elevated PowerShell (Run as administrator) created is still yours to replace
-from an ordinary one. One an earlier release's installer created that way is
-not: install-service starts it as it is when it already runs this
-`seamlessd.exe` with the same paths, and otherwise exits 1 asking you to delete
-it once from an elevated PowerShell (`schtasks /delete /tn Seamless /f`) and
-re-run the installer.
+A release before the per-user name registered `Seamless`. Once the new task is
+registered, install-service ends and deletes a `Seamless` task of yours, and
+never touches another user's. The task's definition gives your account full
+control of it, so a task an elevated PowerShell (Run as administrator)
+registered is still yours to replace from an ordinary one. A `Seamless` an
+earlier release's installer created that way is not, and only an administrator
+may delete it: install-service then removes the new task again, so that two
+tasks never start two daemons at logon. It starts the old task as it is when
+it already runs this `seamlessd.exe` with the same paths, and otherwise exits 1
+asking you to delete it once from an elevated PowerShell (`schtasks /delete
+/tn Seamless /f`) and re-run the installer.
 
 ## seamlessd client-config {#seamlessd_client_config}
 
@@ -19102,9 +19109,11 @@ there.
 
 **Windows:**
 
-An at-logon Scheduled Task named `Seamless`, running as you (`LogonType
-Interactive`, no admin), logging to `~/.seamless/seamlessd.log`. The installer
-registers it with
+An at-logon Scheduled Task named `Seamless-<your SID>`, running as you
+(`LogonType Interactive`, no admin), logging to `~/.seamless/seamlessd.log`.
+Each user of the PC has a task of their own. A release before the per-user name
+registered `Seamless`; installing or updating moves your `Seamless` to the new
+name, and leaves another user's alone. The installer registers it with
 [`seamlessd install-service`](/reference/cli-seamlessd/#seamlessd_install_service),
 which also puts back a task that was deleted. The task action is a bare exec -
 `seamlessd.exe serve --config <path> --log-file <path>` - because a task cannot
@@ -19115,10 +19124,11 @@ output, a crash's included, goes to the log file. A `seamlessd serve` you start
 yourself keeps its window.
 
 ```powershell
-Get-ScheduledTask Seamless | Get-ScheduledTaskInfo   # state, last run, last result
-Get-Content ~/.seamless/seamlessd.log -Wait          # follow the log
-Restart-ScheduledTask Seamless                        # stop + start
-Stop-ScheduledTask Seamless                           # stop (it restarts at next logon)
+$task = "Seamless-$([Security.Principal.WindowsIdentity]::GetCurrent().User.Value)"
+Get-ScheduledTask $task | Get-ScheduledTaskInfo   # state, last run, last result
+Get-Content ~/.seamless/seamlessd.log -Wait       # follow the log
+Stop-ScheduledTask $task; Start-ScheduledTask $task   # stop + start
+Stop-ScheduledTask $task                          # stop (it restarts at next logon)
 ```
 
 It restarts on failure and never hits the default execution time limit, so it
@@ -19216,7 +19226,7 @@ Two things about the service itself matter here:
 **Windows:**
 
 A detached process with no console window and a process group of its own,
-started outside the `Seamless` task's job where Windows allows it
+started outside the Seamless task's job where Windows allows it
 (`CREATE_NO_WINDOW`, `CREATE_NEW_PROCESS_GROUP`, `CREATE_BREAKAWAY_FROM_JOB`).
 When the job refuses the breakaway, the daemon starts it again without that
 flag. Task Scheduler's stop (`Stop-ScheduledTask`, `schtasks /End`) ends only
@@ -19235,14 +19245,14 @@ Get-CimInstance Win32_Process -Filter "Name = 'seamlessd.exe'" | Where-Object Co
 Get-ScheduledTask -TaskName 'SeamlessUpdate-*'                                                                   # only once the fallback has run
 ```
 
-Only the daemon that the `Seamless` task started updates itself. On Windows,
+Only the daemon that your Seamless task started updates itself. On Windows,
 the last of the checks that decide whether this install updates itself asks
 whether this process is the service's own instance. It needs two things: the
-daemon's parent process is the Task Scheduler (`svchost.exe`), and the
-`Seamless` task runs as you. A `seamlessd serve` you started by hand only
-notifies, and its reason reads `not the service's own process: the parent
-process is ..., not the Task Scheduler (svchost.exe)`. Stop it and run
-`Start-ScheduledTask Seamless`. An install that fell back to a Startup-folder
+daemon's parent process is the Task Scheduler (`svchost.exe`), and the task
+(`Seamless-<your SID>`, or an earlier release's `Seamless`) runs as you. A
+`seamlessd serve` you started by hand only notifies, and its reason reads `not
+the service's own process: the parent process is ..., not the Task Scheduler
+(svchost.exe)`. Stop it and run `seamlessd start`. An install that fell back to a Startup-folder
 shortcut, because the installer could not register the task, has no task at
 all, so it only notifies too.
 

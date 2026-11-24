@@ -330,8 +330,11 @@ there.</p>
 </div>
 <div class="ctx-variant" data-ctx-os="windows">
 <p class="ctx-label"><span class="ctx-chip">Windows</span></p>
-<p>An at-logon Scheduled Task named <code>Seamless</code>, running as you (<code>LogonType Interactive</code>, no admin), logging to <code>~/.seamless/seamlessd.log</code>. The installer
-registers it with
+<p>An at-logon Scheduled Task named <code>Seamless-&lt;your SID&gt;</code>, running as you
+(<code>LogonType Interactive</code>, no admin), logging to <code>~/.seamless/seamlessd.log</code>.
+Each user of the PC has a task of their own. A release before the per-user name
+registered <code>Seamless</code>; installing or updating moves your <code>Seamless</code> to the new
+name, and leaves another user's alone. The installer registers it with
 <a href="../../reference/cli-seamlessd/#seamlessd_install_service"><code>seamlessd install-service</code></a>,
 which also puts back a task that was deleted. The task action is a bare exec -
 <code>seamlessd.exe serve --config &lt;path&gt; --log-file &lt;path&gt;</code> - because a task cannot
@@ -340,10 +343,11 @@ flags pass exactly what that prefix would have. Windows opens a console window
 for the task's daemon as it starts, and the daemon closes it at once: its
 output, a crash's included, goes to the log file. A <code>seamlessd serve</code> you start
 yourself keeps its window.</p>
-<div class="code-block" data-lang="powershell"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nb">Get-ScheduledTask</span> <span class="n">Seamless</span> <span class="p">|</span> <span class="nb">Get-ScheduledTaskInfo</span>   <span class="c"># state, last run, last result</span>
-</span></span><span class="line"><span class="cl"><span class="nb">Get-Content</span> <span class="p">~/.</span><span class="n">seamless</span><span class="p">/</span><span class="n">seamlessd</span><span class="p">.</span><span class="py">log</span> <span class="n">-Wait</span>          <span class="c"># follow the log</span>
-</span></span><span class="line"><span class="cl"><span class="nb">Restart-ScheduledTask</span> <span class="n">Seamless</span>                        <span class="c"># stop + start</span>
-</span></span><span class="line"><span class="cl"><span class="nb">Stop-ScheduledTask</span> <span class="n">Seamless</span>                           <span class="c"># stop (it restarts at next logon)</span>
+<div class="code-block" data-lang="powershell"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nv">$task</span> <span class="p">=</span> <span class="s2">&#34;Seamless-</span><span class="p">$([</span><span class="no">Security.Principal.WindowsIdentity</span><span class="p">]::</span><span class="n">GetCurrent</span><span class="p">().</span><span class="py">User</span><span class="p">.</span><span class="n">Value</span><span class="p">)</span><span class="s2">&#34;</span>
+</span></span><span class="line"><span class="cl"><span class="nb">Get-ScheduledTask</span> <span class="nv">$task</span> <span class="p">|</span> <span class="nb">Get-ScheduledTaskInfo</span>   <span class="c"># state, last run, last result</span>
+</span></span><span class="line"><span class="cl"><span class="nb">Get-Content</span> <span class="p">~/.</span><span class="n">seamless</span><span class="p">/</span><span class="n">seamlessd</span><span class="p">.</span><span class="py">log</span> <span class="n">-Wait</span>       <span class="c"># follow the log</span>
+</span></span><span class="line"><span class="cl"><span class="nb">Stop-ScheduledTask</span> <span class="nv">$task</span><span class="p">;</span> <span class="nb">Start-ScheduledTask</span> <span class="nv">$task</span>   <span class="c"># stop + start</span>
+</span></span><span class="line"><span class="cl"><span class="nb">Stop-ScheduledTask</span> <span class="nv">$task</span>                          <span class="c"># stop (it restarts at next logon)</span>
 </span></span></code></pre></div>
 <p>It restarts on failure and never hits the default execution time limit, so it
 behaves like launchd's <code>KeepAlive</code>. Because it triggers at logon, it runs while
@@ -428,7 +432,7 @@ brings back a service that <code>systemctl --user status seamless</code> reports
 <div class="ctx-variant" data-ctx-os="windows">
 <p class="ctx-label"><span class="ctx-chip">Windows</span></p>
 <p>A detached process with no console window and a process group of its own,
-started outside the <code>Seamless</code> task's job where Windows allows it
+started outside the Seamless task's job where Windows allows it
 (<code>CREATE_NO_WINDOW</code>, <code>CREATE_NEW_PROCESS_GROUP</code>, <code>CREATE_BREAKAWAY_FROM_JOB</code>).
 When the job refuses the breakaway, the daemon starts it again without that
 flag. Task Scheduler's stop (<code>Stop-ScheduledTask</code>, <code>schtasks /End</code>) ends only
@@ -443,13 +447,12 @@ starts it with <code>schtasks /Run</code>. The task then stays registered, hidde
 <div class="code-block" data-lang="powershell"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nb">Get-CimInstance</span> <span class="n">Win32_Process</span> <span class="n">-Filter</span> <span class="s2">&#34;Name = &#39;seamlessd.exe&#39;&#34;</span> <span class="p">|</span> <span class="nb">Where-Object</span> <span class="n">CommandLine</span> <span class="o">-like</span> <span class="s1">&#39;*update --auto*&#39;</span>   <span class="c"># an update in progress</span>
 </span></span><span class="line"><span class="cl"><span class="nb">Get-ScheduledTask</span> <span class="n">-TaskName</span> <span class="s1">&#39;SeamlessUpdate-*&#39;</span>                                                                   <span class="c"># only once the fallback has run</span>
 </span></span></code></pre></div>
-<p>Only the daemon that the <code>Seamless</code> task started updates itself. On Windows,
+<p>Only the daemon that your Seamless task started updates itself. On Windows,
 the last of the checks that decide whether this install updates itself asks
 whether this process is the service's own instance. It needs two things: the
-daemon's parent process is the Task Scheduler (<code>svchost.exe</code>), and the
-<code>Seamless</code> task runs as you. A <code>seamlessd serve</code> you started by hand only
-notifies, and its reason reads <code>not the service's own process: the parent process is ..., not the Task Scheduler (svchost.exe)</code>. Stop it and run
-<code>Start-ScheduledTask Seamless</code>. An install that fell back to a Startup-folder
+daemon's parent process is the Task Scheduler (<code>svchost.exe</code>), and the task
+(<code>Seamless-&lt;your SID&gt;</code>, or an earlier release's <code>Seamless</code>) runs as you. A
+<code>seamlessd serve</code> you started by hand only notifies, and its reason reads <code>not the service's own process: the parent process is ..., not the Task Scheduler (svchost.exe)</code>. Stop it and run <code>seamlessd start</code>. An install that fell back to a Startup-folder
 shortcut, because the installer could not register the task, has no task at
 all, so it only notifies too.</p>
 </div>

@@ -141,7 +141,9 @@ func realUpdaterDeps(stdout io.Writer) updaterDeps {
 		autoAllowed:    autoUpdateAllowed,
 		restorePending: backup.RestorePending,
 		service: func(action serviceAction) (bool, string) {
-			plan := serviceControl(action, runtime.GOOS, home, os.Getuid())
+			// Resolved for each action: the installer may have moved the
+			// task to its per-user name in between.
+			plan := serviceControl(action, runtime.GOOS, home, os.Getuid(), serviceTaskForControl())
 			ok, out := runControlCmds(plan.Cmds)
 			if !ok && len(plan.Fallback) > 0 {
 				ok, out = runControlCmds(plan.Fallback)

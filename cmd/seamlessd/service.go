@@ -52,7 +52,10 @@ type serviceControlPlan struct {
 // the only Go code that manages the service. The launchd/systemd/schtasks handles
 // are the shared consts from uninstall.go -- no new definition site. On darwin
 // the label is the installed job's (launchdJob, a stat under home), so a Mac
-// still on the legacy label is controlled under that one.
+// still on the legacy label is controlled under that one. On Windows task is
+// the Scheduled Task to act on, which the caller resolves (serviceTaskForControl):
+// this user's own, found by its principal, so another user's task is never
+// started or ended.
 //
 // darwin uses launchctl because the plist declares KeepAlive: bootout truly stops
 // the job (a plain kill would be resurrected), kickstart -k restarts a loaded job
@@ -61,7 +64,7 @@ type serviceControlPlan struct {
 // returns about a second before Task Scheduler terminates the task's process,
 // which holds the port, the data dir and its executable until then, so Windows
 // stop and restart settle after it (SettleAfter).
-func serviceControl(action serviceAction, goos, home string, uid int) serviceControlPlan {
+func serviceControl(action serviceAction, goos, home string, uid int, task string) serviceControlPlan {
 	switch goos {
 	case "darwin":
 		label := launchdJob(home, fileExists)
@@ -86,25 +89,31 @@ func serviceControl(action serviceAction, goos, home string, uid int) serviceCon
 		}
 		return p
 	case "windows":
+		// "" only when this user's SID could not be read: the query below
+		// then fails, which reads as not installed.
+		shown := task
+		if shown == "" {
+			shown = serviceTaskPrefix + "<your SID>"
+		}
 		p := serviceControlPlan{
-			Label:       "Scheduled Task (" + scheduledTask + ")",
-			ProbeCmd:    exec.Command("schtasks", "/Query", "/TN", scheduledTask),
+			Label:       "Scheduled Task (" + shown + ")",
+			ProbeCmd:    exec.Command("schtasks", "/Query", "/TN", task),
 			InstallHint: "run the installer: irm https://thereisnospoon.org/install.ps1 | iex",
 		}
 		switch action {
 		case actionStart:
-			p.Cmds = []*exec.Cmd{exec.Command("schtasks", "/Run", "/TN", scheduledTask)}
+			p.Cmds = []*exec.Cmd{exec.Command("schtasks", "/Run", "/TN", task)}
 		case actionStop:
-			p.Cmds = []*exec.Cmd{exec.Command("schtasks", "/End", "/TN", scheduledTask)}
+			p.Cmds = []*exec.Cmd{exec.Command("schtasks", "/End", "/TN", task)}
 			p.SettleAfter = 1
 		case actionRestart:
 			p.Cmds = []*exec.Cmd{
-				exec.Command("schtasks", "/End", "/TN", scheduledTask),
-				exec.Command("schtasks", "/Run", "/TN", scheduledTask),
+				exec.Command("schtasks", "/End", "/TN", task),
+				exec.Command("schtasks", "/Run", "/TN", task),
 			}
 			p.SettleAfter = 1
 		case actionStatus:
-			p.Cmds = []*exec.Cmd{exec.Command("schtasks", "/Query", "/TN", scheduledTask, "/V", "/FO", "LIST")}
+			p.Cmds = []*exec.Cmd{exec.Command("schtasks", "/Query", "/TN", task, "/V", "/FO", "LIST")}
 		}
 		return p
 	default: // linux and other unixes run the systemd --user unit
@@ -152,7 +161,7 @@ func runServiceAction(action serviceAction, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	plan := serviceControl(action, runtime.GOOS, homeDir(), os.Getuid())
+	plan := serviceControl(action, runtime.GOOS, homeDir(), os.Getuid(), serviceTaskForControl())
 
 	if !serviceInstalled(plan) {
 		where := plan.Label
@@ -200,8 +209,9 @@ func serviceUsage(w io.Writer, action serviceAction) {
 		"  macOS    the launchd job %s, or %s\n"+
 		"           on a Mac installed before the label rename\n"+
 		"  Linux    the systemd --user unit %s\n"+
-		"  Windows  the Scheduled Task %s\n\n%s\n",
-		action, verb, launchdLabel, legacyLaunchdLabel, systemdUnit, scheduledTask, launchdLabelLine)
+		"  Windows  the Scheduled Task %s<your SID>, or %s on a PC\n"+
+		"           installed before the per-user task name\n\n%s\n",
+		action, verb, launchdLabel, legacyLaunchdLabel, systemdUnit, serviceTaskPrefix, legacyServiceTask, launchdLabelLine)
 }
 
 // runControlCmds runs each command, best-effort, and returns whether the LAST

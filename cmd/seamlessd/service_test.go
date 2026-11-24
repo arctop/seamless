@@ -19,6 +19,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testTask is the Windows task the service verbs act on in these tests: a
+// per-user name, as serviceTaskForControl resolves it.
+const testTask = "Seamless-S-1-5-21-1-2-3-1001"
+
 func TestServiceControl(t *testing.T) {
 	const (
 		home  = "/home/tester"
@@ -57,18 +61,18 @@ func TestServiceControl(t *testing.T) {
 		{"linux status", "linux", actionStatus, "systemd --user (seamless.service)",
 			[][]string{{"systemctl", "--user", "status", "seamless.service"}}, nil},
 		// windows -- Scheduled Task (restart is End then Run: no single verb)
-		{"windows start", "windows", actionStart, "Scheduled Task (Seamless)",
-			[][]string{{"schtasks", "/Run", "/TN", "Seamless"}}, nil},
-		{"windows stop", "windows", actionStop, "Scheduled Task (Seamless)",
-			[][]string{{"schtasks", "/End", "/TN", "Seamless"}}, nil},
-		{"windows restart", "windows", actionRestart, "Scheduled Task (Seamless)",
-			[][]string{{"schtasks", "/End", "/TN", "Seamless"}, {"schtasks", "/Run", "/TN", "Seamless"}}, nil},
-		{"windows status", "windows", actionStatus, "Scheduled Task (Seamless)",
-			[][]string{{"schtasks", "/Query", "/TN", "Seamless", "/V", "/FO", "LIST"}}, nil},
+		{"windows start", "windows", actionStart, "Scheduled Task (" + testTask + ")",
+			[][]string{{"schtasks", "/Run", "/TN", testTask}}, nil},
+		{"windows stop", "windows", actionStop, "Scheduled Task (" + testTask + ")",
+			[][]string{{"schtasks", "/End", "/TN", testTask}}, nil},
+		{"windows restart", "windows", actionRestart, "Scheduled Task (" + testTask + ")",
+			[][]string{{"schtasks", "/End", "/TN", testTask}, {"schtasks", "/Run", "/TN", testTask}}, nil},
+		{"windows status", "windows", actionStatus, "Scheduled Task (" + testTask + ")",
+			[][]string{{"schtasks", "/Query", "/TN", testTask, "/V", "/FO", "LIST"}}, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := serviceControl(tt.action, tt.goos, home, uid)
+			p := serviceControl(tt.action, tt.goos, home, uid, testTask)
 			require.Equal(t, tt.wantLabel, p.Label)
 			require.Equal(t, tt.wantCmds, argvs(p.Cmds))
 			require.Equal(t, tt.wantFall, argvs(p.Fallback))
@@ -81,18 +85,18 @@ func TestServiceControl(t *testing.T) {
 func TestServiceControlProbe(t *testing.T) {
 	const home = "/home/tester"
 
-	dar := serviceControl(actionStatus, "darwin", home, 501)
+	dar := serviceControl(actionStatus, "darwin", home, 501, testTask)
 	require.Equal(t, filepath.Join(home, "Library", "LaunchAgents", "com.arctop.seamless.plist"), dar.DefFile)
 	require.Nil(t, dar.ProbeCmd)
 
-	lin := serviceControl(actionStatus, "linux", home, 501)
+	lin := serviceControl(actionStatus, "linux", home, 501, testTask)
 	require.Equal(t, filepath.Join(home, ".config", "systemd", "user", "seamless.service"), lin.DefFile)
 	require.Nil(t, lin.ProbeCmd)
 
-	win := serviceControl(actionStatus, "windows", home, 501)
+	win := serviceControl(actionStatus, "windows", home, 501, testTask)
 	require.Empty(t, win.DefFile)
 	require.NotNil(t, win.ProbeCmd)
-	require.Equal(t, []string{"schtasks", "/Query", "/TN", "Seamless"}, win.ProbeCmd.Args)
+	require.Equal(t, []string{"schtasks", "/Query", "/TN", testTask}, win.ProbeCmd.Args)
 }
 
 // A Mac still on the pre-rename label is controlled under that label, until
@@ -103,13 +107,13 @@ func TestServiceControl_LegacyLaunchdLabel(t *testing.T) {
 	agents := filepath.Join(home, "Library", "LaunchAgents")
 	require.NoError(t, os.MkdirAll(agents, 0o755))
 
-	none := serviceControl(actionRestart, "darwin", home, 501)
+	none := serviceControl(actionRestart, "darwin", home, 501, testTask)
 	require.Equal(t, "launchd (com.arctop.seamless)", none.Label)
 	require.False(t, serviceInstalled(none))
 
 	legacy := filepath.Join(agents, "org.thereisnospoon.seamless.plist")
 	require.NoError(t, os.WriteFile(legacy, []byte("x"), 0o644))
-	p := serviceControl(actionRestart, "darwin", home, 501)
+	p := serviceControl(actionRestart, "darwin", home, 501, testTask)
 	require.Equal(t, "launchd (org.thereisnospoon.seamless)", p.Label)
 	require.Equal(t, legacy, p.DefFile)
 	require.True(t, serviceInstalled(p))
@@ -118,7 +122,7 @@ func TestServiceControl_LegacyLaunchdLabel(t *testing.T) {
 
 	current := filepath.Join(agents, "com.arctop.seamless.plist")
 	require.NoError(t, os.WriteFile(current, []byte("x"), 0o644))
-	both := serviceControl(actionStop, "darwin", home, 501)
+	both := serviceControl(actionStop, "darwin", home, 501, testTask)
 	require.Equal(t, current, both.DefFile, "the current label wins once its plist exists")
 	require.Equal(t, [][]string{{"launchctl", "bootout", "gui/501/com.arctop.seamless"}}, argvs(both.Cmds))
 }
@@ -187,7 +191,7 @@ func TestServiceControl_SettlesOnlyWindowsStopAndRestart(t *testing.T) {
 			if goos == "windows" && (action == actionStop || action == actionRestart) {
 				want = 1
 			}
-			require.Equal(t, want, serviceControl(action, goos, "/home/tester", 501).SettleAfter, "%s %s", goos, action)
+			require.Equal(t, want, serviceControl(action, goos, "/home/tester", 501, testTask).SettleAfter, "%s %s", goos, action)
 		}
 	}
 }
@@ -198,8 +202,8 @@ func TestServiceControl_SettlesOnlyWindowsStopAndRestart(t *testing.T) {
 // waits for the data dir itself.
 func TestServiceControlPlanRun(t *testing.T) {
 	const (
-		end     = "schtasks /End /TN Seamless"
-		run     = "schtasks /Run /TN Seamless"
+		end     = "schtasks /End /TN " + testTask
+		run     = "schtasks /Run /TN " + testTask
 		restart = "systemctl --user restart seamless.service"
 	)
 	errStuck := errors.New("pid 42 still holds the data dir")
@@ -256,7 +260,7 @@ func TestServiceControlPlanRun(t *testing.T) {
 			if tt.noSettle {
 				settle = nil
 			}
-			ok, out := serviceControl(tt.action, tt.goos, "/home/tester", 501).run(runCmds, settle)
+			ok, out := serviceControl(tt.action, tt.goos, "/home/tester", 501, testTask).run(runCmds, settle)
 			require.Equal(t, tt.wantSteps, steps)
 			require.Equal(t, tt.wantOK, ok)
 			require.Equal(t, tt.wantOut, out)
@@ -429,12 +433,12 @@ func TestDaemonSettle(t *testing.T) {
 	t.Setenv("SEAMLESS_CONFIG", filepath.Join(dir, "absent.yaml"))
 
 	var out bytes.Buffer
-	require.Nil(t, daemonSettle(serviceControl(actionRestart, "darwin", dir, 501), &out))
-	require.Nil(t, daemonSettle(serviceControl(actionRestart, "linux", dir, 501), &out))
-	require.Nil(t, daemonSettle(serviceControl(actionStart, "windows", dir, 501), &out))
+	require.Nil(t, daemonSettle(serviceControl(actionRestart, "darwin", dir, 501, testTask), &out))
+	require.Nil(t, daemonSettle(serviceControl(actionRestart, "linux", dir, 501, testTask), &out))
+	require.Nil(t, daemonSettle(serviceControl(actionStart, "windows", dir, 501, testTask), &out))
 	require.Empty(t, out.String(), "a plan that does not settle never loads the config")
 
-	require.Nil(t, daemonSettle(serviceControl(actionStop, "windows", dir, 501), &out),
+	require.Nil(t, daemonSettle(serviceControl(actionStop, "windows", dir, 501, testTask), &out),
 		"a config that does not load leaves the commands as they were")
 	require.Contains(t, out.String(), "not waiting for the old daemon to exit")
 	require.Contains(t, out.String(), "absent.yaml")
@@ -443,7 +447,7 @@ func TestDaemonSettle(t *testing.T) {
 	cfgPath := filepath.Join(dir, "seamless.yaml")
 	require.NoError(t, os.WriteFile(cfgPath, nil, 0o600))
 	t.Setenv("SEAMLESS_CONFIG", cfgPath)
-	settle := daemonSettle(serviceControl(actionRestart, "windows", dir, 501), &out)
+	settle := daemonSettle(serviceControl(actionRestart, "windows", dir, 501, testTask), &out)
 	require.NotNil(t, settle)
 	require.NoError(t, settle())
 	require.Contains(t, out.String(), "not running", "nothing holds the fresh data dir's lock")

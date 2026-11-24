@@ -215,7 +215,7 @@ func fakeProbeEnv(goos string) installProbeEnv {
 			return strings.EqualFold(norm(a), norm(b))
 		},
 		writable: func(string) bool { return true },
-		taskXML:  func() ([]byte, error) { return nil, errors.New("not windows") },
+		taskXML:  func() (string, []byte, error) { return testTask, nil, errors.New("not windows") },
 		parentImage: func() (string, error) {
 			panic("only windows asks for the parent's image")
 		},
@@ -234,7 +234,7 @@ func fakeProbeEnv(goos string) installProbeEnv {
 		env.home = `C:\Users\me`
 		env.exe = `C:\Users\me\AppData\Local\Programs\Seamless\seamlessd.exe`
 		env.ppid = 2672
-		env.taskXML = func() ([]byte, error) { return utf16LE(taskXML), nil }
+		env.taskXML = func() (string, []byte, error) { return testTask, utf16LE(taskXML), nil }
 		env.parentImage = func() (string, error) { return "svchost.exe", nil }
 		env.isCurrentUser = func(account string) (bool, error) { return account == "S-1-5-21-1-2-3-1001", nil }
 	}
@@ -351,12 +351,12 @@ func TestProbeInstall(t *testing.T) {
 			e.isCurrentUser = func(string) (bool, error) { return false, errors.New("no mapping") }
 		}, winCfg, "release", update.KindUnknown, "could not tell whether"},
 		{"windows task names no user", "windows", func(e *installProbeEnv) {
-			e.taskXML = func() ([]byte, error) {
-				return utf16LE(strings.Replace(taskXML, "<UserId>S-1-5-21-1-2-3-1001</UserId>", "", 1)), nil
+			e.taskXML = func() (string, []byte, error) {
+				return testTask, utf16LE(strings.Replace(taskXML, "<UserId>S-1-5-21-1-2-3-1001</UserId>", "", 1)), nil
 			}
 		}, winCfg, "release", update.KindUnknown, "names no user"},
 		{"windows without the task", "windows", func(e *installProbeEnv) {
-			e.taskXML = func() ([]byte, error) { return nil, errors.New("exit status 1") }
+			e.taskXML = func() (string, []byte, error) { return testTask, nil, errors.New("exit status 1") }
 		}, winCfg, "release", update.KindUnknown, "no installer-managed service"},
 	}
 	for _, tt := range tests {

@@ -16,13 +16,11 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"unicode/utf16"
 
 	"github.com/arctop/seamless/internal/access"
@@ -43,9 +41,10 @@ type installProbeEnv struct {
 	readFile func(path string) ([]byte, error)
 	sameFile func(a, b string) bool
 	writable func(dir string) bool
-	// taskXML returns the Scheduled Task's definition (`schtasks /Query /TN
-	// Seamless /XML`); an error means the task is absent or unreadable.
-	taskXML func() ([]byte, error)
+	// taskXML returns the name and definition of the Scheduled Task this
+	// user's daemon runs from (findServiceTaskXML: `schtasks /Query /TN name
+	// /XML`); an error means the task is absent or unreadable.
+	taskXML func() (name string, raw []byte, err error)
 	// parentImage names this process's parent's executable, without its
 	// directory, and isCurrentUser reports whether a Scheduled Task principal
 	// names the user this process runs as: the Windows half of gate 9.
@@ -70,13 +69,7 @@ func realInstallProbeEnv() installProbeEnv {
 		sameFile: sameFile,
 		writable: dirWritable,
 		// Read once: the service probe and gate 9 both parse it.
-		// No console window: a serve the task started has none to lend it
-		// (detachTaskConsole), so schtasks would open one of its own.
-		taskXML: sync.OnceValues(func() ([]byte, error) {
-			cmd := exec.Command("schtasks", "/Query", "/TN", scheduledTask, "/XML")
-			cmd.SysProcAttr = handoffProcAttr()
-			return cmd.Output()
-		}),
+		taskXML:       onceTaskXML(),
 		parentImage:   parentImageName,
 		isCurrentUser: isCurrentUser,
 		resolve:       access.LookupAccount,
@@ -455,8 +448,8 @@ func probeService(env installProbeEnv) update.ServiceProbe {
 		}
 		program = plistProgram(data)
 	case "windows":
-		sp.Path = "Scheduled Task " + scheduledTask
-		raw, err := env.taskXML()
+		name, raw, err := env.taskXML()
+		sp.Path = "Scheduled Task " + name
 		if err != nil {
 			return sp // schtasks fails for a missing task; nothing to read
 		}
@@ -546,23 +539,23 @@ func windowsSupervised(env installProbeEnv) (bool, string) {
 	if !strings.EqualFold(parent, taskSchedulerImage) {
 		return false, "the parent process is " + parent + ", not the Task Scheduler (" + taskSchedulerImage + ")"
 	}
-	raw, err := env.taskXML()
+	name, raw, err := env.taskXML()
 	if err != nil {
-		return false, "the Scheduled Task " + scheduledTask + " could not be read"
+		return false, "the Scheduled Task " + name + " could not be read"
 	}
 	def, err := parseTaskXML(raw)
 	if err != nil {
-		return false, "the Scheduled Task " + scheduledTask + " could not be parsed: " + err.Error()
+		return false, "the Scheduled Task " + name + " could not be parsed: " + err.Error()
 	}
 	if def.UserID == "" {
-		return false, "the Scheduled Task " + scheduledTask + " names no user"
+		return false, "the Scheduled Task " + name + " names no user"
 	}
 	mine, err := env.isCurrentUser(def.UserID)
 	switch {
 	case err != nil:
-		return false, "could not tell whether the Scheduled Task " + scheduledTask + "'s user " + def.UserID + " is this user: " + err.Error()
+		return false, "could not tell whether the Scheduled Task " + name + "'s user " + def.UserID + " is this user: " + err.Error()
 	case !mine:
-		return false, "the Scheduled Task " + scheduledTask + " runs as " + def.UserID + ", not this user"
+		return false, "the Scheduled Task " + name + " runs as " + def.UserID + ", not this user"
 	}
 	return true, ""
 }

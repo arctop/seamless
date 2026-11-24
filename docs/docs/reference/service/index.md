@@ -81,9 +81,11 @@ there.
 
 **Windows:**
 
-An at-logon Scheduled Task named `Seamless`, running as you (`LogonType
-Interactive`, no admin), logging to `~/.seamless/seamlessd.log`. The installer
-registers it with
+An at-logon Scheduled Task named `Seamless-<your SID>`, running as you
+(`LogonType Interactive`, no admin), logging to `~/.seamless/seamlessd.log`.
+Each user of the PC has a task of their own. A release before the per-user name
+registered `Seamless`; installing or updating moves your `Seamless` to the new
+name, and leaves another user's alone. The installer registers it with
 [`seamlessd install-service`](https://thereisnospoon.org/docs/reference/cli-seamlessd/#seamlessd_install_service),
 which also puts back a task that was deleted. The task action is a bare exec -
 `seamlessd.exe serve --config <path> --log-file <path>` - because a task cannot
@@ -94,10 +96,11 @@ output, a crash's included, goes to the log file. A `seamlessd serve` you start
 yourself keeps its window.
 
 ```powershell
-Get-ScheduledTask Seamless | Get-ScheduledTaskInfo   # state, last run, last result
-Get-Content ~/.seamless/seamlessd.log -Wait          # follow the log
-Restart-ScheduledTask Seamless                        # stop + start
-Stop-ScheduledTask Seamless                           # stop (it restarts at next logon)
+$task = "Seamless-$([Security.Principal.WindowsIdentity]::GetCurrent().User.Value)"
+Get-ScheduledTask $task | Get-ScheduledTaskInfo   # state, last run, last result
+Get-Content ~/.seamless/seamlessd.log -Wait       # follow the log
+Stop-ScheduledTask $task; Start-ScheduledTask $task   # stop + start
+Stop-ScheduledTask $task                          # stop (it restarts at next logon)
 ```
 
 It restarts on failure and never hits the default execution time limit, so it
@@ -195,7 +198,7 @@ Two things about the service itself matter here:
 **Windows:**
 
 A detached process with no console window and a process group of its own,
-started outside the `Seamless` task's job where Windows allows it
+started outside the Seamless task's job where Windows allows it
 (`CREATE_NO_WINDOW`, `CREATE_NEW_PROCESS_GROUP`, `CREATE_BREAKAWAY_FROM_JOB`).
 When the job refuses the breakaway, the daemon starts it again without that
 flag. Task Scheduler's stop (`Stop-ScheduledTask`, `schtasks /End`) ends only
@@ -214,14 +217,14 @@ Get-CimInstance Win32_Process -Filter "Name = 'seamlessd.exe'" | Where-Object Co
 Get-ScheduledTask -TaskName 'SeamlessUpdate-*'                                                                   # only once the fallback has run
 ```
 
-Only the daemon that the `Seamless` task started updates itself. On Windows,
+Only the daemon that your Seamless task started updates itself. On Windows,
 the last of the checks that decide whether this install updates itself asks
 whether this process is the service's own instance. It needs two things: the
-daemon's parent process is the Task Scheduler (`svchost.exe`), and the
-`Seamless` task runs as you. A `seamlessd serve` you started by hand only
-notifies, and its reason reads `not the service's own process: the parent
-process is ..., not the Task Scheduler (svchost.exe)`. Stop it and run
-`Start-ScheduledTask Seamless`. An install that fell back to a Startup-folder
+daemon's parent process is the Task Scheduler (`svchost.exe`), and the task
+(`Seamless-<your SID>`, or an earlier release's `Seamless`) runs as you. A
+`seamlessd serve` you started by hand only notifies, and its reason reads `not
+the service's own process: the parent process is ..., not the Task Scheduler
+(svchost.exe)`. Stop it and run `seamlessd start`. An install that fell back to a Startup-folder
 shortcut, because the installer could not register the task, has no task at
 all, so it only notifies too.
 

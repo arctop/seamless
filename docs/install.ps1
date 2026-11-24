@@ -134,7 +134,14 @@ try {
 } catch {}
 
 $Repo = 'arctop/seamless'
-$TaskName = 'Seamless'
+# The Windows service is the at-logon Scheduled Task Seamless-<your SID>. A
+# task's name is the whole computer's, so with one name for everyone a second
+# user's install replaced or was refused the first user's task. Releases
+# before the per-user name registered $LegacyTaskName: seamlessd
+# install-service moves one of yours to the new name, and a pinned older
+# release, which has no install-service, gets the name its binary knows.
+$TaskName = 'Seamless-' + [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$LegacyTaskName = 'Seamless'
 # The task's Description, and the Windows analog of the comment docs/install
 # writes into its plist and systemd unit: seamlessd's update check looks for it
 # to tell a task this script registered from one set up by hand.
@@ -604,14 +611,59 @@ function Test-CurrentUser {
     }
 }
 
+# Get-OwnTaskNames: this user's Seamless tasks, $TaskName and an earlier
+# release's $LegacyTaskName, each only when its principal is this user: on a
+# shared box \Seamless can be another account's. Read through schtasks.exe,
+# because PowerShell's Task Scheduler cmdlets go through a CIM provider that a
+# session with a reduced token (SSH, a management agent's run as the user)
+# cannot reach. A task that cannot be read is not counted.
+function Get-OwnTaskNames {
+    $own = @()
+    foreach ($name in @($TaskName, $LegacyTaskName)) {
+        $xml = ''
+        $prevEap = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            $xml = (& schtasks.exe /Query /TN $name /XML 2>$null | Out-String)
+            if ($LASTEXITCODE -ne 0) { $xml = '' }
+        } catch {
+            $xml = ''
+        } finally {
+            $ErrorActionPreference = $prevEap
+        }
+        $m = [regex]::Match($xml, '<Principal\b[^>]*>.*?<UserId>([^<]*)</UserId>', 'Singleline')
+        if ($m.Success -and (Test-CurrentUser $m.Groups[1].Value.Trim())) { $own += $name }
+    }
+    return $own
+}
+
+# Invoke-Schtasks runs schtasks.exe with these arguments, its output discarded,
+# and returns its exit code. 2>&1 on a native command can surface as a
+# terminating NativeCommandError under $ErrorActionPreference='Stop', so it
+# relaxes it.
+function Invoke-Schtasks {
+    $code = 1
+    $prevEap = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        & schtasks.exe @args 2>&1 | Out-Null
+        $code = $LASTEXITCODE
+    } catch {
+        $code = 1
+    } finally {
+        $ErrorActionPreference = $prevEap
+    }
+    return $code
+}
+
 # Stop this install's daemon before swapping binaries: a live seamlessd.exe holds
 # its own image locked, and the health check must answer from the NEW binary.
-# Scoped twice over, because the task name and the process name are both
-# machine-global while the install is per-user:
+# Scoped twice over, because the process name is machine-global, and so was an
+# earlier release's task name, while the install is per-user:
 #
-#  - the Seamless task is stopped only when its principal is this user; on a
-#    shared box it can be another account's daemon, which an elevated run of
-#    this script could otherwise stop;
+#  - only this user's tasks are stopped (Get-OwnTaskNames); on a shared box
+#    \Seamless can be another account's daemon, which an elevated run of this
+#    script could otherwise stop;
 #  - only `serve` processes of THIS install's seamlessd.exe are stopped, matched
 #    on the CIM command line: the exe path, then the serve subcommand. That
 #    catches a daemon from the Startup-shortcut fallback or a manual start, which
@@ -622,17 +674,8 @@ function Test-CurrentUser {
 # Then wait for them to exit: Stop-Process returns before the image is released.
 function Stop-Daemon {
     param([string]$InstallDir)
-    # A session with a reduced token -- SSH, a management agent's run as the
-    # user -- cannot reach the Task Scheduler, and that CIM failure is a
-    # terminating error -ErrorAction SilentlyContinue does not stop: it aborted
-    # the install here, before any binary went in. Caught, it is the same as no
-    # task, and the sweep below still stops this install's daemon.
-    try {
-        $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop
-        if (Test-CurrentUser $task.Principal.UserId) {
-            Stop-ScheduledTask -TaskName $TaskName -ErrorAction Stop
-        }
-    } catch {}
+    # A task that is not running fails its /End, harmlessly.
+    foreach ($name in Get-OwnTaskNames) { Invoke-Schtasks /End /TN $name | Out-Null }
     $exe = Join-Path $InstallDir 'seamlessd.exe'
     $pattern = '^\s*"?' + [regex]::Escape($exe) + '"?\s+serve(\s|$)'
     try {
@@ -967,7 +1010,12 @@ function Register-Service {
     # dir the task's daemon holds: the task replaces it.
     $lnk = Join-Path ([Environment]::GetFolderPath('Startup')) 'Seamless.lnk'
     if (Test-Path -LiteralPath $lnk) { Remove-Item -LiteralPath $lnk -Force -ErrorAction SilentlyContinue }
-    Step 'service' "$TaskName (Scheduled Task, at logon)"
+    # The task is the per-user one, unless install-service had to keep an
+    # earlier release's (only an admin may delete it) or the cmdlets
+    # registered that one for an older release.
+    $shown = @(Get-OwnTaskNames) | Select-Object -First 1
+    if (-not $shown) { $shown = $TaskName }
+    Step 'service' "$shown (Scheduled Task, at logon)"
 }
 
 # Test-ServiceVerb: whether this seamlessd.exe registers the task itself.
@@ -1016,8 +1064,11 @@ function Invoke-InstallService {
 }
 
 # Register-ServiceCim registers the task the way every release before
-# install-service had it registered: the Task Scheduler cmdlets. It returns ''
-# when the task runs, or why it could not be registered.
+# install-service had it registered: the Task Scheduler cmdlets, and the name
+# that release's binary knows, $LegacyTaskName. It returns '' when the task
+# runs, or why it could not be registered. A per-user task of yours, from a
+# newer release, goes once it is registered: that binary cannot see it, and the
+# two would start two daemons at every logon.
 function Register-ServiceCim {
     param([string]$Seamlessd)
     $arg = 'serve --config "{0}" --log-file "{1}"' -f $Config, $LogFile
@@ -1044,28 +1095,32 @@ function Register-ServiceCim {
         $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
             -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero) `
             -RestartInterval (New-TimeSpan -Minutes 1) -RestartCount 3 -MultipleInstances IgnoreNew
-        Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
+        Register-ScheduledTask -TaskName $LegacyTaskName -Action $action -Trigger $trigger `
             -Principal $principal -Settings $settings -Description $TaskDescription -Force | Out-Null
     } catch {
         $err = $_
         $owner = $null
-        try { $owner = (Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop).Principal.UserId } catch {}
+        try { $owner = (Get-ScheduledTask -TaskName $LegacyTaskName -ErrorAction Stop).Principal.UserId } catch {}
         if ($owner -and -not (Test-CurrentUser $owner)) {
-            return ("could not register the $TaskName Scheduled Task: it belongs to $owner, and replacing it needs admin " +
-                "(one-time fix: an elevated 'schtasks /delete /tn $TaskName /f', then re-run this installer)")
+            return ("could not register the $LegacyTaskName Scheduled Task: it belongs to $owner, and replacing it needs admin " +
+                "(one-time fix: an elevated 'schtasks /delete /tn $LegacyTaskName /f', then re-run this installer)")
         }
-        return ("could not register the $TaskName Scheduled Task ($($err.Exception.Message)); " +
+        return ("could not register the $LegacyTaskName Scheduled Task ($($err.Exception.Message)); " +
             'group policy may bar task creation for standard users, or this session (SSH, remote management) cannot reach the Task Scheduler')
     }
-    Start-ScheduledTask -TaskName $TaskName | Out-Null
+    if ((Get-OwnTaskNames) -contains $TaskName) {
+        Invoke-Schtasks /End /TN $TaskName | Out-Null
+        Invoke-Schtasks /Delete /TN $TaskName /F | Out-Null
+    }
+    Start-ScheduledTask -TaskName $LegacyTaskName | Out-Null
     return ''
 }
 
 # Managed machines can close the task store to a standard user: group policy can
-# bar task creation outright, and the task name is global, so a \Seamless task
-# registered by ANOTHER user of the machine cannot be replaced without admin,
-# and through the cmdlets a session with a reduced token cannot reach the Task
-# Scheduler at all. None of them should abort an otherwise complete install;
+# bar task creation outright; an older release's task name is global, so a
+# \Seamless task registered by ANOTHER user of the machine cannot be replaced
+# without admin; and through the cmdlets a session with a reduced token cannot
+# reach the Task Scheduler at all. None of them should abort an otherwise complete install;
 # $Why says which it was, for the warning. Fall back to the per-user Startup
 # folder -- always writable, no special rights -- and start the daemon directly
 # so this session still comes up and the health check still means something.

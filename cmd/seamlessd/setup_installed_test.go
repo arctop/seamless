@@ -81,7 +81,7 @@ func setupProbeEnv(goos, home string, environ []string, files map[string]string)
 			return nil, fs.ErrNotExist
 		},
 		sameFile: func(a, b string) bool { return a == b },
-		taskXML:  func() ([]byte, error) { return nil, errors.New("no task") },
+		taskXML:  func() (string, []byte, error) { return testTask, nil, errors.New("no task") },
 		resolve:  func(string) (access.Account, error) { return access.Account{}, errors.New("no account") },
 	}
 }
@@ -168,7 +168,7 @@ func TestSetupFactsOf(t *testing.T) {
 			{"a principal that cannot be judged", false, errors.New("no such account"), setupNone},
 		} {
 			env := setupProbeEnv("windows", home, nil, nil)
-			env.taskXML = func() ([]byte, error) { return utf16LE(taskXML), nil }
+			env.taskXML = func() (string, []byte, error) { return testTask, utf16LE(taskXML), nil }
 			env.isCurrentUser = func(string) (bool, error) { return tt.mine, tt.err }
 			f := setupFactsOf(setupHost{probe: env, exists: none})
 			require.Equal(t, tt.mine && tt.err == nil, f.userService, tt.name)

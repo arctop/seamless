@@ -78,14 +78,15 @@ func setupFactsOf(h setupHost) setupFacts {
 
 // setupServiceMine reports whether the per-user service probeService found is
 // this user's. A LaunchAgent and a systemd user unit live under the home; the
-// Scheduled Task's name is the whole machine's, and on a box another user
-// installed first it is theirs -- the box where this user is to be a Client
+// \Seamless task a release before the per-user task name registered is named
+// for the whole machine, and on a box another user installed first it is
+// theirs -- the box where this user is to be a Client
 // (docs-src/guides/network-install.md, "Windows: a second user on one box").
 func setupServiceMine(env installProbeEnv) bool {
 	if env.goos != "windows" {
 		return true
 	}
-	raw, err := env.taskXML()
+	_, raw, err := env.taskXML()
 	if err != nil || env.isCurrentUser == nil {
 		return false
 	}
