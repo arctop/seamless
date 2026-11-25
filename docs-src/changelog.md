@@ -15,6 +15,14 @@ bumps) filtered out. Each heading links the release's downloads and checksums.
 Install with one command ([quickstart](/quickstart/)), or update an existing
 install in place with `seamlessd update`.
 
+## v0.11.3 {#v0-11-3}
+
+Released 2026-11-25 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.11.3)
+
+### Fixes
+
+- fix(windows): turn on the console's VT mode before printing color
+
 ## v0.11.2 {#v0-11-2}
 
 Released 2026-11-24 - [downloads and notes](https://github.com/arctop/seamless/releases/tag/v0.11.2)
