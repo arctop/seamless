@@ -144,6 +144,9 @@ internal/sshsig/   OpenSSH SSHSIG + allowed_signers verification in pure Go
 internal/shellcmd/ commands printed or run for root or another account through
                    sudo: sudo and env by absolute path, the per-OS tool table
                    (ToolsFor), POSIX quoting (PosixArg). Imports nothing internal
+internal/termvt/   whether a terminal shows ANSI escapes as color: turns on a
+                   Windows console's virtual-terminal mode, which conhost leaves
+                   off (seamlessd's style.go, seam approve). Imports nothing internal
 internal/archive/  instance archives: VACUUM INTO snapshot + corpus + manifest
                    out; guarded tar extract and restore-or-merge back in.
                    Never imports config

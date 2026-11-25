@@ -7,17 +7,21 @@ import (
 	"strings"
 
 	"golang.org/x/term"
+
+	"github.com/arctop/seamless/internal/termvt"
 )
 
 // colorEnabled reports whether ANSI styling should be emitted on stdout: it is a
-// terminal and NO_COLOR is unset (https://no-color.org -- presence disables,
-// regardless of value). Computed once so styling is a cheap string wrap, and so
-// a piped install (fixture harness, CI) stays plain text with no escape codes.
+// terminal that shows escape sequences as styling (termvt.Enable turns that on
+// for a Windows console, whose default prints them as text) and NO_COLOR is
+// unset (https://no-color.org -- presence disables, regardless of value).
+// Computed once so styling is a cheap string wrap, and so a piped install
+// (fixture harness, CI) stays plain text with no escape codes.
 var colorEnabled = func() bool {
 	if _, noColor := os.LookupEnv("NO_COLOR"); noColor {
 		return false
 	}
-	return term.IsTerminal(int(os.Stdout.Fd()))
+	return term.IsTerminal(int(os.Stdout.Fd())) && termvt.Enable(os.Stdout)
 }()
 
 // ANSI SGR codes for the small palette the installer uses.

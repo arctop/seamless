@@ -24,6 +24,7 @@ import (
 
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
+	"github.com/arctop/seamless/internal/termvt"
 )
 
 // env is the world a handler is given.
@@ -53,6 +54,10 @@ type env struct {
 
 	// terminal reports whether stdin and stdout are both terminals.
 	terminal func() bool
+	// ansi reports whether stdout shows escape sequences as color, turning
+	// that on for a Windows console, which prints them as text until a program
+	// asks (termvt.Enable). Nil is no: plain text.
+	ansi func() bool
 	// exec runs a program (sudo, the browser opener, the notifier).
 	exec execFunc
 	// getenv reads the environment (NO_COLOR, TERM).
@@ -83,6 +88,7 @@ func newEnv() *env {
 		dial:       dial,
 		loadConfig: config.LoadClient,
 		terminal:   stdioIsTerminal,
+		ansi:       func() bool { return termvt.Enable(os.Stdout) },
 		exec:       runProgram,
 		getenv:     os.Getenv,
 

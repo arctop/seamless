@@ -142,6 +142,7 @@ func newApproveRig(t *testing.T, h http.HandlerFunc, typed string) *approveRig {
 	e.stdin = strings.NewReader(typed)
 	rig := &approveRig{e: e, out: out, errb: errb, runner: &fakeRunner{}, ac: ac, vars: map[string]string{"NO_COLOR": "1"}}
 	e.terminal = func() bool { return true }
+	e.ansi = func() bool { return true }
 	e.exec = rig.runner.exec(e.stdin)
 	// The stand-in console is on TCP: the check of who answers is faked here,
 	// and the real one is exercised in daemon_peer_test.go.

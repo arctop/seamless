@@ -959,9 +959,10 @@ func kindWords(kind string) string {
 }
 
 // useColor reports whether warnings may be colored: a terminal, no NO_COLOR
-// (https://no-color.org: any non-empty value) and not a dumb terminal.
+// (https://no-color.org: any non-empty value), not a dumb terminal, and one
+// that shows escape sequences as color (e.ansi).
 func useColor(e *env) bool {
-	return e.isTerminal() && e.envVar("NO_COLOR") == "" && e.envVar("TERM") != "dumb"
+	return e.isTerminal() && e.envVar("NO_COLOR") == "" && e.envVar("TERM") != "dumb" && e.ansi != nil && e.ansi()
 }
 
 // printable returns s as it may be written to the owner's terminal: unchanged
