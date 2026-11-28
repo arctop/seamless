@@ -13,8 +13,11 @@
    and advances. Scrolling the reel offscreen pauses the tour; returning resumes
    it where it stopped. Clicking a scene tab jumps the tour there (arrow keys,
    Home and End move between tabs); clicking the inner without|with toggle or
-   replay steers the current scene -- the tour then carries on from wherever
-   the visitor left it. On wide screens both sides of a scene play at once, so
+   replay steers the current scene. Once the visitor has steered, the tour
+   stops changing scenes: their scene plays through and stays, since a
+   transcript takes longer to read than the tour would hold it. A mouse over
+   the reel holds it in the same way for as long as it is there. On wide
+   screens both sides of a scene play at once, so
    neither terminal sits idle while the other runs. prefers-reduced-motion
    renders transcripts statically with no autoplay and no tour. Text is real,
    selectable DOM.
@@ -657,6 +660,8 @@
 
     /* ---- tour state --------------------------------------------------------- */
     var cur = 0, seg = 0, holdTimer = null, inView = false, started = false, segDone = false;
+    var took = false;      // the visitor picked a scene, a side or replay: no more scene changes
+    var hovering = false;  // a mouse over the reel holds it where it is
 
     function setProgress(i, frac, ms) {
       var prog = navEls[i].querySelector(".sr-prog");
@@ -693,7 +698,8 @@
 
     function onSegDone() {
       segDone = true;
-      if (!inView) return;
+      if (!inView || hovering) return;
+      if (took && seg >= controllerFor(cur).segments.length - 1) return; // their scene stays
       var ms = holdMs();
       setProgress(cur, 0, ms); // telegraph the coming advance
       holdTimer = setTimeout(advance, ms);
@@ -724,6 +730,7 @@
     }
     function userSegment(i, name) {
       if (reduced) { pauseSwitch(i); controllerFor(i).showStatic(name); return; }
+      took = true;
       clearHold();
       if (controllers[cur] && cur !== i) { controllers[cur].stop(); navEls[cur].classList.remove("playing"); }
       cur = i;
@@ -735,6 +742,7 @@
     }
     function userReplay(i) {
       if (reduced) { pauseSwitch(i); controllerFor(i).showStatic(); return; }
+      took = true;
       clearHold();
       cur = i;
       showScene(i);
@@ -745,11 +753,13 @@
     navEls.forEach(function (b, i) {
       b.addEventListener("click", function () {
         if (reduced) { pauseSwitch(i); controllerFor(i).showStatic(); return; }
+        took = true;
         goScene(i);
       });
     });
     rovingKeys(navEls, function (i) {
       if (reduced) { pauseSwitch(i); controllerFor(i).showStatic(); return; }
+      took = true;
       goScene(i);
     });
 
@@ -763,6 +773,18 @@
     // build + show the first scene idle
     controllerFor(0);
     showScene(0);
+
+    // a mouse over the reel holds the tour; leaving picks the hold back up
+    reel.addEventListener("pointerenter", function (e) {
+      if (e.pointerType !== "mouse") return;
+      hovering = true;
+      clearHold();
+    });
+    reel.addEventListener("pointerleave", function (e) {
+      if (e.pointerType !== "mouse") return;
+      hovering = false;
+      if (segDone && inView) onSegDone();
+    });
 
     // autoplay on scroll into view; leaving pauses, returning resumes
     if ("IntersectionObserver" in window) {
