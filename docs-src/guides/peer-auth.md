@@ -362,10 +362,11 @@ computer's relay, at the same path
 Windows computer, or one without a relay, is a key client and never opens a
 locked project ([relays](#agents-on-another-computer-relays)).
 
-The console still needs TCP: a browser cannot dial a socket, and
-`seamlessd console-open` refuses a socket `server_url` with instructions. Keep
-a second config of your own, used only for the console, that names the
-daemon's TCP address and holds its key, and name it when you open the console:
+The console still needs TCP: a browser cannot dial a socket. Keep a second
+config of your own, used only for the console, beside your socket config, that
+names the daemon's TCP address and holds its key. `seamlessd console-open` opens
+the console with it whenever your own config dials the socket, and without it
+refuses with instructions:
 
 ```yaml
 # ~/.config/seamless/console.yaml, mode 0600
@@ -376,7 +377,7 @@ mcp:
 ```
 
 ```bash
-SEAMLESS_CONFIG=~/.config/seamless/console.yaml seamlessd console-open
+seamlessd console-open    # uses ~/.config/seamless/console.yaml
 ```
 
 On a daemon that locks a project, `console-open` signs in on the passkey origin

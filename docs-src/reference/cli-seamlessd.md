@@ -1351,10 +1351,14 @@ While `peer_auth` is on, it signs in on
 console's cookie belongs to one host, and browsers refuse passkeys on an IP
 address such as `127.0.0.1`. A client's config carries no `peer_auth` block, so
 there it asks the daemon for that origin, and uses `localhost` only when the
-daemon is on this machine. A socket `server_url` is refused: a browser cannot
-dial one, so the command says where the console is and to sign in with the
-daemon's key, or to run it with a config that names the TCP `server_url` and
-`mcp.api_key` (set `SEAMLESS_CONFIG`).
+daemon is on this machine. A browser cannot dial a socket `server_url`, so on
+such a config the command opens with the console's own config beside it
+instead, `console.yaml` in the same folder (the daemon's TCP `server_url` and
+its `mcp.api_key`, which `seamlessd peer-auth setup` writes there), and says
+which file it used. With no `console.yaml` there it refuses, and says where the
+console is and where that file would go. It never reads a `console.yaml` beside
+a `./seamless.yaml` from the working directory, which anyone who can commit to
+it could have written.
 
 `--unlock PROJECT` is the terminal's half of opening a locked project in one
 browser's console without a passkey. The browser begins it: open the project's

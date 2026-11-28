@@ -169,10 +169,12 @@ func pasClientConfig() string {
 }
 
 // pasConsoleConfigContent is the console's own config: the daemon's TCP
-// address and its key, for SEAMLESS_CONFIG=<it> seamlessd console-open.
+// address and its key, which seamlessd console-open reads when the config
+// beside it dials the socket (socketConsoleConfig).
 func pasConsoleConfigContent(serverURL, key, caFile string) string {
 	s := "# Written by seamlessd peer-auth setup, for the console only: a browser cannot\n" +
-		"# dial the socket. Open it with SEAMLESS_CONFIG=<this file> seamlessd console-open.\n" +
+		"# dial the socket. seamlessd console-open opens the console with this file\n" +
+		"# whenever your config beside it dials the socket.\n" +
 		"# The key is readable by every process of yours: seamlessd setup's \"Sign in with\n" +
 		"# passkeys and retire the key\" retires it.\n" +
 		"role: client\n" +

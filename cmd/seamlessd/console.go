@@ -72,6 +72,10 @@ var consoleLoginTmpl = template.Must(template.New("console-login").Parse(`<!doct
 // passkey begins in the browser too: the sign-in page's terminal sign-in shows
 // a code, which --sign-in --code approves as the daemon's account once it has
 // shown the owner that browser and the owner said yes (runConsoleSignIn).
+//
+// A config that dials the daemon's socket opens nothing itself, since a
+// browser cannot dial one: console-open opens with the console's own config
+// beside it instead (socketConsoleConfig), and refuses when there is none.
 func runConsoleOpen(args []string) error {
 	fs := flag.NewFlagSet("console-open", flag.ContinueOnError)
 	browser := fs.String("browser", "", `browser application to open instead of the default (e.g. "Google Chrome"; macOS only; not with --unlock or --sign-in, which open no browser)`)
@@ -113,7 +117,9 @@ func runConsoleOpen(args []string) error {
 		return nil
 	}
 	if cfg.SocketPath() != "" {
-		return fmt.Errorf("seamlessd.console-open: %w", socketConsoleRefusal(cfg))
+		if cfg, err = socketConsoleConfig(cfg, os.Stdout, os.Stderr); err != nil {
+			return fmt.Errorf("seamlessd.console-open: %w", err)
+		}
 	}
 	// Passkey sign-in: the key signs no browser in, so there is no page to
 	// pre-sign. console-open opens the console's sign-in page and writes
@@ -125,7 +131,11 @@ func runConsoleOpen(args []string) error {
 		return nil
 	}
 	if strings.TrimSpace(cfg.MCP.APIKey) == "" {
-		return fmt.Errorf("seamlessd.console-open: mcp.api_key is empty; run `seamlessd serve` once to generate it, or set it in seamless.yaml")
+		file := "seamless.yaml"
+		if src := cfg.SourcePath(); src != "" {
+			file = src
+		}
+		return fmt.Errorf("seamlessd.console-open: mcp.api_key is empty; run `seamlessd serve` once to generate it, or set it in %s", file)
 	}
 	base := consoleOpenBase(cfg)
 	if !serverReachable(urlHostPort(base)) {
@@ -485,18 +495,72 @@ func usableOrigin(origin string, cfg config.Config) bool {
 	return false
 }
 
+// consoleConfigBeside is where console-open looks for the console's own config
+// (retireConsoleConfig) when cfg dials the daemon's socket: beside the file cfg
+// was loaded from, where seamlessd peer-auth setup writes it. "" when there is
+// no such place: a config from the environment alone, a file that is itself
+// console.yaml, or ./seamless.yaml, the daemon search's last step, whose
+// folder is a working directory anyone may commit to -- a console.yaml there
+// would choose the site the browser is sent to.
+func consoleConfigBeside(cfg config.Config) string {
+	src := cfg.SourcePath()
+	if src == "" || cfg.FromWorkingDir() || filepath.Base(src) == retireConsoleConfig {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(src), retireConsoleConfig)
+}
+
+// socketConsoleConfig is console-open on a config whose server_url is the
+// daemon's socket, which a browser cannot dial: the console's own config
+// beside it (consoleConfigBeside), the daemon's TCP address and its key, when
+// the owner keeps one -- what SEAMLESS_CONFIG=<it> would have loaded -- and
+// otherwise the refusal that says where the console is. It says which file it
+// opens with on out, and warns on errOut when other accounts can read the key.
+func socketConsoleConfig(cfg config.Config, out, errOut io.Writer) (config.Config, error) {
+	path := consoleConfigBeside(cfg)
+	if path == "" {
+		return config.Config{}, socketConsoleRefusal(cfg, "")
+	}
+	info, err := os.Stat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return config.Config{}, socketConsoleRefusal(cfg, path)
+	}
+	if err != nil {
+		return config.Config{}, fmt.Errorf("the console's config %s: %w", path, err)
+	}
+	consoleCfg, err := config.LoadFrom(path)
+	if err != nil {
+		return config.Config{}, fmt.Errorf("the console's config beside %s: %w", cfg.SourcePath(), err)
+	}
+	if consoleCfg.SocketPath() != "" {
+		return config.Config{}, fmt.Errorf("%s, the console's config, dials the daemon's socket too (%s), which a browser cannot dial: "+
+			"give it the daemon's TCP server_url", path, consoleCfg.DaemonAddress())
+	}
+	if perm := info.Mode().Perm(); runtime.GOOS != "windows" && perm&0o077 != 0 && strings.TrimSpace(consoleCfg.MCP.APIKey) != "" {
+		fmt.Fprintf(errOut, "warning: %s keeps the daemon's key, and other accounts can read it (mode %04o): chmod 600 %s\n", path, perm, path)
+	}
+	fmt.Fprintf(out, "%s dials the daemon's socket, which a browser cannot: opening the console with %s\n", cfg.SourcePath(), path)
+	return consoleCfg, nil
+}
+
 // socketConsoleRefusal is console-open on a config whose server_url is the
-// daemon's socket: a browser cannot dial a socket, so there is nothing to
-// open from this config. It names where the daemon says its console is, when
-// the daemon can be asked.
-func socketConsoleRefusal(cfg config.Config) error {
+// daemon's socket, with no console config beside it: a browser cannot dial a
+// socket, so there is nothing to open. It names where the daemon says its
+// console is, when the daemon can be asked, and beside -- where the console's
+// config would be read from ("" when there is no such place) -- or else
+// SEAMLESS_CONFIG.
+func socketConsoleRefusal(cfg config.Config, beside string) error {
 	where := "the daemon's TCP address"
 	if origin := daemonOrigin(cfg); usableOrigin(origin, cfg) {
 		where = origin + "/console/"
 	}
+	use := "run console-open with a config that names the TCP server_url and mcp.api_key (set SEAMLESS_CONFIG)"
+	if beside != "" {
+		use = "keep the console's own config at " + beside + " (mode 0600: role: client, the daemon's TCP server_url and " +
+			"its mcp.api_key), which console-open uses whenever this config dials the socket"
+	}
 	return fmt.Errorf("this config's server_url is the daemon's socket (%s), which a browser cannot dial: "+
-		"open %s and sign in with the daemon's key, or run console-open with a config that names the TCP server_url and "+
-		"mcp.api_key (set SEAMLESS_CONFIG)", cfg.DaemonAddress(), where)
+		"open %s and sign in with the daemon's key, or %s", cfg.DaemonAddress(), where, use)
 }
 
 // errUnlockBrowser refuses --browser beside --unlock. --browser names the

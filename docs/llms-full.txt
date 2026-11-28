@@ -9077,9 +9077,11 @@ syncs to, and a device without one can use your phone's through the browser's
 QR prompt. A `localhost` passkey works only in a browser on the Server itself.
 The rest is in [the console reference](/reference/console/#sign-in-with-a-passkey).
 
-On a Client whose `server_url` is a relay's socket, `seamlessd console-open`
-opens nothing - a browser cannot dial a socket - and names the console's address
-instead.
+On a Client whose `server_url` is a relay's socket, a browser cannot dial that
+socket. When you keep a `console.yaml` beside the Client's config naming the
+Server's TLS `server_url` (and its key, unless the console signs in with
+passkeys), `seamlessd console-open` opens the console with it; otherwise it opens
+nothing and names the console's address.
 
 ## Approve from another computer {#approve-from-another-computer}
 
@@ -9911,10 +9913,11 @@ computer's relay, at the same path
 Windows computer, or one without a relay, is a key client and never opens a
 locked project ([relays](#agents-on-another-computer-relays)).
 
-The console still needs TCP: a browser cannot dial a socket, and
-`seamlessd console-open` refuses a socket `server_url` with instructions. Keep
-a second config of your own, used only for the console, that names the
-daemon's TCP address and holds its key, and name it when you open the console:
+The console still needs TCP: a browser cannot dial a socket. Keep a second
+config of your own, used only for the console, beside your socket config, that
+names the daemon's TCP address and holds its key. `seamlessd console-open` opens
+the console with it whenever your own config dials the socket, and without it
+refuses with instructions:
 
 ```yaml
 # ~/.config/seamless/console.yaml, mode 0600
@@ -9925,7 +9928,7 @@ mcp:
 ```
 
 ```bash
-SEAMLESS_CONFIG=~/.config/seamless/console.yaml seamlessd console-open
+seamlessd console-open    # uses ~/.config/seamless/console.yaml
 ```
 
 On a daemon that locks a project, `console-open` signs in on the passkey origin
@@ -17109,10 +17112,14 @@ While `peer_auth` is on, it signs in on
 console's cookie belongs to one host, and browsers refuse passkeys on an IP
 address such as `127.0.0.1`. A client's config carries no `peer_auth` block, so
 there it asks the daemon for that origin, and uses `localhost` only when the
-daemon is on this machine. A socket `server_url` is refused: a browser cannot
-dial one, so the command says where the console is and to sign in with the
-daemon's key, or to run it with a config that names the TCP `server_url` and
-`mcp.api_key` (set `SEAMLESS_CONFIG`).
+daemon is on this machine. A browser cannot dial a socket `server_url`, so on
+such a config the command opens with the console's own config beside it
+instead, `console.yaml` in the same folder (the daemon's TCP `server_url` and
+its `mcp.api_key`, which `seamlessd peer-auth setup` writes there), and says
+which file it used. With no `console.yaml` there it refuses, and says where the
+console is and where that file would go. It never reads a `console.yaml` beside
+a `./seamless.yaml` from the working directory, which anyone who can commit to
+it could have written.
 
 `--unlock PROJECT` is the terminal's half of opening a locked project in one
 browser's console without a passkey. The browser begins it: open the project's

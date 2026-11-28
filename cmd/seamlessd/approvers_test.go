@@ -352,11 +352,11 @@ func TestSocketConsoleRefusal(t *testing.T) {
 	t.Cleanup(func() { _ = srv.Close() })
 
 	cfg := config.Config{AdvertisedURL: "unix://" + sock, Role: config.RoleClient}
-	err = socketConsoleRefusal(cfg)
+	err = socketConsoleRefusal(cfg, "")
 	require.ErrorContains(t, err, "the daemon's socket (unix:"+sock+"), which a browser cannot dial")
 	require.ErrorContains(t, err, "open http://localhost:8091/console/ and sign in with the daemon's key")
 	require.ErrorContains(t, err, "SEAMLESS_CONFIG")
 
 	gone := config.Config{AdvertisedURL: "unix:///nonexistent/seamless/d.sock", Role: config.RoleClient}
-	require.ErrorContains(t, socketConsoleRefusal(gone), "open the daemon's TCP address and sign in")
+	require.ErrorContains(t, socketConsoleRefusal(gone, ""), "open the daemon's TCP address and sign in")
 }

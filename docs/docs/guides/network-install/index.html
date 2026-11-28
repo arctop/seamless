@@ -880,9 +880,11 @@ Password Manager or another password manager is added once for every device it
 syncs to, and a device without one can use your phone's through the browser's
 QR prompt. A <code>localhost</code> passkey works only in a browser on the Server itself.
 The rest is in <a href="../../reference/console/#sign-in-with-a-passkey">the console reference</a>.</p>
-<p>On a Client whose <code>server_url</code> is a relay's socket, <code>seamlessd console-open</code>
-opens nothing - a browser cannot dial a socket - and names the console's address
-instead.</p>
+<p>On a Client whose <code>server_url</code> is a relay's socket, a browser cannot dial that
+socket. When you keep a <code>console.yaml</code> beside the Client's config naming the
+Server's TLS <code>server_url</code> (and its key, unless the console signs in with
+passkeys), <code>seamlessd console-open</code> opens the console with it; otherwise it opens
+nothing and names the console's address.</p>
 <h2 id="approve-from-another-computer">Approve from another computer</h2>
 <p>A browser on any computer approves with a passkey in the Server's console, and
 the Server verifies the ceremony: an agent's access request (<code>/console/access</code>),

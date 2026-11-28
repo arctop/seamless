@@ -332,3 +332,105 @@ func TestConsoleOpenPath_OnlyAConsolePage(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "http://127.0.0.1:8081/console/login?next=%2Fconsole%2Fapprovers", got)
 }
+
+// A socket config cannot drive a browser, so console-open opens with the
+// console's own config beside it -- where seamlessd peer-auth setup writes
+// console.yaml -- and refuses, naming that file, when the owner keeps none.
+func TestSocketConsoleConfig(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a socket server_url names a Unix path")
+	}
+	for _, k := range []string{"SEAMLESS_SERVER_URL", "SEAMLESS_MCP_API_KEY", "SEAMLESS_ROLE"} {
+		t.Setenv(k, "")
+		require.NoError(t, os.Unsetenv(k))
+	}
+	const sock = "unix:///nonexistent/seamless/d.sock"
+	world := func(t *testing.T, console string, mode os.FileMode) (config.Config, string) {
+		t.Helper()
+		dir := t.TempDir()
+		src := filepath.Join(dir, "seamless.yaml")
+		require.NoError(t, os.WriteFile(src, []byte("role: client\nserver_url: \""+sock+"\"\n"), 0o600))
+		beside := filepath.Join(dir, "console.yaml")
+		if console != "" {
+			require.NoError(t, os.WriteFile(beside, []byte(console), 0o600))
+			require.NoError(t, os.Chmod(beside, mode))
+		}
+		cfg, err := config.LoadFrom(src)
+		require.NoError(t, err)
+		require.NotEmpty(t, cfg.SocketPath())
+		return cfg, beside
+	}
+	const tcp = "role: client\nserver_url: \"https://seam.example:8443\"\nmcp:\n  api_key: \"console-key\"\n"
+
+	t.Run("beside", func(t *testing.T) {
+		cfg, beside := world(t, tcp, 0o600)
+		var out, errOut bytes.Buffer
+		got, err := socketConsoleConfig(cfg, &out, &errOut)
+		require.NoError(t, err)
+		require.Empty(t, got.SocketPath())
+		require.Equal(t, "https://seam.example:8443", got.ServerURL())
+		require.Equal(t, "console-key", got.MCP.APIKey)
+		require.Equal(t, beside, got.SourcePath())
+		require.Contains(t, out.String(), cfg.SourcePath()+" dials the daemon's socket")
+		require.Contains(t, out.String(), "opening the console with "+beside)
+		require.Empty(t, errOut.String())
+	})
+	t.Run("readable by others", func(t *testing.T) {
+		cfg, beside := world(t, tcp, 0o644)
+		var out, errOut bytes.Buffer
+		_, err := socketConsoleConfig(cfg, &out, &errOut)
+		require.NoError(t, err)
+		require.Contains(t, errOut.String(), "other accounts can read it (mode 0644): chmod 600 "+beside)
+	})
+	t.Run("absent", func(t *testing.T) {
+		cfg, beside := world(t, "", 0)
+		var out, errOut bytes.Buffer
+		_, err := socketConsoleConfig(cfg, &out, &errOut)
+		require.ErrorContains(t, err, "which a browser cannot dial")
+		require.ErrorContains(t, err, "keep the console's own config at "+beside)
+		require.NotContains(t, err.Error(), "SEAMLESS_CONFIG")
+		require.Empty(t, out.String())
+	})
+	t.Run("dials the socket too", func(t *testing.T) {
+		cfg, beside := world(t, "role: client\nserver_url: \""+sock+"\"\n", 0o600)
+		_, err := socketConsoleConfig(cfg, &bytes.Buffer{}, &bytes.Buffer{})
+		require.ErrorContains(t, err, beside+", the console's config, dials the daemon's socket too")
+	})
+	t.Run("unreadable", func(t *testing.T) {
+		cfg, _ := world(t, "role: client\nnot_a_key: 1\n", 0o600)
+		_, err := socketConsoleConfig(cfg, &bytes.Buffer{}, &bytes.Buffer{})
+		require.ErrorContains(t, err, "the console's config beside "+cfg.SourcePath())
+	})
+	t.Run("no file to look beside", func(t *testing.T) {
+		envOnly := config.Config{AdvertisedURL: sock, Role: config.RoleClient}
+		_, err := socketConsoleConfig(envOnly, &bytes.Buffer{}, &bytes.Buffer{})
+		require.ErrorContains(t, err, "SEAMLESS_CONFIG")
+
+		// console.yaml that dials the socket itself names no other file.
+		dir := t.TempDir()
+		self := filepath.Join(dir, "console.yaml")
+		require.NoError(t, os.WriteFile(self, []byte("role: client\nserver_url: \""+sock+"\"\n"), 0o600))
+		cfg, err := config.LoadFrom(self)
+		require.NoError(t, err)
+		require.Empty(t, consoleConfigBeside(cfg))
+		_, err = socketConsoleConfig(cfg, &bytes.Buffer{}, &bytes.Buffer{})
+		require.ErrorContains(t, err, "SEAMLESS_CONFIG")
+	})
+	// ./seamless.yaml sits in a working directory anyone may commit to: a
+	// console.yaml beside it would choose the site the browser goes to.
+	t.Run("working directory", func(t *testing.T) {
+		repo := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(repo, config.WorkingDirConfig), []byte("role: client\nserver_url: \""+sock+"\"\n"), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(repo, "console.yaml"), []byte(tcp), 0o600))
+		t.Setenv("HOME", t.TempDir())
+		t.Setenv("SEAMLESS_CONFIG", "")
+		require.NoError(t, os.Unsetenv("SEAMLESS_CONFIG"))
+		t.Chdir(repo)
+		cfg, err := config.Load()
+		require.NoError(t, err)
+		require.True(t, cfg.FromWorkingDir())
+		require.Empty(t, consoleConfigBeside(cfg))
+		_, err = socketConsoleConfig(cfg, &bytes.Buffer{}, &bytes.Buffer{})
+		require.ErrorContains(t, err, "SEAMLESS_CONFIG")
+	})
+}

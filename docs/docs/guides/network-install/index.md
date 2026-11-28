@@ -590,9 +590,11 @@ syncs to, and a device without one can use your phone's through the browser's
 QR prompt. A `localhost` passkey works only in a browser on the Server itself.
 The rest is in [the console reference](https://thereisnospoon.org/docs/reference/console/#sign-in-with-a-passkey).
 
-On a Client whose `server_url` is a relay's socket, `seamlessd console-open`
-opens nothing - a browser cannot dial a socket - and names the console's address
-instead.
+On a Client whose `server_url` is a relay's socket, a browser cannot dial that
+socket. When you keep a `console.yaml` beside the Client's config naming the
+Server's TLS `server_url` (and its key, unless the console signs in with
+passkeys), `seamlessd console-open` opens the console with it; otherwise it opens
+nothing and names the console's address.
 
 ## Approve from another computer {#approve-from-another-computer}
 

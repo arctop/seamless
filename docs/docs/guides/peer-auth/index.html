@@ -654,17 +654,18 @@ computer's relay, at the same path
 (<a href="../../guides/network-install/#step-3-pair-a-client">how a Client pairs</a>). A
 Windows computer, or one without a relay, is a key client and never opens a
 locked project (<a href="#agents-on-another-computer-relays">relays</a>).</p>
-<p>The console still needs TCP: a browser cannot dial a socket, and
-<code>seamlessd console-open</code> refuses a socket <code>server_url</code> with instructions. Keep
-a second config of your own, used only for the console, that names the
-daemon's TCP address and holds its key, and name it when you open the console:</p>
+<p>The console still needs TCP: a browser cannot dial a socket. Keep a second
+config of your own, used only for the console, beside your socket config, that
+names the daemon's TCP address and holds its key. <code>seamlessd console-open</code> opens
+the console with it whenever your own config dials the socket, and without it
+refuses with instructions:</p>
 <div class="code-block" data-lang="yaml"><pre class="chroma"><code><span class="line"><span class="cl"><span class="c"># ~/.config/seamless/console.yaml, mode 0600</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">role</span><span class="p">:</span><span class="w"> </span><span class="l">client</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">server_url</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;http://127.0.0.1:8081&#34;</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">mcp</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">api_key</span><span class="p">:</span><span class="w"> </span><span class="s2">&#34;&lt;the same key as the daemon&#39;s config&gt;&#34;</span><span class="w">
 </span></span></span></code></pre></div>
-<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl"><span class="nv">SEAMLESS_CONFIG</span><span class="o">=</span>~/.config/seamless/console.yaml seamlessd console-open
+<div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd console-open    <span class="c1"># uses ~/.config/seamless/console.yaml</span>
 </span></span></code></pre></div>
 <p>On a daemon that locks a project, <code>console-open</code> signs in on the passkey origin
 the daemon names (<a href="#the-passkey-origin">which one</a>) instead of <code>127.0.0.1</code>:
