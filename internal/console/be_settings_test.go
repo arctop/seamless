@@ -277,18 +277,17 @@ func TestBeUtilityRankingOf(t *testing.T) {
 		{Project: "e", Status: "building"},
 		{Project: "", Status: "building"},
 	}
-	u := utilityRankingOf(rows, "", true)
+	u := utilityRankingOf(rows, "")
 	require.Equal(t, "auto", u.Mode)
 	require.Equal(t, 2, u.Ranking)
 	require.Equal(t, 1, u.Ready)
 	require.Equal(t, 2, u.Forced)
 	require.Len(t, u.Rows, 4)
 	require.Len(t, u.Building, 1)
-	require.True(t, u.Rows[0].Momentum)
 	require.Equal(t, "projects", u.BuildingNoun())
 
 	rows[5].RecentEvents = 3
-	u = utilityRankingOf(rows, "off", false)
+	u = utilityRankingOf(rows, "off")
 	require.Len(t, u.Building, 2)
 	require.Equal(t, "scopes", u.BuildingNoun())
 	require.Equal(t, "off", u.Mode)

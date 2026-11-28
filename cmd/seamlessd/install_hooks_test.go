@@ -570,7 +570,7 @@ func TestRunInstallHooks_ServerURLWritesTheClientConfigAndOpensNoDatabase(t *tes
 	home := t.TempDir()
 	clientInstallEnv(t, home)
 	srv, seen := settingsServer(t, http.StatusOK,
-		`{"featuresConfig":{"research":true,"momentum":false,"gamification":false}}`)
+		`{"featuresConfig":{"research":true}}`)
 
 	settings := filepath.Join(t.TempDir(), "settings.json")
 	out := captureStdout(t, func() error {

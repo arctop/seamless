@@ -29,15 +29,17 @@ func settingsServer(t *testing.T, status int, body string) (*httptest.Server, *[
 }
 
 func TestClientFeatures_ReadsTheServersEffectiveState(t *testing.T) {
+	// An older server still names momentum and gamification: the keys are
+	// read past, they switch nothing now.
 	srv, seen := settingsServer(t, http.StatusOK,
-		`{"featuresConfig":{"research":true,"momentum":false,"gamification":false}}`)
+		`{"featuresConfig":{"research":true,"momentum":false,"gamification":false,"repo_locks":false}}`)
 
 	cfg := config.Defaults()
 	cfg.MCP.APIKey = "server-key"
 	got := clientFeatures(cfg, srv.URL)
 
 	require.True(t, got.Research, "the server's stored override decides, not this machine's config")
-	require.False(t, got.Momentum)
+	require.Equal(t, config.Features{Research: true}, got)
 	require.Len(t, *seen, 1)
 	require.Equal(t, "/console/settings?format=json", (*seen)[0].URL.RequestURI())
 	require.Equal(t, "Bearer server-key", (*seen)[0].Header.Get("Authorization"))
@@ -82,14 +84,14 @@ func TestClientFeatures_UnreachableServerWarnsAndFallsBack(t *testing.T) {
 	srv.Close() // nothing is listening now
 
 	cfg := config.Defaults()
-	cfg.Features.Momentum = true
+	cfg.Features.RepoLocks = true
 	var got config.Features
 	out := captureStdout(t, func() error {
 		got = clientFeatures(cfg, url)
 		return nil
 	})
 
-	require.True(t, got.Momentum)
+	require.True(t, got.RepoLocks)
 	require.Contains(t, out, "warning:")
 	require.Contains(t, out, "cannot read the feature toggles from "+url)
 }

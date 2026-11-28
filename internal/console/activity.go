@@ -36,7 +36,7 @@ func (s *Service) recentEvents(ctx context.Context, limit int) ([]eventRow, erro
 	if s.cfg.Events == nil {
 		return nil, nil
 	}
-	evs, err := s.eventLog(ctx).RecentExcluding(ctx, limit, s.ledgerExcludedKinds(ctx)...)
+	evs, err := s.eventLog(ctx).RecentExcluding(ctx, limit, ledgerExcludedKinds...)
 	if err != nil {
 		return nil, err
 	}
@@ -89,23 +89,13 @@ func mishapTypeOf(p map[string]any) core.MishapType {
 
 // ledgerExcludedKinds is the exclusion set for the business ledgers (the
 // Overview feed, the Now wire, the project workspace's recent list):
-// transport-level Interactions noise always -- tool.call and hook.prompt live
-// on the Interactions screen instead -- plus milestone.reached while momentum
-// is off. Milestones are the one gated kind consumption must filter itself:
-// the events are only minted while the feature is on, but a row minted before
-// a switch-off would otherwise keep celebrating in the ledger, and off means
-// zero trace. The audit surfaces (the Interactions stream, the event detail
-// page) keep the history, exactly like historical trial lines.
-func (s *Service) ledgerExcludedKinds(ctx context.Context) []core.EventKind {
-	// memory.screened rides beside every write while write screening is on:
-	// telemetry for a monitor, not news for the owner. What the owner acts on
-	// -- a hold, a release, a discard, a marked session -- stays in the ledger.
-	kinds := []core.EventKind{core.EventToolCall, core.EventHookPrompt, core.EventMemoryScreened}
-	if !features.Enabled(s.effectiveFeatures(ctx), features.Momentum) {
-		kinds = append(kinds, store.EventMilestoneReached)
-	}
-	return kinds
-}
+// transport-level Interactions noise -- tool.call and hook.prompt live on the
+// Interactions screen instead -- and memory.screened, which rides beside every
+// write while write screening is on: telemetry for a monitor, not news for
+// the owner. What the owner acts on -- a hold, a release, a discard, a marked
+// session -- stays in the ledger. The audit surfaces (the Interactions stream,
+// the event detail page) keep every kind.
+var ledgerExcludedKinds = []core.EventKind{core.EventToolCall, core.EventHookPrompt, core.EventMemoryScreened}
 
 func toEventRow(e core.Event) eventRow {
 	return eventRow{

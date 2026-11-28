@@ -1,9 +1,8 @@
 package console
 
-// Momentum's console-side helpers for project maturity stages: gated
-// evaluation (the computation and its latch run only while the feature is
-// on), crossing events, and the glyph the board rows and the project detail
-// header share.
+// Momentum's console-side helpers for project maturity stages: evaluation
+// and its latch, crossing events, and the glyph the board rows and the
+// project detail header share.
 
 import (
 	"context"
@@ -12,19 +11,15 @@ import (
 	"time"
 
 	"github.com/arctop/seamless/internal/core"
-	"github.com/arctop/seamless/internal/features"
 	"github.com/arctop/seamless/internal/store"
 )
 
 // projectStages evaluates the momentum maturity stages for the given board
-// rows: nil while the feature is off (no computation, no latch writes), and
-// failure-soft -- an error costs the glyphs, never the page. Latch advances
-// are recorded as project.stage_reached events, once per crossing by
-// construction (the latch only moves forward).
+// rows, failure-soft -- an error costs the glyphs (nil), never the page. Latch
+// advances are recorded as project.stage_reached events, once per crossing by
+// construction (the latch only moves forward, and a project it first sees is
+// seeded rather than crossed).
 func (s *Service) projectStages(ctx context.Context, rows []store.ProjectBoardRow, now time.Time) map[string]store.ProjectStageInfo {
-	if !features.Enabled(s.effectiveFeatures(ctx), features.Momentum) {
-		return nil
-	}
 	stages, crossings, err := store.EvaluateProjectStagesWith(ctx, s.db(ctx), s.writeDB(), rows, now)
 	if err != nil {
 		s.logger.Warn("console: project stages", "error", err)
@@ -62,12 +57,8 @@ func finishBar(p store.PlanRollup) template.HTML {
 
 // glintKind reports whether an event kind is one of the momentum-born
 // celebration kinds whose Overview ledger row wears the mom-glint class -- the
-// hook the live-arrival wash rides (see console.css). Keyed on the kind, not
-// the feature: all three kinds are minted only while momentum is on
-// (projectStages here, the first-reuse latch and the milestone ledger in
-// store), and a stale milestone row is filtered out of the feeds while it is
-// off (ledgerExcludedKinds), so the class never appears on a page the feature
-// did not already touch.
+// hook the live-arrival wash rides (see console.css): projectStages here, the
+// first-reuse latch and the milestone ledger in store.
 func glintKind(kind string) bool {
 	return kind == string(core.EventMemoryFirstReuse) || kind == string(core.EventProjectStage) ||
 		kind == string(store.EventMilestoneReached)

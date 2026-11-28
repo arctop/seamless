@@ -123,6 +123,9 @@ func doctorOn(args []string, m doctorMachine) error {
 		configSourceCheck(cfg),
 		configFileCheck(cfg, m.goos, m.sharedConfig),
 	)
+	if row, ok := retiredKeysCheck(cfg, os.LookupEnv); ok {
+		checks = append(checks, row)
+	}
 	// A relay on this computer (its data directory exists): no rows anywhere else.
 	checks = append(checks, relayDoctorChecks(context.Background(), m.relay)...)
 	// A move to peer_auth (seamlessd peer-auth setup): no row on a computer

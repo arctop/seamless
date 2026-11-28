@@ -537,17 +537,18 @@ injected while they are running. See
 ship <strong>off</strong>. Nothing is broken and nothing was deleted - the feature's data is
 untouched, and every surface returns the moment it is switched back on. Tools
 and whole screens belong to research (the Labs and Trials screens, the trials
-search scope, and <code>lab_open</code>, <code>trial_record</code>, <code>trial_query</code>); the in-page
-momentum surfaces (finish-line cards, the capture calendar, payoff moments,
-maturity stages) belong to momentum; the Now screen's arcade (the day tape,
-personal records, the hot-streak pulse, celebration moments) belongs to
-gamification - the Now screen itself is core and always on; the Locks screen,
-the <code>locks_*</code> tools and <code>seam lock</code> belong to repo locks; and the Diary screen,
-with its Open in Diary link on a Sessions day view, belongs to the Diary.</p>
+search scope, and <code>lab_open</code>, <code>trial_record</code>, <code>trial_query</code>); the Locks
+screen, the <code>locks_*</code> tools and <code>seam lock</code> belong to repo locks; and the Diary
+screen, with its Open in Diary link on a Sessions day view, belongs to the
+Diary. <a href="../../reference/console/#momentum">Momentum</a> (finish-line cards, the
+capture calendar, payoff moments, maturity stages, milestones) and the Now
+screen's <a href="../../reference/console/#now-arcade">arcade</a> are not optional: they are
+always on, and the <code>features.momentum</code> and <code>features.gamification</code> keys they
+used to have switch nothing (<code>seamlessd doctor</code> names them for removal).</p>
 <p><strong>Fix.</strong> Turn the feature on in the console under Settings → Features (or set
 its <code>features:</code> key in YAML, or <code>SEAMLESS_FEATURES_RESEARCH=1</code> /
-<code>SEAMLESS_FEATURES_MOMENTUM=1</code> / <code>SEAMLESS_FEATURES_GAMIFICATION=1</code> /
-<code>SEAMLESS_FEATURES_REPO_LOCKS=1</code> / <code>SEAMLESS_FEATURES_DIARY=1</code>). The
+<code>SEAMLESS_FEATURES_SCREENING=1</code> / <code>SEAMLESS_FEATURES_REPO_LOCKS=1</code> /
+<code>SEAMLESS_FEATURES_DIARY=1</code>). The
 console toggle stores an override that beats both the file and the
 environment, so check it before you edit YAML.</p>
 <p><strong>If you already turned it on and the agent still cannot call the tool</strong>, you

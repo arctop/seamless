@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"math"
 	"os"
 	"path/filepath"
@@ -356,26 +357,15 @@ func TestLoadFrom_FeaturesFileAndEnv(t *testing.T) {
 	cfg, err := LoadFrom("")
 	require.NoError(t, err)
 	require.False(t, cfg.Features.Research, "optional features default to off")
-	require.False(t, cfg.Features.Momentum, "optional features default to off")
+	require.Empty(t, cfg.Features.RetiredKeys())
 
 	path := writeConfig(t, `
 features:
   research: true
-  momentum: true
 `)
 	cfg, err = LoadFrom(path)
 	require.NoError(t, err)
 	require.True(t, cfg.Features.Research)
-	require.True(t, cfg.Features.Momentum)
-
-	t.Setenv("SEAMLESS_FEATURES_MOMENTUM", "false")
-	cfg, err = LoadFrom(path)
-	require.NoError(t, err)
-	require.False(t, cfg.Features.Momentum, "env wins over file")
-	require.True(t, cfg.Features.Research, "the momentum env override leaves research alone")
-	// t.Setenv above registered the restore-to-unset cleanup; drop the override
-	// so the research assertions below run without it.
-	require.NoError(t, os.Unsetenv("SEAMLESS_FEATURES_MOMENTUM"))
 
 	t.Setenv("SEAMLESS_FEATURES_RESEARCH", "false")
 	cfg, err = LoadFrom(path)
@@ -825,4 +815,27 @@ func TestMatchBriefingPreset(t *testing.T) {
 	require.False(t, ok)
 	_, ok = MatchBriefingPreset(Briefing{})
 	require.False(t, ok)
+}
+
+// A file written while momentum and gamification were switches still loads:
+// their keys parse (KnownFields would refuse them otherwise) and switch
+// nothing, RetiredKeys names them for doctor, their env overrides are no
+// longer read, and neither reaches the console's override row.
+func TestLoadFrom_RetiredFeatureKeysStillLoad(t *testing.T) {
+	path := writeConfig(t, `
+features:
+  research: true
+  momentum: false
+  gamification: true
+`)
+	t.Setenv("SEAMLESS_FEATURES_MOMENTUM", "not-a-bool")
+	cfg, err := LoadFrom(path)
+	require.NoError(t, err, "a retired key never stops the daemon, nor does its env override")
+	require.True(t, cfg.Features.Research, "the block's live keys still apply")
+	require.Equal(t, []string{"features.momentum", "features.gamification"}, cfg.Features.RetiredKeys())
+
+	raw, err := json.Marshal(cfg.Features)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"research":true,"screening":false,"repo_locks":false,"diary":false}`, string(raw))
+	require.Equal(t, []string{"SEAMLESS_FEATURES_MOMENTUM", "SEAMLESS_FEATURES_GAMIFICATION"}, RetiredFeatureEnv)
 }

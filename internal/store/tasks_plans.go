@@ -181,8 +181,7 @@ type FinishLinePlan struct {
 
 // FinishLinePlans returns every active plan at the finish line (AtFinishLine)
 // across all projects, most recently active first, each carrying the titles of
-// its not-yet-closed steps oldest-first. A momentum-only surface: callers gate
-// on the feature before asking, so a disabled install never runs the query.
+// its not-yet-closed steps oldest-first: momentum's finish-line cards.
 func FinishLinePlans(ctx context.Context, db *sql.DB) ([]FinishLinePlan, error) {
 	all, err := allPlanRollups(ctx, db)
 	if err != nil {

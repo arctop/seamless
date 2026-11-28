@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 )
 
@@ -54,8 +53,6 @@ func seedPlanTask(t *testing.T, db *sql.DB, project, plan string, status core.Ta
 	return id
 }
 
-var momentumOn = config.Features{Momentum: true}
-
 func TestCheckMilestones_MemoryWrittenCrossingMintsOnce(t *testing.T) {
 	db := openTestDB(t)
 	rec := newFakeOnceRecorder()
@@ -65,7 +62,7 @@ func TestCheckMilestones_MemoryWrittenCrossingMintsOnce(t *testing.T) {
 	for i := 1; i <= 110; i++ {
 		insertProjectEvent(t, db, core.EventMemoryWritten, "sess-1", "demo", "", "{}", ts)
 		e := core.Event{Kind: core.EventMemoryWritten, SessionID: "sess-1", ProjectSlug: "demo", TS: ts}
-		require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, e))
+		require.NoError(t, CheckMilestones(ctx, db, rec, e))
 		if i < 100 {
 			require.Emptyf(t, rec.minted, "no mint before the 100th write (write %d)", i)
 		}
@@ -82,38 +79,80 @@ func TestCheckMilestones_MemoryWrittenCrossingMintsOnce(t *testing.T) {
 	require.Equal(t, 100, m.Payload["threshold"])
 
 	// A projectless event moves no per-project count.
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn,
+	require.NoError(t, CheckMilestones(ctx, db, rec,
 		core.Event{Kind: core.EventMemoryWritten, TS: ts}))
 	require.Len(t, rec.minted, 1)
 }
 
-func TestCheckMilestones_ThresholdsCrossedWhileOffLatchOnNextCheck(t *testing.T) {
+// A count first checked far past several thresholds -- writes recorded before
+// milestones were -- mints only the highest it reached, with the real count,
+// and the next threshold still mints on the write that reaches it.
+func TestCheckMilestones_CatchUpMintsOnlyTheHighestThreshold(t *testing.T) {
 	db := openTestDB(t)
 	rec := newFakeOnceRecorder()
 	ctx := context.Background()
 	ts := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
 
-	for range 500 {
+	for range 501 {
 		insertProjectEvent(t, db, core.EventMemoryWritten, "", "demo", "", "{}", ts)
 	}
 	e := core.Event{Kind: core.EventMemoryWritten, ProjectSlug: "demo", TS: ts}
-	require.NoError(t, CheckMilestones(ctx, db, rec, config.Features{}, e))
-	require.Empty(t, rec.minted, "off runs no checks and mints nothing")
-
-	// Momentum comes on; the next write latches both crossed thresholds, each
-	// claim exactly true and each count the real one at mint time.
-	insertProjectEvent(t, db, core.EventMemoryWritten, "", "demo", "", "{}", ts)
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, e))
-	require.Len(t, rec.minted, 2)
-	require.Equal(t, "memories-100:demo", rec.minted[0].ItemID)
-	require.Equal(t, "100 memories written in demo", rec.minted[0].Payload["claim"])
+	require.NoError(t, CheckMilestones(ctx, db, rec, e))
+	require.Len(t, rec.minted, 1, "one row for the catch-up, not one per threshold passed")
+	require.Equal(t, "memories-500:demo", rec.minted[0].ItemID)
+	require.Equal(t, "500 memories written in demo", rec.minted[0].Payload["claim"])
 	require.Equal(t, 501, rec.minted[0].Payload["count"])
-	require.Equal(t, "memories-500:demo", rec.minted[1].ItemID)
-	require.Equal(t, "500 memories written in demo", rec.minted[1].Payload["claim"])
-	require.Equal(t, 501, rec.minted[1].Payload["count"])
+	require.Equal(t, 500, rec.minted[0].Payload["threshold"])
+
+	// Further writes below the next threshold mint nothing more.
+	insertProjectEvent(t, db, core.EventMemoryWritten, "", "demo", "", "{}", ts)
+	require.NoError(t, CheckMilestones(ctx, db, rec, e))
+	require.Len(t, rec.minted, 1)
+
+	// The write that reaches 1000 mints it, on that write.
+	for range 497 {
+		insertProjectEvent(t, db, core.EventMemoryWritten, "", "demo", "", "{}", ts)
+	}
+	require.NoError(t, CheckMilestones(ctx, db, rec, e))
+	require.Len(t, rec.minted, 1, "999 writes is not the next milestone")
+	insertProjectEvent(t, db, core.EventMemoryWritten, "", "demo", "", "{}", ts)
+	require.NoError(t, CheckMilestones(ctx, db, rec, e))
+	require.Len(t, rec.minted, 2)
+	require.Equal(t, "memories-1000:demo", rec.minted[1].ItemID)
+	require.Equal(t, 1000, rec.minted[1].Payload["count"])
 }
 
-func TestCheckMilestones_OffGateAndStoredOverride(t *testing.T) {
+// A milestone already in the ledger stops its check at the latch: no count and
+// no mint attempt, though the counts are past every threshold (the fake
+// recorder has not seen these keys, so a check that went on would mint).
+func TestCheckMilestones_LatchedMilestoneStopsItsCheck(t *testing.T) {
+	db := openTestDB(t)
+	rec := newFakeOnceRecorder()
+	ctx := context.Background()
+	now := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
+
+	for range 1000 {
+		insertProjectEvent(t, db, core.EventMemoryWritten, "", "demo", "", "{}", now)
+		insertProjectEvent(t, db, core.EventInjected, "", "demo", "", `{"source":"recall"}`, now)
+	}
+	seedRegisteredProject(t, db, "demo", now.AddDate(-1, 0, -1))
+	for _, key := range []string{"memories-1000:demo", "recalls-1000:demo", "birthday-1:demo"} {
+		insertProjectEvent(t, db, EventMilestoneReached, "", "demo", key, "{}", now)
+	}
+
+	require.NoError(t, CheckMilestones(ctx, db, rec,
+		core.Event{Kind: core.EventMemoryWritten, ProjectSlug: "demo", TS: now}))
+	require.NoError(t, CheckMilestones(ctx, db, rec,
+		core.Event{Kind: core.EventInjected, ProjectSlug: "demo", Payload: map[string]any{"source": "recall"}, TS: now}))
+	require.NoError(t, CheckMilestones(ctx, db, rec,
+		core.Event{Kind: core.EventSessionStarted, ProjectSlug: "demo", TS: now}))
+	require.Empty(t, rec.minted)
+}
+
+// The milestones are always on: an unwatched kind runs nothing, and a stored
+// features override from when momentum was a switch -- momentum off --
+// changes nothing.
+func TestCheckMilestones_UnwatchedKindsAndLegacyOverride(t *testing.T) {
 	db := openTestDB(t)
 	ctx := context.Background()
 	ts := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
@@ -121,30 +160,17 @@ func TestCheckMilestones_OffGateAndStoredOverride(t *testing.T) {
 	for range 100 {
 		insertProjectEvent(t, db, core.EventMemoryWritten, "", "demo", "", "{}", ts)
 	}
-	e := core.Event{Kind: core.EventMemoryWritten, ProjectSlug: "demo", TS: ts}
+	require.NoError(t, SetSetting(ctx, db, SettingFeaturesConfig, `{"research":false,"momentum":false,"gamification":false}`))
 
-	// Base off, no override: nothing.
 	rec := newFakeOnceRecorder()
-	require.NoError(t, CheckMilestones(ctx, db, rec, config.Features{}, e))
-	require.Empty(t, rec.minted)
+	require.NoError(t, CheckMilestones(ctx, db, rec,
+		core.Event{Kind: core.EventNoteWritten, ProjectSlug: "demo", TS: ts}))
+	require.Empty(t, rec.minted, "an unwatched kind runs no check")
 
-	// The console's stored override flips momentum on live over an off base.
-	require.NoError(t, SetFeaturesConfig(ctx, db, config.Features{Momentum: true}))
-	require.NoError(t, CheckMilestones(ctx, db, rec, config.Features{}, e))
+	require.NoError(t, CheckMilestones(ctx, db, rec,
+		core.Event{Kind: core.EventMemoryWritten, ProjectSlug: "demo", TS: ts}))
 	require.Len(t, rec.minted, 1)
 	require.Equal(t, "memories-100:demo", rec.minted[0].ItemID)
-
-	// And a stored override off wins over an on base.
-	require.NoError(t, SetFeaturesConfig(ctx, db, config.Features{Momentum: false}))
-	rec2 := newFakeOnceRecorder()
-	require.NoError(t, CheckMilestones(ctx, db, rec2, momentumOn, e))
-	require.Empty(t, rec2.minted)
-
-	// An unwatched kind runs nothing even when on.
-	require.NoError(t, ClearFeaturesConfig(ctx, db))
-	require.NoError(t, CheckMilestones(ctx, db, rec2, momentumOn,
-		core.Event{Kind: core.EventNoteWritten, ProjectSlug: "demo", TS: ts}))
-	require.Empty(t, rec2.minted)
 }
 
 func TestCheckMilestones_RecallAnsweredThousandth(t *testing.T) {
@@ -166,11 +192,11 @@ func TestCheckMilestones_RecallAnsweredThousandth(t *testing.T) {
 
 	recall := core.Event{Kind: core.EventInjected, SessionID: "sess-9", ProjectSlug: "demo",
 		Payload: map[string]any{"source": "recall"}, TS: ts}
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, recall))
+	require.NoError(t, CheckMilestones(ctx, db, rec, recall))
 	require.Empty(t, rec.minted, "999 answered recalls is not the milestone")
 
 	insertProjectEvent(t, db, core.EventInjected, "", "demo", "", `{"source":"recall"}`, ts)
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, recall))
+	require.NoError(t, CheckMilestones(ctx, db, rec, recall))
 	require.Len(t, rec.minted, 1)
 	m := rec.minted[0]
 	require.Equal(t, "recalls-1000:demo", m.ItemID)
@@ -180,13 +206,13 @@ func TestCheckMilestones_RecallAnsweredThousandth(t *testing.T) {
 
 	// Re-checks past the threshold do not re-mint.
 	insertProjectEvent(t, db, core.EventInjected, "", "demo", "", `{"source":"recall"}`, ts)
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, recall))
+	require.NoError(t, CheckMilestones(ctx, db, rec, recall))
 	require.Len(t, rec.minted, 1)
 
 	// A browse injection is not an answered recall and triggers no check.
 	browse := core.Event{Kind: core.EventInjected, ProjectSlug: "demo",
 		Payload: map[string]any{"source": "recall-browse"}, TS: ts}
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, browse))
+	require.NoError(t, CheckMilestones(ctx, db, rec, browse))
 	require.Len(t, rec.minted, 1)
 }
 
@@ -198,7 +224,7 @@ func TestCheckMilestones_FirstSupersession(t *testing.T) {
 
 	e := core.Event{Kind: core.EventMemorySuperseded, SessionID: "sess-2",
 		ProjectSlug: "demo", ItemID: "01OLDMEMID", TS: ts}
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, e))
+	require.NoError(t, CheckMilestones(ctx, db, rec, e))
 	require.Len(t, rec.minted, 1)
 	m := rec.minted[0]
 	require.Equal(t, "first-supersession:demo", m.ItemID)
@@ -208,7 +234,7 @@ func TestCheckMilestones_FirstSupersession(t *testing.T) {
 
 	// The second supersession is not a first.
 	e.ItemID = "01OTHERMEM"
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, e))
+	require.NoError(t, CheckMilestones(ctx, db, rec, e))
 	require.Len(t, rec.minted, 1)
 }
 
@@ -229,19 +255,19 @@ func TestCheckMilestones_PlanShippedOnFinalStepDone(t *testing.T) {
 	}
 
 	// A step done while another stays open ships nothing.
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, transition(done1, "done")))
+	require.NoError(t, CheckMilestones(ctx, db, rec, transition(done1, "done")))
 	require.Empty(t, rec.minted)
 	// Claiming is not shipping.
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, transition(last, "in_progress")))
+	require.NoError(t, CheckMilestones(ctx, db, rec, transition(last, "in_progress")))
 	require.Empty(t, rec.minted)
 	// A non-plan task closing is not a plan.
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, transition(loose, "done")))
+	require.NoError(t, CheckMilestones(ctx, db, rec, transition(loose, "done")))
 	require.Empty(t, rec.minted)
 
 	// The final step closing as done mints the settlement, once.
 	_, err := db.ExecContext(ctx, `UPDATE tasks SET status = 'done' WHERE id = ?`, last)
 	require.NoError(t, err)
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, transition(last, "done")))
+	require.NoError(t, CheckMilestones(ctx, db, rec, transition(last, "done")))
 	require.Len(t, rec.minted, 1)
 	m := rec.minted[0]
 	require.Equal(t, core.EventPlanShipped, m.Kind)
@@ -253,12 +279,12 @@ func TestCheckMilestones_PlanShippedOnFinalStepDone(t *testing.T) {
 	require.Equal(t, 3, m.Payload["steps"])
 
 	// Repeated rollup recomputes do not re-mint the settlement.
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, transition(last, "done")))
+	require.NoError(t, CheckMilestones(ctx, db, rec, transition(last, "done")))
 	require.Len(t, rec.minted, 1)
 
 	// The recorder feeds the minted settlement back through CheckMilestones,
 	// which latches the first-plan-shipped milestone with the steps verbatim.
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, m))
+	require.NoError(t, CheckMilestones(ctx, db, rec, m))
 	require.Len(t, rec.minted, 2)
 	first := rec.minted[1]
 	require.Equal(t, EventMilestoneReached, first.Kind)
@@ -270,11 +296,11 @@ func TestCheckMilestones_PlanShippedOnFinalStepDone(t *testing.T) {
 
 	// A later plan mints its own settlement, but the first-milestone latch holds.
 	encore := seedPlanTask(t, db, "demo", "encore", core.TaskDone)
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, transition(encore, "done")))
+	require.NoError(t, CheckMilestones(ctx, db, rec, transition(encore, "done")))
 	require.Len(t, rec.minted, 3)
 	require.Equal(t, core.EventPlanShipped, rec.minted[2].Kind)
 	require.Equal(t, "encore", rec.minted[2].ItemID)
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, rec.minted[2]))
+	require.NoError(t, CheckMilestones(ctx, db, rec, rec.minted[2]))
 	require.Len(t, rec.minted, 3, "the second shipped plan finds the milestone latch set")
 }
 
@@ -287,20 +313,20 @@ func TestCheckMilestones_PlanShippedEventLatchesTheFirstMilestone(t *testing.T) 
 	// A plan.shipped event latches the project's first-plan milestone.
 	shipped := core.Event{Kind: core.EventPlanShipped, SessionID: "sess-4", ProjectSlug: "demo",
 		ItemID: "from-l2", Payload: map[string]any{"slug": "from-l2"}, TS: ts}
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, shipped))
+	require.NoError(t, CheckMilestones(ctx, db, rec, shipped))
 	require.Len(t, rec.minted, 1)
 	require.Equal(t, "first-plan-shipped:demo", rec.minted[0].ItemID)
 	require.Equal(t, "first plan shipped in demo: from-l2", rec.minted[0].Payload["claim"])
 
 	// A later plan's settlement finds the milestone latch set: no double mint.
 	only := seedPlanTask(t, db, "demo", "by-tasks", core.TaskDone)
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn,
+	require.NoError(t, CheckMilestones(ctx, db, rec,
 		core.Event{Kind: core.EventTaskTransition, ProjectSlug: "demo", ItemID: only,
 			Payload: map[string]any{"to": "done"}, TS: ts}))
 	require.Len(t, rec.minted, 2, "the completion still mints its own settlement")
 	require.Equal(t, core.EventPlanShipped, rec.minted[1].Kind)
 	require.Equal(t, "by-tasks", rec.minted[1].ItemID)
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, rec.minted[1]))
+	require.NoError(t, CheckMilestones(ctx, db, rec, rec.minted[1]))
 	require.Len(t, rec.minted, 2, "feeding it back mints no second first-plan milestone")
 }
 
@@ -319,7 +345,7 @@ func TestCheckMilestones_ProjectBirthdayLatchesPerYear(t *testing.T) {
 	}
 
 	// Only the current anniversary mints -- no backfill of earlier years.
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, started("elder")))
+	require.NoError(t, CheckMilestones(ctx, db, rec, started("elder")))
 	require.Len(t, rec.minted, 1)
 	m := rec.minted[0]
 	require.Equal(t, "birthday-2:elder", m.ItemID)
@@ -328,17 +354,17 @@ func TestCheckMilestones_ProjectBirthdayLatchesPerYear(t *testing.T) {
 	require.Equal(t, core.FormatTime(now.AddDate(-2, 0, -1)), m.Payload["registered"])
 
 	// The same year never re-mints.
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, started("elder")))
+	require.NoError(t, CheckMilestones(ctx, db, rec, started("elder")))
 	require.Len(t, rec.minted, 1)
 
 	// Exactly one year old, singular phrasing.
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, started("yearling")))
+	require.NoError(t, CheckMilestones(ctx, db, rec, started("yearling")))
 	require.Len(t, rec.minted, 2)
 	require.Equal(t, "birthday-1:yearling", rec.minted[1].ItemID)
 	require.Equal(t, "one year of yearling", rec.minted[1].Payload["claim"])
 
 	// Under a year, and unregistered, earn nothing.
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, started("young")))
-	require.NoError(t, CheckMilestones(ctx, db, rec, momentumOn, started("ghost")))
+	require.NoError(t, CheckMilestones(ctx, db, rec, started("young")))
+	require.NoError(t, CheckMilestones(ctx, db, rec, started("ghost")))
 	require.Len(t, rec.minted, 2)
 }

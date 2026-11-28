@@ -35,24 +35,10 @@ type Key string
 // a fully usable feature or an empty screen.
 const Research Key = "research"
 
-// Momentum covers the gentle motivation surfaces woven into EXISTING screens
-// rather than screens of their own: the plan finish-line card (and its agent
-// briefing emphasis), the activity calendar with capture streaks, knowledge
-// payoff moments, and project maturity stages. They are one feature because
-// they answer one question -- "is this knowledge practice building on
-// itself?" -- and an owner who finds that framing noisy switches all of it
-// off with one toggle.
-const Momentum Key = "momentum"
-
-// Gamification covers the arcade layer of the Now screen: the day tape, the
-// personal-records rail, the hot-streak pulse, and the celebration moments.
-// It is separate from Momentum because it answers a different question --
-// momentum asks "is this knowledge practice building on itself?", gamification
-// plays back "how hard is the fleet running right now?" -- and an owner who
-// enjoys one framing may find the other noisy. Like every surface here, its
-// numbers are judged from real recorded activity, never invented, and there
-// are no punishment mechanics.
-const Gamification Key = "gamification"
+// Momentum (the finish lines, the capture calendar, payoffs, maturity stages
+// and milestones) and gamification (the Now screen's arcade) were optional
+// features here until they became core: they are always on and have no key.
+// A config file may still name them (config.Features' retired fields).
 
 // Screening covers write screening and the held queue: every agent write to a
 // memory or note is screened, and a suspicious write -- or a change to a
@@ -70,8 +56,8 @@ const Gamification Key = "gamification"
 // optional metadata feed. They extend the same promise -- what agents receive
 // has passed the screens or the owner -- and mean nothing without the screens.
 //
-// Unlike the presentation features above, it changes what agents receive, so
-// it is a feature toggle and never part of a console level. Turning it off
+// Unlike a feature that only shows the owner more, it changes what agents
+// receive, so it is a feature toggle and never part of a console level. Turning it off
 // stops screening new writes; a write already held stays held -- out of the
 // corpus -- until the feature is back on and the owner decides.
 const Screening Key = "screening"
@@ -116,7 +102,7 @@ type Feature struct {
 	// RoutePrefixes are the console route prefixes to gate.
 	RoutePrefixes []string
 	// Surfaces are owner-facing phrases for the feature's IN-PAGE surfaces --
-	// elements woven into existing screens (an Overview card, a board glyph)
+	// elements woven into existing screens (a briefing line, a day-view link)
 	// rather than whole screens, gated where they render via the console's
 	// per-request features state rather than by a route prefix. Each phrase
 	// joins the Settings card's "what disappears" line verbatim, so register a
@@ -175,40 +161,6 @@ var registry = []Feature{
 		Default:       false,
 		get:           func(c config.Features) bool { return c.Research },
 		set:           func(c *config.Features, on bool) { c.Research = on },
-	},
-	{
-		Key:   Momentum,
-		Label: "Momentum",
-		Blurb: "Gentle progress cues on existing screens (plan finish lines, capture streaks, knowledge payoffs, and project growth), judged from real activity, never invented.",
-		Line:  "Quiet progress cues: finish lines, streaks and payoffs.",
-		Surfaces: []string{
-			"the plan finish-line cards on Overview (and their agent-briefing emphasis)",
-			"the capture calendar and streak on Sessions",
-			"the first-reuse payoff marks in the activity ledger",
-			"the memory-of-the-month spotlight on Overview",
-			"the maturity-stage pills on the project board and detail header",
-			"the plan-shipped settle and monthly shipped count on Plans",
-			"the milestone rows in the activity ledger",
-			"the unlocked dates on Knowledge engine's ranking rows in Settings",
-		},
-		Default: false,
-		get:     func(c config.Features) bool { return c.Momentum },
-		set:     func(c *config.Features, on bool) { c.Momentum = on },
-	},
-	{
-		Key:   Gamification,
-		Label: "Gamification",
-		Blurb: "An arcade layer on the Now screen (the day tape, personal records, the hot-streak pulse, and celebration moments), every number judged from real recorded activity, never invented.",
-		Line:  "An arcade layer on Now: the day tape, records and streaks.",
-		Surfaces: []string{
-			"the day tape on Now",
-			"the personal-records rail on Now",
-			"the hot-streak pulse on Now",
-			"the record and plan-finish celebration moments on Now",
-		},
-		Default: false,
-		get:     func(c config.Features) bool { return c.Gamification },
-		set:     func(c *config.Features, on bool) { c.Gamification = on },
 	},
 	{
 		Key:           Screening,

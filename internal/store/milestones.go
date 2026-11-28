@@ -8,9 +8,10 @@
 // the same latch. Every payload states its exact claim verbatim and the real
 // count behind it ("100 memories written in seamless", count 100), never a
 // score-shaped invention. The checks piggyback on the event recorder's write
-// path, where the counts change: there is no polling pass, and while the
-// momentum feature is off no threshold check runs and nothing is minted
-// (the gamification-arcade discipline).
+// path, where the counts change: there is no polling pass. They run on the
+// write path of every watched event, so each reads its latch before it
+// counts or inserts anything: a milestone already minted costs one indexed
+// read, never a count over the event log or a write.
 package store
 
 import (
@@ -20,7 +21,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 )
 
@@ -59,16 +59,13 @@ type OnceRecorder interface {
 // moved, minting any newly crossed milestone through rec. The event recorder
 // calls it after every successful insert, so each COUNT already includes e.
 //
-// Gated on the effective momentum config, resolved live (base overlaid with
-// the console's stored override, the same discipline as every momentum
-// surface): off means no threshold check runs and nothing is minted. Events
-// with no project slug move no per-project count and are skipped outright, as
-// are all kinds outside the small watched set -- in particular
+// Events with no project slug move no per-project count and are skipped
+// outright, as are all kinds outside the small watched set -- in particular
 // milestone.reached itself, which bounds the recorder's re-entrant call.
 // plan.shipped is watched on purpose: the recorder feeds a settlement this
 // very function just minted back through here to latch the first-plan-shipped
 // milestone, and that second re-entry ends at milestone.reached.
-func CheckMilestones(ctx context.Context, db *sql.DB, rec OnceRecorder, base config.Features, e core.Event) error {
+func CheckMilestones(ctx context.Context, db *sql.DB, rec OnceRecorder, e core.Event) error {
 	if e.ProjectSlug == "" {
 		return nil
 	}
@@ -78,15 +75,8 @@ func CheckMilestones(ctx context.Context, db *sql.DB, rec OnceRecorder, base con
 	default:
 		return nil
 	}
-	eff, _, ferr := FeaturesConfig(ctx, db, base)
-	if ferr != nil {
-		eff = base // failure-soft per FeaturesConfig's contract; ferr still reaches the caller's log
-	}
-	if !eff.Momentum {
-		return ferr
-	}
 
-	errs := ferr
+	var errs error
 	switch e.Kind {
 	case core.EventMemoryWritten:
 		errs = errors.Join(errs, checkMemoryWrittenMilestones(ctx, db, rec, e))
@@ -106,39 +96,72 @@ func CheckMilestones(ctx context.Context, db *sql.DB, rec OnceRecorder, base con
 	return errs
 }
 
+// milestoneLatched reports whether the milestone key has been minted: the read
+// half of RecordOnce's guard, so a check whose milestone is already in the
+// ledger stops before it counts anything or opens a write.
+func milestoneLatched(ctx context.Context, db *sql.DB, key string) (bool, error) {
+	var one int
+	err := db.QueryRowContext(ctx,
+		`SELECT 1 FROM events WHERE kind = ? AND item_id = ? LIMIT 1`,
+		string(EventMilestoneReached), key).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("store.CheckMilestones: read latch %s: %w", key, err)
+	}
+	return true, nil
+}
+
+// memoryMilestoneKey is the latch key of a project's memory-written threshold.
+func memoryMilestoneKey(threshold int, project string) string {
+	return fmt.Sprintf("memories-%d:%s", threshold, project)
+}
+
 // checkMemoryWrittenMilestones counts the project's memory.written events
-// (the triggering one included) and mints each threshold the count has
-// reached. A threshold crossed while momentum was off latches on the next
-// check after it comes on -- the claim stays exactly true ("100 memories
-// written in demo") and the payload carries the real count at mint time.
+// (the triggering one included) and mints the highest threshold the count has
+// reached. Checked on every write, a count meets each threshold on the write
+// that reaches it, so each mints in its turn. A count first checked far past
+// several of them -- writes recorded before the milestones were, or by a
+// recorder that never armed them -- mints only the highest, with the real
+// count in the payload ("1000 memories written in demo", count 1450), rather
+// than a row now for each lower threshold passed long ago. Once the top
+// threshold is minted, the check is one latch read.
 func checkMemoryWrittenMilestones(ctx context.Context, db *sql.DB, rec OnceRecorder, e core.Event) error {
+	top := MilestoneMemoryWrittenThresholds[len(MilestoneMemoryWrittenThresholds)-1]
+	if done, err := milestoneLatched(ctx, db, memoryMilestoneKey(top, e.ProjectSlug)); err != nil || done {
+		return err
+	}
 	var n int
 	if err := db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM events WHERE kind = ? AND project_slug = ?`,
 		string(core.EventMemoryWritten), e.ProjectSlug).Scan(&n); err != nil {
 		return fmt.Errorf("store.CheckMilestones: count memory writes: %w", err)
 	}
-	var errs error
+	reached := 0
 	for _, threshold := range MilestoneMemoryWrittenThresholds {
-		if n < threshold {
-			break // thresholds ascend
-		}
-		key := fmt.Sprintf("memories-%d:%s", threshold, e.ProjectSlug)
-		_, _, err := rec.RecordOnce(ctx, core.Event{
-			Kind: EventMilestoneReached, SessionID: e.SessionID,
-			ProjectSlug: e.ProjectSlug, ItemID: key,
-			Payload: map[string]any{
-				"claim":     fmt.Sprintf("%d memories written in %s", threshold, e.ProjectSlug),
-				"project":   e.ProjectSlug,
-				"count":     n,
-				"threshold": threshold,
-			},
-		})
-		if err != nil {
-			errs = errors.Join(errs, fmt.Errorf("store.CheckMilestones: mint %s: %w", key, err))
+		if n >= threshold {
+			reached = threshold // thresholds ascend
 		}
 	}
-	return errs
+	if reached == 0 {
+		return nil
+	}
+	key := memoryMilestoneKey(reached, e.ProjectSlug)
+	_, _, err := rec.RecordOnce(ctx, core.Event{
+		Kind: EventMilestoneReached, SessionID: e.SessionID,
+		ProjectSlug: e.ProjectSlug, ItemID: key,
+		Payload: map[string]any{
+			"claim":     fmt.Sprintf("%d memories written in %s", reached, e.ProjectSlug),
+			"project":   e.ProjectSlug,
+			"count":     n,
+			"threshold": reached,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("store.CheckMilestones: mint %s: %w", key, err)
+	}
+	return nil
 }
 
 // checkRecallAnsweredMilestone counts the project's answered recalls --
@@ -151,6 +174,10 @@ func checkRecallAnsweredMilestone(ctx context.Context, db *sql.DB, rec OnceRecor
 	if payloadString(e.Payload, "source") != "recall" {
 		return nil
 	}
+	key := fmt.Sprintf("recalls-%d:%s", MilestoneRecallAnsweredThreshold, e.ProjectSlug)
+	if done, err := milestoneLatched(ctx, db, key); err != nil || done {
+		return err
+	}
 	var n int
 	if err := db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM events
@@ -161,7 +188,6 @@ func checkRecallAnsweredMilestone(ctx context.Context, db *sql.DB, rec OnceRecor
 	if n < MilestoneRecallAnsweredThreshold {
 		return nil
 	}
-	key := fmt.Sprintf("recalls-%d:%s", MilestoneRecallAnsweredThreshold, e.ProjectSlug)
 	_, _, err := rec.RecordOnce(ctx, core.Event{
 		Kind: EventMilestoneReached, SessionID: e.SessionID,
 		ProjectSlug: e.ProjectSlug, ItemID: key,
@@ -280,7 +306,9 @@ func mintFirstPlanShipped(ctx context.Context, rec OnceRecorder, sessionID, proj
 // ordinal, so RecordOnce latches each year exactly once, and a dormant year
 // simply never mints. An unregistered slug has no registration date and earns
 // no birthday (the maturity precedent). Age is judged against the triggering
-// event's timestamp with AddDate, never day arithmetic.
+// event's timestamp with AddDate, never day arithmetic. Every watched event
+// of a project past its first year asks, so the year's latch is read before
+// anything is written.
 func checkProjectBirthday(ctx context.Context, db *sql.DB, rec OnceRecorder, e core.Event) error {
 	var createdStr string
 	err := db.QueryRowContext(ctx,
@@ -306,11 +334,14 @@ func checkProjectBirthday(ctx context.Context, db *sql.DB, rec OnceRecorder, e c
 	if years < 1 {
 		return nil
 	}
+	key := fmt.Sprintf("birthday-%d:%s", years, e.ProjectSlug)
+	if done, lerr := milestoneLatched(ctx, db, key); lerr != nil || done {
+		return lerr
+	}
 	claim := fmt.Sprintf("%d years of %s", years, e.ProjectSlug)
 	if years == 1 {
 		claim = "one year of " + e.ProjectSlug
 	}
-	key := fmt.Sprintf("birthday-%d:%s", years, e.ProjectSlug)
 	_, _, err = rec.RecordOnce(ctx, core.Event{
 		Kind: EventMilestoneReached, SessionID: e.SessionID,
 		ProjectSlug: e.ProjectSlug, ItemID: key,

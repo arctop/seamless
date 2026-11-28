@@ -774,16 +774,6 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 <td>-</td>
 </tr>
 <tr>
-<td><code>features.momentum</code></td>
-<td>bool</td>
-<td>-</td>
-</tr>
-<tr>
-<td><code>features.gamification</code></td>
-<td>bool</td>
-<td>-</td>
-</tr>
-<tr>
 <td><code>features.screening</code></td>
 <td>bool</td>
 <td>-</td>
@@ -1315,21 +1305,14 @@ rejected until one is set - <code>seamlessd doctor</code> reports it as a warnin
 </span></span></span><span class="line"><span class="cl"><span class="c"># MCP tools, and its agent-facing mentions; it never deletes stored data, and</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># re-enabling restores every surface. An installation that already holds research</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="c"># data keeps the feature on across the upgrade (a one-time seeded override).</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># Momentum and gamification are not here: they are always on. A file that</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># still names features.momentum or features.gamification loads, the keys switch</span><span class="w">
+</span></span></span><span class="line"><span class="cl"><span class="c"># nothing, and `seamlessd doctor` names them for removal.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="nt">features</span><span class="p">:</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Research labs and trials: the Labs and Trials console screens, the trials</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># search scope, and the lab_open, trial_record, trial_query MCP tools.</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_FEATURES_RESEARCH</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">research</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Momentum surfaces woven into existing screens: the plan finish-line card</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># (and its agent-briefing emphasis), the activity calendar with capture</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># streaks, knowledge payoff moments, and project maturity stages.</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_FEATURES_MOMENTUM</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">momentum</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># The arcade layer of the Now screen: the day tape, personal records, the</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># hot-streak pulse, and celebration moments. Every number is judged from</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># real recorded activity; off, the Now screen carries no trace of it.</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># env: SEAMLESS_FEATURES_GAMIFICATION</span><span class="w">
-</span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="nt">gamification</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># Write screening: every agent write to a memory or note is screened for</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># secrets, injection markers, hidden Unicode, long encoded blobs and URLs</span><span class="w">
 </span></span></span><span class="line"><span class="cl"><span class="w">  </span><span class="c"># outside screening.url_allowlist. A suspicious write -- and any change to a</span><span class="w">

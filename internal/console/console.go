@@ -964,8 +964,8 @@ type overviewData struct {
 	StaleDays   int // the "going stale" horizon, in days, stated in the card
 	StaleUnseen int // active memories with no update, injection, or read within it: Retrieval's stale list
 
-	// Spotlight is the momentum memory-of-the-month rail panel: nil while the
-	// feature is off (no panel, no JSON key), non-nil with Found false as the
+	// Spotlight is the momentum memory-of-the-month rail panel: nil when its
+	// read failed (no panel, no JSON key), non-nil with Found false as the
 	// honest empty state.
 	Spotlight *spotlightData `json:"spotlight,omitempty"`
 
@@ -1360,14 +1360,11 @@ func (s *Service) knowledgeSky(ctx context.Context, now time.Time, r *http.Reque
 	return sky
 }
 
-// memorySpotlight assembles the momentum memory-of-the-month panel: nil while
-// the feature is off (the query never runs), the honest empty state when no
-// active memory earned query-gated utility in the window, and failure-soft --
-// a store error costs the panel, never the page.
+// memorySpotlight assembles the momentum memory-of-the-month panel: the
+// honest empty state when no active memory earned query-gated utility in the
+// window, and failure-soft -- a store error costs the panel (nil), never the
+// page.
 func (s *Service) memorySpotlight(ctx context.Context, now time.Time) *spotlightData {
-	if !features.Enabled(s.effectiveFeatures(ctx), features.Momentum) {
-		return nil
-	}
 	mem, found, err := store.MemorySpotlight(ctx, s.db(ctx), now.AddDate(0, 0, -spotlightWindowDays), now)
 	if err != nil {
 		s.logger.Warn("console: memory spotlight", "error", err)

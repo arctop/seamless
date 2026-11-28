@@ -366,6 +366,9 @@ func configRows(v reflect.Value, prefix string) ([]string, error) {
 		if tag == "" || tag == "-" {
 			continue
 		}
+		if field.Tag.Get("doc") == "retired" {
+			continue // a key that still parses and does nothing (config.Features' retired keys)
+		}
 		key := tag
 		if prefix != "" {
 			key = prefix + "." + tag

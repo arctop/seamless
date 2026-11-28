@@ -388,8 +388,6 @@ rejected until one is set - `seamlessd doctor` reports it as a warning.
 | `briefing.utility_weight` | float64 | `0.4` |
 | `briefing.utility_mode` | string | `auto` |
 | `features.research` | bool | - |
-| `features.momentum` | bool | - |
-| `features.gamification` | bool | - |
 | `features.screening` | bool | - |
 | `features.repo_locks` | bool | - |
 | `features.diary` | bool | - |
@@ -651,21 +649,14 @@ briefing:
 # MCP tools, and its agent-facing mentions; it never deletes stored data, and
 # re-enabling restores every surface. An installation that already holds research
 # data keeps the feature on across the upgrade (a one-time seeded override).
+# Momentum and gamification are not here: they are always on. A file that
+# still names features.momentum or features.gamification loads, the keys switch
+# nothing, and `seamlessd doctor` names them for removal.
 features:
   # Research labs and trials: the Labs and Trials console screens, the trials
   # search scope, and the lab_open, trial_record, trial_query MCP tools.
   # env: SEAMLESS_FEATURES_RESEARCH
   research: false
-  # Momentum surfaces woven into existing screens: the plan finish-line card
-  # (and its agent-briefing emphasis), the activity calendar with capture
-  # streaks, knowledge payoff moments, and project maturity stages.
-  # env: SEAMLESS_FEATURES_MOMENTUM
-  momentum: false
-  # The arcade layer of the Now screen: the day tape, personal records, the
-  # hot-streak pulse, and celebration moments. Every number is judged from
-  # real recorded activity; off, the Now screen carries no trace of it.
-  # env: SEAMLESS_FEATURES_GAMIFICATION
-  gamification: false
   # Write screening: every agent write to a memory or note is screened for
   # secrets, injection markers, hidden Unicode, long encoded blobs and URLs
   # outside screening.url_allowlist. A suspicious write -- and any change to a

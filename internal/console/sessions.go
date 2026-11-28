@@ -130,7 +130,7 @@ type sessionsData struct {
 	Retained string `json:"retained,omitempty"`
 	// Calendar and Streak are the momentum capture calendar (a year of daily
 	// activity with covered-day marks) and its two quiet numbers. Both are nil
-	// while the momentum feature is off -- zero trace, including in the JSON.
+	// when there is no session in the year to draw, or the read failed.
 	Calendar template.HTML  `json:"-"`
 	Streak   *captureStreak `json:"captureStreak,omitempty"`
 	// Locked names the locked projects this request does
@@ -434,13 +434,8 @@ func (s *Service) sessionsProject(ctx context.Context, raw string) (slug string,
 // grid lives here rather than as a compact strip on Overview (the placement
 // call the plan left to the implementer). selected is the active ?day filter,
 // so the grid can outline the cell the list is currently answering about.
-// Gated on the momentum feature -- off, neither query runs and the page is
-// byte-identical to before -- and failure-soft: a store error costs the
-// calendar, never the page.
+// Failure-soft: a store error costs the calendar, never the page.
 func (s *Service) captureCalendar(ctx context.Context, now time.Time, selected string) (template.HTML, *captureStreak) {
-	if !features.Enabled(s.effectiveFeatures(ctx), features.Momentum) {
-		return "", nil
-	}
 	// A year back from today's local midnight, extended to the previous Sunday
 	// so the grid's first column is a full week (AddDate day arithmetic, per
 	// the localBucketAxis conventions -- never 24h multiples across DST).

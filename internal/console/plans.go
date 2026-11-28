@@ -33,7 +33,6 @@ import (
 
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/core"
-	"github.com/arctop/seamless/internal/features"
 	"github.com/arctop/seamless/internal/files"
 	"github.com/arctop/seamless/internal/plans"
 	"github.com/arctop/seamless/internal/store"
@@ -134,8 +133,7 @@ type planRow struct {
 	// own. A plan moves when any part of it moves.
 	Updated time.Time `json:"updated"`
 	// Shipped marks a plan with a plan.shipped settlement in the current local
-	// month -- the mom-settle hook the live-arrival wash keys on. A momentum
-	// surface: never set while the feature is off (zero trace, JSON included).
+	// month -- the mom-settle hook the live-arrival wash keys on (momentum).
 	Shipped bool `json:"shipped,omitempty"`
 	// Token fields project store.PlanTokenRollup: the cumulative model tokens
 	// of the sessions attributed to this plan (whole-session transcript totals,
@@ -177,8 +175,8 @@ type plansData struct {
 	Filter   planFilterJSON     `json:"filter"`
 	Projects []planProjectCount `json:"projects"`
 	// ShippedMonth is the header's quiet momentum line: the real count of
-	// plan.shipped settlements in the current LOCAL calendar month. nil while
-	// the momentum feature is off -- zero trace, including in the JSON.
+	// plan.shipped settlements in the current LOCAL calendar month. nil when
+	// the read failed, rather than a wrong zero.
 	ShippedMonth *planShippedMonth `json:"shippedThisMonth,omitempty"`
 	// Locked names the locked projects this request does not read, whose
 	// plans the board leaves out: their names only, never a count of what
@@ -1067,13 +1065,10 @@ func sortPlanCards(cards []planTimelineVM) {
 
 // planShippedMomentum fills the momentum surfaces of the Plans page: the
 // header's monthly shipped count and the per-plan settle marks, both judged
-// from the plan.shipped settlements in the current local month. Gated on the
-// feature (off = not computed, zero trace) and failure-soft the momentum way
-// -- an error drops the whole surface rather than rendering a wrong zero.
+// from the plan.shipped settlements in the current local month. Failure-soft
+// the momentum way -- an error drops the whole surface rather than rendering
+// a wrong zero.
 func (s *Service) planShippedMomentum(ctx context.Context, data *plansData) {
-	if !features.Enabled(s.effectiveFeatures(ctx), features.Momentum) {
-		return
-	}
 	now := time.Now().Local()
 	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 	refs, err := store.PlansShippedSince(ctx, s.db(ctx), monthStart)

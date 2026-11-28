@@ -288,13 +288,12 @@ mkdir -p /tmp/demo-home
 go run ./cmd/demoseed -data /tmp/demo-home/.seamless
 CGO_ENABLED=0 go build -tags osusergo -o /tmp/seamlessd-demo ./cmd/seamlessd
 
-# 2. serve it on a port that is NOT your live daemon. The three SEAMLESS_FEATURES_*
-#    flags are load-bearing: optional features ship off and this throwaway data
-#    dir is a new installation, so without them the seeded history is hidden --
-#    research takes the Overview's Labs/Trials tiles and Trials coverage row,
-#    momentum takes the Overview memory-of-the-month spotlight and the Plans
-#    shipped-this-month count, and gamification takes the Now screen's records
-#    rail and hot-streak pulse. SEAMLESS_CONSOLE_LEVEL=advanced is load-bearing
+# 2. serve it on a port that is NOT your live daemon. SEAMLESS_FEATURES_RESEARCH
+#    is load-bearing: optional features ship off and this throwaway data dir is
+#    a new installation, so without it the seeded history is hidden -- research
+#    takes the Overview's Labs/Trials tiles and Trials coverage row. (Momentum
+#    and the Now screen's arcade are always on and need no flag.)
+#    SEAMLESS_CONSOLE_LEVEL=advanced is load-bearing
 #    for the same reason: a new installation's console starts at basic, which
 #    drops Now, Interactions, Retrieval, and the Overview vitals from what the
 #    shots capture. (This flow does not go through scripts/fixture/harness.sh,
@@ -308,8 +307,7 @@ CGO_ENABLED=0 go build -tags osusergo -o /tmp/seamlessd-demo ./cmd/seamlessd
 touch /tmp/seamless-demo.yaml
 HOME=/tmp/demo-home USER=you SEAMLESS_CONFIG=/tmp/seamless-demo.yaml \
   SEAMLESS_DATA_DIR=/tmp/demo-home/.seamless SEAMLESS_ADDR=127.0.0.1:8090 \
-  SEAMLESS_FEATURES_RESEARCH=1 SEAMLESS_FEATURES_MOMENTUM=1 \
-  SEAMLESS_FEATURES_GAMIFICATION=1 SEAMLESS_FEATURES_SCREENING=1 \
+  SEAMLESS_FEATURES_RESEARCH=1 SEAMLESS_FEATURES_SCREENING=1 \
   SEAMLESS_CONSOLE_LEVEL=advanced SEAMLESS_MCP_API_KEY=<any key> \
   /tmp/seamlessd-demo serve
 
@@ -352,8 +350,9 @@ the server-side `history=` param cannot help because the page ships an empty
 
 **Capture within about an hour of seeding.** The fleet's "live" sessions and
 leases are anchored to the seeding time and start reading as stale on screen.
-This binds the momentum and gamification surfaces too: the Now screen's records
-rail reads "set today" off the same anchor.
+This binds the momentum surfaces and the Now screen's arcade too: the day tape
+and the records rail judge "today" off the same anchor, and the rail's first
+draw seeds its records from the history seeded before it.
 
 The `relations` capture deliberately keeps its legacy filename while pointing at
 `/console/context` -- published and cached landing-page URLs reference the old

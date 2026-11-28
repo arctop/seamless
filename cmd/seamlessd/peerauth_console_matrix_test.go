@@ -148,7 +148,7 @@ func (d *cmDaemon) postTargets(t *testing.T, pendingID string) []struct {
 				"/console/tasks/{id}/gate/clear":       {"note": {"probe"}},
 				"/console/tasks/{id}/gate":             {"who": {"owner"}, "what": {"probe"}},
 				"/console/settings/level":              {"level": {"advanced"}},
-				"/console/settings/features":           {"feature_research": {"1"}, "feature_momentum": {"1"}, "feature_gamification": {"1"}, "feature_screening": {"1"}, "feature_diary": {"1"}},
+				"/console/settings/features":           {"feature_research": {"1"}, "feature_screening": {"1"}, "feature_diary": {"1"}},
 				"/console/settings/embeddings/mode":    {"mode": {"auto"}},
 				"/console/settings/embeddings/reembed": {},
 				"/console/held/lockdown":               {"on": {"0"}},

@@ -139,7 +139,7 @@ type planTimelineVM struct {
 	// from StepsURL when it is opened. The token fields are the plan's model
 	// tokens (store.PlanTokenRollup: whole-session, never summed across
 	// plans). Dropped is how many of the closed steps were dropped, and
-	// MomSettle marks a plan shipped this local month (momentum only).
+	// MomSettle marks a plan shipped this local month (momentum).
 	State           string
 	Anchor          string
 	ShowProject     bool
@@ -452,7 +452,7 @@ func (s *Service) fillOverviewTab(r *http.Request, data *projectWorkspaceData, w
 	data.Trend = trend
 
 	if s.cfg.Events != nil {
-		evs, err := s.eventLog(ctx).ProjectEvents(ctx, slug, nil, s.ledgerExcludedKinds(ctx), projectRecentRows)
+		evs, err := s.eventLog(ctx).ProjectEvents(ctx, slug, nil, ledgerExcludedKinds, projectRecentRows)
 		if err != nil {
 			return err
 		}

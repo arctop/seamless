@@ -166,8 +166,9 @@ func TestBriefingPendingPlanLines(t *testing.T) {
 }
 
 // TestBriefingPlanFinishLineEmphasis pins the momentum half of the plan rollup
-// line: with the feature on, a near-done plan carries the finish-line phrase;
-// off (the shipped default), the line is byte-identical to the plain rollup.
+// line: a near-done plan carries the finish-line phrase, and one under the
+// line keeps the plain rollup. A features override stored while momentum was
+// a switch, momentum off, changes nothing.
 func TestBriefingPlanFinishLineEmphasis(t *testing.T) {
 	db := setupDB(t)
 	ctx := context.Background()
@@ -195,20 +196,12 @@ func TestBriefingPlanFinishLineEmphasis(t *testing.T) {
 
 	svc := New(db, nil, budgets(), nil)
 
-	// Shipped default: momentum off, the plain rollup line and nothing else.
-	off, _, err := svc.Briefing(ctx, BriefingInput{CWD: "/work/seam", Source: "startup"})
-	require.NoError(t, err)
-	require.Contains(t, off, "- nearly -- 4/5 done, 1 claimable, 0 in flight\n")
-	require.NotContains(t, off, "from shipped")
-
-	// The console's stored override flips the very next briefing -- same
-	// effective config as the console gates, no restart.
-	require.NoError(t, store.SetFeaturesConfig(ctx, db, config.Features{Momentum: true}))
+	require.NoError(t, store.SetSetting(ctx, db, store.SettingFeaturesConfig, `{"momentum":false}`))
 	on, _, err := svc.Briefing(ctx, BriefingInput{CWD: "/work/seam", Source: "startup"})
 	require.NoError(t, err)
 	require.Contains(t, on, "- nearly -- 4/5 done, 1 claimable, 0 in flight -- one step from shipped\n")
 	require.Contains(t, on, "- early -- 1/3 done, 2 claimable, 0 in flight\n",
-		"a plan under the line keeps the plain rollup even with the feature on")
+		"a plan under the line keeps the plain rollup")
 }
 
 // TestBriefingPlanGatesWaitingOnPeople: a plan's gated steps are not

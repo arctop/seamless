@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/arctop/seamless/internal/access"
-	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/store"
 )
@@ -80,13 +79,11 @@ type hub struct {
 	subs   map[int]chan core.Event
 	nextID int
 
-	// features is the file/env optional-features base the milestone layer
-	// gates on, and featuresArmed whether SetFeatures has supplied it. Until
-	// then the recorder appends events exactly as before -- no gate read, no
-	// milestone checks -- so unwired recorders (tests, benchmarks, one-shot
-	// tools) keep their behavior and cost unchanged.
-	features      config.Features
-	featuresArmed bool
+	// milestonesArmed is whether ArmMilestones has run. Until then the
+	// recorder appends events and nothing more -- no milestone checks -- so
+	// unwired recorders (tests, benchmarks, one-shot tools) keep their
+	// behavior and cost.
+	milestonesArmed bool
 }
 
 // NewRecorder returns a Recorder backed by db.
@@ -112,16 +109,12 @@ func (r *Recorder) rdb() *sql.DB {
 // The milestone layer mints through RecordOnce (store.OnceRecorder).
 var _ store.OnceRecorder = (*Recorder)(nil)
 
-// SetFeatures arms the momentum milestone layer with the file/env features
-// base. From then on every successfully recorded event runs
-// store.CheckMilestones, which resolves the effective features live (base
-// overlaid with the console's stored override) and does nothing while
-// momentum is off -- so the console toggle applies immediately, with no
-// daemon restart. Call it once at wiring time, before serving.
-func (r *Recorder) SetFeatures(base config.Features) {
+// ArmMilestones arms the milestone layer: from then on every successfully
+// recorded event runs store.CheckMilestones. Call it once at wiring time,
+// before serving.
+func (r *Recorder) ArmMilestones() {
 	r.mu.Lock()
-	r.features = base
-	r.featuresArmed = true
+	r.milestonesArmed = true
 	r.mu.Unlock()
 }
 
@@ -132,12 +125,12 @@ func (r *Recorder) SetFeatures(base config.Features) {
 // milestone.reached is not a kind CheckMilestones watches.
 func (r *Recorder) mintMilestones(ctx context.Context, e core.Event) {
 	r.mu.Lock()
-	armed, base := r.featuresArmed, r.features
+	armed := r.milestonesArmed
 	r.mu.Unlock()
 	if !armed {
 		return
 	}
-	if err := store.CheckMilestones(ctx, r.db, r, base, e); err != nil {
+	if err := store.CheckMilestones(ctx, r.db, r, e); err != nil {
 		slog.Warn("events: milestone check", "kind", string(e.Kind), "error", err)
 	}
 }

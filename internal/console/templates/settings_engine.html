@@ -131,7 +131,7 @@
         <form method="post" action="/console/settings/utility" class="set-row ur-row" id="{{.Anchor}}" data-autosave>
           <input type="hidden" name="project" value="{{.Project}}">
           <div class="set-row-label">{{if .Project}}<a class="mono" href="/console/projects/{{.Project}}">{{.Project}}</a>{{else}}<strong>{{.Label}}</strong>{{end}}
-            <span class="set-row-sub">{{.Why}}{{with .ReadyAt}} &middot; {{if $.Momentum}}<span class="mom-unlocked">{{timeAs . (print "unlocked " (day .))}}</span>{{else}}since {{agoTime .}}{{end}}{{end}}</span>
+            <span class="set-row-sub">{{.Why}}{{with .ReadyAt}} &middot; <span class="mom-unlocked">{{timeAs . (print "unlocked " (day .))}}</span>{{end}}</span>
           </div>
           <div class="set-row-control">
             <span class="ur-meter" role="img" aria-label="{{.MeterLabel}}">{{range .Meter}}<i{{if .Met}} class="is-met"{{end}} style="height: {{.Pct}}%"></i>{{end}}</span>

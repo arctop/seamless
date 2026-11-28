@@ -205,7 +205,7 @@ func cmNewDaemon(t *testing.T, owner access.Account, restricted *access.Account,
 	garden := gardener.New(db, mgr, nil, nil, rec, gardener.Config{}, nil)
 	// The Diary is on, so the crawl sweeps its days under every principal: a
 	// day of work in a locked project must show none of it.
-	feats := config.Features{Research: true, Momentum: true, Gamification: true, Screening: true, Diary: true}
+	feats := config.Features{Research: true, Screening: true, Diary: true}
 	ret.SetFeaturesConfig(feats)
 	screen := screening.New(screening.Config{DB: db, Files: mgr, Events: rec, Gardener: garden,
 		Enabled: func(context.Context) bool { return true }})

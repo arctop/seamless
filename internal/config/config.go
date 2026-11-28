@@ -327,15 +327,16 @@ type Features struct {
 	// screens, the trials search scope, and the lab_open, trial_record, and
 	// trial_query MCP tools.
 	Research bool `yaml:"research" json:"research"`
-	// Momentum enables the gentle momentum surfaces woven into existing
-	// screens: the plan finish-line card on Overview and its briefing
-	// emphasis, the activity calendar with capture streaks, knowledge payoff
-	// moments, and project maturity stages.
-	Momentum bool `yaml:"momentum" json:"momentum"`
-	// Gamification enables the arcade layer of the Now screen: the day tape,
-	// the personal-records rail, the hot-streak pulse, and the celebration
-	// moments.
-	Gamification bool `yaml:"gamification" json:"gamification"`
+	// RetiredMomentum and RetiredGamification are the keys of two features
+	// that are no longer optional: momentum (the finish lines, the capture
+	// calendar, payoffs, maturity stages and milestones) and gamification (the
+	// Now screen's arcade) are always on. A file written before still names
+	// them, and KnownFields would refuse it, so they still parse; nothing
+	// reads them but doctor, which names them for removal. Unset (nil) unless
+	// the file says them; never in the console's override row (json "-") or
+	// the configuration reference (doc "retired").
+	RetiredMomentum     *bool `yaml:"momentum,omitempty" json:"-" doc:"retired"`
+	RetiredGamification *bool `yaml:"gamification,omitempty" json:"-" doc:"retired"`
 	// Screening enables write screening: every agent write to a memory or note
 	// is screened (secrets, injection markers, hidden Unicode, long encoded
 	// blobs, URLs outside screening.url_allowlist), a suspicious write -- and
@@ -358,6 +359,25 @@ type Features struct {
 	// off; while it is on, a Claude Code prompt also keeps its session's
 	// ledger current (internal/hooks usage_live.go).
 	Diary bool `yaml:"diary" json:"diary"`
+}
+
+// RetiredFeatureEnv are the environment overrides of the retired feature keys
+// (Features.RetiredMomentum, RetiredGamification). Nothing reads them; doctor
+// names any that are still set.
+var RetiredFeatureEnv = []string{"SEAMLESS_FEATURES_MOMENTUM", "SEAMLESS_FEATURES_GAMIFICATION"}
+
+// RetiredKeys names the retired feature keys this file set, as dotted config
+// paths ("features.momentum"), in declaration order: what doctor asks the
+// owner to remove.
+func (f Features) RetiredKeys() []string {
+	var keys []string
+	if f.RetiredMomentum != nil {
+		keys = append(keys, "features.momentum")
+	}
+	if f.RetiredGamification != nil {
+		keys = append(keys, "features.gamification")
+	}
+	return keys
 }
 
 // Screening tunes the write screens behind the screening optional feature
@@ -629,7 +649,7 @@ func Defaults() Config {
 		// Optional features ship off: a fresh installation exposes none until the
 		// owner enables it. Existing installations holding research data are
 		// grandfathered on by a one-time store migration, not by this default.
-		Features:  Features{Research: false, Momentum: false, Gamification: false, Screening: false, RepoLocks: false, Diary: false},
+		Features:  Features{Research: false, Screening: false, RepoLocks: false, Diary: false},
 		Screening: Screening{BlobMinLength: DefaultScreeningBlobMinLength, DriftInterval: DefaultScreeningDriftInterval},
 		// Commit records ship off: nothing is recorded and no snapshot written.
 		Commits: Commits{SnapshotInterval: DefaultCommitsSnapshotInterval, SnapshotWindow: DefaultCommitsSnapshotWindow},
@@ -1045,12 +1065,6 @@ func (c *Config) applyEnv() error {
 	}
 	envStr("SEAMLESS_BRIEFING_UTILITY_MODE", &c.Briefing.UtilityMode)
 	if err := envBool("SEAMLESS_FEATURES_RESEARCH", &c.Features.Research); err != nil {
-		return err
-	}
-	if err := envBool("SEAMLESS_FEATURES_MOMENTUM", &c.Features.Momentum); err != nil {
-		return err
-	}
-	if err := envBool("SEAMLESS_FEATURES_GAMIFICATION", &c.Features.Gamification); err != nil {
 		return err
 	}
 	if err := envBool("SEAMLESS_FEATURES_SCREENING", &c.Features.Screening); err != nil {

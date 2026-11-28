@@ -7,9 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
-	mcpserver "github.com/arctop/seamless/internal/mcp"
 )
 
 // firstReuseEvents counts the memory.first_reuse marks for one memory id.
@@ -22,13 +20,11 @@ func firstReuseEvents(t *testing.T, db *sql.DB, itemID string) int {
 	return n
 }
 
-// The first-reuse moment: latched exactly once per memory ever, only for a
-// reader that is not the writer, and only while the momentum feature is on.
+// The first-reuse moment: latched exactly once per memory ever, and only for a
+// reader that is not the writer. It needs no optional feature.
 func TestMemoryRead_FirstReuseMark(t *testing.T) {
 	ctx := context.Background()
-	url, db := newServerCfg(t, func(c *mcpserver.Config) {
-		c.Features = config.Features{Momentum: true}
-	})
+	url, db := newServer(t)
 
 	writer := dialClient(t, ctx, url, testKey)
 	callJSON(t, ctx, writer, "session_start", map[string]any{"cwd": "/work/demo"})
@@ -64,21 +60,37 @@ func TestMemoryRead_FirstReuseMark(t *testing.T) {
 	require.Contains(t, payload, `"reader":"sess/reader-one"`)
 }
 
-// With the feature off (the shipped default) detection never runs: a disabled
-// install records nothing and behaves exactly as before.
-func TestMemoryRead_FirstReuseOffByDefault(t *testing.T) {
+// A memory another session read before first reuse was recorded at all (an
+// install from before momentum was core: the read is in the log, no mark is)
+// was reused then, so the next foreign read is not its first and mints
+// nothing -- the claim "paid off for the first time" stays true.
+func TestMemoryRead_FirstReuseJudgedFromTheReadHistory(t *testing.T) {
 	ctx := context.Background()
 	url, db := newServer(t)
 
 	writer := dialClient(t, ctx, url, testKey)
 	callJSON(t, ctx, writer, "session_start", map[string]any{"cwd": "/work/demo"})
 	w := callJSON(t, ctx, writer, "memory_write", map[string]any{
-		"name": "quiet-mem", "kind": "gotcha", "description": "d", "body": "the lesson",
+		"name": "old-mem", "kind": "gotcha", "description": "d", "body": "the lesson",
 	})
 	memID, _ := w["id"].(string)
+	require.NotEmpty(t, memID)
+
+	// The writer's own read earlier is no reuse; another session's is.
+	callJSON(t, ctx, writer, "memory_read", map[string]any{"name": "old-mem"})
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO events (id, ts, kind, session_id, project_slug, item_id, payload)
+		VALUES ('01OLDREAD0000000000000000A', '2026-01-02T03:04:05Z', ?, '01EARLIERREADERSESSION0000', 'demo', ?, '{}')`,
+		string(core.EventMemoryRead), memID)
+	require.NoError(t, err)
 
 	reader := dialClient(t, ctx, url, testKey)
-	callJSON(t, ctx, reader, "session_start", map[string]any{"cwd": "/work/demo", "name": "sess/off-reader"})
-	callJSON(t, ctx, reader, "memory_read", map[string]any{"name": "quiet-mem"})
-	require.Zero(t, firstReuseEvents(t, db, memID))
+	callJSON(t, ctx, reader, "session_start", map[string]any{"cwd": "/work/demo", "name": "sess/late-reader"})
+	callJSON(t, ctx, reader, "memory_read", map[string]any{"name": "old-mem"})
+	require.Zero(t, firstReuseEvents(t, db, memID), "the reuse happened before: no first-reuse claim now")
+
+	var reads int
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM events WHERE kind = ? AND item_id = ?`,
+		string(core.EventMemoryRead), memID).Scan(&reads))
+	require.Equal(t, 3, reads, "every read is still recorded")
 }

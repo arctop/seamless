@@ -635,24 +635,20 @@ func (s *Service) needKnowledge(ctx context.Context, in needsInput) []attnCard {
 		})
 	}
 	// Momentum's finish-line cards close the strip: the only positive entry, so
-	// the problems keep the lead. Gated here rather than in the template
-	// because a disabled install must not even run the query; the briefing's
-	// plan-line emphasis checks the same effective config, so the two surfaces
-	// switch together.
-	if features.Enabled(s.effectiveFeatures(ctx), features.Momentum) {
-		finish, err := store.FinishLinePlans(ctx, s.db(ctx))
-		if err != nil {
-			s.logger.Warn("console: finish-line plans for the needs strip", "error", err)
-		}
-		for _, p := range finish {
-			out = append(out, attnCard{
-				Kind: needFinishLine, Sev: "ok", Icon: "flag", Count: p.StepsLeft(),
-				Title: p.Slug + ": " + p.FinishLinePhrase(),
-				Sub:   "left: " + shownTitle(strings.Join(p.Remaining, " · ")),
-				Href:  planHref(p.Project, p.Slug),
-				Bar:   finishBar(p.PlanRollup),
-			})
-		}
+	// the problems keep the lead. The briefing's plan-line emphasis reads the
+	// same rollup (store.PlanRollup), so an agent and the owner read one story.
+	finish, err := store.FinishLinePlans(ctx, s.db(ctx))
+	if err != nil {
+		s.logger.Warn("console: finish-line plans for the needs strip", "error", err)
+	}
+	for _, p := range finish {
+		out = append(out, attnCard{
+			Kind: needFinishLine, Sev: "ok", Icon: "flag", Count: p.StepsLeft(),
+			Title: p.Slug + ": " + p.FinishLinePhrase(),
+			Sub:   "left: " + shownTitle(strings.Join(p.Remaining, " · ")),
+			Href:  planHref(p.Project, p.Slug),
+			Bar:   finishBar(p.PlanRollup),
+		})
 	}
 	return out
 }

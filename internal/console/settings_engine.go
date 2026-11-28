@@ -135,12 +135,10 @@ type utilityRanking struct {
 	Mode string
 }
 
-// utilityRankingRow is a row as the Ranking card draws it.
+// utilityRankingRow is a row as the Ranking card draws it. A latched row's
+// time note is momentum's witnessed unlock ("unlocked <day>").
 type utilityRankingRow struct {
 	utilityProjectRow
-	// Momentum words a latched row's time note as the Momentum feature does
-	// ("unlocked <day>"); without it the note is plain ("since <ago>").
-	Momentum bool
 }
 
 // Hint is the card's hint: when a project starts ranking by use, with the
@@ -169,13 +167,13 @@ func (u utilityRanking) BuildingNoun() string {
 // global scope is folded only when it has some history: with none it can
 // neither rank nor need anything, and every project's briefing already
 // carries its memories.
-func utilityRankingOf(rows []utilityProjectRow, mode string, momentum bool) utilityRanking {
+func utilityRankingOf(rows []utilityProjectRow, mode string) utilityRanking {
 	if mode == "" {
 		mode = "auto"
 	}
 	u := utilityRanking{Mode: mode}
 	for _, row := range rows {
-		r := utilityRankingRow{utilityProjectRow: row, Momentum: momentum}
+		r := utilityRankingRow{utilityProjectRow: row}
 		if r.Forced != "" {
 			u.Forced++
 		}

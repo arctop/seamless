@@ -204,7 +204,7 @@ func (s *Service) settings(w http.ResponseWriter, r *http.Request) {
 		LevelCards:             levelCards(featuresCfg, lvl.Level),
 		BriefingPresets:        briefingPresetCards(briefing),
 		BriefingGroups:         briefingGroups(briefing),
-		Ranking:                utilityRankingOf(utilityRows, briefing.UtilityMode, featuresCfg.Momentum),
+		Ranking:                utilityRankingOf(utilityRows, briefing.UtilityMode),
 		Setup:                  s.setupData(ctx),
 		Updates:                updates,
 		Backups:                backups,

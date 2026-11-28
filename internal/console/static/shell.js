@@ -1008,7 +1008,7 @@
   // owner POST inside .main: X-Seam-Follow, the server's redirect followed in
   // place, never a fetch of this script's own. While it is out the control
   // (a radio's whole group) is disabled and aria-busy. navigation.js ends it
-  // with seam:submitted. Saved, the toast names the change ("Momentum is
+  // with seam:submitted. Saved, the toast names the change ("Diary is
   // off.", by the control's data-autosave-label, aria-label or label), adds
   // the data-autosave-note its row or form carries, when one does ("Agents
   // see it from their next session."), and offers Undo, which posts the

@@ -12,7 +12,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/plans"
@@ -123,60 +122,68 @@ func TestNowPage_ShowsTheFleet(t *testing.T) {
 	require.Equal(t, readyID, data.UpNext[0].ID)
 }
 
-// The arcade is a gamification surface: off (the shipped default), no query
-// runs, no latch is written, no event is minted, and the page carries zero
-// trace in HTML and JSON alike; on, the tape and records render and a record
-// crossing is celebrated exactly once. Every run sits in the first minute of the
-// local day, where "today" is easiest to get wrong.
-func TestNowPage_ArcadeFollowsTheGamificationFeature(t *testing.T) {
+// The arcade is always on, and its records begin from the history rather than
+// from nothing: the first render seeds the ledger with the best day before
+// today (its real day) and the agents live now (counted, not celebrated), so a
+// first look breaks no records; a day that then beats the history is
+// celebrated exactly once. Every run sits in the first minute of the local
+// day, where "today" is easiest to get wrong.
+func TestNowPage_ArcadeSeedsItsRecordsFromHistory(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		justAfterLocalMidnight(t)
-		db, mux, _ := newGatedConsole(t)
+		db, mux, _ := newGatedConsole(t) // no optional feature on: the arcade needs none
 		ctx := context.Background()
 		now := time.Now().UTC()
+		dayStart := localMidnight(now)
 
-		agentID, _, _, _ := seedNowFleet(t, db)
-		closed := now.Add(-10 * time.Second) // still today; a minute back is yesterday
-		require.NoError(t, store.CreateTask(ctx, db, core.Task{
-			ID: mustID(t), ProjectSlug: "demo", Title: "already shipped today",
-			Status: core.TaskDone, ClosedAt: &closed,
-			CreatedAt: now.Add(-2 * time.Hour), UpdatedAt: closed,
-		}))
+		agentID, _, _, _ := seedNowFleet(t, db) // one live agent, one memory written today
+		closeTask := func(at time.Time) {
+			require.NoError(t, store.CreateTask(ctx, db, core.Task{
+				ID: mustID(t), ProjectSlug: "demo", Title: "shipped", Status: core.TaskDone, ClosedAt: &at,
+				CreatedAt: at.Add(-time.Hour), UpdatedAt: at,
+			}))
+		}
+		// The history: three days back, two tasks closed and one memory written.
+		past := dayStart.AddDate(0, 0, -3).Add(9 * time.Hour)
+		closeTask(past)
+		closeTask(past.Add(time.Hour))
+		_, err := events.NewRecorder(db).Record(ctx, core.Event{
+			Kind: core.EventMemoryWritten, ProjectSlug: "demo", TS: past, Payload: map[string]any{"name": "old"},
+		})
+		require.NoError(t, err)
+		closeTask(now.Add(-10 * time.Second)) // today: one, under the record
 		recordEvents := func() int {
 			var n int
 			require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM events WHERE kind = ?`,
 				string(core.EventRecordBroken)).Scan(&n))
 			return n
 		}
-		latchRows := func() int {
-			var n int
-			require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM settings WHERE key = ?`,
-				store.SettingGamificationRecords).Scan(&n))
-			return n
-		}
 
-		off := getPeek(t, mux, "/console/now").Body.String()
-		require.Contains(t, off, `id="ag-`+agentID+`"`, "the core page renders regardless of the feature")
-		for _, marker := range []string{"now-tape", "now-record", "now-moment", "now-hot", "data-moment"} {
-			require.NotContains(t, off, marker, "off means zero trace")
-		}
-		require.NotContains(t, getJSON2(t, mux, "/console/now?format=json"), "arcade")
-		require.Zero(t, latchRows(), "off means no computation and no latch")
+		first := getPeek(t, mux, "/console/now").Body.String()
+		require.Contains(t, first, `id="ag-`+agentID+`"`)
+		require.Contains(t, first, "now-tape")
+		require.Contains(t, first, "most tasks closed in a day")
+		require.Contains(t, first, past.Local().Format("2006-01-02"), "the tasks record is the history's best day")
+		require.Contains(t, first, "counted since "+dayStart.Format("2006-01-02"), "the live agents are counted, not a record")
+		require.NotContains(t, first, `data-moment="`, "a first look breaks no records")
 		require.Zero(t, recordEvents())
+		var data nowData
+		getJSON(t, mux, "/console/now?format=json", &data)
+		require.NotNil(t, data.Arcade)
+		require.Equal(t, nowRecordVM{Key: "tasks_day", Label: "most tasks closed in a day", N: 2,
+			Day: past.Local().Format("2006-01-02")}, data.Arcade.Records[0])
+		require.Equal(t, nowRecordVM{Key: "live_agents", Label: "most agents live at once", N: 1,
+			Day: dayStart.Format("2006-01-02"), Seen: true}, data.Arcade.Records[2])
 
-		require.NoError(t, store.SetFeaturesConfig(ctx, db, config.Features{Gamification: true}))
+		// Today beats the history: a record, celebrated once.
+		closeTask(now.Add(-5 * time.Second))
+		closeTask(now.Add(-4 * time.Second))
 		on := getPeek(t, mux, "/console/now").Body.String()
-		require.Contains(t, on, "now-tape")
-		require.Contains(t, on, "tasks closed")
-		require.Contains(t, on, "most tasks closed in a day")
-		require.Contains(t, on, `data-moment="record-tasks_day-`, "a fresh record is a moment")
-		require.Equal(t, 1, latchRows(), "the ledger latched")
-		require.Equal(t, 3, recordEvents(), "each crossing (tasks, memories, live agents) is minted exactly once")
-
+		require.Contains(t, on, `data-moment="record-tasks_day-`, "a record broken is a moment")
+		require.Equal(t, 1, recordEvents())
 		again := getPeek(t, mux, "/console/now").Body.String()
 		require.Contains(t, again, "now-record")
-		require.Equal(t, 3, recordEvents(), "re-rendering mints nothing new")
-		require.Contains(t, getJSON2(t, mux, "/console/now?format=json"), "arcade")
+		require.Equal(t, 1, recordEvents(), "re-rendering mints nothing new")
 	})
 }
 

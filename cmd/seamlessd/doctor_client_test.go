@@ -192,7 +192,7 @@ func TestClientMCPToolsCheck_AllFeaturesOnExpectsTheFullSurface(t *testing.T) {
 	}
 	mux.Handle("/api/mcp", mcp.New(mcp.Config{APIKey: "k", Features: on}).Handler())
 	mux.HandleFunc("/console/settings", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"featuresConfig":{"research":true,"momentum":true,"gamification":true,"repo_locks":true}}`))
+		_, _ = w.Write([]byte(`{"featuresConfig":{"research":true,"repo_locks":true}}`))
 	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)

@@ -21,31 +21,14 @@ func TestRegistry_ResearchEntry(t *testing.T) {
 	require.False(t, f.Default, "optional features ship off")
 }
 
-func TestRegistry_MomentumEntry(t *testing.T) {
-	f, ok := Get(Momentum)
-	require.True(t, ok)
-	require.Equal(t, Key("momentum"), f.Key)
-	require.Equal(t, "Momentum", f.Label)
-	require.NotEmpty(t, f.Blurb)
-	require.Empty(t, f.Tools, "momentum owns no MCP tools -- its surfaces live inside existing pages")
-	require.Empty(t, f.NavIDs, "momentum owns no screens of its own")
-	require.Empty(t, f.RoutePrefixes)
-	require.Empty(t, f.Skill)
-	require.False(t, f.Default, "optional features ship off")
-}
-
-func TestRegistry_GamificationEntry(t *testing.T) {
-	f, ok := Get(Gamification)
-	require.True(t, ok)
-	require.Equal(t, Key("gamification"), f.Key)
-	require.Equal(t, "Gamification", f.Label)
-	require.NotEmpty(t, f.Blurb)
-	require.Empty(t, f.Tools, "gamification owns no MCP tools -- its surfaces live inside the Now screen")
-	require.Empty(t, f.NavIDs, "gamification owns no screens of its own -- the Now screen itself is core")
-	require.Empty(t, f.RoutePrefixes)
-	require.Empty(t, f.Skill)
-	require.NotEmpty(t, f.Surfaces, "each in-page surface registers its owner-facing phrase")
-	require.False(t, f.Default, "optional features ship off")
+// Momentum and gamification are core, always on: no registry entry, so no
+// Settings switch, and an asker about either key is told it is not a feature.
+func TestRegistry_MomentumAndGamificationAreNotOptional(t *testing.T) {
+	for _, key := range []Key{"momentum", "gamification"} {
+		_, ok := Get(key)
+		require.False(t, ok, key)
+		require.False(t, Enabled(config.Features{Research: true, Screening: true, RepoLocks: true, Diary: true}, key), key)
+	}
 }
 
 func TestRegistry_ScreeningEntry(t *testing.T) {
@@ -90,15 +73,13 @@ func TestRegistry_DiaryEntry(t *testing.T) {
 	require.False(t, f.Default, "optional features ship off")
 }
 
-func TestRegistry_OrderIsResearchThenMomentumThenGamificationThenScreeningThenRepoLocksThenDiary(t *testing.T) {
+func TestRegistry_OrderIsResearchThenScreeningThenRepoLocksThenDiary(t *testing.T) {
 	reg := Registry()
-	require.Len(t, reg, 6)
+	require.Len(t, reg, 4)
 	require.Equal(t, Research, reg[0].Key, "registry order is the Settings card order")
-	require.Equal(t, Momentum, reg[1].Key)
-	require.Equal(t, Gamification, reg[2].Key)
-	require.Equal(t, Screening, reg[3].Key)
-	require.Equal(t, RepoLocks, reg[4].Key)
-	require.Equal(t, Diary, reg[5].Key)
+	require.Equal(t, Screening, reg[1].Key)
+	require.Equal(t, RepoLocks, reg[2].Key)
+	require.Equal(t, Diary, reg[3].Key)
 }
 
 func TestRegistry_WellFormed(t *testing.T) {

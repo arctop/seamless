@@ -15,7 +15,6 @@ import (
 	"github.com/arctop/seamless/internal/agentguide"
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
-	"github.com/arctop/seamless/internal/features"
 	"github.com/arctop/seamless/internal/plans"
 	"github.com/arctop/seamless/internal/store"
 )
@@ -261,8 +260,7 @@ func (s *Service) briefingFor(ctx context.Context, project string, in BriefingIn
 	pending = reachable(ctx, pending, noteProject)
 	stages := s.pinnedStages(stageMems, cfg.StageUnknownMaxAgeDays, time.Now())
 	// The effective features, read once for the whole assembly and only when
-	// asked: without RepoLocks the first ask is momentum's, below, exactly where
-	// the read always happened.
+	// asked.
 	feats := s.featuresOnce(ctx)
 	// Repo locks (features.RepoLocks): the checkout's lock lines and its live
 	// peers. They are news in themselves, so a declared lock makes an
@@ -292,7 +290,6 @@ func (s *Service) briefingFor(ctx context.Context, project string, in BriefingIn
 		// Asked for only past the nothing-to-inject return above: the notice
 		// rides on a briefing, it never makes an empty one non-empty.
 		notice:    s.updateNoticeLine(ctx, in.Host) + hold.line(),
-		momentum:  features.Enabled(feats(), features.Momentum),
 		repoLocks: locks,
 	}, cfg)
 	return text, ids, nil
@@ -336,8 +333,8 @@ func (s *Service) effectiveBriefing(ctx context.Context) config.Briefing {
 
 // effectiveFeatures resolves the optional-features state for one assembly the
 // same way: file/env base, console override row on top, failure-soft. The
-// briefing checks the same effective config the console gates on, so "momentum
-// off" means off everywhere at once.
+// briefing checks the same effective config the console gates on, so a
+// feature switched off is off everywhere at once.
 func (s *Service) effectiveFeatures(ctx context.Context) config.Features {
 	cfg, _, err := store.FeaturesConfig(ctx, s.db, s.features)
 	if err != nil {
@@ -762,7 +759,6 @@ type briefingSections struct {
 	pendingPlans []core.Note        // captured, not-yet-approved CC plans (budget-participating)
 	isolation    core.Isolation     // the project's fence state; open renders no line
 	notice       string             // sanitized update-notice line ("" = none), pinned under the isolation line
-	momentum     bool               // momentum feature on: near-done plan lines carry the finish-line emphasis
 	provenance   map[string]string  // memory id -> provenance mark (screening on); nil renders no marks
 	repoLocks    repoLockView       // repo locks on: the lock lines (pinned) and the presence line (first to pack)
 }
@@ -866,9 +862,9 @@ func (s *Service) assembleBriefing(project, source string, sec briefingSections,
 				fmt.Fprintf(&rollups, ", %d gates waiting on people", p.GatesOpen)
 			}
 			// Momentum's finish-line emphasis: the same qualification and phrase
-			// the Overview card derives (store.PlanRollup), gated by the same
-			// effective feature state, so an agent and the owner read one story.
-			if sec.momentum && p.AtFinishLine() {
+			// the Overview card derives (store.PlanRollup), so an agent and the
+			// owner read one story.
+			if p.AtFinishLine() {
 				rollups.WriteString(" -- " + p.FinishLinePhrase())
 			}
 			rollups.WriteString("\n")

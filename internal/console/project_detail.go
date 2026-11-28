@@ -64,8 +64,8 @@ type projectWorkspaceData struct {
 	Favorite    bool
 	ActiveTab   string
 	Tabs        []projectTabVM
-	// Stage is the momentum maturity glyph, pre-rendered ("" while the
-	// feature is off); the same glyph the board row shows, by construction.
+	// Stage is the momentum maturity glyph, pre-rendered ("" when the stages
+	// could not be judged); the same glyph the board row shows, by construction.
 	Stage template.HTML
 
 	// The agent-facing fence: the title-row pill, the Overview control, and the

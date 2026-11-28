@@ -97,8 +97,8 @@ type projectRowVM struct {
 	// session start or end.
 	LastActive  time.Time
 	TokensTotal int // real model tokens burned across the project's sessions
-	// Stage is the momentum maturity glyph, pre-rendered ("" while the feature
-	// is off -- zero trace in the row markup).
+	// Stage is the momentum maturity glyph, pre-rendered ("" when the stages
+	// could not be judged -- no trace in the row markup).
 	Stage template.HTML
 }
 

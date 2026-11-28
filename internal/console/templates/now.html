@@ -200,7 +200,7 @@
           <li class="now-record{{if .Today}} today{{end}}" id="rec-{{.Key}}">
             <strong>{{.N}}</strong>
             <span class="l">{{.Label}}</span>
-            {{if .Day}}<small>{{if .Today}}set today{{else}}{{.Day}}{{end}}</small>{{else}}<small>unset, so today could be the day</small>{{end}}
+            {{if .Day}}<small>{{if .Today}}set today{{else if .Seen}}<span title="The most seen when the records began on {{.Day}}: beat it for a record.">counted since {{.Day}}</span>{{else}}{{.Day}}{{end}}</small>{{else}}<small>unset, so today could be the day</small>{{end}}
           </li>
           {{end}}
         </ul>
@@ -307,9 +307,9 @@ window.SEAM_LIVE_ALL_KINDS = true; // the Now page IS the transport pulse: refre
 {{if .Data.Arcade}}
 (function () {
   'use strict';
-  /* Celebration moments (gamification). Rendered only while the arcade is on,
-     so a disabled install's page carries zero trace of the feature -- script
-     included. A [data-moment] chip already on screen at load is a fact, not
+  /* Celebration moments (gamification). Rendered only when the arcade could
+     be judged (nowArcade is failure-soft), script included. A [data-moment]
+     chip already on screen at load is a fact, not
      news -- prime it silently. A chip that NEWLY appears during a live morph
      is news: toast it, and burst confetti unless motion is reduced. The
      seen-set lives in this closure, which survives morphs (scripts are not

@@ -21,6 +21,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -49,8 +50,6 @@ type captureStreakCache struct {
 // consecutive covered local days and the longest run ever. Today counts into
 // the current run as soon as it is covered; an uncovered today is a pause, not
 // a break -- the run through yesterday stands until the day is actually over.
-// A momentum-only surface: callers gate on the feature, so a disabled install
-// neither queries nor writes the cache.
 func CaptureStreak(ctx context.Context, db *sql.DB, now time.Time) (current, longest int, err error) {
 	return CaptureStreakWith(ctx, db, db, now)
 }
@@ -208,8 +207,7 @@ type SpotlightMemory struct {
 // the given instant -- the same signal classes, weights, per-session dedup,
 // and decay as RebuildRetrievalStats, restricted to the window -- with its
 // windowed read and reader counts. found is false when no active memory earned
-// any query-gated utility in the window: the honest empty state. A
-// momentum-only surface: callers gate on the feature before asking.
+// any query-gated utility in the window: the honest empty state.
 func MemorySpotlight(ctx context.Context, db *sql.DB, since, now time.Time) (SpotlightMemory, bool, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT ts, kind, session_id, item_id, payload FROM events
@@ -331,6 +329,29 @@ func MemorySpotlight(ctx context.Context, db *sql.DB, since, now time.Time) (Spo
 	return best, found, nil
 }
 
+// MemoryReadByOthers reports whether any session other than writer has read
+// the memory (a memory.read event): what decides that a read is its first
+// reuse. writer is the memory's source_session, a session ULID, or the
+// session NAME a v1 import carries, so both identities are left out.
+// memory.read is never pruned, so the answer covers the whole history --
+// reads made before first reuse was recorded included.
+func MemoryReadByOthers(ctx context.Context, db *sql.DB, memoryID, writer string) (bool, error) {
+	var one int
+	err := db.QueryRowContext(ctx, `
+		SELECT 1 FROM events
+		 WHERE item_id = ? AND kind = ? AND session_id <> '' AND session_id <> ?
+		   AND session_id NOT IN (SELECT id FROM sessions WHERE name = ?)
+		 LIMIT 1`,
+		memoryID, string(core.EventMemoryRead), writer, writer).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("store.MemoryReadByOthers: %w", err)
+	}
+	return true, nil
+}
+
 // PlanShippedRef identifies one shipped plan: the plan.shipped settlement
 // event's project and plan slug (its item_id).
 type PlanShippedRef struct {
@@ -341,8 +362,7 @@ type PlanShippedRef struct {
 // PlansShippedSince returns the plan.shipped settlements recorded at or after
 // since, oldest first -- one per plan, because the settlement is latched
 // once-ever per plan slug at mint time. It backs the Plans page's monthly
-// shipped count and settle marks; a momentum-only surface, so callers gate on
-// the feature before asking and a disabled install never runs the query.
+// shipped count and settle marks.
 func PlansShippedSince(ctx context.Context, db *sql.DB, since time.Time) ([]PlanShippedRef, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT project_slug, item_id FROM events

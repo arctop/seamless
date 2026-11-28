@@ -54,7 +54,7 @@ func TestFsFeatureRows_ViewFromTheRegistry(t *testing.T) {
 		}
 	}
 
-	research, screening := cards[0], cards[3]
+	research, screening := cards[0], cards[1]
 	require.Equal(t, string(features.Research), research.Key)
 	require.Equal(t, "8 trials kept", research.Kept)
 	require.True(t, strings.HasSuffix(research.Hint, " Data kept: 8 trials across 2 labs."), "the hint says what stays")
@@ -73,8 +73,8 @@ func TestFsFeatureRows_ViewFromTheRegistry(t *testing.T) {
 	require.Empty(t, empty[0].Kept)
 	require.Equal(t, empty[0].Blurb+" "+empty[0].WhenOff, empty[0].Hint)
 	require.Equal(t, "No trial data yet.", empty[0].DataKept)
-	require.Empty(t, empty[3].Kept)
-	require.Equal(t, "Nothing is held.", empty[3].DataKept)
+	require.Empty(t, empty[1].Kept)
+	require.Equal(t, "Nothing is held.", empty[1].DataKept)
 
 	require.Equal(t, "2 writes held", featureKept(features.Screening, navCounts{Held: 2}))
 	require.Equal(t, "1 trial kept", featureKept(features.Research, navCounts{Trials: 1, Labs: 1}))
@@ -133,22 +133,22 @@ func TestFsFeaturesSection_RowsThatSaveAtOnce(t *testing.T) {
 		require.Contains(t, row, template.HTMLEscapeString(f.Blurb), "%s: the blurb lives in the hint", f.Key)
 		require.Contains(t, row, `<input type="checkbox" role="switch" name="`+featureField(f.Key)+`" value="1" aria-label="`+
 			template.HTMLEscapeString(f.Label)+`" aria-describedby="feature-line-`+string(f.Key)+`">`,
-			"%s: off, and named for the toast (Momentum is off.)", f.Key)
+			"%s: off, and named for the toast (Diary is off.)", f.Key)
 	}
 	require.Contains(t, fsRow(t, sec, "research"), `<span class="badge compact quiet feature-row-kept">1 trial kept</span>`)
-	require.NotContains(t, fsRow(t, sec, "momentum"), "feature-row-kept", "no chip without data")
+	require.NotContains(t, fsRow(t, sec, "diary"), "feature-row-kept", "no chip without data")
 	require.Contains(t, form, `<div class="feature-rows-save"><button class="btn small primary" type="submit">`,
 		"without script the form still posts (console.css hides it under .js)")
 
-	// A change posts the whole form: here, momentum switched on with the
+	// A change posts the whole form: here, the Diary switched on with the
 	// rest as they stand (all off). The route reads every switch.
-	rr := postForm(mux, "/console/settings/features", url.Values{"feature_momentum": {"1"}}.Encode())
+	rr := postForm(mux, "/console/settings/features", url.Values{"feature_diary": {"1"}}.Encode())
 	require.Equal(t, http.StatusSeeOther, rr.Code)
 	require.Contains(t, rr.Header().Get("Location"), "/console/settings?s=features&notice=")
 	require.True(t, strings.HasSuffix(rr.Header().Get("Location"), "#features"), "back to the section, in place")
 	sec = fsSection(t, getHTMLBody(t, mux, "/console/settings?s=features"))
-	require.Contains(t, fsRow(t, sec, "momentum"), `aria-describedby="feature-line-momentum" checked>`)
-	require.Contains(t, fsRow(t, sec, "momentum"), `class="feature-row is-on"`)
+	require.Contains(t, fsRow(t, sec, "diary"), `aria-describedby="feature-line-diary" checked>`)
+	require.Contains(t, fsRow(t, sec, "diary"), `class="feature-row is-on"`)
 	require.NotContains(t, fsRow(t, sec, "research"), " checked>")
 }
 

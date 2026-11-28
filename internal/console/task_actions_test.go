@@ -26,16 +26,16 @@ import (
 // The owner's task actions (plan:console-ux-pass UX 06): Mark done, Drop,
 // Reopen, Mark as handled and Release claim, in the task reader and the peek.
 
-// tkConsole is a console whose event recorder is armed with feats, the way
-// the daemon arms it (seamlessd's rec.SetFeatures), so the milestone layer --
-// plan.shipped among it -- runs on the console's own events.
+// tkConsole is a console whose event recorder has its milestones armed, the
+// way the daemon arms it (seamlessd's rec.ArmMilestones), so the milestone
+// layer -- plan.shipped among it -- runs on the console's own events.
 func tkConsole(t *testing.T, feats config.Features) (*sql.DB, *http.ServeMux) {
 	t.Helper()
 	db, err := storetest.OpenFresh(t, filepath.Join(t.TempDir(), "seam.db"))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	rec := events.NewRecorder(db)
-	rec.SetFeatures(feats)
+	rec.ArmMilestones()
 	svc, err := New(Config{
 		DB: db, Events: rec, APIKey: testKey,
 		Retrieve: retrieve.New(db, nil, config.Defaults().Budgets, nil),
@@ -424,11 +424,11 @@ func TestTkMarkAsHandled_IsTheOwnersHands(t *testing.T) {
 
 // A console close of a plan's last step mints plan.shipped exactly as the
 // MCP path's close does: the recorder mints it from the task.transition
-// event the console records (store.CheckMilestones, momentum on), once per
+// event the console records (store.CheckMilestones), once per
 // plan whatever closes it again. Mark as handled closing a plan's last step,
 // a gate, settles its plan too.
 func TestTkPlanShipped_ConsoleClosesThePlansLastStep(t *testing.T) {
-	db, mux := tkConsole(t, config.Features{Momentum: true})
+	db, mux := tkConsole(t, config.Features{})
 	const plan = "tk-plan"
 	first := tkTask(t, db, "tk step one", func(k *core.Task) { k.PlanSlug = plan })
 	last := tkTask(t, db, "tk step two", func(k *core.Task) { k.PlanSlug = plan; k.DependsOn = []string{first} })
@@ -472,16 +472,6 @@ func TestTkPlanShipped_ConsoleClosesThePlansLastStep(t *testing.T) {
 	require.Len(t, got, 2)
 	require.Equal(t, gated, got[1].ItemID)
 	require.Equal(t, 2, tkCount(t, db, core.EventPlanShipped))
-}
-
-// With momentum off nothing is minted, from the console as from MCP: the
-// milestone layer is the feature's.
-func TestTkPlanShipped_MomentumOffMintsNothing(t *testing.T) {
-	db, mux := tkConsole(t, config.Features{})
-	last := tkTask(t, db, "tk only step", func(k *core.Task) { k.PlanSlug = "tk-quiet" })
-	tkFlash(t, tkPost(t, mux, "/console/tasks/"+last+"/status", url.Values{"to": {"done"}}, false))
-	require.Zero(t, tkCount(t, db, core.EventPlanShipped))
-	require.Len(t, tkTransitions(t, db, last), 1, "the close itself is recorded")
 }
 
 // A locked project's task is not found to every action, with no title: the

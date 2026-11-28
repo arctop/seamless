@@ -393,7 +393,7 @@ Settings and the lock screens share a few parts.
   are in the page: a screen reader reads them with the button.
 - **A switch that saves at once** posts as soon as it changes, through the
   same in-place path as every other console write, and waits, disabled, for
-  Seamless to answer. The toast then names the change ("Momentum is off.")
+  Seamless to answer. The toast then names the change ("Diary is off.")
   with **Undo**, which posts the values from before it. A save that fails puts
   the switch back and says why, with **Try again**. Typing never saves: a form
   with a typed value (a number, a folder) keeps its **Save** bar. A toast with
@@ -666,6 +666,75 @@ the screen that acts on them: an agent asking for access (**Access
 requests**), a write held for review (**Held**) and a reported mishap
 (**Mishaps**).
 
+## Momentum {#momentum}
+
+Momentum is gentle progress cues woven into the screens you already use --
+plan finish lines, capture streaks, knowledge payoffs, and project growth --
+answering "is this knowledge practice building on itself?" It has no screen
+or tool of its own, and it is always on (it used to be an optional feature,
+off by default):
+
+- **Plan finish-line cards** on the Overview attention strip: any plan at least
+  80% done gets one positive card naming the exact remaining steps ("seambench
+  -- one step from shipped"), linking to the plan, with a thin progress bar
+  drawn to the plan's exact done/total percent. The agent briefing's plan
+  line carries the same emphasis, so agents are nudged to close it too.
+- **The capture calendar** on Sessions: a year of daily activity, cell
+  intensity from sessions per day, a distinct dot on days that captured
+  knowledge (a session left findings, a memory, a note, or a trial), and two
+  quiet numbers -- the current capture streak and the longest ever. The streak
+  counts covered days, so it rewards capture, not raw usage; a streak of seven
+  covered days or more earns a small flame beside the number, and the number
+  itself stays verbatim. The grid is an instrument, not wallpaper: hovering a
+  cell reads out its day, clicking one focuses the session map on exactly that
+  day (a clearable chip names the focus; picking a time window widens back
+  out), and the grid is keyboard-walkable -- arrows move a day or a week,
+  Enter focuses, all without a page reload.
+- **Knowledge payoff moments**: the first time a memory is read by a session
+  other than the one that wrote it, the moment lands in the activity ledger
+  ("gotcha chroma-boot-race just paid off for the first time") -- once per
+  memory, ever -- and the Overview rail gains a **Memory of the month** panel
+  naming the last 30 days' top-utility memory with the counts behind the claim.
+  The read history decides what counts as first: a memory another session had
+  already read before the moment was recorded paid off then, so it is never
+  announced now.
+- **Maturity stages** on the project board and detail header: each project
+  earns a latched stage -- seedling, sprouting, established, deep-rooted --
+  from real thresholds over age, memories, event volume, and reach. Stages
+  never regress, and the pill's tooltip states exactly what the next stage
+  asks for. A project the latch sees for the first time is recorded at the
+  stage it already holds, with no crossing in the ledger: only a step up the
+  latch watched happen is one.
+- **The plan-shipped settle** on Plans: the task transition that closes a
+  plan's last step -- wherever it lands, an agent shipping over MCP included --
+  mints a once-ever plan.shipped moment. The plan's row settles with a single
+  wash when it happens while you are watching, the ledger renders it under its
+  own flag icon, and the Plans header counts the local month: "Plans shipped
+  this month: N".
+- **Milestone moments** in the activity ledger: a short latched set of honest
+  firsts and counts -- a project's 100th/500th/1000th memory, its 1000th
+  answered recall, its first supersession, its first shipped plan, and its
+  birthdays -- each minted once ever and rendered under an award glyph with
+  the exact claim ("100 memories written in seamless"). A project whose count
+  is first checked well past several thresholds gets one row, for the highest,
+  with its real count. Milestones accumulate in the ledger only; there is no
+  trophy screen.
+- **Witnessed unlocks** on Settings: a ranking project's note in Knowledge
+  engine reads the date it unlocked, so a latch that used to flip silently is
+  witnessed.
+
+Motion keeps one register: every animation plays once -- on a live arrival or
+on first render -- and nothing loops except the existing pulse idioms. A moment
+already on screen when the page loads renders plain; only a new arrival over
+the live feed animates. `prefers-reduced-motion` stills all of it, and the
+shipped-plan settle is the ceiling: no confetti and no toasts, which belong to
+the [arcade](#now-arcade) on Now.
+
+Momentum keeps the console's judged-numbers ethos: every number is real and
+verifiable, empty states say so honestly, and there are no punishment mechanics
+-- an inactive day is an empty cell, never a warning, and nothing nags or
+expires.
+
 ## Overview
 
 `/console/`
@@ -688,8 +757,8 @@ then whether stored knowledge is reaching your agents. Top to bottom:
   progress with no claim. Then your own queues: mishaps to review, an update
   that failed, rolled back or paused itself, and backups that are failing,
   stopped, missing, or older than a week. Then the knowledge queue: gardener
-  proposals, what automatic apply applied, memories going stale, and, with
-  momentum on, plans at the finish line. Each card is one sentence with its
+  proposals, what automatic apply applied, memories going stale, and
+  [momentum's](#momentum) plans at the finish line. Each card is one sentence with its
   count and a link to the screen that answers it; a card for a screen your
   level does not show names it without a link. Where one step settles a
   card, that step is on it - **Mark as handled** for one gate, **Approve**
@@ -855,10 +924,38 @@ Top to bottom:
 Everything links onward - sessions, tasks, plans, projects, events - and the
 lease countdowns tick client-side between refreshes. A title wraps to two
 lines rather than cutting at one, and one that two lines still cut keeps its
-whole text on hover. With the
-[gamification](#optional-features) feature on, the page also carries the day
-tape, the personal-records rail, the hot-streak pulse, and celebration moments;
-off (the default), none of that renders.
+whole text on hover.
+
+### The arcade {#now-arcade}
+
+The arcade plays back "how hard is the fleet running right now?" on top of
+the page, always on (it used to be the optional gamification feature):
+
+- **The day tape**: today's judged output - tasks closed, memories and notes
+  written, plans touched, sessions started - each cell against its trailing
+  7-day daily average. An agent card adds its own today line: the memories,
+  notes and closed tasks its events show.
+- **The personal-records rail**: latched bests (most tasks closed in a day,
+  most memories written in a day, most agents live at once). Records only ever
+  move forward, like maturity stages; an unset record reads "today could be
+  the day". The rail begins from the history, not from nothing: the first
+  time it is drawn, the day records start at the best day already recorded
+  (the tasks table and the event log through yesterday, with that day's date),
+  and the live-agent record at the agents live then, which reads "counted
+  since" its day, because there is no history to judge it by. So a first look
+  breaks no records; today is a record only if it beats what came before.
+- **The hot-streak pulse**: the last ten minutes' event count beside the
+  titlebar pulse, catching fire past a fixed floor. The count is shown
+  verbatim either way, so the claim stays verifiable.
+- **Celebration moments**: a record falling or a plan shipping its last step
+  today renders a moment chip - and when one lands while you are watching, a
+  toast and a brief confetti burst (skipped under reduced motion). A record
+  crossing is minted into the event ledger at most once per record per day.
+
+Every number is judged from recorded activity, never invented, and there are
+no punishment mechanics - a quiet day is an empty tape, never a warning. If
+the arcade's numbers cannot be read, it is left off the page rather than drawn
+with wrong ones.
 
 ## Interactions
 
@@ -1390,7 +1487,8 @@ searched for must appear in the session's name, project, findings or id.
 A row names its host only when the session ran on a different machine
 from the console's, and its source only when it was not a normal startup.
 
-A day view (`?day=YYYY-MM-DD`, what a click on the momentum calendar opens)
+A day view (`?day=YYYY-MM-DD`, what a click on the
+[capture calendar](#momentum) opens)
 lists the sessions started on that day, whatever the window. While the
 [Diary](#diary) is on, its heading carries **Open in Diary**, that day's page.
 
@@ -2401,103 +2499,19 @@ feature is, a generated sentence naming exactly what turning it off takes away
 ("Turning this off hides the Labs & Trials screens, ..."), and, while it holds
 data, what is kept ("Data kept: 12 trials across 3 labs"). A switch saves as
 soon as you flip it, with no Save button: the toast names the change
-("Momentum is off. Agents see it from their next session.") and offers
+("Diary is off. Agents see it from their next session.") and offers
 **Undo**. Without JavaScript the section keeps a **Save features** button.
 
-There are six today:
+There are four today. [Momentum](#momentum) and the Now screen's
+[arcade](#now-arcade) used to be optional features; they are always on now,
+with no switch here. A config file that still names `features.momentum`
+or `features.gamification` loads, the key switches nothing, and
+`seamlessd doctor` names it so you can remove it.
 
 **Research labs & trials** owns the [Labs](#labs) and [Trials](#trials)
 screens, the trials search scope, and the `lab_open`, `trial_record`, and
 `trial_query` MCP tools. Screens and tools move together on purpose, so an
 agent never sees a tool for a screen you switched off.
-
-**Momentum** is gentle progress cues woven into existing screens -- plan finish
-lines, capture streaks, knowledge payoffs, and project growth -- judged from
-real activity, never invented. It owns no screens or tools of its own; turning
-it on adds seven surfaces where you already look:
-
-- **Plan finish-line cards** on the Overview attention strip: any plan at least
-  80% done gets one positive card naming the exact remaining steps ("seambench
-  -- one step from shipped"), linking to the plan, with a thin progress bar
-  drawn to the plan's exact done/total percent. The agent briefing's plan
-  line carries the same emphasis, so agents are nudged to close it too.
-- **The capture calendar** on Sessions: a year of daily activity, cell
-  intensity from sessions per day, a distinct dot on days that captured
-  knowledge (a session left findings, a memory, a note, or a trial), and two
-  quiet numbers -- the current capture streak and the longest ever. The streak
-  counts covered days, so it rewards capture, not raw usage; a streak of seven
-  covered days or more earns a small flame beside the number, and the number
-  itself stays verbatim. The grid is an instrument, not wallpaper: hovering a
-  cell reads out its day, clicking one focuses the session map on exactly that
-  day (a clearable chip names the focus; picking a time window widens back
-  out), and the grid is keyboard-walkable -- arrows move a day or a week,
-  Enter focuses, all without a page reload.
-- **Knowledge payoff moments**: the first time a memory is read by a session
-  other than the one that wrote it, the moment lands in the activity ledger
-  ("gotcha chroma-boot-race just paid off for the first time") -- once per
-  memory, ever -- and the Overview rail gains a **Memory of the month** panel
-  naming the last 30 days' top-utility memory with the counts behind the claim.
-- **Maturity stages** on the project board and detail header: each project
-  earns a latched stage -- seedling, sprouting, established, deep-rooted --
-  from real thresholds over age, memories, event volume, and reach. Stages
-  never regress, and the pill's tooltip states exactly what the next stage
-  asks for.
-- **The plan-shipped settle** on Plans: the task transition that closes a
-  plan's last step -- wherever it lands, an agent shipping over MCP included --
-  mints a once-ever plan.shipped moment. The plan's row settles with a single
-  wash when it happens while you are watching, the ledger renders it under its
-  own flag icon, and the Plans header counts the local month: "Plans shipped
-  this month: N".
-- **Milestone moments** in the activity ledger: a short latched set of honest
-  firsts and counts -- a project's 100th/500th/1000th memory, its 1000th
-  answered recall, its first supersession, its first shipped plan, and its
-  birthdays -- each minted once ever and rendered under an award glyph with
-  the exact claim ("100 memories written in seamless"). Milestones accumulate
-  in the ledger only; there is no trophy screen.
-- **Witnessed unlocks** on Settings: a ranking project's "since" note in
-  Knowledge engine upgrades to the date it unlocked, so a latch that used to
-  flip silently is witnessed.
-
-Motion keeps one register: every animation plays once -- on a live arrival or
-on first render -- and nothing loops except the existing pulse idioms. A moment
-already on screen when the page loads renders plain; only a new arrival over
-the live feed animates. `prefers-reduced-motion` stills all of it, and the
-shipped-plan settle is the ceiling: no confetti and no toasts, which belong to
-gamification's arcade on Now.
-
-Momentum keeps the console's judged-numbers ethos: every number is real and
-verifiable, empty states say so honestly, and there are no punishment mechanics
--- an inactive day is an empty cell, never a warning, and nothing nags or
-expires. Off (the default), none of it renders and none of it is computed: no
-latch moves and no moment is minted. Moments minted while it was on stay in
-the event history (nothing is ever deleted), though milestone rows leave the
-activity feeds until it returns.
-
-**Gamification** is the arcade layer of the [Now](#now) screen. Where momentum
-asks "is this knowledge practice building on itself?", gamification plays back
-"how hard is the fleet running right now?" - and an owner who enjoys one
-framing may find the other noisy, so they toggle separately. It owns no screens
-or tools of its own; turning it on adds four surfaces to Now:
-
-- **The day tape**: today's judged output - tasks closed, memories and notes
-  written, plans touched, sessions started - each cell against its trailing
-  7-day daily average.
-- **The personal-records rail**: latched bests (most tasks closed in a day,
-  most memories written in a day, most agents live at once). Records only ever
-  move forward, like maturity stages; an unset record reads "today could be
-  the day".
-- **The hot-streak pulse**: the last ten minutes' event count beside the
-  titlebar pulse, catching fire past a fixed floor. The count is shown
-  verbatim either way, so the claim stays verifiable.
-- **Celebration moments**: a record falling or a plan shipping its last step
-  today renders a moment chip - and when one lands while you are watching, a
-  toast and a brief confetti burst (skipped under reduced motion). A record
-  crossing is minted into the event ledger at most once per record per day.
-
-The same guardrails as momentum apply: every number is judged from recorded
-activity, never invented, and there are no punishment mechanics - a quiet day
-is an empty tape, never a warning. Off (the default), none of it is computed,
-no record latch is written, and the Now page carries zero trace of it.
 
 **Write screening** is the only feature that changes what agents receive
 rather than what the console shows. On, every agent write to a memory or note
@@ -2546,7 +2560,7 @@ each row is for - it reports the feature's own rows whether it is on or off.
 | The console | Immediately - nav entries, screens, the search scope, and the overview tiles appear or disappear on the next render. |
 | A tool call | Immediately - a disabled feature's tool is refused as an unknown tool, whatever list the caller is holding. |
 | A hook | Immediately - the Diary's mid-session usage read follows the switch from the next Claude Code prompt, with no restart. |
-| The agent briefing | The next session start - momentum's finish-line emphasis reads the same stored override the console gates on. |
+| The agent briefing | The next session start - repo locks' LOCK lines and write screening's marks read the same stored override the console gates on. |
 | A client's tool list | The next time it lists tools, in practice its next session. Seamless declares `listChanged: false` and sends no tool-list notification, so a connected client keeps the list it already has. |
 | The client-side skill | The next `seamlessd install-hooks` run. The daemon does not reach into `~/.claude/skills` on a toggle, so `seamlessd doctor` raises an **info** line while a skill for a disabled feature is still sitting in a client's skill home. |
 

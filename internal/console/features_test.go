@@ -228,10 +228,10 @@ func TestOverviewCoverage_DropsTheTrialsChannelWhileOff(t *testing.T) {
 	require.Equal(t, []string{"Findings", "Memories", "Notes", "Trials"}, labels)
 }
 
-// The finish-line card is a momentum surface: off (the shipped default) leaves
-// the Overview without a trace of it; on, a near-done plan earns the strip's
-// one positive card, naming the exact remaining steps and linking to the plan.
-func TestOverviewFinishLineCard_FollowsTheMomentumFeature(t *testing.T) {
+// The finish-line card is a momentum surface, always on: a near-done plan earns
+// the strip's one positive card, naming the exact remaining steps and linking
+// to the plan.
+func TestOverviewFinishLineCard_NamesTheStepsLeft(t *testing.T) {
 	db, mux, _ := newGatedConsole(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -250,12 +250,6 @@ func TestOverviewFinishLineCard_FollowsTheMomentumFeature(t *testing.T) {
 	seed("nearly", "write the docs", core.TaskOpen, 10)
 
 	page := getPeek(t, mux, "/console/").Body.String()
-	require.NotContains(t, page, "from shipped")
-	require.NotContains(t, page, `data-sev="ok"`)
-	require.NotContains(t, page, "mom-fin-bar", "off leaves no trace of the progress draw either")
-
-	require.NoError(t, store.SetFeaturesConfig(ctx, db, config.Features{Momentum: true}))
-	page = getPeek(t, mux, "/console/").Body.String()
 	require.Contains(t, page, "nearly: one step from shipped")
 	require.Contains(t, page, "left: write the docs")
 	require.Contains(t, page, `href="/console/plans/nearly?project=demo"`, "the plan's page, its project named")
@@ -266,8 +260,7 @@ func TestOverviewFinishLineCard_FollowsTheMomentumFeature(t *testing.T) {
 	require.Contains(t, page, "<title>4 of 5 steps done (80%)</title>",
 		"the percent is verifiable on the surface, done and total named verbatim")
 
-	// A plan under the line earns nothing even with the feature on: no card is
-	// the empty state.
+	// A plan under the line earns nothing: no card is the empty state.
 	seed("midway", "first of many", core.TaskOpen, 20)
 	seed("midway", "second of many", core.TaskDone, 21)
 	page = getPeek(t, mux, "/console/").Body.String()
@@ -275,10 +268,10 @@ func TestOverviewFinishLineCard_FollowsTheMomentumFeature(t *testing.T) {
 }
 
 // The maturity-stage pills are a momentum surface on the project board and
-// the detail header: off (the shipped default), no computation, no latch, no
-// markup; on, both surfaces show the same latched stage and the crossing is
-// minted as an event exactly once.
-func TestProjectStages_FollowTheMomentumFeature(t *testing.T) {
+// the detail header: both show the same latched stage. The first render seeds
+// the latch with no event; a crossing the latch then watches is minted as an
+// event exactly once.
+func TestProjectStages_SeedThenCross(t *testing.T) {
 	db, mux, _ := newGatedConsole(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -295,6 +288,16 @@ func TestProjectStages_FollowTheMomentumFeature(t *testing.T) {
 			mustID(t), core.FormatTime(now.Add(-time.Hour)))
 		require.NoError(t, err)
 	}
+	stageEvents := func() int {
+		var n int
+		require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM events WHERE kind = ?`,
+			string(core.EventProjectStage)).Scan(&n))
+		return n
+	}
+	board := getPeek(t, mux, "/console/projects").Body.String()
+	require.Contains(t, board, `data-stage="seedling"`, "no memories yet: the latch is seeded at seedling")
+	require.Zero(t, stageEvents(), "a seed is not a crossing")
+
 	for i := range 5 {
 		stamp := core.FormatTime(now)
 		_, err = db.ExecContext(ctx, `
@@ -306,18 +309,7 @@ func TestProjectStages_FollowTheMomentumFeature(t *testing.T) {
 			stamp, stamp, stamp)
 		require.NoError(t, err)
 	}
-	stageEvents := func() int {
-		var n int
-		require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM events WHERE kind = ?`,
-			string(core.EventProjectStage)).Scan(&n))
-		return n
-	}
-
-	require.NotContains(t, getPeek(t, mux, "/console/projects").Body.String(), "mom-stage")
-	require.Zero(t, stageEvents(), "off means no computation and no latch")
-
-	require.NoError(t, store.SetFeaturesConfig(ctx, db, config.Features{Momentum: true}))
-	board := getPeek(t, mux, "/console/projects").Body.String()
+	board = getPeek(t, mux, "/console/projects").Body.String()
 	require.Contains(t, board, `data-stage="sprouting"`)
 	require.Contains(t, board, "sprouting: established at 30d, 15 memories, 250 events",
 		"the pill's tooltip names the next stage's bars beside where the project stands")
@@ -359,9 +351,7 @@ func TestLedgerGlint_MomentumBornKindsCarryTheHook(t *testing.T) {
 	page := getPeek(t, mux, "/console/").Body.String()
 	require.NotContains(t, page, "mom-glint", "no celebration event, no glint hook anywhere")
 
-	// The kinds are only minted while momentum is on; the glint is presentation
-	// on those rows, keyed to the kind rather than re-gated on the feature.
-	require.NoError(t, store.SetFeaturesConfig(ctx, db, config.Features{Momentum: true}))
+	// The glint is presentation on those rows, keyed to the kind.
 	_, err := db.ExecContext(ctx, `
 		INSERT INTO events (id, ts, kind, session_id, project_slug, item_id, payload)
 		VALUES (?, ?, ?, '', 'demo', '', '{"name":"chroma-boot-race","kind":"gotcha"}')`,
@@ -373,18 +363,14 @@ func TestLedgerGlint_MomentumBornKindsCarryTheHook(t *testing.T) {
 	require.Contains(t, page, "just paid off for the first time")
 }
 
-// The milestone rows are a momentum surface in the activity ledger: off (the
-// shipped default) filters even a stale milestone.reached event -- one minted
-// before a later switch-off -- out of the business feeds; on, the row renders
-// the payload's claim verbatim under its own award glyph, wearing the glint
-// hook the live-arrival wash keys on. Milestones accumulate in the ledger
-// only: no screen of their own.
-func TestLedgerMilestones_FollowTheMomentumFeature(t *testing.T) {
+// The milestone rows are a momentum surface in the activity ledger: the row
+// renders the payload's claim verbatim under its own award glyph, wearing the
+// glint hook the live-arrival wash keys on. Milestones accumulate in the
+// ledger only: no screen of their own.
+func TestLedgerMilestones_RenderTheClaim(t *testing.T) {
 	db, mux, _ := newGatedConsole(t)
 	ctx := context.Background()
 
-	// A milestone minted while momentum was on, surviving in the log after the
-	// feature went back off (nothing is ever deleted).
 	_, err := db.ExecContext(ctx, `
 		INSERT INTO events (id, ts, kind, session_id, project_slug, item_id, payload)
 		VALUES (?, ?, ?, '', 'demo', 'memories-100:demo',
@@ -392,12 +378,6 @@ func TestLedgerMilestones_FollowTheMomentumFeature(t *testing.T) {
 		mustID(t), core.FormatTime(time.Now().UTC()), string(store.EventMilestoneReached))
 	require.NoError(t, err)
 
-	offPage := getPeek(t, mux, "/console/").Body.String()
-	require.NotContains(t, offPage, "milestone.reached", "off = no milestone rows, even stale ones")
-	require.NotContains(t, offPage, "100 memories written in demo")
-	require.NotContains(t, getJSON2(t, mux, "/console/?format=json"), "milestone.reached")
-
-	require.NoError(t, store.SetFeaturesConfig(ctx, db, config.Features{Momentum: true}))
 	page := getPeek(t, mux, "/console/").Body.String()
 	require.Contains(t, page, "milestone.reached")
 	require.Contains(t, page, "100 memories written in demo",
@@ -412,20 +392,13 @@ func TestLedgerMilestones_FollowTheMomentumFeature(t *testing.T) {
 
 	// A payload-less row still reads as a sentence rather than an empty line.
 	require.Equal(t, "milestone reached", eventSummary(core.Event{Kind: store.EventMilestoneReached}))
-
-	// Off again: the ledger is byte-identical to the pre-enable render -- the
-	// stale row leaves no residue.
-	require.NoError(t, store.SetFeaturesConfig(ctx, db, config.Features{}))
-	require.Equal(t, offPage, getPeek(t, mux, "/console/").Body.String(),
-		"off = byte-identical Overview")
+	require.Contains(t, getJSON2(t, mux, "/console/?format=json"), "milestone.reached")
 }
 
-// The unlocked-date note on a Knowledge engine ranking row is a
-// momentum surface: on, a scope's stored activation timestamp reads as the
-// witnessed "unlocked <date>" note; off keeps the operational "since <ago>"
-// note -- the same timestamp, no celebration vocabulary, and a page
-// byte-for-byte free of the momentum markup.
-func TestSettingsUtilityUnlocked_FollowsTheMomentumFeature(t *testing.T) {
+// The unlocked-date note on a Knowledge engine ranking row is a momentum
+// surface: a scope's stored activation timestamp reads as the witnessed
+// "unlocked <date>" note.
+func TestSettingsUtilityUnlocked_WitnessesTheDate(t *testing.T) {
 	db, mux, _ := newGatedConsole(t)
 	ctx := context.Background()
 
@@ -435,25 +408,17 @@ func TestSettingsUtilityUnlocked_FollowsTheMomentumFeature(t *testing.T) {
 	}))
 
 	page := getPeek(t, mux, "/console/settings?s=engine").Body.String()
-	require.NotContains(t, page, "mom-unlocked", "off leaves no trace of the unlock notice")
-	require.NotContains(t, page, "unlocked 2026-07-12")
-	require.Contains(t, page, "since <time ", "the operational note is core metadata and stays")
-
-	require.NoError(t, store.SetFeaturesConfig(ctx, db, config.Features{Momentum: true}))
-	page = getPeek(t, mux, "/console/settings?s=engine").Body.String()
 	require.Contains(t, page, `class="mom-unlocked"`)
 	require.Contains(t, page, "unlocked 2026-07-12",
 		"the stored activation date is witnessed on the surface, verbatim")
 	require.Contains(t, page, `title="2026-07-12 09:30 UTC"`, "the full timestamp stays in the tooltip")
-	require.NotContains(t, page, "since <time ",
-		"the note upgrades rather than duplicates -- one timestamp, one line")
+	require.NotContains(t, page, "since <time ", "one timestamp, one line")
 }
 
 // The memory-of-the-month spotlight is a momentum surface on the Overview
-// rail: off (the shipped default), no trace in HTML or JSON; on, the window's
-// top-utility memory renders with its counts, or the honest empty state when
-// nothing qualifies.
-func TestOverviewSpotlight_FollowsTheMomentumFeature(t *testing.T) {
+// rail: the window's top-utility memory renders with its counts, or the honest
+// empty state when nothing qualifies.
+func TestOverviewSpotlight_NamesTheMonthsMemory(t *testing.T) {
 	db, mux, _ := newGatedConsole(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -479,17 +444,12 @@ func TestOverviewSpotlight_FollowsTheMomentumFeature(t *testing.T) {
 	}
 
 	page := getPeek(t, mux, "/console/").Body.String()
-	require.NotContains(t, page, "Memory of the month")
-	require.NotContains(t, getJSON2(t, mux, "/console/?format=json"), "spotlight")
-
-	require.NoError(t, store.SetFeaturesConfig(ctx, db, config.Features{Momentum: true}))
-	page = getPeek(t, mux, "/console/").Body.String()
 	require.Contains(t, page, "Memory of the month")
 	require.Contains(t, page, "star-memory")
 	require.Contains(t, page, "2 reads · 2 sessions · last 30 days")
 	require.Contains(t, page, `href="/console/memories/`+memID+`"`)
 
-	// The honest empty state: the feature on with nothing qualifying.
+	// The honest empty state: nothing qualifying.
 	_, err = db.ExecContext(ctx, `DELETE FROM events WHERE kind = ?`, string(core.EventMemoryRead))
 	require.NoError(t, err)
 	page = getPeek(t, mux, "/console/").Body.String()
@@ -497,10 +457,9 @@ func TestOverviewSpotlight_FollowsTheMomentumFeature(t *testing.T) {
 	require.Contains(t, page, "No memory earned reuse in the last 30 days yet.")
 }
 
-// The capture calendar is a momentum surface on the Sessions page: off (the
-// shipped default), the page carries no trace of it in HTML or JSON; on, the
-// grid renders with the streak numbers, live from the stored override.
-func TestSessionsCaptureCalendar_FollowsTheMomentumFeature(t *testing.T) {
+// The capture calendar is a momentum surface on the Sessions page: the grid
+// renders with the streak numbers, in HTML and JSON.
+func TestSessionsCaptureCalendar_RendersTheYear(t *testing.T) {
 	db, mux, _ := newGatedConsole(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -512,12 +471,6 @@ func TestSessionsCaptureCalendar_FollowsTheMomentumFeature(t *testing.T) {
 	}))
 
 	page := getPeek(t, mux, "/console/sessions").Body.String()
-	require.NotContains(t, page, "mom-cal")
-	require.NotContains(t, page, "Capture calendar")
-	require.NotContains(t, getJSON2(t, mux, "/console/sessions?format=json"), "captureStreak")
-
-	require.NoError(t, store.SetFeaturesConfig(ctx, db, config.Features{Momentum: true}))
-	page = getPeek(t, mux, "/console/sessions").Body.String()
 	require.Contains(t, page, "Capture calendar")
 	require.Contains(t, page, `class="mom-cal-grid"`)
 	require.Contains(t, page, "mom-cal-dot", "the covered day carries its mark")
@@ -541,9 +494,8 @@ func TestSessionsCaptureCalendar_FollowsTheMomentumFeature(t *testing.T) {
 
 // The streak ember is presentation on the calendar's already-judged current
 // streak: at StreakEmberFloor covered days the number gains the warm pulsing
-// flame (the now-hot.on pattern), below the floor there is no ember at all
-// (the calendar test above pins that), and off the whole calendar -- ember
-// included -- leaves no trace.
+// flame (the now-hot.on pattern), and below the floor there is no ember at all
+// (the calendar test above pins that).
 func TestSessionsStreakEmber_LightsAtTheFloor(t *testing.T) {
 	db, mux, _ := newGatedConsole(t)
 	ctx := context.Background()
@@ -561,10 +513,6 @@ func TestSessionsStreakEmber_LightsAtTheFloor(t *testing.T) {
 	}
 
 	page := getPeek(t, mux, "/console/sessions").Body.String()
-	require.NotContains(t, page, "mom-cal", "off keeps the whole calendar out, ember included")
-
-	require.NoError(t, store.SetFeaturesConfig(ctx, db, config.Features{Momentum: true}))
-	page = getPeek(t, mux, "/console/sessions").Body.String()
 	require.Contains(t, page, "mom-cal-ember", "at the floor the ember lights")
 	require.Contains(t, page, fmt.Sprintf("<strong>%d</strong>", StreakEmberFloor),
 		"the streak number stays verbatim beside the glyph")
@@ -573,12 +521,10 @@ func TestSessionsStreakEmber_LightsAtTheFloor(t *testing.T) {
 }
 
 // The plan-shipped settle and the monthly shipped count are momentum surfaces
-// on the Plans page: off (the shipped default), the page and its JSON carry no
-// trace and no settlement is computed or minted -- even with the completing
-// transition recorded; on, the settlement is minted exactly once across
-// repeated rollup recomputes, the header gains the quiet count line, and the
-// shipped plan's done row wears the settle hook the live-arrival wash keys on.
-func TestPlansShipped_FollowsTheMomentumFeature(t *testing.T) {
+// on the Plans page: the settlement is minted exactly once across repeated
+// rollup recomputes, the header gains the quiet count line, and the shipped
+// plan's done row wears the settle hook the live-arrival wash keys on.
+func TestPlansShipped_SettlesOnceAndCounts(t *testing.T) {
 	db, mgr, mux := newConsoleWithFiles(t)
 	ctx := context.Background()
 	seeded := time.Now().UTC().Add(-2 * time.Hour) // fixed in the past so ago() stays stable across renders
@@ -599,10 +545,9 @@ func TestPlansShipped_FollowsTheMomentumFeature(t *testing.T) {
 
 	// The detection chokepoint is the recorder's post-insert hook, so shipping
 	// via any path that records the transition counts -- this is the exact shape
-	// the MCP tasks_update tool records. Armed on the off base: the stored
-	// override decides live.
+	// the MCP tasks_update tool records.
 	rec := events.NewRecorder(db)
-	rec.SetFeatures(config.Features{})
+	rec.ArmMilestones()
 	transition := core.Event{Kind: core.EventTaskTransition, ProjectSlug: "demo",
 		ItemID: last, Payload: map[string]any{"to": "done"}}
 	shippedCount := func() int {
@@ -612,20 +557,6 @@ func TestPlansShipped_FollowsTheMomentumFeature(t *testing.T) {
 		return n
 	}
 
-	_, err = rec.Record(ctx, transition)
-	require.NoError(t, err)
-	require.Zero(t, shippedCount(), "off = not computed, no event minted")
-
-	offPage := getPeek(t, mux, "/console/plans?w=all").Body.String()
-	require.NotContains(t, offPage, "Plans shipped this month")
-	require.NotContains(t, offPage, "mom-shipped")
-	require.NotContains(t, offPage, "mom-settle")
-	offJSON := getJSON2(t, mux, "/console/plans?format=json&w=all")
-	require.NotContains(t, offJSON, "shippedThisMonth")
-	require.NotContains(t, offJSON, `"shipped":true`)
-
-	// On via the stored override: the next recompute mints, and only once.
-	require.NoError(t, store.SetFeaturesConfig(ctx, db, config.Features{Momentum: true}))
 	_, err = rec.Record(ctx, transition)
 	require.NoError(t, err)
 	_, err = rec.Record(ctx, transition)
@@ -649,12 +580,6 @@ func TestPlansShipped_FollowsTheMomentumFeature(t *testing.T) {
 	require.Equal(t, "shipped plan ship-it (2 steps)", eventSummary(shipped[0]))
 	require.Equal(t, "flag", evtIcon(string(core.EventPlanShipped)))
 	require.NotEqual(t, evtIcon(string(core.EventPlanCaptured)), evtIcon(string(core.EventPlanShipped)))
-
-	// Switching off again leaves the page byte-identical to the pre-enable
-	// render: no computation, no residue, even though the settlement now exists.
-	require.NoError(t, store.SetFeaturesConfig(ctx, db, config.Features{Momentum: false}))
-	require.Equal(t, offPage, getPeek(t, mux, "/console/plans?w=all").Body.String(),
-		"off = byte-identical Plans page")
 }
 
 // The Diary is an optional feature with a screen of its own and one in-page
@@ -819,12 +744,17 @@ func TestFeatureCards_RenderOnePerRegistryEntry(t *testing.T) {
 	require.True(t, on[0].Enabled)
 	require.Equal(t, "Data kept: 1 trial across 1 lab.", on[0].DataKept)
 
-	momentum := cards[1]
-	require.Equal(t, string(features.Momentum), momentum.Key)
-	require.Equal(t, "feature_momentum", momentum.Field)
-	require.False(t, momentum.Enabled)
-	require.False(t, momentum.Default, "optional features ship off")
-	require.Empty(t, momentum.DataKept, "no reassurance line until the feature owns stored data")
+	diary := cards[len(cards)-1]
+	require.Equal(t, string(features.Diary), diary.Key)
+	require.Equal(t, "feature_diary", diary.Field)
+	require.False(t, diary.Enabled)
+	require.False(t, diary.Default, "optional features ship off")
+	require.Empty(t, diary.DataKept, "no reassurance line until the feature owns stored data")
+
+	// Momentum and gamification are core, always on: no switch of their own.
+	for _, c := range cards {
+		require.NotContains(t, []string{"momentum", "gamification"}, c.Key)
+	}
 }
 
 // The screening card says what switching screening off takes away. In an
@@ -896,11 +826,13 @@ func TestSettingsFeaturesZone_MarkupContract(t *testing.T) {
 	require.Contains(t, body, "nothing is ever deleted")
 	require.Contains(t, body, "agents pick the change up on their next session")
 	require.Contains(t, body, `data-feature="research"`)
-	require.Contains(t, body, `data-feature="momentum"`)
+	require.Contains(t, body, `data-feature="diary"`)
+	require.NotContains(t, body, `data-feature="momentum"`, "momentum is core: no switch")
+	require.NotContains(t, body, `data-feature="gamification"`, "gamification is core: no switch")
 	require.Contains(t, body, `action="/console/settings/features"`)
 	require.Contains(t, body, `data-features-form`)
 	require.Contains(t, body, `name="feature_research"`)
-	require.Contains(t, body, `name="feature_momentum"`)
+	require.Contains(t, body, `name="feature_diary"`)
 	require.Contains(t, body, `<label class="set-switch"><input type="checkbox" role="switch" name="feature_research" value="1" aria-label="Research labs &amp; trials"`,
 		"the toggle is the shared switch, named for its feature")
 	require.NotContains(t, body, `feature-state-pill`, "the switch says which way it is; no Enabled/Disabled pill")
@@ -979,25 +911,27 @@ func TestSettingsFeaturesSaveAndReset(t *testing.T) {
 	require.False(t, found, "reset is a row deletion, not a stored all-off")
 }
 
-// The momentum toggle stores independently of research, and the resolved state
+// The Diary toggle stores independently of research, and the resolved state
 // reaches the render context (pageData.Features) on the very next request --
-// which is the mechanism every in-page momentum surface gates on.
-func TestSettingsFeaturesSave_MomentumTogglesIndependently(t *testing.T) {
+// which is the mechanism every in-page feature surface gates on.
+func TestSettingsFeaturesSave_DiaryTogglesIndependently(t *testing.T) {
 	db, mux, _ := newGatedConsole(t)
 	ctx := context.Background()
 
-	rr := postForm(mux, "/console/settings/features", url.Values{"feature_momentum": {"1"}}.Encode())
+	rr := postForm(mux, "/console/settings/features", url.Values{"feature_diary": {"1"}}.Encode())
 	require.Equal(t, http.StatusSeeOther, rr.Code)
 
 	var data settingsData
 	getJSON(t, mux, "/console/settings?format=json", &data)
-	require.True(t, data.FeaturesConfig.Momentum)
-	require.False(t, data.FeaturesConfig.Research, "the momentum box alone leaves research off")
-	require.True(t, data.Features[1].Enabled)
+	require.True(t, data.FeaturesConfig.Diary)
+	require.False(t, data.FeaturesConfig.Research, "the diary box alone leaves research off")
+	for _, c := range data.Features {
+		require.Equal(t, c.Key == string(features.Diary), c.Enabled, c.Key)
+	}
 
 	svc, err := New(Config{DB: db, APIKey: testKey})
 	require.NoError(t, err)
-	require.True(t, svc.effectiveFeatures(ctx).Momentum,
+	require.True(t, svc.effectiveFeatures(ctx).Diary,
 		"a fresh resolve sees the stored override without any restart")
 }
 
@@ -1051,7 +985,7 @@ func TestSettingsFeaturesSave_RecordsAnEvent(t *testing.T) {
 	}
 	require.NotNil(t, found, "the toggle must be visible in Activity")
 	require.Equal(t, "console", found.Payload["by"])
-	require.Equal(t, "optional features changed (research on, momentum off, gamification off, screening off, repo_locks off, diary off)", eventSummary(*found))
+	require.Equal(t, "optional features changed (research on, screening off, repo_locks off, diary off)", eventSummary(*found))
 
 	rr = postForm(mux, "/console/settings/features/reset", "")
 	require.Equal(t, http.StatusSeeOther, rr.Code)
@@ -1094,7 +1028,7 @@ func TestSettingsJSON_ExposesTheFeatureContract(t *testing.T) {
 	require.Equal(t, "feature_research", cards[0].Field)
 	require.NotEmpty(t, cards[0].WhenOff)
 
-	require.JSONEq(t, `{"research": false, "momentum": false, "gamification": false, "screening": false, "repo_locks": false, "diary": false}`, string(raw["featuresConfig"]))
+	require.JSONEq(t, `{"research": false, "screening": false, "repo_locks": false, "diary": false}`, string(raw["featuresConfig"]))
 	require.Equal(t, "false", string(raw["featuresOverridden"]))
 }
 

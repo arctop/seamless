@@ -5,10 +5,9 @@
 // output, with the loose ends (claims nobody live is holding), the plans in
 // motion, the cross-project ready queue, and the live wire below.
 //
-// The optional gamification feature layers the arcade on top: the day tape,
-// the personal-records rail, the hot-streak pulse, and celebration moments.
-// Off (the shipped default), none of it is computed and the page is
-// byte-identical to the feature never existing -- in HTML and JSON alike.
+// The arcade (gamification) rides on top: the day tape, the personal-records
+// rail, the hot-streak pulse, and celebration moments, every number judged
+// from recorded activity.
 package console
 
 import (
@@ -23,7 +22,6 @@ import (
 	"time"
 
 	"github.com/arctop/seamless/internal/core"
-	"github.com/arctop/seamless/internal/features"
 	"github.com/arctop/seamless/internal/plans"
 	"github.com/arctop/seamless/internal/store"
 )
@@ -69,8 +67,9 @@ type nowData struct {
 	ReadyTotal int        `json:"readyTotal"`
 	Wire       []eventRow `json:"wire"`
 
-	// Arcade is the gamification layer: nil while the feature is off, so the
-	// page (HTML and JSON) carries zero trace of it.
+	// Arcade is the gamification layer: nil only when it could not be judged
+	// (nowArcade is failure-soft), so the page drops it rather than show wrong
+	// numbers.
 	Arcade *nowArcadeVM `json:"arcade,omitempty"`
 
 	// liveAll counts every live session whatever the scope, and shippedToday
@@ -109,8 +108,8 @@ type nowAgentVM struct {
 	Lapsed []nowLooseVM `json:"lapsedClaims,omitempty"`
 	Trail  []eventRow   `json:"trail"`
 
-	// Contrib is the agent's today line, a gamification surface: nil while the
-	// feature is off.
+	// Contrib is the agent's today line, a gamification surface: nil when the
+	// card's trail could not be read.
 	Contrib *nowContribVM `json:"contrib,omitempty"`
 }
 
@@ -221,6 +220,9 @@ type nowRecordVM struct {
 	N     int    `json:"n"`
 	Day   string `json:"day,omitempty"`
 	Today bool   `json:"today,omitempty"` // set today -- worth a glow
+	// Seen is a best the ledger found when it began, on Day, rather than one
+	// it saw fall (store.RecordMark): never a record set today.
+	Seen bool `json:"seen,omitempty"`
 }
 
 // nowHotVM is the ten-minute pulse: the verbatim count, and whether it clears
@@ -259,7 +261,6 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 	if err != nil {
 		return nowData{}, err
 	}
-	arcadeOn := features.Enabled(s.effectiveFeatures(ctx), features.Gamification)
 	dayStart := localMidnight(now)
 
 	// Trail + today's contribution from one newest-first read per card.
@@ -276,7 +277,7 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 					vm.Trail = append(vm.Trail, toEventRow(e))
 				}
 			}
-			if arcadeOn {
+			if terr == nil {
 				vm.Contrib = nowContribution(evs, dayStart)
 			}
 		}
@@ -309,9 +310,7 @@ func (s *Service) buildNow(ctx context.Context, now time.Time, scope string) (no
 	data.EventsHour = len(pulseTimes)
 	data.Pulse = nowPulseSpark(pulseTimes, now)
 
-	if arcadeOn {
-		data.Arcade = s.nowArcade(ctx, now, dayStart, data.liveAll, data.shippedToday, pulseTimes)
-	}
+	data.Arcade = s.nowArcade(ctx, now, dayStart, data.liveAll, data.shippedToday, pulseTimes)
 	return data, nil
 }
 
@@ -657,8 +656,7 @@ func nowPulseSpark(times []time.Time, now time.Time) spark {
 }
 
 // nowArcade assembles the gamification layer. Failure-soft: an arcade error is
-// logged and drops the layer, never the page. Callers gate on the feature, so
-// none of this runs -- and no latch is written -- while it is off.
+// logged and drops the layer, never the page.
 func (s *Service) nowArcade(ctx context.Context, now, dayStart time.Time, liveAgents int, shippedToday []store.ProjectPlan, pulseTimes []time.Time) *nowArcadeVM {
 	dayKey := dayStart.Format("2006-01-02")
 	today, err := store.GamificationDayCounts(ctx, s.db(ctx), dayStart, dayStart.AddDate(0, 0, 1))
@@ -699,7 +697,8 @@ func (s *Service) nowArcade(ctx context.Context, now, dayStart time.Time, liveAg
 	}
 	record := func(key, label string, mark store.RecordMark) {
 		arc.Records = append(arc.Records, nowRecordVM{
-			Key: key, Label: label, N: mark.N, Day: mark.Day, Today: mark.Day == dayKey && mark.N > 0,
+			Key: key, Label: label, N: mark.N, Day: mark.Day, Seen: mark.Seen,
+			Today: mark.Day == dayKey && mark.N > 0 && !mark.Seen,
 		})
 	}
 	record("tasks_day", "most tasks closed in a day", recs.TasksDay)

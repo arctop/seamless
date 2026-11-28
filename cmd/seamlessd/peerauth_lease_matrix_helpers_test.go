@@ -273,7 +273,7 @@ func newLMDaemon(t *testing.T) *lmDaemon {
 	// Write screening OFF: the lease rows are about reach; the screens have
 	// their own matrix rows, and a restricted account's binding rules are
 	// held whether or not screening is on.
-	feats := config.Features{Research: true, Momentum: true, Gamification: true, RepoLocks: true}
+	feats := config.Features{Research: true, RepoLocks: true}
 	ret.SetFeaturesConfig(feats)
 	screen := screening.New(screening.Config{DB: db, Files: mgr, Events: rec, Gardener: garden,
 		Enabled: func(context.Context) bool { return false }})

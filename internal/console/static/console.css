@@ -4130,15 +4130,13 @@ button.star.on .ico { fill: currentColor; }
    Now arcade. */
 .rail-item.mom-settle.live-in { animation: live-in var(--dur-med) var(--ease-out), ix-locate-wash .5s var(--ease-out) both; }
 
-/* Momentum unlock notice: while the feature is on, the Settings
-   utility-activation table's stored activation timestamp reads as the
-   witnessed "unlocked <date>" note (it stays the operational "armed <ago>"
-   note while off). A static line in the ok tone -- no motion, the date
-   verbatim. */
+/* Momentum unlock notice: the Settings utility-activation table's stored
+   activation timestamp reads as the witnessed "unlocked <date>" note. A
+   static line in the ok tone -- no motion, the date verbatim. */
 .ur-row .mom-unlocked { color: var(--ok); font-variant-numeric: tabular-nums; }
 
-/* The Plans header's quiet momentum line (rendered only while the feature is
-   on): a muted verbatim count, no pill, no motion. */
+/* The Plans header's quiet momentum line: a muted verbatim count, no pill,
+   no motion. */
 .mom-shipped { font-size: var(--text-xs); color: var(--faint); white-space: nowrap; }
 .mom-shipped strong { color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
 
@@ -4771,7 +4769,7 @@ a.checkin-chip:hover { border-color: var(--brand); color: var(--brand); text-dec
    countdowns riding along, with the loose ends, the moving plans, the ready
    queue, and the wire below. Every strip disappears entirely when its bucket
    is empty. The gamification arcade (day tape, records, hot streak, moments)
-   renders only while its feature is on.
+   rides on top.
    =========================================================================== */
 .now-titlebar {
   display: flex; align-items: center; gap: 16px;

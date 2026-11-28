@@ -104,16 +104,18 @@ func ComputeStage(in StageInputs, now time.Time) ProjectStage {
 	}
 }
 
-// SettingProjectStages is the settings key holding the latched stage per
-// project: {"projects":{"slug":{"stage":"sprouting","since":"..."}}}. Deleting
-// the row is safe in the sense that nothing breaks -- but unlike a cache it IS
-// the latch, so earned stages would be recomputed from current facts.
+// SettingProjectStages is the settings key holding the latched stage of every
+// project the latch has seen: {"projects":{"slug":{"stage":"sprouting",
+// "since":"..."}}}, since absent for a stage seeded rather than crossed.
+// Deleting the row is safe in the sense that nothing breaks -- but unlike a
+// cache it IS the latch, so stages would be seeded again from current facts.
 const SettingProjectStages = "momentum_project_stages"
 
-// projectStageState is one project's stored latch.
+// projectStageState is one project's stored latch. Since is when the project
+// crossed into Stage, zero when Stage is where the latch first saw it.
 type projectStageState struct {
 	Stage ProjectStage `json:"stage"`
-	Since time.Time    `json:"since"`
+	Since time.Time    `json:"since,omitzero"`
 }
 
 // projectStagesDoc is the stored shape behind SettingProjectStages.
@@ -140,8 +142,15 @@ type StageCrossing struct {
 // board, latches forward (never back), persists any advances, and returns the
 // effective stages plus the crossings this evaluation minted (the caller
 // records those as events). The global "" scope is not a project and earns no
-// stage. A momentum-only surface: callers gate on the feature, so a disabled
-// install neither computes nor latches.
+// stage.
+//
+// A project the latch has never seen is seeded at the stage it holds, with no
+// crossing: an install from before the stages were always on, a project a
+// console lock kept off the board until now, a latch row deleted. Nobody
+// watched those projects grow, so a crossing minted now would date an old
+// stage to today, and a board of mature projects would flood the ledger with
+// one crossing each. Seedlings are seeded too, so a new project's first real
+// crossing is minted as one.
 func EvaluateProjectStages(ctx context.Context, db *sql.DB, rows []ProjectBoardRow, now time.Time) (map[string]ProjectStageInfo, []StageCrossing, error) {
 	return EvaluateProjectStagesWith(ctx, db, db, rows, now)
 }
@@ -176,9 +185,17 @@ func EvaluateProjectStagesWith(ctx context.Context, db, cacheDB *sql.DB, rows []
 			ReachRate: row.ReachRate,
 			HasReach:  row.Active > 0,
 		}
-		latched := doc.Projects[row.Project]
+		latched, seen := doc.Projects[row.Project]
 		effective := latched.Stage
-		if computed := ComputeStage(in, now); computed.Rank() > latched.Stage.Rank() {
+		computed := ComputeStage(in, now)
+		switch {
+		case !seen:
+			// The seed: the stage held when the latch first saw the project, not a
+			// crossing it watched -- and no since, the day it was earned unknown.
+			effective = computed
+			doc.Projects[row.Project] = projectStageState{Stage: computed}
+			changed = true
+		case computed.Rank() > latched.Stage.Rank():
 			from := latched.Stage
 			if from == "" {
 				from = StageSeedling
@@ -186,10 +203,7 @@ func EvaluateProjectStagesWith(ctx context.Context, db, cacheDB *sql.DB, rows []
 			effective = computed
 			doc.Projects[row.Project] = projectStageState{Stage: computed, Since: now.UTC()}
 			changed = true
-			// Reaching seedling is not a crossing -- every project is born there.
-			if computed != StageSeedling {
-				crossings = append(crossings, StageCrossing{Project: row.Project, From: from, To: computed})
-			}
+			crossings = append(crossings, StageCrossing{Project: row.Project, From: from, To: computed})
 		}
 		if effective == "" {
 			effective = StageSeedling
@@ -209,7 +223,7 @@ func EvaluateProjectStagesWith(ctx context.Context, db, cacheDB *sql.DB, rows []
 }
 
 // loadProjectStages reads the latch document; an absent or corrupt row is an
-// empty latch (stages recompute and re-latch), never a failed page.
+// empty latch (every project is seeded again), never a failed page.
 func loadProjectStages(ctx context.Context, db *sql.DB) (projectStagesDoc, error) {
 	doc := projectStagesDoc{Projects: map[string]projectStageState{}}
 	raw, found, err := GetSetting(ctx, db, SettingProjectStages)

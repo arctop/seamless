@@ -176,12 +176,10 @@ type featureCard struct {
 // featureIconDefault; a guard test keeps every registered feature in the map
 // and every glyph in lucidePaths.
 var featureIcons = map[features.Key]string{
-	features.Research:     "flask-conical",
-	features.Momentum:     "sparkles",
-	features.Gamification: "trophy",
-	features.Screening:    "shield",
-	features.RepoLocks:    "git-branch",
-	features.Diary:        "book-open",
+	features.Research:  "flask-conical",
+	features.Screening: "shield",
+	features.RepoLocks: "git-branch",
+	features.Diary:     "book-open",
 }
 
 // featureIconDefault is the Features section's own glyph.

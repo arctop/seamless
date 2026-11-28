@@ -244,7 +244,7 @@ func ndFixture(t *testing.T, c *ndConsole) ndSeeded {
 }
 
 // ndAllOn is every feature the strip reads.
-var ndAllOn = config.Features{Screening: true, RepoLocks: true, Momentum: true}
+var ndAllOn = config.Features{Screening: true, RepoLocks: true}
 
 // The strip lists every kind of item in its one order -- what an agent is
 // blocked on first, then the owner's queues, then the knowledge queue -- each
@@ -320,10 +320,11 @@ func TestNdStrip_FeatureOffItemsDoNotExist(t *testing.T) {
 	c := ndNew(t, "advanced", config.Features{})
 	ndFixture(t, c)
 	kinds := ndKinds(ndRead(t, c.mux).Attention)
-	for _, off := range []string{needHeld, needLocks, needFinishLine} {
+	for _, off := range []string{needHeld, needLocks} {
 		require.NotContains(t, kinds, off, "its feature is off")
 	}
 	require.Contains(t, kinds, needGates)
+	require.Contains(t, kinds, needFinishLine, "the finish line is momentum's, which is always on")
 
 	empty := ndNew(t, "advanced", ndAllOn)
 	require.Empty(t, ndRead(t, empty.mux).Attention)

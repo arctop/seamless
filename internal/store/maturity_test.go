@@ -77,32 +77,56 @@ func TestEvaluateProjectStages_LatchesAndNeverRegresses(t *testing.T) {
 		{Project: "fresh", Memories: 0},
 	}
 
+	// The first evaluation seeds the latch: demo already holds sprouting, but
+	// nobody watched it cross, so no crossing is minted and no since is claimed.
 	stages, crossings, err := EvaluateProjectStages(ctx, db, rows, now)
 	require.NoError(t, err)
 	require.NotContains(t, stages, "", "the global scope is not a project")
 	require.Equal(t, StageSprouting, stages["demo"].Stage)
+	require.True(t, stages["demo"].Since.IsZero(), "a seeded stage claims no crossing day")
 	require.Equal(t, StageSeedling, stages["fresh"].Stage)
-	require.Equal(t, []StageCrossing{{Project: "demo", From: StageSeedling, To: StageSprouting}}, crossings,
-		"one crossing minted; being born a seedling is not one")
+	require.Empty(t, crossings, "seeding is not crossing")
 	require.Equal(t, 6, stages["demo"].Inputs.Memories, "the inputs ride along for the progress tooltip")
 	require.Equal(t, 30, stages["demo"].Inputs.Events)
 
+	// fresh was seen as a seedling, so growing past the bar is a crossing.
+	later := now.AddDate(0, 0, 8)
+	seedProjectEvents(t, db, "fresh", 30, later.Add(-time.Hour))
+	rows[2].Memories = 6
+	stages, crossings, err = EvaluateProjectStages(ctx, db, rows, later)
+	require.NoError(t, err)
+	require.Equal(t, []StageCrossing{{Project: "fresh", From: StageSeedling, To: StageSprouting}}, crossings,
+		"one crossing minted, for the project the latch watched grow")
+	require.Equal(t, later, stages["fresh"].Since)
+
 	// A second evaluation mints nothing new.
-	_, crossings, err = EvaluateProjectStages(ctx, db, rows, now)
+	_, crossings, err = EvaluateProjectStages(ctx, db, rows, later)
 	require.NoError(t, err)
 	require.Empty(t, crossings, "the latch was already set")
 
 	// The project sheds its memories: the stage stands (never regress).
 	rows[1].Memories = 0
-	stages, crossings, err = EvaluateProjectStages(ctx, db, rows, now)
+	stages, crossings, err = EvaluateProjectStages(ctx, db, rows, later)
 	require.NoError(t, err)
 	require.Empty(t, crossings)
 	require.Equal(t, StageSprouting, stages["demo"].Stage, "stages never regress")
 
-	// A corrupt latch row degrades to recomputation, never a failed page.
+	// A project the latch has never seen (one a console lock kept off the
+	// board) is seeded at the stage it holds, not crossed into it.
+	seedRegisteredProject(t, db, "hidden", now.AddDate(0, -2, 0))
+	seedProjectEvents(t, db, "hidden", 300, now)
+	stages, crossings, err = EvaluateProjectStages(ctx, db,
+		append(rows, ProjectBoardRow{Project: "hidden", Memories: 20}), later)
+	require.NoError(t, err)
+	require.Empty(t, crossings)
+	require.Equal(t, StageEstablished, stages["hidden"].Stage)
+
+	// A corrupt latch row degrades to a fresh seed, never a failed page or a
+	// burst of crossings.
 	require.NoError(t, SetSetting(ctx, db, SettingProjectStages, "not json"))
 	rows[1].Memories = 6
-	stages, _, err = EvaluateProjectStages(ctx, db, rows, now)
+	stages, crossings, err = EvaluateProjectStages(ctx, db, rows, later)
 	require.NoError(t, err)
+	require.Empty(t, crossings)
 	require.Equal(t, StageSprouting, stages["demo"].Stage)
 }

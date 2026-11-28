@@ -72,8 +72,30 @@ func TestFeaturesConfigStoredShapeMatchesMigration(t *testing.T) {
 	raw, found, err := GetSetting(ctx, db, SettingFeaturesConfig)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, `{"research":true,"momentum":false,"gamification":false,"screening":false,"repo_locks":false,"diary":false}`, raw,
+	require.Equal(t, `{"research":true,"screening":false,"repo_locks":false,"diary":false}`, raw,
 		"the migration's seeded {\"research\":true} decodes over this shape: absent keys stay at the base value")
+}
+
+// TestFeaturesConfig_RowNamingRetiredFeatures reads an override stored while
+// momentum and gamification were switches: their keys are ignored (they
+// switch nothing now), the row's other keys still apply, and the next save
+// writes the row without them.
+func TestFeaturesConfig_RowNamingRetiredFeatures(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	require.NoError(t, SetSetting(ctx, db, SettingFeaturesConfig,
+		`{"research":true,"momentum":true,"gamification":false,"screening":false,"repo_locks":true,"diary":false}`))
+
+	got, overridden, err := FeaturesConfig(ctx, db, config.Features{})
+	require.NoError(t, err)
+	require.True(t, overridden)
+	require.Equal(t, config.Features{Research: true, RepoLocks: true}, got)
+
+	require.NoError(t, SetFeaturesConfig(ctx, db, got))
+	raw, _, err := GetSetting(ctx, db, SettingFeaturesConfig)
+	require.NoError(t, err)
+	require.NotContains(t, raw, "momentum")
+	require.NotContains(t, raw, "gamification")
 }
 
 // TestFeaturesConfig_RowFromBeforeTheDiaryKeepsItsBase reads an override a

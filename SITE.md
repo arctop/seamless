@@ -560,16 +560,14 @@ CGO_ENABLED=0 go build -tags osusergo -o /tmp/seamlessd-demo ./cmd/seamlessd
 # 2. serve it on a port that is NOT your live daemon, with a throwaway config
 #    (without SEAMLESS_CONFIG, serve loads your LIVE config). The optional
 #    features ship off, and a fresh data dir is a new installation -- without
-#    them the seeded trials, momentum cues, the Now screen's arcade and the
-#    write-screening layer never render. A new installation's console also
+#    them the seeded trials and the write-screening layer never render. A new installation's console also
 #    starts at level basic, which hides Now, Interactions, and Retrieval; the
 #    level flag puts every screen back. USER and HOME keep your account name
 #    and home path off the Privacy screen.
 touch /tmp/seamless-demo.yaml
 HOME=/tmp/demo-home USER=you SEAMLESS_CONFIG=/tmp/seamless-demo.yaml \
   SEAMLESS_DATA_DIR=/tmp/demo-home/.seamless SEAMLESS_ADDR=127.0.0.1:8090 \
-  SEAMLESS_FEATURES_RESEARCH=1 SEAMLESS_FEATURES_MOMENTUM=1 \
-  SEAMLESS_FEATURES_GAMIFICATION=1 SEAMLESS_FEATURES_SCREENING=1 \
+  SEAMLESS_FEATURES_RESEARCH=1 SEAMLESS_FEATURES_SCREENING=1 \
   SEAMLESS_CONSOLE_LEVEL=advanced SEAMLESS_MCP_API_KEY=<any key> \
   /tmp/seamlessd-demo serve
 SEAMLESS_CONFIG=/tmp/seamless-demo.yaml SEAMLESS_SERVER_URL=http://127.0.0.1:8090 \

@@ -473,7 +473,7 @@ func runServe(args []string) error {
 	// as the reaper and the console (gardener.session_idle_minutes).
 	ret.SetSessionIdle(time.Duration(cfg.Gardener.SessionIdleMinutes) * time.Minute)
 	rec := events.NewRecorder(db)
-	rec.SetFeatures(cfg.Features) // arms the momentum milestone layer
+	rec.ArmMilestones()
 
 	// One id per process, served by /healthz and kept in the update state: it
 	// tells this daemon apart from another answering on the same port, and

@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/store"
 	"github.com/arctop/seamless/internal/store/storetest"
@@ -18,7 +17,7 @@ import (
 func TestRecord_ArmedRecorderMintsMilestoneOnce(t *testing.T) {
 	r := newRecorder(t)
 	ctx := context.Background()
-	r.SetFeatures(config.Features{Momentum: true})
+	r.ArmMilestones()
 
 	for i := range 100 {
 		_, err := r.Record(ctx, core.Event{
@@ -55,7 +54,7 @@ func TestRecord_TaskTransitionMintsPlanShippedOnce(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = db.Close() })
 	r := NewRecorder(db)
-	r.SetFeatures(config.Features{Momentum: true})
+	r.ArmMilestones()
 	ctx := context.Background()
 
 	seed := func(status core.TaskStatus) string {
@@ -106,7 +105,7 @@ func TestRecord_TaskTransitionMintsPlanShippedOnce(t *testing.T) {
 }
 
 func TestRecord_UnarmedRecorderMintsNothing(t *testing.T) {
-	r := newRecorder(t) // SetFeatures never called: behavior as before
+	r := newRecorder(t) // ArmMilestones never called: events, and nothing more
 	ctx := context.Background()
 
 	for i := range 100 {

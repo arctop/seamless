@@ -21,7 +21,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/core"
 	"github.com/arctop/seamless/internal/events"
 	"github.com/arctop/seamless/internal/store"
@@ -268,7 +267,6 @@ func TestSnSessionsList_ProjectFilterLockedProjectIsAbsent(t *testing.T) {
 // list link does.
 func TestFd_CalendarDayFocusKeepsTheProjectFilter(t *testing.T) {
 	db, mux := newConsole(t)
-	require.NoError(t, store.SetFeaturesConfig(context.Background(), db, config.Features{Momentum: true}))
 	snSession(t, db, "cc/ops", "example-ops", core.SessionCompleted, "ran it", time.Minute)
 	day := time.Now().Local().Format("2006-01-02")
 

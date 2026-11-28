@@ -1378,7 +1378,9 @@ URLs and no feature state.
   after), and the transport events (tool.call, hook.prompt,
   retrieval.injected) are left out on purpose.
 - **Shipping is derived** from the tasks per (project, slug), never from the
-  momentum `plan.shipped` event, which exists only while momentum is on.
+  momentum `plan.shipped` event, which exists only for plans whose last step
+  closed while the milestone layer recorded: an install that upgraded from
+  momentum switched off has none for the plans it shipped before.
 - **The significance consts are calibrated.** Change a weight, the floor, the
   cap or the minor test only together with the `TestCalibration_*` tests.
 - **`Ref.Href` is the console's slot.** The day model leaves it empty; the

@@ -232,7 +232,7 @@ func dgNewDaemon(t *testing.T) *dgDaemon {
 	ret.SetSearchConfig(cfg.Search)
 	ret.SetFeaturesConfig(cfg.Features)
 	rec := events.NewRecorder(db)
-	rec.SetFeatures(cfg.Features)
+	rec.ArmMilestones()
 	garden := gardener.New(db, mgr, nil, nil, rec, gardener.FromConfig(cfg.Gardener), logger)
 	screeningOn := func(ctx context.Context) bool {
 		fc, _, ferr := store.FeaturesConfig(ctx, db, cfg.Features)

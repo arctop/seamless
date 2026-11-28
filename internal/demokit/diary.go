@@ -1308,7 +1308,7 @@ func (d *diarySeeder) claimTask(r *diaryRun, key string, leaseSeconds int) error
 
 // closeTask is tasks_update status=done or dropped, recording commits; the
 // close that completes a plan with a step done mints its plan.shipped, as
-// store.CheckMilestones does with momentum on.
+// store.CheckMilestones does.
 func (d *diarySeeder) closeTask(r *diaryRun, key string, status core.TaskStatus, commits int) error {
 	task, err := d.task(key)
 	if err != nil {
