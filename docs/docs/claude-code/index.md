@@ -48,8 +48,8 @@ Claude Code can run a hook as a command or as an http request, and every
 Seamless hook is a command running `seam hook <event>`: SessionStart only fires
 as a command hook, SessionEnd as http races Claude Code's teardown, the
 plan-capture hooks pre-filter locally so the machine-wide `Write`/`Edit` hot
-path never touches the network, and the Claude app's code sessions never run
-an http UserPromptSubmit. No bearer key lands in `settings.json`. The full
+path never touches the network, and the Claude app may not send an http hook
+at all. No bearer key lands in `settings.json`. The full
 rationale, hook by hook, is in
 [the hooks reference](https://thereisnospoon.org/docs/reference/hooks/#why-every-hook-is-a-command).
 
@@ -167,13 +167,15 @@ matrix](https://thereisnospoon.org/docs/reference/claude-app-compatibility/):
   `seamlessd doctor` reports each discoverable runtime on its own line -
   `claude CLI runtime` and `claude app runtime` - so the skew is visible when
   an app-only failure has you debugging.
-- **The app runs command hooks only.** On the observed build, the
-  SessionStart briefing, PostToolUse events, and the SessionEnd findings
-  harvest all worked, but the http UserPromptSubmit hook that installs against
-  a plain-http daemon used to write never fired, so app code sessions got no
-  `<seam-recall>` injections and no mid-session usage for the Diary. Every hook
-  is a command hook now; an install from before that gets the command hook the
-  next time `seamlessd install-hooks` runs, which an update does for you.
+- **Every hook is a command hook, the shape the app was seen to run.** On the
+  observed build, the SessionStart briefing, PostToolUse events, and the
+  SessionEnd findings harvest - all command hooks - worked. UserPromptSubmit,
+  which installs against a plain-http daemon used to write as an http hook,
+  left no trace, though that capture predates v0.10.6, whose daemon left no
+  trace of any Claude Code prompt, so it shows nothing either way. It is a
+  command hook now, and per-prompt `<seam-recall>` and the Diary's mid-session
+  usage ride it; an install from before that gets the command hook the next
+  time `seamlessd install-hooks` runs, which an update does for you.
 - **SessionEnd may come late, or never.** The app keeps a session open until
   you archive it or quit, and a session it stops ends with no hook at all.
   Once the agent ends such a session with `session_end`, or the idle reaper

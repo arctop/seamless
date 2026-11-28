@@ -1189,11 +1189,12 @@ registry) are not files Seamless can read, so they are not consulted.</p>
 <code>PermissionRequest</code>. All are command hooks that run <code>seam hook &lt;event&gt;</code> (exec
 form, no shell) - Claude Code will not run an http hook for SessionStart at
 all, at SessionEnd a fire-and-forget request races process teardown, so the
-findings harvest would often be lost, and the Claude app's code sessions never
-ran the http <code>UserPromptSubmit</code> hook earlier installs wrote, which this
-replaces in place. No bearer key is written into the file. The Codex profile is five shell-string command hooks. Both
-profiles include safe constraint injection and parent-only lifecycle handling
-for subagents; the <a href="../../reference/hooks/">hooks reference</a> has both tables.</p>
+findings harvest would often be lost, and the Claude app may not send an http
+hook at all, which is how earlier installs wrote <code>UserPromptSubmit</code> (this
+replaces that entry in place). No bearer key is written into the file. The
+Codex profile is five shell-string command hooks. Both profiles include safe
+constraint injection and parent-only lifecycle handling for subagents; the
+<a href="../../reference/hooks/">hooks reference</a> has both tables.</p>
 <h2 id="seamlessd_install_service">seamlessd install-service</h2>
 <div class="code-block" data-lang="powershell"><pre class="chroma"><code><span class="line"><span class="cl"><span class="n">seamlessd</span> <span class="nb">install-service</span> <span class="p">-</span><span class="n">-config</span> <span class="n">PATH</span> <span class="p">-</span><span class="n">-log</span><span class="o">-file</span> <span class="n">PATH</span>
 </span></span></code></pre></div>

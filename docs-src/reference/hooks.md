@@ -590,12 +590,17 @@ has its own reason not to be one:
   `seam hook subagent-start` command, so the subagent lifecycle stays one
   transport and one code path across profiles.
 - **`UserPromptSubmit` runs where the session runs.** It was an `http` hook
-  against a plain-http daemon until the Claude app's code sessions were seen to
-  run every command hook and never that one, which cost them per-prompt recall
-  and the Diary's [mid-session usage](#mid-session-usage). An install from
-  before that still carries the http entry; `seamlessd install-hooks` (which an
-  update reruns) replaces it in place, and `seamlessd doctor` reports it stale
-  until then.
+  against a plain-http daemon. The Claude app's code sessions were seen to run
+  every command hook, and Claude Code's runtime declines to send an http hook
+  in some environments ("HTTP hook not sent: this process's proxy, TLS trust
+  or resolver settings differ from the person's own environment"), while
+  per-prompt recall and the Diary's [mid-session usage](#mid-session-usage)
+  ride this hook. The app was never seen to send the http one, but the capture
+  that looked predates v0.10.6, whose daemon left no trace of any Claude Code
+  prompt ([the matrix](/reference/claude-app-compatibility/)), so it shows
+  nothing either way. An install from before the change still carries the
+  http entry; `seamlessd install-hooks` (which an update reruns) replaces it in
+  place, and `seamlessd doctor` reports it stale until then.
 
 Command hooks work by having Claude Code pipe the event JSON to the command's
 stdin; `seam hook <arg>` forwards that to the matching endpoint and echoes the

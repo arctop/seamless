@@ -38,14 +38,19 @@ type hookSpec struct {
 // request races the teardown, so the ambient-session harvest often never lands
 // and sessions pile up as active; running it as a command hook Claude Code
 // waits on makes the harvest reliable. UserPromptSubmit was an http hook on an
-// http base URL until the Claude app's code sessions were seen to run every
-// command hook and never that one, so per-prompt recall and the Diary's
-// mid-session usage never ran there; as a command hook it also keeps the
-// bearer key out of settings.json, and goes through the CLI's own HTTP client,
-// the one that reads tls.ca_file (Claude Code's cannot be pointed at it) and
-// dials a peer_auth socket (Claude Code's cannot dial one). An http entry an
-// earlier install wrote is still recognized (classifier.go), and the next
-// install replaces it with this one.
+// http base URL. A command hook is the shape the Claude app's code sessions
+// were seen to run (SessionStart, PostToolUse, SessionEnd), while Claude
+// Code's runtime declines to send an http hook in some environments ("HTTP
+// hook not sent: this process's proxy, TLS trust or resolver settings differ
+// from the person's own environment"), and per-prompt recall and the Diary's
+// mid-session usage ride this hook. The app was never seen to send the http
+// one, but the capture that looked predates v0.10.6, whose daemon left no
+// trace of any Claude Code prompt, so it shows nothing either way. As a
+// command hook it also keeps the bearer key out of settings.json, and goes
+// through the CLI's own HTTP client, the one that reads tls.ca_file (Claude
+// Code's cannot be pointed at it) and dials a peer_auth socket (Claude Code's
+// cannot dial one). An http entry an earlier install wrote is still
+// recognized (classifier.go), and the next install replaces it with this one.
 //
 // The plan-capture hooks (PostToolUse, SubagentStop, PermissionRequest) are
 // command hooks too: the seam CLI pre-filters PostToolUse locally so the

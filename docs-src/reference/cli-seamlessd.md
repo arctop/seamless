@@ -709,11 +709,12 @@ For Claude Code, seven events are installed together: `SessionStart`,
 `PermissionRequest`. All are command hooks that run `seam hook <event>` (exec
 form, no shell) - Claude Code will not run an http hook for SessionStart at
 all, at SessionEnd a fire-and-forget request races process teardown, so the
-findings harvest would often be lost, and the Claude app's code sessions never
-ran the http `UserPromptSubmit` hook earlier installs wrote, which this
-replaces in place. No bearer key is written into the file. The Codex profile is five shell-string command hooks. Both
-profiles include safe constraint injection and parent-only lifecycle handling
-for subagents; the [hooks reference](/reference/hooks/) has both tables.
+findings harvest would often be lost, and the Claude app may not send an http
+hook at all, which is how earlier installs wrote `UserPromptSubmit` (this
+replaces that entry in place). No bearer key is written into the file. The
+Codex profile is five shell-string command hooks. Both profiles include safe
+constraint injection and parent-only lifecycle handling for subagents; the
+[hooks reference](/reference/hooks/) has both tables.
 
 ## seamlessd install-service {#seamlessd_install_service}
 

@@ -946,12 +946,17 @@ so the hot path never touches the network.</li>
 <code>seam hook subagent-start</code> command, so the subagent lifecycle stays one
 transport and one code path across profiles.</li>
 <li><strong><code>UserPromptSubmit</code> runs where the session runs.</strong> It was an <code>http</code> hook
-against a plain-http daemon until the Claude app's code sessions were seen to
-run every command hook and never that one, which cost them per-prompt recall
-and the Diary's <a href="#mid-session-usage">mid-session usage</a>. An install from
-before that still carries the http entry; <code>seamlessd install-hooks</code> (which an
-update reruns) replaces it in place, and <code>seamlessd doctor</code> reports it stale
-until then.</li>
+against a plain-http daemon. The Claude app's code sessions were seen to run
+every command hook, and Claude Code's runtime declines to send an http hook
+in some environments (&quot;HTTP hook not sent: this process's proxy, TLS trust
+or resolver settings differ from the person's own environment&quot;), while
+per-prompt recall and the Diary's <a href="#mid-session-usage">mid-session usage</a>
+ride this hook. The app was never seen to send the http one, but the capture
+that looked predates v0.10.6, whose daemon left no trace of any Claude Code
+prompt (<a href="../../reference/claude-app-compatibility/">the matrix</a>), so it shows
+nothing either way. An install from before the change still carries the
+http entry; <code>seamlessd install-hooks</code> (which an update reruns) replaces it in
+place, and <code>seamlessd doctor</code> reports it stale until then.</li>
 </ul>
 <p>Command hooks work by having Claude Code pipe the event JSON to the command's
 stdin; <code>seam hook &lt;arg&gt;</code> forwards that to the matching endpoint and echoes the

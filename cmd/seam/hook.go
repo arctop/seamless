@@ -60,9 +60,9 @@ type hookEvent struct {
 // drift here is a silent no-op rather than an error.
 //
 // Every event the installers wire is a command hook on every transport: Claude
-// Code's user-prompt-submit was an http hook on an http base URL until the
-// Claude app's code sessions were seen never to run it (internal/hooks
-// seamlessHooks), and an install from before that still sends it the old way.
+// Code's user-prompt-submit was an http hook on an http base URL, which the
+// Claude app may not send (internal/hooks seamlessHooks), and an install from
+// before the change still sends it the old way.
 var hookEvents = []hookEvent{
 	{"session-start", "/api/hooks/session-start", hookFullDialBudget, hookDeadline},
 	{"user-prompt-submit", "/api/hooks/user-prompt-submit", hookShortDialBudget, hookPromptDeadline},

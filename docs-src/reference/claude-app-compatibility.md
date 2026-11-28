@@ -16,17 +16,20 @@ for one is never evidence for the other.
 
 | App runtime / platform | Hooks observed | MCP | Sessions |
 |---|---|---|---|
-| Bundled Claude Code 2.1.215 (PATH CLI 2.1.216 on the same machine) / Darwin arm64, 2026-07-21 | SessionStart briefing injected in 8/8 app sessions, correctly project-scoped (including global for cwd-less helper sessions); PostToolUse tool-call events recorded; SessionEnd auto-harvest fired on app close and completed the sessions with genuine findings. **UserPromptSubmit never fired** - no per-prompt recall on this surface | The shared user-scope `~/.claude.json` registration (http + `headersHelper`) worked unchanged from an app code session: a `notes_create` round trip landed a real note | Repo cwd resolved to the mapped project; ambient `cc/...` sessions behaved exactly as CLI sessions |
+| Bundled Claude Code 2.1.215 (PATH CLI 2.1.216 on the same machine) / Darwin arm64, 2026-07-21 | SessionStart briefing injected in 8/8 app sessions, correctly project-scoped (including global for cwd-less helper sessions); PostToolUse tool-call events recorded; SessionEnd auto-harvest fired on app close and completed the sessions with genuine findings. **No UserPromptSubmit trace** - no per-prompt recall on this surface (see below) | The shared user-scope `~/.claude.json` registration (http + `headersHelper`) worked unchanged from an app code session: a `notes_create` round trip landed a real note | Repo cwd resolved to the mapped project; ambient `cc/...` sessions behaved exactly as CLI sessions |
 
-The UserPromptSubmit row is not a Seamless configuration problem: a firing
-hook always leaves a trace (an injection or a prompt event), and none exists
-for any of the eight observed app sessions. It was also the one http hook that
-install wrote (against a plain-http daemon); every command hook fired. Seamless
-has since made UserPromptSubmit a command hook like the rest
-(`seam hook user-prompt-submit`), which is the shape the app was seen to run.
-That it fires in an app code session in that shape is expected from this
-evidence but not yet observed, so it stays on the list below until a live app
-session shows it.
+The UserPromptSubmit row cannot be read as it was at the time. It held that a
+firing hook always leaves a trace (an injection or a prompt event), and none
+exists for any of the eight observed app sessions - but until v0.10.6 the
+daemon read Claude Code's prompt from a field Claude Code does not send, so a
+real Claude Code prompt left no trace at all, from the app or the CLI. What the
+row does show is that UserPromptSubmit was the one http hook that install
+wrote (against a plain-http daemon), and that every command hook fired.
+Seamless has since made UserPromptSubmit a command hook like the rest
+(`seam hook user-prompt-submit`), the shape the app was seen to run, so
+whether the app sends http hooks no longer matters here. That the command hook
+fires in an app code session is still to be observed, so it stays on the list
+below.
 
 Managed worktrees did **not** materialize during this capture (the app ran its
 code sessions directly in the repo root), so the worktree-to-project mapping -

@@ -3,9 +3,9 @@ package hooks
 // The transport shapes no hook: every Claude Code hook is a `seam hook <event>`
 // command hook whether the base URL is http, https or a socket. UserPromptSubmit
 // was the one exception -- an http hook on an http base URL, carrying the bearer
-// key -- until the Claude app's code sessions were seen to run every command
-// hook and never that one. The entry such an install wrote must be replaced by
-// the next install, never kept beside the command hook (both would fire).
+// key -- which the Claude app may not send (seamlessHooks). The entry such an
+// install wrote must be replaced by the next install, never kept beside the
+// command hook (both would fire).
 
 import (
 	"encoding/json"
