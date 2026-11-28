@@ -79,7 +79,13 @@ type Config struct {
 	// stale-plan pass opens repositories on disk for its ship evidence, so it
 	// reads only the mappings THIS machine made: a remote device's repo path
 	// either is not here, or is a different repository with the same path.
+	// The owed-usage pass reads only the transcripts of sessions recorded on
+	// it, for the same reason.
 	LocalHost string
+	// PeerAuth is peer_auth.enabled. The daemon then opens no file an agent's
+	// hook named, so the owed-usage pass reads no transcript (owed_usage.go):
+	// it has no request View to say so, so the config does.
+	PeerAuth bool
 	// AgentsMayApply and AutoApply are the file/env values of the gardener's
 	// two switches (gardener.agents_may_apply, gardener.auto_apply). They are
 	// only the BASE: Switches layers the console's stored override over them
@@ -321,6 +327,11 @@ func (s *Service) Housekeep(ctx context.Context) {
 	// honest -- the only reliable close for these, since no hook fires on a kill.
 	s.reapStaleSessions(ctx)
 
+	// Read the usage of the Claude Code conversations whose sessions ended
+	// without their SessionEnd harvest, those just reaped among them, where
+	// the daemon may read their transcripts (owed_usage.go).
+	s.settleOwedUsage(ctx)
+
 	// Settle the pending proposals whose memory went inactive by another route
 	// since they were raised, so the queue only holds what can still be applied.
 	// The gardener decides these itself.
@@ -448,10 +459,13 @@ func (s *Service) pruneToolEvents(ctx context.Context) {
 // active session is only otherwise cleared by an explicit session_end or the
 // SessionEnd hook, neither of which fires on a crash/kill.
 //
-// A flagged session among them, or any other that ended without its end
-// signal making its transcript copy, is then settled (TranscriptKeeper): the
-// daemon copies it where it may read the file, and under peer_auth it waits,
-// pending, for the agent's later hooks to send it.
+// A Claude Code session among them then has its token usage owed
+// (markReapedUsageOwed): the expiry is the end its client never sent, and the
+// upkeep reads the transcript after it (settleOwedUsage). A flagged session
+// among them, or any other that ended without its end signal making its
+// transcript copy, is then settled (TranscriptKeeper): the daemon copies it
+// where it may read the file, and under peer_auth it waits, pending, for the
+// agent's later hooks to send it.
 func (s *Service) reapStaleSessions(ctx context.Context) {
 	now := s.now().UTC()
 	stale, err := store.ExpireIdleSessions(ctx, s.db, now, s.cfg.SessionIdle)
@@ -491,6 +505,9 @@ func (s *Service) reapStaleSessions(ctx context.Context) {
 		}
 	}
 	s.logger.Info("gardener reaped idle sessions", "count", len(stale), "idle_ttl", s.cfg.SessionIdle)
+	// After the flips, never before: a harvest of a row still active would
+	// move its updated_at, and the flip would then find it live.
+	s.markReapedUsageOwed(ctx, stale, now)
 }
 
 // seenKeys is the suppression set a pass consults before proposing: payload key

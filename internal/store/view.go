@@ -88,6 +88,8 @@ var viewTables = []struct {
 	// The usage ledger's rows are one session's counts (migration 053): hidden
 	// with the session.
 	{"session_usage", "session_id NOT IN %[2]s"},
+	// Owed usage is about one session (migration 057).
+	{"session_usage_owed", "session_id NOT IN %[2]s"},
 	// The corpus record names one file of one project: hidden by the project
 	// its path is under, and by the item it records.
 	{"corpus_records", "project_slug NOT IN %[1]s AND item_id NOT IN %[3]s"},

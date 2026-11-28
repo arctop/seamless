@@ -1216,7 +1216,7 @@ an absolute path into the client registration so it works from every repository.
 </span></span><span class="line"><span class="cl">seam hook subagent-start<span class="p">|</span>subagent-stop<span class="p">|</span>post-tool-use<span class="p">|</span>permission-request
 </span></span><span class="line"><span class="cl">seam hook session-taint
 </span></span><span class="line"><span class="cl">seam hook-transcript --session-id ID --path PATH <span class="o">[</span>--wanted BYTES<span class="o">]</span> <span class="o">[</span>--named<span class="o">]</span> <span class="o">[</span>--client CLIENT<span class="o">]</span> <span class="o">[</span>--config PATH<span class="o">]</span>
-</span></span><span class="line"><span class="cl">seam hook-usage --session-id ID --path PATH <span class="o">[</span>--client CLIENT<span class="o">]</span> <span class="o">[</span>--config PATH<span class="o">]</span>
+</span></span><span class="line"><span class="cl">seam hook-usage --session-id ID --path PATH <span class="o">[</span>--owed<span class="o">]</span> <span class="o">[</span>--client CLIENT<span class="o">]</span> <span class="o">[</span>--config PATH<span class="o">]</span>
 </span></span></code></pre></div>
 <p>Invoked by Claude Code or Codex, not by hand. Each reads the hook payload from stdin,
 forwards it to the matching <code>/api/hooks/...</code> endpoint with the bearer key, and
@@ -1259,8 +1259,11 @@ end signal never sent it, the hook starts <code>seam hook-transcript</code> to s
 whole transcript, gzip-compressed, in a request of its own, and returns at
 once. With the Diary on, an answer to a Claude Code <code>user-prompt-submit</code> may
 ask for the session's usage, and the hook starts <code>seam hook-usage</code> the same
-way. On any other <code>server_url</code> the payload is forwarded exactly as the
-client wrote it, and no transcript or usage is sent.</li>
+way; an answer to a <code>session-start</code> or <code>session-end</code> may ask for the
+<a href="../../reference/hooks/#owed-usage">owed usage</a> of a conversation that ended
+without its SessionEnd harvest, and the hook starts <code>seam hook-usage --owed</code>.
+On any other <code>server_url</code> the payload is forwarded exactly as the client
+wrote it, and no transcript or usage is sent.</li>
 </ul>
 <p>Install these with <code>seamlessd install-hooks</code>. The one exception is
 <code>session-taint</code>, which no installer wires: an agent guard's own PostToolUse
@@ -1283,7 +1286,11 @@ session's usage ledger is due). It reads the transcript the prompt named, the
 transcripts of the subagents it launched included, and sends the session's
 usage ledger rows over the peer_auth socket, and only there. It gives up after
 a minute, and a transcript with no usage in it yet sends nothing
-(<a href="../../reference/hooks/#mid-session-usage">mid-session usage</a>).</p>
+(<a href="../../reference/hooks/#mid-session-usage">mid-session usage</a>). <code>--owed</code> marks a
+path the daemon named for a conversation whose usage is
+<a href="../../reference/hooks/#owed-usage">owed</a>: read only when it is a regular <code>*.jsonl</code>
+file inside the agent client's own transcript folder, and sent with when the
+transcript last changed; any other is reported to the daemon unread.</p>
 
 </article>
 

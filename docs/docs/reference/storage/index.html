@@ -514,12 +514,17 @@ counts and which minutes of the quarter-hour a message landed in. A row holds
 a session id, a model id, counts and a time: no text. It is written whether
 or not the <a href="../../reference/console/#diary">Diary</a> is on: Claude Code's
 <code>SessionEnd</code> replaces a session's rows from its transcript, each Codex <code>Stop</code>
-adds what the session's token counter grew by, and while the Diary is on a
+adds what the session's token counter grew by, a Claude Code conversation
+ended without its <code>SessionEnd</code> has its transcript read later
+(<a href="../../reference/hooks/#owed-usage">owed usage</a>), and while the Diary is on a
 Claude Code prompt keeps a live session's rows current
 (<a href="../../reference/hooks/#mid-session-usage">mid-session usage</a>). A session's
 token totals are always the sum of its rows. It travels in backups and
 restores with the database; a merge into another instance carries a
-session's rows only with a session the merge adds.</li>
+session's rows only with a session the merge adds. <code>session_usage_owed</code>
+holds one row per conversation whose usage is owed: when it was owed, the
+transcript's last change at the last read, and under peer_auth how often it
+was asked for; a merge leaves it out.</li>
 <li><code>tasks</code> and <code>task_deps</code> - the ready-queue, plan slugs, claims, and leases.
 <code>task_body_revisions</code> keeps the bodies a <code>tasks_update</code> replaced or appended
 to, at most 20 for a task; a merge carries them only with a task it adds.</li>

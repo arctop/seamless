@@ -452,9 +452,11 @@ func runHook(ctx context.Context, e *env, o *hookOpts, pos []string) error {
 	var reply []byte
 	// A flagged session's transcript the daemon asks for (hook_capture.go):
 	// this session's at its end signal, and pending ones of this caller's;
-	// and, while the Diary is on, a prompt's ask for the session's usage.
+	// while the Diary is on, a prompt's ask for the session's usage; and the
+	// owed usage of this caller's conversations that ended without a
+	// SessionEnd harvest.
 	var wanted, usage string
-	var pending []string
+	var pending, owed []string
 	if err == nil {
 		defer func() { _ = resp.Body.Close() }()
 		// A non-2xx reply is a failure like the rest, never hook output: a bad
@@ -491,6 +493,7 @@ func runHook(ctx context.Context, e *env, o *hookOpts, pos []string) error {
 		wanted = resp.Header.Get(harvest.TranscriptWantedHeader)
 		pending = resp.Header.Values(harvest.TranscriptPendingHeader)
 		usage = resp.Header.Get(harvest.UsageWantedHeader)
+		owed = resp.Header.Values(harvest.UsageOwedHeader)
 	}
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
@@ -505,8 +508,8 @@ func runHook(ctx context.Context, e *env, o *hookOpts, pos []string) error {
 	// One write of the whole reply; a failure means stdout is gone, and a hook
 	// must never block the agent by failing here.
 	_, _ = e.stdout.Write(reply) //nolint:errcheck // a hook must not fail on a broken stdout
-	// Under peer_auth the daemon asked for transcripts, or a live session's
-	// usage, that it may not read itself (hook_capture.go): each is sent by a
+	// Under peer_auth the daemon asked for transcripts, or a session's usage,
+	// that it may not read itself (hook_capture.go): each is sent by a
 	// detached process of its own, with its own deadline, so the hook returns
 	// now whatever their size.
 	if pushesCaptures(cfg) {
@@ -519,7 +522,7 @@ func runHook(ctx context.Context, e *env, o *hookOpts, pos []string) error {
 				fmt.Fprintln(e.stderr, "seam hook: transcript not sent:", err)
 			}
 		}
-		for _, args := range usageJobs(o, event, payload, usage) {
+		for _, args := range usageJobs(o, event, payload, usage, owed) {
 			if err := spawn(args); err != nil {
 				fmt.Fprintln(e.stderr, "seam hook: usage not sent:", err)
 			}

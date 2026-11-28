@@ -1349,7 +1349,9 @@ the locked notice, and `seam approve` in your own terminal shows its request.
   [flagged session's transcript](https://thereisnospoon.org/docs/guides/data/#flagged-transcripts) is sent
   the same way, in a request of its own, when the daemon's answer to the
   session's end asks for it, or a later answer asks for one whose end never
-  came.
+  came. So is the [token usage](https://thereisnospoon.org/docs/reference/hooks/#owed-usage) of a Claude Code
+  conversation that ended without its SessionEnd (the agent's `session_end`,
+  the idle reaper): your next session's start or end is asked for it.
 - **It updates itself, as its own account.** The installer's per-user service
   cannot host peer_auth, so neither the installer nor a `seamlessd update` run
   as you touches this install. The daemon installs new releases by itself

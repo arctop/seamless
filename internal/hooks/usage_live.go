@@ -40,7 +40,8 @@ package hooks
 // except that rows counting fewer messages than the ledger holds (a read a
 // later harvest overtook, the end's included) write nothing, and rows the
 // ledger holds already write nothing either. A session with no SessionEnd
-// keeps a ledger up to the turn before the last prompt that asked.
+// keeps a ledger up to the turn before the last prompt that asked, and the
+// rest is owed once its session ends (usage_owed.go).
 //
 // The write heartbeats an active ambient row, Replace's rule. That is the
 // prompt's own sign of life -- which touchAmbient also records, when the hook
@@ -321,7 +322,8 @@ func writeUsageAnswer(w http.ResponseWriter, status int, a harvest.UsagePushAnsw
 // the peer_auth socket (this daemon's, or a paired relay's), only while the
 // Diary is on, and only for a session the caller may act on (reachOK) whose
 // ask is still open, once. Anything else writes nothing; every session it
-// refuses answers alike.
+// refuses answers alike. A body with harvest.UsageOwedField set answers an
+// owed ask instead (usageOwedPush), behind the same fences but the Diary's.
 func (h *Handler) usagePush(w http.ResponseWriter, r *http.Request) {
 	if !verifyBearer(r, h.apiKey) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -348,18 +350,26 @@ func (h *Handler) usagePush(w http.ResponseWriter, r *http.Request) {
 	body := readHookBody(w, r)
 	var in struct {
 		SessionID string `json:"session_id"`
+		owedPush
 	}
 	if err := json.Unmarshal(body, &in); err != nil {
 		writeUsageAnswer(w, http.StatusBadRequest, harvest.UsagePushAnswer{Error: "the body must be one JSON object: " +
 			"session_id, and the session's usage under " + harvest.Field})
 		return
 	}
+	// An owed answer's report (usage_owed.go) says why the path was not read,
+	// and carries no rows.
+	report := in.Owed && in.Refused != ""
 	push, pushed, err := harvest.DecodePush(body)
 	switch {
 	case err != nil:
 		writeUsageAnswer(w, http.StatusBadRequest, harvest.UsagePushAnswer{Error: err.Error()})
 		return
-	case !pushed || push.Tokens == nil || len(push.Usage) == 0:
+	case report && pushed:
+		writeUsageAnswer(w, http.StatusBadRequest, harvest.UsagePushAnswer{Error: "a report under " +
+			harvest.UsageRefusedField + " carries no usage"})
+		return
+	case !report && (!pushed || push.Tokens == nil || len(push.Usage) == 0):
 		writeUsageAnswer(w, http.StatusBadRequest, harvest.UsagePushAnswer{Error: "a push carries the session's usage rows " +
 			"and the totals they sum to, under " + harvest.Field})
 		return
@@ -367,13 +377,27 @@ func (h *Handler) usagePush(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), hookTimeout)
 	defer cancel()
 	externalID := namespacedExternalID(r, strings.TrimSpace(in.SessionID))
-	if externalID == "" || !h.featureOn(ctx, features.Diary) {
+	// An owed answer stands in for a SessionEnd harvest, which no feature
+	// gates; a prompt's ask is the Diary's.
+	if externalID == "" || (!in.Owed && !h.featureOn(ctx, features.Diary)) {
 		writeUsageAnswer(w, http.StatusNotFound, harvest.UsagePushAnswer{Error: usageNotAsked})
 		return
 	}
 	// The reach first: a caller that may not act on the session never closes
 	// its ask.
-	if reach, _ := h.sessionReachOf(ctx, client, externalID); reach != reachOK || !h.live.answer(liveKey(client, externalID), h.now()) {
+	if reach, _ := h.sessionReachOf(ctx, client, externalID); reach != reachOK {
+		writeUsageAnswer(w, http.StatusNotFound, harvest.UsagePushAnswer{Error: usageNotAsked})
+		return
+	}
+	if in.Owed {
+		var answer *harvest.Push
+		if !report {
+			answer = &push
+		}
+		h.usageOwedPush(ctx, w, client, externalID, in.owedPush, answer)
+		return
+	}
+	if !h.live.answer(liveKey(client, externalID), h.now()) {
 		writeUsageAnswer(w, http.StatusNotFound, harvest.UsagePushAnswer{Error: usageNotAsked})
 		return
 	}

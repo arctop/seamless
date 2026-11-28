@@ -725,9 +725,11 @@ matrix](/reference/claude-app-compatibility/):
   is a command hook now; an install from before that gets the command hook the
   next time `seamlessd install-hooks` runs, which an update does for you.
 - **SessionEnd may come late, or never.** The app keeps a session open until
-  you archive it or quit, and a session it kills ends with no hook at all. The
-  idle reaper ends such a session after `gardener.session_idle_minutes` and
-  reads its usage then, so its agent time still reaches the
+  you archive it or quit, and a session it stops ends with no hook at all.
+  Once the agent ends such a session with `session_end`, or the idle reaper
+  expires it after `gardener.session_idle_minutes`, its usage is
+  [owed](/reference/hooks/#owed-usage), and the daemon reads its transcript
+  later, so its agent time still reaches the
   [Diary](/reference/console/#diary-usage).
 - **Managed worktrees keep their project.** The app may run a session in a
   managed worktree (`<repo>/.claude/worktrees/<name>`); Seamless resolves a
@@ -4405,8 +4407,13 @@ transcript simply records none. They are kept in the
 [usage ledger](/reference/storage/#what-lives-only-in-sqlite), by quarter-hour,
 model and thread, and a session's totals are the sum of its rows. A Claude Code
 session the agent already ended with `session_end`, or the reaper expired,
-still gets its usage when its client ends it, and stays as it ended. A session
-whose Claude Code transcript is still
+still gets its usage when its client ends it, and stays as it ended. One whose
+client never ends it - a closed terminal, a killed process, an app that stops a
+session without running its SessionEnd hook - still gets it: from that
+`session_end` or expiry its usage is [owed](/reference/hooks/#owed-usage), and
+the daemon reads its transcript later, as often as it changes (under
+[peer_auth](/guides/peer-auth/), the same agent's next session sends it). A
+session whose Claude Code transcript is still
 on its computer but was never harvested is filled by
 [`seam usage backfill`](/reference/cli-seam/#seam_usage_backfill).
 With the Diary [optional feature](/reference/console/#optional-features) on, a
@@ -6025,9 +6032,12 @@ Both are reversible, and the two exits are not the same:
 
 Every `gardener.interval_minutes` (60) the gardener does two things. First the
 **upkeep**, which the daemon always needs: it reaps idle sessions and returns
-their claims, prunes old transport events, refreshes the retrieval stats, latches
-utility ranking where a project's demand history has matured, and settles
-proposals whose memory is gone. Then, when `gardener.enabled` is on, the
+their claims, reads the token usage Claude Code conversations still owe -
+those it reaps, and those whose agent ended them with `session_end` - where
+the daemon may read their transcripts ([owed usage](/reference/hooks/#owed-usage)),
+prunes old transport events, refreshes the retrieval stats, latches utility
+ranking where a project's demand history has matured, and settles proposals
+whose memory is gone. Then, when `gardener.enabled` is on, the
 **proposal passes** above.
 
 `gardener.enabled: false` turns off only the proposal passes: no background
@@ -10910,7 +10920,9 @@ the locked notice, and `seam approve` in your own terminal shows its request.
   [flagged session's transcript](/guides/data/#flagged-transcripts) is sent
   the same way, in a request of its own, when the daemon's answer to the
   session's end asks for it, or a later answer asks for one whose end never
-  came.
+  came. So is the [token usage](/reference/hooks/#owed-usage) of a Claude Code
+  conversation that ended without its SessionEnd (the agent's `session_end`,
+  the idle reaper): your next session's start or end is asked for it.
 - **It updates itself, as its own account.** The installer's per-user service
   cannot host peer_auth, so neither the installer nor a `seamlessd update` run
   as you touches this install. The daemon installs new releases by itself
@@ -15706,7 +15718,7 @@ seam hook session-start|user-prompt-submit|session-end|stop
 seam hook subagent-start|subagent-stop|post-tool-use|permission-request
 seam hook session-taint
 seam hook-transcript --session-id ID --path PATH [--wanted BYTES] [--named] [--client CLIENT] [--config PATH]
-seam hook-usage --session-id ID --path PATH [--client CLIENT] [--config PATH]
+seam hook-usage --session-id ID --path PATH [--owed] [--client CLIENT] [--config PATH]
 ```
 
 Invoked by Claude Code or Codex, not by hand. Each reads the hook payload from stdin,
@@ -15751,8 +15763,11 @@ Two behaviours matter if you are debugging a hook:
   whole transcript, gzip-compressed, in a request of its own, and returns at
   once. With the Diary on, an answer to a Claude Code `user-prompt-submit` may
   ask for the session's usage, and the hook starts `seam hook-usage` the same
-  way. On any other `server_url` the payload is forwarded exactly as the
-  client wrote it, and no transcript or usage is sent.
+  way; an answer to a `session-start` or `session-end` may ask for the
+  [owed usage](/reference/hooks/#owed-usage) of a conversation that ended
+  without its SessionEnd harvest, and the hook starts `seam hook-usage --owed`.
+  On any other `server_url` the payload is forwarded exactly as the client
+  wrote it, and no transcript or usage is sent.
 
 Install these with `seamlessd install-hooks`. The one exception is
 `session-taint`, which no installer wires: an agent guard's own PostToolUse
@@ -15777,7 +15792,11 @@ session's usage ledger is due). It reads the transcript the prompt named, the
 transcripts of the subagents it launched included, and sends the session's
 usage ledger rows over the peer_auth socket, and only there. It gives up after
 a minute, and a transcript with no usage in it yet sends nothing
-([mid-session usage](/reference/hooks/#mid-session-usage)).
+([mid-session usage](/reference/hooks/#mid-session-usage)). `--owed` marks a
+path the daemon named for a conversation whose usage is
+[owed](/reference/hooks/#owed-usage): read only when it is a regular `*.jsonl`
+file inside the agent client's own transcript folder, and sent with when the
+transcript last changed; any other is reported to the daemon unread.
 
 ---
 
@@ -18803,12 +18822,58 @@ did not before.
   only the turns since. A read that counts fewer messages than the ledger holds
   (one a later harvest overtook, the end's included) writes nothing. A session
   whose `SessionEnd` never comes keeps its usage up to the turn before the last
-  prompt that asked.
+  prompt that asked, and the rest is [owed](#owed-usage) once it ends.
 - **A session in a locked project takes no counts** until the owner approves,
   as at its end, and a session another account started is never asked.
 - **The write is the prompt's heartbeat.** It moves an active session's
   `updated_at`, as every harvest does, a moment after the prompt that asked; it
   never revives a session the agent or the idle reaper ended.
+
+## Owed usage {#owed-usage}
+
+A Claude Code conversation reports its whole usage at `SessionEnd`, and that
+hook can come late or never: the Claude app keeps a session open until you
+archive it or quit, and runs no `SessionEnd` for a session it stops; a closed
+terminal or a killed process runs none either. So when a conversation's
+session ends any other way - the agent closes it with `session_end`, or the
+idle reaper expires it - its usage is **owed** from then: the turns since its
+last harvest, which are the ones a long agentic turn spends its time in, are on
+its transcript alone. The conversation may also go on on its ended session (a
+prompt revives no session), so one read at that end is not enough. This
+happens whether or not the Diary is on, as every harvest does.
+
+- **With peer_auth off**, the gardener's upkeep (every
+  `gardener.interval_minutes`, whatever `gardener.enabled` says) reads each owed
+  conversation's transcript, its subagents' included, whenever it changed
+  since the last read, and records what it holds by the
+  [mid-session rule](#mid-session-usage): idempotent, never backwards, and
+  landing on the ended session without reviving it or moving its time. It
+  reads only a regular file, on the session's own computer, for the owner's
+  session; anything else owes nothing, since nothing can read it.
+- **On the peer_auth socket** the daemon opens no file a hook named. The same
+  caller's next Claude Code `SessionStart` or `SessionEnd` - the same agent
+  client, account and computer, never the conversation the hook itself names,
+  never one in a project locked to the caller - carries
+  `X-Seamless-Usage-Owed`, one value per conversation and at most three an
+  answer, each URL-query-encoded as `session_id` and `path`, the transcript its
+  hooks recorded. `seam hook` starts a detached `seam hook-usage --owed`,
+  which reads the path only when it is a regular `*.jsonl` file inside the
+  agent client's own transcript folder (as a
+  [pending transcript](/guides/data/#flagged-transcripts) is read), and posts
+  the rows to `POST /api/hooks/usage` with `"owed": true` and `changed_at`,
+  when the transcript last changed - or, for a path it refused or could not
+  find, `"refused": "path"` or `"missing"` and no rows, which settles the
+  conversation (`{"result": "settled"}`). The route takes it only for a
+  conversation it asked about in the last two minutes. The wait between asks
+  starts at two minutes and doubles with each ask; an answer that brought a
+  change starts it over, and after eight asks in a row with no change (or no
+  answer: an older `seam` ignores the header) the conversation is given up
+  on. The TCP key's hook under peer_auth, which pushes nothing, is asked
+  nothing.
+- **It is settled** by the conversation's `SessionEnd` harvest, which reads the
+  whole transcript; by its session going active again (a `SessionStart`
+  resumed it), whose own next end marks it again; or once nothing has changed
+  for seven days.
 
 ## Repo locks in the briefing {#repo-locks}
 
@@ -20892,8 +20957,11 @@ than whole:
   note under the tiles, counted as "(N unreported)" on the tokens tile and on
   its thread's card, and never counted as zero. A Claude Code session reports at its end,
   and while the Diary is on its prompts keep it current
-  ([mid-session usage](/reference/hooks/#mid-session-usage)); a Codex session
-  reports at each turn's `Stop`.
+  ([mid-session usage](/reference/hooks/#mid-session-usage)); one its client
+  never ends reports after the agent's `session_end` or the idle reaper's
+  expiry, when the daemon reads its transcript
+  ([owed usage](/reference/hooks/#owed-usage)). A Codex session reports at
+  each turn's `Stop`.
 - **Approximate** - a session from before the usage ledger, which has token
   totals and no ledger rows. Its whole total counts on the day it ended and on
   no other ("counted on Nov 12"), with no hour, thread or agent time: the
@@ -22952,12 +23020,17 @@ so losing `seam.db` loses them:
   a session id, a model id, counts and a time: no text. It is written whether
   or not the [Diary](/reference/console/#diary) is on: Claude Code's
   `SessionEnd` replaces a session's rows from its transcript, each Codex `Stop`
-  adds what the session's token counter grew by, and while the Diary is on a
+  adds what the session's token counter grew by, a Claude Code conversation
+  ended without its `SessionEnd` has its transcript read later
+  ([owed usage](/reference/hooks/#owed-usage)), and while the Diary is on a
   Claude Code prompt keeps a live session's rows current
   ([mid-session usage](/reference/hooks/#mid-session-usage)). A session's
   token totals are always the sum of its rows. It travels in backups and
   restores with the database; a merge into another instance carries a
-  session's rows only with a session the merge adds.
+  session's rows only with a session the merge adds. `session_usage_owed`
+  holds one row per conversation whose usage is owed: when it was owed, the
+  transcript's last change at the last read, and under peer_auth how often it
+  was asked for; a merge leaves it out.
 - `tasks` and `task_deps` - the ready-queue, plan slugs, claims, and leases.
   `task_body_revisions` keeps the bodies a `tasks_update` replaced or appended
   to, at most 20 for a task; a merge carries them only with a task it adds.

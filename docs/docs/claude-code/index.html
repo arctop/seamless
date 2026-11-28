@@ -384,9 +384,11 @@ a plain-http daemon used to write never fired, so app code sessions got no
 is a command hook now; an install from before that gets the command hook the
 next time <code>seamlessd install-hooks</code> runs, which an update does for you.</li>
 <li><strong>SessionEnd may come late, or never.</strong> The app keeps a session open until
-you archive it or quit, and a session it kills ends with no hook at all. The
-idle reaper ends such a session after <code>gardener.session_idle_minutes</code> and
-reads its usage then, so its agent time still reaches the
+you archive it or quit, and a session it stops ends with no hook at all.
+Once the agent ends such a session with <code>session_end</code>, or the idle reaper
+expires it after <code>gardener.session_idle_minutes</code>, its usage is
+<a href="../reference/hooks/#owed-usage">owed</a>, and the daemon reads its transcript
+later, so its agent time still reaches the
 <a href="../reference/console/#diary-usage">Diary</a>.</li>
 <li><strong>Managed worktrees keep their project.</strong> The app may run a session in a
 managed worktree (<code>&lt;repo&gt;/.claude/worktrees/&lt;name&gt;</code>); Seamless resolves a

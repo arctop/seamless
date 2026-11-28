@@ -23,17 +23,24 @@ import (
 // alone when it pushed no rows (an older client, a transcript past the cap),
 // credited under the model it sniffed; else, when local, the transcript's own
 // rows. The caller has judged the reach and the disk (metadataOnly,
-// localDiskOK).
+// localDiskOK). An end that recorded the usage read the whole conversation,
+// so none of it is owed any more (usage_owed.go).
 func (h *Handler) harvestEndUsage(ctx context.Context, client Client, externalSessionID, transcriptPath string,
 	push *harvest.Push, local bool, now time.Time) {
+	wrote := false
 	switch {
 	case push != nil && len(push.Usage) > 0:
-		h.replaceUsage(ctx, client, externalSessionID, push.Usage, now)
+		wrote = h.replaceUsage(ctx, client, externalSessionID, push.Usage, now)
 	case push != nil && push.Tokens != nil:
-		h.creditUsage(ctx, client, externalSessionID, store.UsageCredit{Cumulative: *push.Tokens, Model: push.Model, At: now})
+		wrote = h.creditUsage(ctx, client, externalSessionID, store.UsageCredit{Cumulative: *push.Tokens, Model: push.Model, At: now})
 	case push == nil && local:
 		if _, rows, ok := claudeTranscriptUsage(transcriptPath); ok {
-			h.replaceUsage(ctx, client, externalSessionID, rows, now)
+			wrote = h.replaceUsage(ctx, client, externalSessionID, rows, now)
+		}
+	}
+	if wrote {
+		if err := store.ClearConversationUsageOwed(ctx, h.db, client.externalIdentity(), externalSessionID); err != nil {
+			h.recordHookError(ctx, "usage-owed-clear", client, err, "external_session_id", externalSessionID)
 		}
 	}
 }
@@ -66,20 +73,28 @@ func (h *Handler) creditCodexTurn(ctx context.Context, externalSessionID string,
 	h.creditUsage(ctx, ClientCodex, externalSessionID, store.UsageCredit{Cumulative: cumulative, Model: model, At: now, Turn: true})
 }
 
-// replaceUsage replaces the conversation's ledger rows with a transcript's.
-func (h *Handler) replaceUsage(ctx context.Context, client Client, externalSessionID string, rows []core.UsageBucket, now time.Time) {
-	if _, err := store.ReplaceConversationUsage(ctx, h.db, client.externalIdentity(), externalSessionID, rows, now); err != nil {
+// replaceUsage replaces the conversation's ledger rows with a transcript's,
+// reporting whether they landed (the conversation has an ambient row).
+func (h *Handler) replaceUsage(ctx context.Context, client Client, externalSessionID string, rows []core.UsageBucket, now time.Time) bool {
+	found, err := store.ReplaceConversationUsage(ctx, h.db, client.externalIdentity(), externalSessionID, rows, now)
+	if err != nil {
 		h.recordHookError(ctx, "session-end-token-harvest", client, err, "external_session_id", externalSessionID)
+		return false
 	}
+	return found
 }
 
-// creditUsage credits a running total's growth to the conversation's ledger.
-func (h *Handler) creditUsage(ctx context.Context, client Client, externalSessionID string, c store.UsageCredit) {
+// creditUsage credits a running total's growth to the conversation's ledger,
+// reporting whether a credit was written.
+func (h *Handler) creditUsage(ctx context.Context, client Client, externalSessionID string, c store.UsageCredit) bool {
 	stage := "session-end-token-harvest"
 	if client == ClientCodex {
 		stage = "codex-stop-token-harvest"
 	}
-	if _, err := store.CreditConversationUsage(ctx, h.db, client.externalIdentity(), externalSessionID, c); err != nil {
+	wrote, err := store.CreditConversationUsage(ctx, h.db, client.externalIdentity(), externalSessionID, c)
+	if err != nil {
 		h.recordHookError(ctx, stage, client, err, "external_session_id", externalSessionID)
+		return false
 	}
+	return wrote
 }

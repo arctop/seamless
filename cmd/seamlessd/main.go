@@ -516,7 +516,10 @@ func runServe(args []string) error {
 	} else {
 		chat = c
 	}
-	garden := gardener.New(db, mgr, embedder, chat, rec, gardener.FromConfig(cfg.Gardener), logger)
+	gardenCfg := gardener.FromConfig(cfg.Gardener)
+	// The reaper reads a reaped session's transcript only without peer_auth.
+	gardenCfg.PeerAuth = cfg.PeerAuth.Enabled
+	garden := gardener.New(db, mgr, embedder, chat, rec, gardenCfg, logger)
 	// Write screening (the screening optional feature): the held queue and the
 	// session marks. Built unconditionally and inert while the feature is off --
 	// every surface asks the effective features before calling in, so the

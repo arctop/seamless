@@ -385,12 +385,58 @@ did not before.
   only the turns since. A read that counts fewer messages than the ledger holds
   (one a later harvest overtook, the end's included) writes nothing. A session
   whose `SessionEnd` never comes keeps its usage up to the turn before the last
-  prompt that asked.
+  prompt that asked, and the rest is [owed](#owed-usage) once it ends.
 - **A session in a locked project takes no counts** until the owner approves,
   as at its end, and a session another account started is never asked.
 - **The write is the prompt's heartbeat.** It moves an active session's
   `updated_at`, as every harvest does, a moment after the prompt that asked; it
   never revives a session the agent or the idle reaper ended.
+
+## Owed usage {#owed-usage}
+
+A Claude Code conversation reports its whole usage at `SessionEnd`, and that
+hook can come late or never: the Claude app keeps a session open until you
+archive it or quit, and runs no `SessionEnd` for a session it stops; a closed
+terminal or a killed process runs none either. So when a conversation's
+session ends any other way - the agent closes it with `session_end`, or the
+idle reaper expires it - its usage is **owed** from then: the turns since its
+last harvest, which are the ones a long agentic turn spends its time in, are on
+its transcript alone. The conversation may also go on on its ended session (a
+prompt revives no session), so one read at that end is not enough. This
+happens whether or not the Diary is on, as every harvest does.
+
+- **With peer_auth off**, the gardener's upkeep (every
+  `gardener.interval_minutes`, whatever `gardener.enabled` says) reads each owed
+  conversation's transcript, its subagents' included, whenever it changed
+  since the last read, and records what it holds by the
+  [mid-session rule](#mid-session-usage): idempotent, never backwards, and
+  landing on the ended session without reviving it or moving its time. It
+  reads only a regular file, on the session's own computer, for the owner's
+  session; anything else owes nothing, since nothing can read it.
+- **On the peer_auth socket** the daemon opens no file a hook named. The same
+  caller's next Claude Code `SessionStart` or `SessionEnd` - the same agent
+  client, account and computer, never the conversation the hook itself names,
+  never one in a project locked to the caller - carries
+  `X-Seamless-Usage-Owed`, one value per conversation and at most three an
+  answer, each URL-query-encoded as `session_id` and `path`, the transcript its
+  hooks recorded. `seam hook` starts a detached `seam hook-usage --owed`,
+  which reads the path only when it is a regular `*.jsonl` file inside the
+  agent client's own transcript folder (as a
+  [pending transcript](/guides/data/#flagged-transcripts) is read), and posts
+  the rows to `POST /api/hooks/usage` with `"owed": true` and `changed_at`,
+  when the transcript last changed - or, for a path it refused or could not
+  find, `"refused": "path"` or `"missing"` and no rows, which settles the
+  conversation (`{"result": "settled"}`). The route takes it only for a
+  conversation it asked about in the last two minutes. The wait between asks
+  starts at two minutes and doubles with each ask; an answer that brought a
+  change starts it over, and after eight asks in a row with no change (or no
+  answer: an older `seam` ignores the header) the conversation is given up
+  on. The TCP key's hook under peer_auth, which pushes nothing, is asked
+  nothing.
+- **It is settled** by the conversation's `SessionEnd` harvest, which reads the
+  whole transcript; by its session going active again (a `SessionStart`
+  resumed it), whose own next end marks it again; or once nothing has changed
+  for seven days.
 
 ## Repo locks in the briefing {#repo-locks}
 

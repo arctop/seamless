@@ -2057,8 +2057,11 @@ than whole:</p>
 note under the tiles, counted as &quot;(N unreported)&quot; on the tokens tile and on
 its thread's card, and never counted as zero. A Claude Code session reports at its end,
 and while the Diary is on its prompts keep it current
-(<a href="../../reference/hooks/#mid-session-usage">mid-session usage</a>); a Codex session
-reports at each turn's <code>Stop</code>.</li>
+(<a href="../../reference/hooks/#mid-session-usage">mid-session usage</a>); one its client
+never ends reports after the agent's <code>session_end</code> or the idle reaper's
+expiry, when the daemon reads its transcript
+(<a href="../../reference/hooks/#owed-usage">owed usage</a>). A Codex session reports at
+each turn's <code>Stop</code>.</li>
 <li><strong>Approximate</strong> - a session from before the usage ledger, which has token
 totals and no ledger rows. Its whole total counts on the day it ended and on
 no other (&quot;counted on Nov 12&quot;), with no hour, thread or agent time: the

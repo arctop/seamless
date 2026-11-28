@@ -1270,7 +1270,7 @@ seam hook session-start|user-prompt-submit|session-end|stop
 seam hook subagent-start|subagent-stop|post-tool-use|permission-request
 seam hook session-taint
 seam hook-transcript --session-id ID --path PATH [--wanted BYTES] [--named] [--client CLIENT] [--config PATH]
-seam hook-usage --session-id ID --path PATH [--client CLIENT] [--config PATH]
+seam hook-usage --session-id ID --path PATH [--owed] [--client CLIENT] [--config PATH]
 ```
 
 Invoked by Claude Code or Codex, not by hand. Each reads the hook payload from stdin,
@@ -1315,8 +1315,11 @@ Two behaviours matter if you are debugging a hook:
   whole transcript, gzip-compressed, in a request of its own, and returns at
   once. With the Diary on, an answer to a Claude Code `user-prompt-submit` may
   ask for the session's usage, and the hook starts `seam hook-usage` the same
-  way. On any other `server_url` the payload is forwarded exactly as the
-  client wrote it, and no transcript or usage is sent.
+  way; an answer to a `session-start` or `session-end` may ask for the
+  [owed usage](https://thereisnospoon.org/docs/reference/hooks/#owed-usage) of a conversation that ended
+  without its SessionEnd harvest, and the hook starts `seam hook-usage --owed`.
+  On any other `server_url` the payload is forwarded exactly as the client
+  wrote it, and no transcript or usage is sent.
 
 Install these with `seamlessd install-hooks`. The one exception is
 `session-taint`, which no installer wires: an agent guard's own PostToolUse
@@ -1341,4 +1344,8 @@ session's usage ledger is due). It reads the transcript the prompt named, the
 transcripts of the subagents it launched included, and sends the session's
 usage ledger rows over the peer_auth socket, and only there. It gives up after
 a minute, and a transcript with no usage in it yet sends nothing
-([mid-session usage](https://thereisnospoon.org/docs/reference/hooks/#mid-session-usage)).
+([mid-session usage](https://thereisnospoon.org/docs/reference/hooks/#mid-session-usage)). `--owed` marks a
+path the daemon named for a conversation whose usage is
+[owed](https://thereisnospoon.org/docs/reference/hooks/#owed-usage): read only when it is a regular `*.jsonl`
+file inside the agent client's own transcript folder, and sent with when the
+transcript last changed; any other is reported to the daemon unread.

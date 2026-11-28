@@ -565,9 +565,12 @@ what brings the pattern back, and if it has stopped recurring, nothing does.</li
 <h2 id="when-it-runs">When it runs</h2>
 <p>Every <code>gardener.interval_minutes</code> (60) the gardener does two things. First the
 <strong>upkeep</strong>, which the daemon always needs: it reaps idle sessions and returns
-their claims, prunes old transport events, refreshes the retrieval stats, latches
-utility ranking where a project's demand history has matured, and settles
-proposals whose memory is gone. Then, when <code>gardener.enabled</code> is on, the
+their claims, reads the token usage Claude Code conversations still owe -
+those it reaps, and those whose agent ended them with <code>session_end</code> - where
+the daemon may read their transcripts (<a href="../../reference/hooks/#owed-usage">owed usage</a>),
+prunes old transport events, refreshes the retrieval stats, latches utility
+ranking where a project's demand history has matured, and settles proposals
+whose memory is gone. Then, when <code>gardener.enabled</code> is on, the
 <strong>proposal passes</strong> above.</p>
 <p><code>gardener.enabled: false</code> turns off only the proposal passes: no background
 pass proposes anything, while the upkeep keeps its schedule and your requests

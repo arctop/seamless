@@ -450,8 +450,10 @@ func (h *Handler) sessionStart(w http.ResponseWriter, r *http.Request) {
 		briefing = injectNotice(briefing, h.claimNotice(ctx, client, p.SessionID, reach))
 		// A flagged session of this caller's whose end signal never came: a
 		// crashed agent's next start is the likeliest next contact
-		// (transcript.go).
+		// (transcript.go). Under peer_auth, so is a conversation's owed usage
+		// (usage_owed.go).
 		h.keepPending(ctx, w, client, host, p.SessionID)
+		h.askOwedUsage(ctx, w, client, host, p.SessionID)
 	}
 	// Cap after the ambient line is appended, then record and serialize the same
 	// prepared bytes. A SessionStart carries no user prompt (prompt="").
@@ -495,6 +497,7 @@ func (h *Handler) sessionEnd(w http.ResponseWriter, r *http.Request) {
 	// which the whole conversation is on disk (transcript.go).
 	h.snapshotAtEnd(ctx, w, client, h.hostOf(p.Identity), p.SessionID, p.TranscriptPath, reach, true)
 	h.keepPending(ctx, w, client, h.hostOf(p.Identity), p.SessionID)
+	h.askOwedUsage(ctx, w, client, h.hostOf(p.Identity), p.SessionID)
 	// SessionEnd has no hookSpecificOutput variant in Claude Code's schema, so
 	// the response is a bare ack -- emitting one fails root validation.
 	writeHookAck(w)

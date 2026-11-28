@@ -197,7 +197,9 @@ type Usage struct {
 	Sessions int `json:"sessions"`
 	Reported int `json:"reported"`
 	// Unreported names the session-days with no token record (a live Claude
-	// Code session reports at its end; a killed or reaped one never does).
+	// Code session reports as its prompts are answered and at its end; one
+	// ended without its SessionEnd once the daemon reads the usage it owes:
+	// store usage_owed.go).
 	Unreported []Ref `json:"unreported"`
 	// Approximate is set when a session from before the ledger has its stored
 	// total counted on the day it ended, with no hour, thread or minutes.

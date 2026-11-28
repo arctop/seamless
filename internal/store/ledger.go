@@ -8,9 +8,12 @@ package store
 // counter grew by to the bucket of the Stop (CreditConversationUsage). While
 // the Diary is on, a Claude Code prompt also keeps a live conversation's rows
 // current (RefreshConversationUsage, Replace's rule for a read that may land
-// after a later one). In the same transaction every session a write touches
-// has its token totals (the sessions columns of migration 011) set to the sum
-// of its rows, so every surface that reads the totals reads the ledger's sum.
+// after a later one), and the reads of a conversation's owed usage use that
+// rule too (usage_owed.go): one whose session the agent or the reaper ended
+// before its client sent its SessionEnd. In the same transaction every
+// session a write touches has its token totals (the sessions columns of
+// migration 011) set to the sum of its rows, so every surface that reads the
+// totals reads the ledger's sum.
 //
 // Every writer finds the conversation by its client's external identity: its
 // ambient row, whatever its status, and the sessions its moves ended

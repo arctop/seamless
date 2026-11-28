@@ -1348,9 +1348,14 @@ URLs and no feature state.
   `RefreshConversationUsage`, `CreditConversationUsage`). The harvests that
   write it (Claude Code's SessionEnd and each Codex Stop,
   `internal/hooks/usage.go`; `seam usage backfill`'s fill,
-  `usage_backfill.go`) check no feature: never put a ledger write, or a
-  totals write beside it, behind `features.Diary`, or turning the Diary on
-  would show a history that was never kept. The feature gates what the owner
+  `usage_backfill.go`; the owed-usage reads of a Claude Code conversation
+  ended without its SessionEnd -- the upkeep's,
+  `internal/gardener/owed_usage.go`, which reads only where the daemon may
+  read an agent's files and so takes `Config.PeerAuth` as the transcripts
+  service does, and under peer_auth the answer to an ask,
+  `internal/hooks/usage_owed.go`) check no feature: never put a ledger write,
+  or a totals write beside it, behind `features.Diary`, or turning the Diary
+  on would show a history that was never kept. The feature gates what the owner
   sees and the one hook cost it adds, the mid-session harvest
   (`usage_live.go`, above). A row holds no text; a merge carries rows only
   with the sessions it inserts (`archive/merge.go`'s riders), so totals stay

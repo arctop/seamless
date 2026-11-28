@@ -422,8 +422,13 @@ transcript simply records none. They are kept in the
 [usage ledger](/reference/storage/#what-lives-only-in-sqlite), by quarter-hour,
 model and thread, and a session's totals are the sum of its rows. A Claude Code
 session the agent already ended with `session_end`, or the reaper expired,
-still gets its usage when its client ends it, and stays as it ended. A session
-whose Claude Code transcript is still
+still gets its usage when its client ends it, and stays as it ended. One whose
+client never ends it - a closed terminal, a killed process, an app that stops a
+session without running its SessionEnd hook - still gets it: from that
+`session_end` or expiry its usage is [owed](/reference/hooks/#owed-usage), and
+the daemon reads its transcript later, as often as it changes (under
+[peer_auth](/guides/peer-auth/), the same agent's next session sends it). A
+session whose Claude Code transcript is still
 on its computer but was never harvested is filled by
 [`seam usage backfill`](/reference/cli-seam/#seam_usage_backfill).
 With the Diary [optional feature](/reference/console/#optional-features) on, a

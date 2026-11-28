@@ -1097,8 +1097,11 @@ than whole:
   note under the tiles, counted as "(N unreported)" on the tokens tile and on
   its thread's card, and never counted as zero. A Claude Code session reports at its end,
   and while the Diary is on its prompts keep it current
-  ([mid-session usage](https://thereisnospoon.org/docs/reference/hooks/#mid-session-usage)); a Codex session
-  reports at each turn's `Stop`.
+  ([mid-session usage](https://thereisnospoon.org/docs/reference/hooks/#mid-session-usage)); one its client
+  never ends reports after the agent's `session_end` or the idle reaper's
+  expiry, when the daemon reads its transcript
+  ([owed usage](https://thereisnospoon.org/docs/reference/hooks/#owed-usage)). A Codex session reports at
+  each turn's `Stop`.
 - **Approximate** - a session from before the usage ledger, which has token
   totals and no ledger rows. Its whole total counts on the day it ended and on
   no other ("counted on Nov 12"), with no hour, thread or agent time: the

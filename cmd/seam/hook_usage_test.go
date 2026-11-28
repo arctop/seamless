@@ -7,12 +7,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -125,33 +127,127 @@ func TestRunHook_StartsTheUsageReadDetached(t *testing.T) {
 }
 
 // usageJobs answers only a Claude Code prompt's ask, and only with a session
-// and a transcript to read.
+// and a transcript to read; and each owed value, at any Claude Code event,
+// read only inside the client's own folder (--owed).
 func TestUsageJobs(t *testing.T) {
 	payload := []byte(`{"session_id":"cc-a","transcript_path":"/t/a.jsonl","prompt":"go"}`)
+	owed := func(id, path string) string {
+		return url.Values{harvest.TranscriptSessionParam: {id}, harvest.TranscriptPathParam: {path}}.Encode()
+	}
 	for _, tc := range []struct {
 		name    string
 		o       hookOpts
 		event   string
 		payload []byte
 		wanted  string
+		owed    []string
 		want    [][]string
 	}{
-		{"nothing asked", hookOpts{}, "user-prompt-submit", payload, "", nil},
-		{"asked", hookOpts{}, "user-prompt-submit", payload, harvest.UsageWanted,
+		{"nothing asked", hookOpts{}, "user-prompt-submit", payload, "", nil, nil},
+		{"asked", hookOpts{}, "user-prompt-submit", payload, harvest.UsageWanted, nil,
 			[][]string{{"hook-usage", "--session-id", "cc-a", "--path", "/t/a.jsonl"}}},
-		{"with the hook's flags", hookOpts{config: "/c.yaml", client: hookClientClaudeCode}, "user-prompt-submit", payload, harvest.UsageWanted,
+		{"with the hook's flags", hookOpts{config: "/c.yaml", client: hookClientClaudeCode}, "user-prompt-submit", payload, harvest.UsageWanted, nil,
 			[][]string{{"hook-usage", "--config", "/c.yaml", "--client", "claude-code", "--session-id", "cc-a", "--path", "/t/a.jsonl"}}},
-		{"a value this release does not know", hookOpts{}, "user-prompt-submit", payload, "2", nil},
-		{"another event", hookOpts{}, "session-start", payload, harvest.UsageWanted, nil},
-		{"a Codex prompt", hookOpts{client: hookClientCodex}, "user-prompt-submit", payload, harvest.UsageWanted, nil},
-		{"no transcript named", hookOpts{}, "user-prompt-submit", []byte(`{"session_id":"cc-a"}`), harvest.UsageWanted, nil},
-		{"no session named", hookOpts{}, "user-prompt-submit", []byte(`{"transcript_path":"/t/a.jsonl"}`), harvest.UsageWanted, nil},
-		{"not a JSON object", hookOpts{}, "user-prompt-submit", []byte(`[1]`), harvest.UsageWanted, nil},
+		{"a value this release does not know", hookOpts{}, "user-prompt-submit", payload, "2", nil, nil},
+		{"another event", hookOpts{}, "session-start", payload, harvest.UsageWanted, nil, nil},
+		{"a Codex prompt", hookOpts{client: hookClientCodex}, "user-prompt-submit", payload, harvest.UsageWanted, nil, nil},
+		{"no transcript named", hookOpts{}, "user-prompt-submit", []byte(`{"session_id":"cc-a"}`), harvest.UsageWanted, nil, nil},
+		{"no session named", hookOpts{}, "user-prompt-submit", []byte(`{"transcript_path":"/t/a.jsonl"}`), harvest.UsageWanted, nil, nil},
+		{"not a JSON object", hookOpts{}, "user-prompt-submit", []byte(`[1]`), harvest.UsageWanted, nil, nil},
+		{"owed, at a start", hookOpts{config: "/c.yaml"}, "session-start", payload, "", []string{owed("cc-old", "/p/old.jsonl")},
+			[][]string{{"hook-usage", "--config", "/c.yaml", "--owed", "--session-id", "cc-old", "--path", "/p/old.jsonl"}}},
+		{"a prompt's ask beside the owed", hookOpts{}, "user-prompt-submit", payload, harvest.UsageWanted,
+			[]string{owed("cc-old", "/p/old.jsonl")},
+			[][]string{
+				{"hook-usage", "--session-id", "cc-a", "--path", "/t/a.jsonl"},
+				{"hook-usage", "--owed", "--session-id", "cc-old", "--path", "/p/old.jsonl"},
+			}},
+		{"at most a few owed an answer", hookOpts{}, "session-end", payload, "",
+			[]string{owed("1", "/p/1.jsonl"), owed("2", "/p/2.jsonl"), owed("3", "/p/3.jsonl"), owed("4", "/p/4.jsonl")},
+			[][]string{
+				{"hook-usage", "--owed", "--session-id", "1", "--path", "/p/1.jsonl"},
+				{"hook-usage", "--owed", "--session-id", "2", "--path", "/p/2.jsonl"},
+				{"hook-usage", "--owed", "--session-id", "3", "--path", "/p/3.jsonl"},
+			}},
+		{"owed values that do not hold", hookOpts{}, "session-start", payload, "",
+			[]string{"%zz", owed("", "/p/x.jsonl"), owed("cc-x", "")}, nil},
+		{"owed, to a Codex hook", hookOpts{client: hookClientCodex}, "session-start", payload, "",
+			[]string{owed("cc-old", "/p/old.jsonl")}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.want, usageJobs(&tc.o, tc.event, tc.payload, tc.wanted))
+			require.Equal(t, tc.want, usageJobs(&tc.o, tc.event, tc.payload, tc.wanted, tc.owed))
 		})
 	}
+}
+
+// A conversation the agent ended with session_end, whose SessionEnd never
+// came, over a real peer_auth socket: the same caller's next start asks for
+// its usage, the detached `seam hook-usage --owed` (run here in-process)
+// reads the recorded path inside the client's own folder, and the ledger
+// holds its rows -- the Diary off. A path outside that folder is reported,
+// never read, and the conversation is settled.
+func TestRunHook_SendsOwedUsageAtTheNextStart(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the peer_auth socket is a Unix deployment")
+	}
+	f := newCaptureFixture(t)
+	ctx := context.Background()
+	d := newSocketDaemon(t, f, ownerSocketView(t))
+	var jobs [][]string
+	spawn := inProcess(t, d.cfg, &jobs)
+	proj := filepath.Join(f.home, ".claude", "projects", "-work-ops")
+	require.NoError(t, os.MkdirAll(proj, 0o700))
+	ended := filepath.Join(proj, "ended.jsonl")
+	raw, err := os.ReadFile(f.transcript)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(ended, raw, 0o600))
+	start := func(id, transcript string) {
+		t.Helper()
+		require.Empty(t, runHookSpawning(t, d.cfg, hookCall{event: "session-start",
+			payload: map[string]any{"session_id": id, "cwd": f.cwd, "source": "startup", "transcript_path": transcript}}, spawn))
+	}
+	end := func(id string) core.Session {
+		t.Helper()
+		sess := d.session(t, "claude-code", id)
+		sess.Status, sess.Findings, sess.UpdatedAt = core.SessionCompleted, "done", time.Now().UTC()
+		require.NoError(t, store.UpdateSession(ctx, d.db, sess))
+		marked, err := store.MarkUsageOwed(ctx, d.db, sess.ID, time.Now().UTC())
+		require.NoError(t, err)
+		require.True(t, marked)
+		return sess
+	}
+	owed := func(id string) bool {
+		t.Helper()
+		_, found, err := store.OwedUsageOf(ctx, d.db, "claude-code", id)
+		require.NoError(t, err)
+		return found
+	}
+
+	start("cc-ended", ended)
+	start("cc-out", f.transcript) // its recorded path lies outside the client's folder
+	sess := end("cc-ended")
+	require.Empty(t, jobs)
+
+	start("cc-next", f.transcript)
+	require.Equal(t, [][]string{{"hook-usage", "--owed", "--session-id", "cc-ended", "--path", ended}}, jobs)
+	_, rows, ok := harvest.ClaudeUsage(ended)
+	require.True(t, ok)
+	require.Equal(t, rows, d.ledgerLedger(t, "cc-ended"))
+	require.Equal(t, core.SessionCompleted, d.reload(t, sess.ID).Status, "the push revives no row")
+	require.True(t, owed("cc-ended"), "owed still: the conversation may go on on its row")
+
+	jobs = nil
+	start("cc-third", f.transcript)
+	require.Empty(t, jobs, "within the wait after the answer")
+
+	out := end("cc-out")
+	pushes := d.pushes.Load()
+	start("cc-fourth", f.transcript)
+	require.Equal(t, [][]string{{"hook-usage", "--owed", "--session-id", "cc-out", "--path", f.transcript}}, jobs)
+	require.Equal(t, pushes+1, d.pushes.Load(), "one report, no rows")
+	require.False(t, owed("cc-out"), "a refused path is settled")
+	require.Empty(t, d.ledgerLedger(t, "cc-out"))
+	require.Equal(t, core.SessionCompleted, d.reload(t, out.ID).Status)
 }
 
 // Off the socket the client reads and sends no usage, whatever an answer

@@ -38,7 +38,10 @@ package main
 // Diary is on, the daemon's answer to a prompt asks for it in a header
 // (harvest.UsageWantedHeader) at most once per its own throttle, and a
 // detached `seam hook-usage` reads the transcript and sends the rows
-// (hook_usage.go), so the prompt waits for none of it.
+// (hook_usage.go), so the prompt waits for none of it. So does the owed usage
+// of this caller's conversations that ended without a SessionEnd harvest
+// (harvest.UsageOwedHeader, carried only while one is owed), read only inside
+// the client's own transcript folder (--owed).
 
 import (
 	"context"
@@ -285,27 +288,45 @@ func transcriptJobs(o *hookOpts, event string, payload []byte, wanted string, pe
 }
 
 // usageJobs are the `seam hook-usage` command lines for the usage the
-// daemon's answer to a Claude Code prompt asked for (wanted, the
-// harvest.UsageWantedHeader value): the session the payload names, read from
-// the transcript it names. None for any other event or client, an answer
-// that did not ask, or a payload naming no session or transcript.
-func usageJobs(o *hookOpts, event string, payload []byte, wanted string) [][]string {
-	if event != "user-prompt-submit" || wanted != harvest.UsageWanted || (o.client != "" && o.client != hookClientClaudeCode) {
+// daemon's answer asked for, a Claude Code session's only: the session a
+// prompt's payload names, read from the transcript it names, when the answer
+// to that prompt asked (wanted, the harvest.UsageWantedHeader value); and
+// each owed conversation an owed header value names (at most
+// harvest.MaxPendingPerAnswer, read only inside the client's own transcript
+// folder: --owed). A payload naming no session or transcript asks nothing,
+// and a value that does not parse is skipped.
+func usageJobs(o *hookOpts, event string, payload []byte, wanted string, owed []string) [][]string {
+	if o.client != "" && o.client != hookClientClaudeCode {
 		return nil
 	}
-	var in struct {
-		SessionID      string `json:"session_id"`
-		TranscriptPath string `json:"transcript_path"`
-	}
-	if err := json.Unmarshal(payload, &in); err != nil || in.SessionID == "" || in.TranscriptPath == "" {
-		return nil
-	}
-	job := []string{"hook-usage"}
+	base := []string{"hook-usage"}
 	if o.config != "" {
-		job = append(job, "--config", o.config)
+		base = append(base, "--config", o.config)
 	}
 	if o.client != "" {
-		job = append(job, "--client", o.client)
+		base = append(base, "--client", o.client)
 	}
-	return [][]string{append(job, "--session-id", in.SessionID, "--path", in.TranscriptPath)}
+	job := func(extra ...string) []string { return append(slices.Clone(base), extra...) }
+	var jobs [][]string
+	if event == "user-prompt-submit" && wanted == harvest.UsageWanted {
+		var in struct {
+			SessionID      string `json:"session_id"`
+			TranscriptPath string `json:"transcript_path"`
+		}
+		if err := json.Unmarshal(payload, &in); err == nil && in.SessionID != "" && in.TranscriptPath != "" {
+			jobs = append(jobs, job("--session-id", in.SessionID, "--path", in.TranscriptPath))
+		}
+	}
+	for _, raw := range owed[:min(len(owed), harvest.MaxPendingPerAnswer)] {
+		q, err := url.ParseQuery(raw)
+		if err != nil {
+			continue
+		}
+		id, path := q.Get(harvest.TranscriptSessionParam), q.Get(harvest.TranscriptPathParam)
+		if id == "" || path == "" {
+			continue
+		}
+		jobs = append(jobs, job("--owed", "--session-id", id, "--path", path))
+	}
+	return jobs
 }

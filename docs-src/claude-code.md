@@ -176,9 +176,11 @@ matrix](/reference/claude-app-compatibility/):
   is a command hook now; an install from before that gets the command hook the
   next time `seamlessd install-hooks` runs, which an update does for you.
 - **SessionEnd may come late, or never.** The app keeps a session open until
-  you archive it or quit, and a session it kills ends with no hook at all. The
-  idle reaper ends such a session after `gardener.session_idle_minutes` and
-  reads its usage then, so its agent time still reaches the
+  you archive it or quit, and a session it stops ends with no hook at all.
+  Once the agent ends such a session with `session_end`, or the idle reaper
+  expires it after `gardener.session_idle_minutes`, its usage is
+  [owed](/reference/hooks/#owed-usage), and the daemon reads its transcript
+  later, so its agent time still reaches the
   [Diary](/reference/console/#diary-usage).
 - **Managed worktrees keep their project.** The app may run a session in a
   managed worktree (`<repo>/.claude/worktrees/<name>`); Seamless resolves a

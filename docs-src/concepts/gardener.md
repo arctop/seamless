@@ -253,9 +253,12 @@ Both are reversible, and the two exits are not the same:
 
 Every `gardener.interval_minutes` (60) the gardener does two things. First the
 **upkeep**, which the daemon always needs: it reaps idle sessions and returns
-their claims, prunes old transport events, refreshes the retrieval stats, latches
-utility ranking where a project's demand history has matured, and settles
-proposals whose memory is gone. Then, when `gardener.enabled` is on, the
+their claims, reads the token usage Claude Code conversations still owe -
+those it reaps, and those whose agent ended them with `session_end` - where
+the daemon may read their transcripts ([owed usage](/reference/hooks/#owed-usage)),
+prunes old transport events, refreshes the retrieval stats, latches utility
+ranking where a project's demand history has matured, and settles proposals
+whose memory is gone. Then, when `gardener.enabled` is on, the
 **proposal passes** above.
 
 `gardener.enabled: false` turns off only the proposal passes: no background

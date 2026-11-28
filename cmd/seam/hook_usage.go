@@ -12,6 +12,16 @@ package main
 // installer wires it, and nobody runs it by hand; its stdio is the null
 // device, and what became of the rows is the session's usage ledger.
 //
+// With --owed it answers a later hook's harvest.UsageOwedHeader instead: the
+// usage of a conversation of this caller's that ended without its SessionEnd
+// harvest (the agent's session_end, the idle reaper), at the path its hooks
+// recorded, which it reads only when it is a regular *.jsonl file inside the
+// agent client's own transcript folder (openNamedTranscript, as a pending
+// transcript is read). It sends the rows with when the transcript last
+// changed (harvest.ClaudeTranscriptChanged), so the daemon knows when nothing
+// more is coming -- or, for a path it refused or could not find, that report
+// alone (harvest.UsageRefusedField).
+//
 // The rule of every client-side capture holds (hook_capture.go): it sends
 // only to the peer_auth socket, and only what a daemon's answer asked for.
 
@@ -27,6 +37,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/arctop/seamless/internal/config"
 	"github.com/arctop/seamless/internal/harvest"
@@ -37,7 +48,8 @@ type hookUsageOpts struct {
 	config    string // --config, as the hook had it
 	client    string // --client, as the hook had it; "" is Claude Code
 	sessionID string // --session-id: the agent client's own session id
-	path      string // --path: the session's transcript, as the prompt named it
+	path      string // --path: the session's transcript, as the prompt (or the owed header) named it
+	owed      bool   // --owed: an owed conversation's usage, at a path the daemon named
 
 	// httpClient builds the client the push is sent through; nil is
 	// cfg.HTTPClient(0). Not a flag: tests pass one.
@@ -51,6 +63,8 @@ func bindHookUsage(fs *flag.FlagSet) *hookUsageOpts {
 		"agent CLI the session is from (`CLIENT`); valid: "+strings.Join(hookClients, ", ")+"; default Claude Code")
 	fs.StringVar(&o.sessionID, "session-id", "", "the agent client's own session id (`ID`)")
 	fs.StringVar(&o.path, "path", "", "the session's transcript (`PATH`)")
+	fs.BoolVar(&o.owed, "owed", false,
+		"send an owed conversation's usage, at a path the daemon named: read only inside the client's own transcript folder")
 	return o
 }
 
@@ -58,10 +72,14 @@ var hookUsageCmd = spec("hook-usage", groupHooks,
 	"send a live session's usage, detached (started by seam hook)",
 	noArgs(), bindHookUsage, runHookUsage).
 	withLong(`seam hook starts this, detached from the agent, when the daemon's answer to
-a Claude Code prompt asks for the session's usage (the Diary is on); no
-installer wires it, and it is not run by hand. It reads the transcript, the
-transcripts of the subagents it launched included, and sends the session's
-usage ledger rows over the peer_auth socket only. It gives up after ` + harvest.UsagePushTimeout.String() + `.`)
+a Claude Code prompt asks for the session's usage (the Diary is on), or with
+--owed when an answer asks for the usage of a conversation that ended
+without its SessionEnd harvest; no installer wires it, and it is not run by
+hand. It reads the transcript, the transcripts of the subagents it launched
+included, and sends the session's usage ledger rows over the peer_auth socket
+only. With --owed it reads only a regular *.jsonl file inside the agent
+client's own transcript folder, and sends when the transcript last changed.
+It gives up after ` + harvest.UsagePushTimeout.String() + `.`)
 
 func runHookUsage(ctx context.Context, e *env, o *hookUsageOpts, _ []string) error {
 	if o.config != "" {
@@ -76,10 +94,20 @@ func runHookUsage(ctx context.Context, e *env, o *hookUsageOpts, _ []string) err
 		return nil
 	}
 	if !pushesCaptures(cfg) || o.sessionID == "" || o.path == "" || (o.client != "" && o.client != hookClientClaudeCode) {
-		return nil // only to the peer_auth socket, only a Claude Code session, and only what a prompt asked for
+		return nil // only to the peer_auth socket, only a Claude Code session, and only what an answer asked for
 	}
 	ctx, cancel := context.WithTimeout(ctx, harvest.UsagePushTimeout)
 	defer cancel()
+	msg := map[string]any{"session_id": o.sessionID}
+	if o.owed {
+		refusal, changed := checkOwedTranscript(o.path, transcriptRoots(o.client))
+		msg[harvest.UsageOwedField] = true
+		if refusal != "" {
+			msg[harvest.UsageRefusedField] = refusal
+			return postUsage(ctx, e, o, cfg, msg)
+		}
+		msg[harvest.UsageChangedField] = changed.Format(time.RFC3339Nano)
+	}
 	totals, rows, ok := harvest.ClaudeUsage(o.path)
 	if !ok || len(rows) > harvest.MaxUsageRows {
 		return nil // nothing harvested yet, or more rows than a push carries: the session's end sends them
@@ -91,7 +119,30 @@ func runHookUsage(ctx context.Context, e *env, o *hookUsageOpts, _ []string) err
 		fmt.Fprintln(e.stderr, "seam hook-usage: usage not sent:", err)
 		return nil
 	}
-	body, err := json.Marshal(map[string]any{"session_id": o.sessionID, harvest.Field: push})
+	msg[harvest.Field] = push
+	return postUsage(ctx, e, o, cfg, msg)
+}
+
+// checkOwedTranscript checks a transcript path the daemon named for an owed
+// conversation (openNamedTranscript's rule) and when it last changed: refusal
+// is "" when it may be read, else the harvest.TranscriptRefused* word.
+func checkOwedTranscript(path string, roots []string) (refusal string, changed time.Time) {
+	f, _, refusal := openNamedTranscript(path, roots)
+	if refusal != "" {
+		return refusal, time.Time{}
+	}
+	_ = f.Close() //nolint:errcheck // opened only to check it; nothing was written
+	changed, ok := harvest.ClaudeTranscriptChanged(path)
+	if !ok {
+		return harvest.TranscriptRefusedMissing, time.Time{}
+	}
+	return "", changed
+}
+
+// postUsage sends msg, a usage push's body, to the daemon's usage route, and
+// reports a refusal on stderr. Like every hook it fails open: it returns nil.
+func postUsage(ctx context.Context, e *env, o *hookUsageOpts, cfg config.Config, msg map[string]any) error {
+	body, err := json.Marshal(msg)
 	if err != nil {
 		fmt.Fprintln(e.stderr, "seam hook-usage: usage not sent:", err)
 		return nil

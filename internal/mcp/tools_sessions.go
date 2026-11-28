@@ -739,6 +739,14 @@ func (s *Server) handleSessionEnd(ctx context.Context, req mcp.CallToolRequest) 
 	if err := store.UpdateSession(ctx, s.cfg.DB, sess); err != nil {
 		return errResult("session_end", err)
 	}
+	// A Claude Code conversation goes on reporting nothing until its
+	// SessionEnd harvest, which may come late or never (the Claude app runs
+	// none for a session it stops): its usage is owed from here, and the
+	// daemon reads it later (store.MarkUsageOwed marks only such a
+	// conversation's ambient row). Best-effort: the session has ended.
+	if _, err := store.MarkUsageOwed(ctx, s.cfg.DB, sess.ID, now); err != nil {
+		s.logger.Warn("mcp: session_end: mark usage owed", "session", sess.ID, "error", err)
+	}
 	// The session is over: drop every connection binding pointing at it, so the
 	// bindings map does not grow one dead entry per ended session on a
 	// long-lived daemon (sessions ended by the hook or the reaper are swept
