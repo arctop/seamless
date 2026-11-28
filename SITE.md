@@ -544,6 +544,12 @@ anchored to the seeding time and go stale on screen after that.
 `scripts/branding/README.md` is the operator-facing version of this recipe, next
 to the other branding flow (record -> distill -> `docs/static/scenes.js`).
 
+The landing's console figure points at the overview shot with four numbered
+callouts, placed by hand as `left`/`top` percentages on the `.hs` spans in
+`index.html`. A re-captured shot moves what they point at: place them again,
+and rewrite the two `alt` texts and the notes under the figure, in the same
+change. (They pointed at a layout two captures old until November 2026.)
+
 ## Regenerate the terminal scenes
 
 `docs/static/scenes.js` holds the verbatim with/without transcripts the scene
@@ -555,6 +561,10 @@ marketing surface, so it is a deliberate act, never a side effect of a build.
 
 ## Pending (owner approval required)
 
+- Console shots from a build with backups on. The overview shot shows a "No
+  backup yet" card, because the demo is a source build, while the page says a
+  release install backs up every day. The fine print under the figure says
+  why; a re-capture would remove the need.
 - Spot-check on a real phone. Narrow widths are no longer unexercised: the page
   was swept at 320/360/390/414/600/768/900/1024/1280/1440 under Chrome device
   emulation and has no horizontal overflow at any of them. That sweep caught a
