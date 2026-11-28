@@ -105,7 +105,10 @@ nothing runs sudo: seamlessd approve runs only on the server. There d denies
 over the relay, which the server takes only from the owner's own hands (a
 terminal with no agent above it, through a relay it maps) and otherwise
 refuses, saying why; y opens the request's passkey page instead, and Touch ID
-approves from the agent's dialog.
+approves from the agent's dialog. A computer is a client when its relay's
+directory (/opt/seamless/relay) is there, or its server_url is not a socket:
+the owner's role: client config on a peer_auth server, which dials the
+daemon's own socket, decides through sudo as above.
 
 A read grant request (isolation.requests: an agent asking to read a
 confidential project) is decided the same way. On a daemon without peer_auth
@@ -231,8 +234,9 @@ func runApprove(ctx context.Context, e *env, o *approveOpts, pos []string) error
 	// On a client computer the account, seamlessd and config the daemon names
 	// are the server's, and the peer the kernel named is this computer's relay,
 	// so no terminal commit is looked for: nothing here runs sudo
-	// (decideOnClient).
-	onClient := cfg.IsClient()
+	// (decideOnClient). The owner's role: client config on a peer_auth server
+	// is not one (onClientComputer): its socket is the daemon's own.
+	onClient := onClientComputer(e, cfg)
 	var t terminalApprover
 	if !*o.passkey && !one.Advisory {
 		if unverified != nil {

@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -28,18 +30,17 @@ func (m clMarkTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	return m.next.RoundTrip(r)
 }
 
-// clVerifiedPeer is fakeDaemonPeer whose client marks what it sends.
-func clVerifiedPeer(uid uint32) func(context.Context, config.Config) (uint32, *http.Client, error) {
-	return func(_ context.Context, cfg config.Config) (uint32, *http.Client, error) {
-		base, err := cfg.HTTPClient(consoleTimeout)
-		if err != nil {
-			return 0, nil, err
-		}
-		next := base.Transport
-		if next == nil {
-			next = http.DefaultTransport
-		}
-		return uid, &http.Client{Timeout: base.Timeout, Transport: clMarkTransport{next}}, nil
+// clVerifiedPeer is fakeDaemonPeer for a socket whose server is the stand-in
+// console: its client dials standIn over TCP whatever the URL names (a
+// socket's URL has no host of its own, config.SocketBaseURL), and marks what
+// it sends.
+func clVerifiedPeer(uid uint32, standIn string) func(context.Context, config.Config) (uint32, *http.Client, error) {
+	return func(context.Context, config.Config) (uint32, *http.Client, error) {
+		var d net.Dialer
+		next := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return d.DialContext(ctx, "tcp", standIn)
+		}}
+		return uid, &http.Client{Timeout: consoleTimeout, Transport: clMarkTransport{next}}, nil
 	}
 }
 
@@ -47,20 +48,54 @@ func clVerifiedPeer(uid uint32) func(context.Context, config.Config) (uint32, *h
 // which no account on the client resolves to.
 var clServerTerminal = &terminalApprover{Account: "_serveronly", Seamlessd: "/opt/seamless/bin/seamlessd", Config: "/opt/seamless/etc/seamless.yaml"}
 
-// clClientRig is newApproveRig on a client computer: role client, the relay's
-// socket verified (clVerifiedPeer), and no account lookup at all.
-func clClientRig(t *testing.T, h http.HandlerFunc, typed string) *approveRig {
+// clSocketRig is newApproveRig on a role: client config whose server_url is a
+// socket, verified (clVerifiedPeer). relay says whether this computer's relay
+// serves it: a client computer's, or else the owner's half of a peer_auth
+// install, whose daemon serves that socket on this computer. The path is one
+// nothing serves, never the machine's own (config.RelaySocketURL): a request
+// that went past the verified client would reach a live daemon there.
+func clSocketRig(t *testing.T, h http.HandlerFunc, typed string, relay bool) *approveRig {
 	t.Helper()
 	rig := newApproveRig(t, h, typed)
 	cfg := rig.ac.config()
 	cfg.Role = config.RoleClient
+	cfg.AdvertisedURL = "unix://" + filepath.Join(t.TempDir(), "unserved.sock")
 	rig.e.loadConfig = func() (config.Config, error) { return cfg, nil }
-	rig.e.dialDaemon = clVerifiedPeer(testDaemonUID)
+	rig.e.dialDaemon = clVerifiedPeer(testDaemonUID, rig.ac.srv.Listener.Addr().String())
+	rig.e.relayHere = func() bool { return relay }
+	return rig
+}
+
+// clClientRig is newApproveRig on a client computer: role client, the relay's
+// socket verified (clVerifiedPeer), and no account lookup at all.
+func clClientRig(t *testing.T, h http.HandlerFunc, typed string) *approveRig {
+	t.Helper()
+	rig := clSocketRig(t, h, typed, true)
 	rig.e.lookupAccount = func(name string) (uint32, error) {
 		t.Errorf("a client resolves no account the server names: %q", name)
 		return 0, errNoAccountLookup
 	}
 	return rig
+}
+
+// The owner's own config on a peer_auth server is role: client too, on the
+// socket its daemon serves, with no relay on the computer: there seam approve
+// is the server's terminal path, through sudo, and posts nothing. Taken for a
+// client computer's, it opened the passkey page instead.
+func TestCLPeerAuthServerApprove_CommitsThroughSudo(t *testing.T) {
+	a := factsOf(reqA, "R-7F3K", "example-finance")
+	table := byRef(t, a)
+
+	rig := clSocketRig(t, routes(t, table), "y\n", false)
+	require.Equal(t, 0, rig.run("R-7F3K", "--for", "1h"), rig.errb.String())
+	require.Equal(t, append(slices.Clone(passwordlessProbe), approveArgvFor(reqA, "1h", a.Digest)), rig.runner.recorded())
+	require.NotContains(t, rig.out.String(), "nothing runs sudo")
+	require.Empty(t, clPosts(rig), "the commit is sudo's")
+
+	rig = clSocketRig(t, routes(t, table), "d\n", false)
+	require.Equal(t, 0, rig.run("R-7F3K", "--for", "session"), rig.errb.String())
+	require.Equal(t, append(slices.Clone(passwordlessProbe), denyArgvFor(reqA)), rig.runner.recorded())
+	require.Empty(t, clPosts(rig))
 }
 
 // clDenyRoutes serves a's facts, as a server names them, and answers its deny
@@ -195,6 +230,9 @@ func TestCLClientApprove_TouchIDOnlyWhereTheDialogApproves(t *testing.T) {
 func TestCLClientApprove_UnverifiedServerIsRefusedAsBefore(t *testing.T) {
 	a := factsOf(reqA, "R-7F3K", "example-finance")
 	rig := clClientRig(t, clDenyRoutes(t, a, http.StatusOK, clDenied), "\nd\n")
+	cfg := rig.ac.config() // the stand-in's own address: a key device's server_url
+	cfg.Role = config.RoleClient
+	rig.e.loadConfig = func() (config.Config, error) { return cfg, nil }
 	rig.e.dialDaemon = func(context.Context, config.Config) (uint32, *http.Client, error) { return 0, nil, errServerNotSocket }
 	require.Equal(t, 1, rig.run("R-7F3K"))
 	require.Equal(t, "error: "+errServerNotSocket.Error()+"\n", rig.errb.String())

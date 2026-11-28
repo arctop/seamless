@@ -86,8 +86,8 @@ type approverHost struct {
 	home   func() (string, error) // the owner's home, where the app is installed; nil is os.UserHomeDir
 	socket string                 // the peer_auth socket this bridge dials; "" when server_url names none
 	self   func() (string, error) // this seam binary, whose team the app is pinned to; nil is selfPath
-	// onClient is a client computer's bridge (role: client): the socket is the
-	// relay's, and the helper is told so (--role client).
+	// onClient is a client computer's bridge (onClientComputer): the socket is
+	// the relay's, and the helper is told so (--role client).
 	onClient bool
 }
 

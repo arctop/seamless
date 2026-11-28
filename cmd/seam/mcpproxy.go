@@ -686,7 +686,9 @@ func isReply(msg []byte) bool {
 
 // bridgeApprover is how the bridge launches the Touch ID approver under cfg:
 // through the socket it dials, told on a client computer that the socket is
-// the relay's (approverHost.onClient).
+// the relay's (approverHost.onClient). The owner's role: client config on a
+// peer_auth server dials the daemon's own socket, and tells the app nothing
+// (onClientComputer).
 func bridgeApprover(e *env, cfg config.Config) approverHost {
-	return approverHost{run: e.run, goos: e.platform(), home: os.UserHomeDir, socket: cfg.SocketPath(), onClient: cfg.IsClient()}
+	return approverHost{run: e.run, goos: e.platform(), home: os.UserHomeDir, socket: cfg.SocketPath(), onClient: onClientComputer(e, cfg)}
 }

@@ -821,6 +821,12 @@ When the daemon names no passkey page, <code>y</code> says so, names Touch ID wh
 applies and a terminal on the server, and exits 1. A client whose
 <code>server_url</code> is not a socket (a key device's address) is refused as before.</li>
 </ol>
+<p>A socket <code>server_url</code> is a client computer's only when that computer's relay
+is set up: its data directory, <code>/opt/seamless/relay</code>, is there. Your own
+config on a peer_auth server is <code>role: client</code> too
+(<a href="../../guides/peer-auth/#connect-the-owner">Connect the owner</a>), on the socket
+its daemon serves on that same computer, at the same path; with no relay
+there, <code>seam approve</code> decides through sudo as above.</p>
 <p><code>--passkey</code> opens the request's passkey page (the <code>page</code> the daemon names) in
 the default browser - <code>open</code> on macOS, <code>xdg-open</code> on Linux, <code>rundll32</code> on
 Windows - or prints the address when no browser could be opened. With <code>--for</code>
@@ -916,6 +922,11 @@ as the server's. An app installed before this <code>seam</code> does not take
 running <code>seam touchid enroll</code> again and answering <code>y</code> replaces it. Neither looks the server's account up on the
 client: the socket's peer is the client's relay, held to the account root
 pinned there (the relay's), as <code>seam approve</code> holds it on a client.</p>
+<p>A computer is a client here only when its relay is set up
+(<code>/opt/seamless/relay</code> is there), as for <code>seam approve</code>. On a peer_auth
+server your own <code>role: client</code> config dials the daemon's socket on that
+computer: there the app is opened with no <code>--role</code>, and the commands it
+shows run on the same Mac.</p>
 <p>Once enrolled, accepting an access request's dialog with Touch ID opens the
 app for that request: it reads the request's facts from the daemon itself,
 shows them in the Touch ID prompt, and signs over the request and the

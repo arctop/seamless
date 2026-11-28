@@ -23,8 +23,8 @@ package main
 // a system account, which keeps out an ordinary login account but not another
 // role account.
 //
-// On a client computer (role: client) the socket is the relay's, and the pin
-// names the relay's account (the relay's root step writes it). The peer is
+// On a client computer (onClientComputer) the socket is the relay's, and the
+// pin names the relay's account (the relay's root step writes it). The peer is
 // held to it as a daemon is, but the account the daemon names is the
 // server's, which the client cannot resolve or compare: seam approve and seam
 // touchid enroll there skip accountIsPeer, and say that every command for the
@@ -51,6 +51,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -61,6 +62,37 @@ import (
 	"github.com/arctop/seamless/internal/access"
 	"github.com/arctop/seamless/internal/config"
 )
+
+// onClientComputer reports whether cfg's daemon is on another computer, which
+// is what seam approve, seam touchid enroll and the bridge's Touch ID launch
+// ask: a client config (role: client) that dials it over TCP, or over a socket
+// this computer's relay serves. role: client alone does not say so. The
+// owner's half of a peer_auth install is role: client too, on the socket the
+// daemon serves on this same computer, at the very path a relay serves
+// (config.RelaySocketURL). There the socket's peer is the daemon itself, so
+// those three act as on any server: seam approve commits through sudo, and the
+// Touch ID app is told no --role, which an app installed before that flag
+// existed refuses. The relay's data directory, which the client setup's root
+// step creates before it pairs, tells the two apart, as it tells doctor where
+// to report a relay (cmd/seamlessd/doctor_relay.go).
+func onClientComputer(e *env, cfg config.Config) bool {
+	if !cfg.IsClient() {
+		return false
+	}
+	if cfg.SocketPath() == "" {
+		return true
+	}
+	return e.relayHere != nil && e.relayHere()
+}
+
+// relayDataDirPresent is the real relayHere: anything at config.RelayDataDir
+// counts, as doctor counts it, and only a path that is not there at all does
+// not. The directory is the relay account's, 0700, so only its own entry is
+// looked at (Lstat), never what it holds.
+func relayDataDirPresent() bool {
+	_, err := os.Lstat(config.RelayDataDir)
+	return !errors.Is(err, fs.ErrNotExist)
+}
 
 var (
 	// errServerNotSocket is a server_url that is not a Unix socket: nothing says

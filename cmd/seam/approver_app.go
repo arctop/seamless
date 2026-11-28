@@ -50,10 +50,11 @@ var errNoApproverSocket = errors.New("the Touch ID approver needs server_url to 
 
 // approverApproveArgs is the helper's command line for one approval: the
 // socket to read the request from and answer on, the request, the duration
-// the owner chose in the dialog, and on a client computer (role: client)
+// the owner chose in the dialog, and on a client computer (onClientComputer)
 // --role client: there the socket is the relay's, and the account the daemon
 // names is the server's, which the helper then does not look up (as seam
-// touchid enroll's approverEnrollArgs).
+// touchid enroll's approverEnrollArgs). A server's argv has no --role, which
+// an app installed before that flag refuses.
 func approverApproveArgs(socket, requestID, duration string, onClient bool) []string {
 	argv := []string{"approve", "--socket", socket, "--request", requestID, "--for", duration}
 	if onClient {

@@ -24,6 +24,15 @@ import (
 // (internal/relay's DefaultSocketPath), which the relay serves on a Client.
 const RelaySocketURL = "unix:///opt/seamless/run/seamlessd.sock"
 
+// RelayDataDir is the data directory of the relay that serves a Client's
+// agents (internal/relay's DefaultDataDir), which the client setup's root step
+// creates before the relay pairs. RelaySocketURL is also the socket a peer_auth
+// daemon serves on its own computer, where the owner's config is role: client
+// too (the peer_auth guide's "Connect the owner"): the two configs are the same
+// file, and this directory is how a process on the computer tells the relay's
+// socket from the daemon's own, as doctor's relay rows do.
+const RelayDataDir = "/opt/seamless/relay"
+
 // ErrConfigExists is a Client's config that cannot be written because a
 // config file is there already: setup checks it before it pairs, since a key
 // the server minted and no file could take is a key lost.

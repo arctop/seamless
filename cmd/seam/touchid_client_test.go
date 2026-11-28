@@ -21,20 +21,61 @@ import (
 // account on the client resolves to.
 var tidServerTerminal = &terminalApprover{Account: "_serveronly", Seamlessd: "/opt/seamless/bin/seamlessd", Config: "/opt/seamless/etc/seamless.yaml"}
 
-// tidClientRig is newTouchRig on a client computer: role client, and an
-// account lookup that fails the test when it is asked anything.
+// tidClientRig is newTouchRig on a client computer: role client, a relay on
+// this computer serving the socket, and an account lookup that fails the test
+// when it is asked anything.
 func tidClientRig(t *testing.T, d *stubDaemon) *touchRig {
+	t.Helper()
+	rig := tidPeerAuthOwnerRig(t, d)
+	rig.e.relayHere = func() bool { return true }
+	rig.e.lookupAccount = func(name string) (uint32, error) {
+		t.Errorf("a client resolves no account the server names: %q", name)
+		return 0, errNoAccountLookup
+	}
+	return rig
+}
+
+// tidPeerAuthOwnerRig is newTouchRig as the owner's half of a peer_auth
+// install sees it: role client, the socket the daemon serves on this computer,
+// and no relay here.
+func tidPeerAuthOwnerRig(t *testing.T, d *stubDaemon) *touchRig {
 	t.Helper()
 	rig := newTouchRig(t, d, "")
 	cfg, err := rig.e.loadConfig()
 	require.NoError(t, err)
 	cfg.Role = config.RoleClient
 	rig.e.loadConfig = func() (config.Config, error) { return cfg, nil }
-	rig.e.lookupAccount = func(name string) (uint32, error) {
-		t.Errorf("a client resolves no account the server names: %q", name)
-		return 0, errNoAccountLookup
-	}
+	rig.e.relayHere = func() bool { return false }
 	return rig
+}
+
+// The owner's config on a peer_auth server is role: client on the daemon's
+// own socket: no relay, so seam touchid enroll is a server's there. The app
+// is told no --role (an app from before that flag refuses it), the commands
+// run on this Mac, and the account the daemon names is still held to the peer.
+func TestTouchIDEnrollOnPeerAuthServer_IsAServersEnrollment(t *testing.T) {
+	d := &stubDaemon{terminal: testTerminal}
+	rig := tidPeerAuthOwnerRig(t, d)
+	var shown string
+	rig.runner.helper = func(argv []string) {
+		shown = rig.out.String()
+		tidEnrolls(t, d)(argv)
+	}
+	require.Equal(t, 0, rig.run("enroll", "--name", "Touch ID on server"), rig.errb.String())
+
+	calls := rig.runner.recorded()
+	require.Equal(t, []string{"open", "-W", "-n", "-a", rig.target(), "--args",
+		"enroll", "--socket", rig.sock, "--name", "Touch ID on server"}, calls[len(calls)-1],
+		"a server's argv: no --role")
+	require.Contains(t, shown, "Run that command in another terminal on this Mac")
+	require.NotContains(t, shown, "this computer is a client")
+	require.Contains(t, rig.out.String(), `Enrolled the Touch ID key "Touch ID on server" (01KTOUCHIDKEY0000000000001)`)
+
+	// The account the daemon names must still be the uid that answered.
+	rig = tidPeerAuthOwnerRig(t, &stubDaemon{terminal: tidServerTerminal})
+	require.Equal(t, 1, rig.run("enroll"))
+	require.Contains(t, rig.errb.String(), `it names "_serveronly" as its account, which this machine cannot resolve`)
+	require.Empty(t, rig.runner.recorded(), "nothing installs, nothing runs")
 }
 
 // tidEnrolls makes the fake helper enroll a key on d under its --name.

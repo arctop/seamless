@@ -26,13 +26,15 @@ package main
 //     retires this Mac's earlier key with it. seam then confirms on the
 //     daemon that a new Touch ID key exists and names the one it replaced.
 //
-// On a client computer (role: client) the socket is this computer's relay,
+// On a client computer (onClientComputer) the socket is this computer's relay,
 // which forwards to the server, and the daemon's account, its seamlessd and
 // its config are the server's: the command that mints the code, and the one
 // that removes a key, run in a terminal on the server, and both seam and the
 // app say so (the app through --role client). Nothing here resolves the
 // server's account on this computer: the peer the kernel names is the relay,
 // held to root's pin as seam approve on a client holds it (enrollCodeApprover).
+// The owner's role: client config on a peer_auth server dials the daemon's own
+// socket, and is a server's here.
 //
 // Nothing here is the proof of anything. The enrollment code is (the daemon
 // checks it), and every later approval is the key's signature (the daemon's
@@ -120,7 +122,10 @@ On a client computer (role: client), server_url names the relay's socket,
 and the key enrolls with the server through it. The command that mints the
 code is the server's, and so is the one that removes an older key: run them
 in a terminal on the server (there, or over SSH), where the daemon's account
-and seamlessd are. The app's window and this command say so.`)
+and seamlessd are. The app's window and this command say so. A computer is a
+client when its relay's directory (/opt/seamless/relay) is there: the
+owner's role: client config on a peer_auth server, which dials the daemon's
+own socket, enrolls as on any server.`)
 
 type touchIDEnrollOpts struct {
 	app  *presentString
@@ -209,7 +214,7 @@ func runTouchIDEnroll(ctx context.Context, e *env, o *touchIDEnrollOpts, _ []str
 	// here waits on a key the owner might miss after switching terminals. The
 	// command comes from the window, which alone knows the new key's
 	// fingerprint.
-	onClient := cfg.IsClient()
+	onClient := onClientComputer(e, cfg)
 	fmt.Fprintln(e.stdout, "\nOpening Seamless Approve. Its window shows this Mac's new key and the command that mints a one-time enrollment code for it.")
 	if onClient {
 		fmt.Fprintln(e.stdout, "Run that command in a terminal on the server, not on this Mac: this computer is a client (role: client), and the daemon's account and seamlessd are on the server. "+
@@ -322,7 +327,7 @@ func validKeyName(name string) error {
 // first, as seam approve verifies it: they become that command line either way.
 //
 // On a server the account named must be the uid the kernel saw answer
-// (accountIsPeer). On a client computer (role: client) it is not looked up:
+// (accountIsPeer). On a client computer (onClientComputer) it is not looked up:
 // the peer is this computer's relay, which verifyDaemon held to root's pin
 // (the relay's root step pins the relay's account as the daemon's,
 // cmd/seamlessd/relay_install.go), and the account named is the server's, so
@@ -352,7 +357,7 @@ func enrollCodeApprover(ctx context.Context, e *env, cfg config.Config) (termina
 	case !absPath(t.Config):
 		return terminalApprover{}, fmt.Errorf("the daemon named %q as its config, which is not an absolute path", t.Config)
 	}
-	if cfg.IsClient() {
+	if onClientComputer(e, cfg) {
 		return *t, nil
 	}
 	if err := daemon.accountIsPeer(e, t.Account); err != nil {

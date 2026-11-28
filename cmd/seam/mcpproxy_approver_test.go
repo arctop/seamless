@@ -456,17 +456,36 @@ func TestBridge_ApproverEndIsReported(t *testing.T) {
 	}
 }
 
-// The bridge's approver dials the socket server_url names and, with role:
-// client, says it is a client computer's.
-func TestBridgeApprover_RoleComesFromTheConfig(t *testing.T) {
-	e, _, _ := stubEnv()
-	cfg := config.Defaults()
-	cfg.AdvertisedURL = "unix://" + testSocket
-	h := bridgeApprover(e, cfg)
-	require.Equal(t, testSocket, h.socket)
-	require.False(t, h.onClient, "a server's bridge")
-	cfg.Role = config.RoleClient
-	h = bridgeApprover(e, cfg)
-	require.Equal(t, testSocket, h.socket)
-	require.True(t, h.onClient, "a client computer's bridge")
+// The bridge's approver dials the socket server_url names and says it is a
+// client computer's only where this computer's relay serves that socket. The
+// owner's role: client config on a peer_auth server dials the daemon's own
+// socket: told --role client there, an app from before that flag refused
+// every approval, so Touch ID failed on every such server.
+func TestBridgeApprover_RoleComesFromTheConfigAndTheRelay(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		role         string
+		relayHere    func() bool
+		wantOnClient bool
+	}{
+		{name: "a server's bridge", relayHere: func() bool { return true }},
+		{name: "a client computer's bridge, through its relay", role: config.RoleClient,
+			relayHere: func() bool { return true }, wantOnClient: true},
+		{name: "the owner's bridge on a peer_auth server", role: config.RoleClient,
+			relayHere: func() bool { return false }},
+		{name: "the owner's bridge, no relay probe", role: config.RoleClient},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e, _, _ := stubEnv()
+			e.relayHere = tc.relayHere
+			cfg := config.Defaults()
+			cfg.AdvertisedURL = "unix://" + testSocket
+			if tc.role != "" {
+				cfg.Role = tc.role
+			}
+			h := bridgeApprover(e, cfg)
+			require.Equal(t, testSocket, h.socket)
+			require.Equal(t, tc.wantOnClient, h.onClient)
+		})
+	}
 }

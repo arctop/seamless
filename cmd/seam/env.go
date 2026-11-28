@@ -77,6 +77,10 @@ type env struct {
 	// daemonAccount reads the pin root writes of the daemon's account
 	// (access.DaemonAccount): present false when there is none.
 	daemonAccount func() (pin access.DaemonPin, present bool, err error)
+	// relayHere reports whether a relay serves this computer's agents: its
+	// data directory (config.RelayDataDir) is there. Nil is no relay, so a
+	// test that plays a client computer's socket says so (onClientComputer).
+	relayHere func() bool
 }
 
 // newEnv returns the real world.
@@ -95,6 +99,7 @@ func newEnv() *env {
 		dialDaemon:    dialSocketDaemon,
 		lookupAccount: lookupAccountUID,
 		daemonAccount: access.DaemonAccount,
+		relayHere:     relayDataDirPresent,
 	}
 }
 

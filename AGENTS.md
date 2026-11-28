@@ -1070,8 +1070,14 @@ any of it.
   `access.relay_decision` (console/relay_decision.go). Its reads, and the
   writes an agent may make, stay open: `seam` on a client reads console JSON
   through the relay, and `seam approve` there builds no sudo line
-  (`decideOnClient`, keyed on `role: client`): d posts the console's deny
-  route, judged as above, and y opens the passkey page.
+  (`decideOnClient`): d posts the console's deny route, judged as above, and
+  y opens the passkey page. "A client computer" is `onClientComputer`
+  (cmd/seam), never `role: client` alone: the owner's config on a peer_auth
+  server is `role: client` on the daemon's own socket, the very path a relay
+  serves (`config.RelaySocketURL`), so a socket config is a client computer's
+  only when the relay's data directory (`config.RelayDataDir`) is there. seam
+  approve, seam touchid enroll and the bridge's Touch ID launch (`--role
+  client`, which an app from before that flag refuses) all ask it.
   Revoking refuses the credential from its next request, ends the requests it is making and, in the same transaction, a relay's live leases, grants and waiting requests (`store.RevokeDeviceEndingAccess`); the edge registers a request (`track`) before it reads the device's status a last time, so no revocation slips between its lookup and its registration (review I1). Under peer_auth doctor warns for each key device a code alone paired (`peer_auth devices`, review I2). A merge carries no device, a fresh import revokes the snapshot's,
   and a backup restore keeps today's (`keptTables`).
 - **The relay forwards and judges nothing** (plan networked-relay;
