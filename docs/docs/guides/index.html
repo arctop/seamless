@@ -16,7 +16,7 @@
 <meta property="og:image" content="https://thereisnospoon.org/static/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Seamless - sessions end. What they learned doesn&#39;t.">
+<meta property="og:image:alt" content="Seamless - every agent you run should know what the others learned.">
 <meta name="twitter:card" content="summary_large_image">
 <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://thereisnospoon.org/docs/guides/"}]},{"@type":"TechArticle","headline":"Guides - Seamless docs","description":"Task-shaped walkthroughs - wiring an agent into the loop, writing memories that get recalled, coordinating a fleet, capturing plans, running trials, and fixing what broke.","url":"https://thereisnospoon.org/docs/guides/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f5">
@@ -148,13 +148,17 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
       
       <ul>
         
+        <li><a href="../guides/claude-code-memory-between-sessions/">Make Claude Code remember between sessions</a></li>
+        
+        <li><a href="../guides/share-memory-claude-code-codex/">Share memory between Claude Code and Codex</a></li>
+        
         <li><a href="../guides/integrate-your-agent/">Integrate your agent</a></li>
         
         <li><a href="../guides/mcp-clients/">Connect Cursor, Cline, Windsurf &amp; Zed</a></li>
         
         <li><a href="../guides/write-good-memories/">Write memories that get recalled</a></li>
         
-        <li><a href="../guides/coordinate-agents/">Coordinate multiple agents</a></li>
+        <li><a href="../guides/coordinate-agents/">Coordinate Claude Code and Codex agents with one task queue</a></li>
         
         <li><a href="../guides/plan-mode/">Capture Claude Code plans</a></li>
         
@@ -247,6 +251,12 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   <p>Where the <a href="../concepts/">concepts</a> pages explain how Seamless thinks, these pages
 are organized around jobs: each one starts from something you are trying to do
 and walks the shortest honest path through it, including the failure modes.</p>
+<p>Two pages start from the problem rather than the tool.
+<a href="../guides/claude-code-memory-between-sessions/">Make Claude Code remember between sessions</a>
+sets <code>CLAUDE.md</code>, the built-in auto memory, and a shared memory side by side,
+with what each one carries into the next session.
+<a href="../guides/share-memory-claude-code-codex/">Share memory between Claude Code and Codex</a>
+gives both clients one store, with a two-minute test.</p>
 <p>If you are connecting a client, start with
 <a href="../guides/integrate-your-agent/">Integrate your agent</a> - the MCP handshake, the
 stdio bridge, session binding, and the scope discipline that keeps writes
@@ -298,6 +308,16 @@ silence, not an error message.</p>
 <div class="card-grid">
   
   
+  <a class="doc-card" href="../guides/claude-code-memory-between-sessions/">
+    <h2>Make Claude Code remember between sessions</h2>
+    <p>A new Claude Code session starts with no memory of the last one. Three ways to give it persistent memory across sessions - CLAUDE.md, the built-in auto memory, and a shared memory every session is briefed from - and where each one stops.</p>
+  </a>
+  
+  <a class="doc-card" href="../guides/share-memory-claude-code-codex/">
+    <h2>Share memory between Claude Code and Codex</h2>
+    <p>Claude Code and Codex do not share memory - each keeps its own store and reads neither&#39;s. How to give both one store, so what a Claude Code session learned is in the next Codex session&#39;s briefing, with a two-minute test.</p>
+  </a>
+  
   <a class="doc-card" href="../guides/integrate-your-agent/">
     <h2>Integrate your agent</h2>
     <p>Wire another agent into the loop - the MCP handshake, stdio bridge, session binding, scope discipline, and seam CLI fallback.</p>
@@ -314,8 +334,8 @@ silence, not an error message.</p>
   </a>
   
   <a class="doc-card" href="../guides/coordinate-agents/">
-    <h2>Coordinate multiple agents</h2>
-    <p>Fan-out over the ready queue, planner/executor splits via plan composition, shared-lab investigation, what happens when a claim holder dies, and the git hooks that check a repo lock.</p>
+    <h2>Coordinate Claude Code and Codex agents with one task queue</h2>
+    <p>Run several Claude Code or Codex sessions on one backlog without relaying between them yourself - a shared task queue with atomic, leased claims, a planner and executors on one plan, what happens when a claim holder dies, and the git hooks that check a repo lock.</p>
   </a>
   
   <a class="doc-card" href="../guides/plan-mode/">
@@ -345,7 +365,7 @@ silence, not an error message.</p>
   
   <a class="doc-card" href="../guides/write-screening/">
     <h2>Screen writes and hold the suspicious ones</h2>
-    <p>Write screening - agent writes are screened and suspicious ones held for you; the existing corpus is reviewed, files changed outside Seamless are quarantined, a lockdown switch narrows what agents receive, and refusals and a metadata feed tell a monitor what happened.</p>
+    <p>Write screening, a guard against memory poisoning - agent writes are screened and suspicious ones held for you; the existing corpus is reviewed, files changed outside Seamless are quarantined, a lockdown switch narrows what agents receive, and refusals and a metadata feed tell a monitor what happened.</p>
   </a>
   
   <a class="doc-card" href="../guides/security-monitor/">
@@ -365,7 +385,7 @@ silence, not an error message.</p>
     
     <nav class="page-nav" aria-label="Pagination">
       <a class="prev" href="../concepts/coordination-substrate/"><span class="dir">Previous</span><span class="t">What is a coordination substrate?</span></a>
-      <a class="next" href="../guides/integrate-your-agent/"><span class="dir">Next</span><span class="t">Integrate your agent</span></a>
+      <a class="next" href="../guides/claude-code-memory-between-sessions/"><span class="dir">Next</span><span class="t">Make Claude Code remember between sessions</span></a>
     </nav>
     
   </main>

@@ -49,6 +49,8 @@ sections:
     description: Task-shaped walkthroughs - wiring up an agent, writing memories worth recalling, running a fleet, and fixing what broke.
     pages:
       - index.md
+      - claude-code-memory-between-sessions.md
+      - share-memory-claude-code-codex.md
       - integrate-your-agent.md
       - mcp-clients.md
       - write-good-memories.md

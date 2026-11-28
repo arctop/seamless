@@ -7,8 +7,11 @@
                      point at a star to read it
    2. reveals        the two headline word-rises, staggered .rv siblings
    3. the header     the progress line, the current section in the nav
-   4. the duel       the hero figure: Monday, then one Tuesday prompt down
-                     two lanes, without Seamless and with it
+   4. the duel       the hero figure: Monday in Claude Code, then one Tuesday
+                     prompt in Codex down two lanes, without Seamless and
+                     with it
+   4b. the seams     three places knowledge has to cross: each row opens
+                     with a dashed bridge marked "you", then closes
    5. the loop       write -> brief -> recall -> curate: a tablist beside
                      the orbit that plays one lap by itself
    6. the board      two agents race for one plan step, once
@@ -828,8 +831,10 @@
     var mark = $(".mk", fig);
     var last = 0;
     beats.forEach(function (el) { last = Math.max(last, +el.dataset.beat); });
-    /* how long each beat holds before the next one arrives */
-    var HOLD = [700, 950, 1050, 700, 1000, 800, 850, 800, 0];
+    /* how long each beat holds before the next one arrives: the two verdicts
+       land a little over five seconds in, while the first screen still has
+       the visitor */
+    var HOLD = [450, 650, 700, 450, 700, 550, 600, 550, 0];
     fig.classList.add("is-armed");
     var token = 0;
     async function run() {
@@ -850,6 +855,34 @@
     if (replay) replay.addEventListener("click", run);
     /* the headline rises first */
     onceVisible(fig, function () { setTimeout(run, 450); }, 0.3);
+  }
+
+  /* ======================================================================
+     4b. THE SEAMS -- three places knowledge has to cross
+     Each row starts open, with the dashed bridge marked "you" over its gap,
+     long enough to be read. Then the rows close in turn: the line runs
+     through, the star lands, and the second sentence arrives.
+     ====================================================================== */
+  function Seams(list) {
+    if (reduced) return;
+    var rows = $$(".seam", list);
+    var replay = $("[data-seams-replay]");
+    if (!rows.length) return;
+    list.classList.add("is-armed");
+    var token = 0;
+    async function run() {
+      var my = ++token;
+      if (replay) replay.hidden = true;
+      rows.forEach(function (r) { r.classList.remove("is-shut"); });
+      await wait(2600); if (my !== token) return;
+      for (var i = 0; i < rows.length; i++) {
+        rows[i].classList.add("is-shut");
+        await wait(1500); if (my !== token) return;
+      }
+      if (replay) replay.hidden = false;
+    }
+    if (replay) replay.addEventListener("click", run);
+    onceVisible(list, run, 0.5);
   }
 
   /* ======================================================================
@@ -1311,10 +1344,12 @@
      12. SMALL THINGS
      ====================================================================== */
   var sky = null;
-  /* THE DOCK -- the install command, within reach once the hero's own has
-     scrolled away. It steps aside whenever another install command, the
-     welcome-back card, or the footer is on screen, and the close button
-     keeps it away for the rest of the visit (sessionStorage).
+  /* THE DOCK -- the install command, within reach once the visitor has read
+     past the why section: it would sit on top of that argument otherwise,
+     offering the command before the reason. It steps aside whenever another
+     install command, the welcome-back card, or the footer is on screen, and
+     the close button keeps it away for the rest of the visit
+     (sessionStorage).
      */
   function Dock(el) {
     var KEY = "seamless.dock";
@@ -1335,7 +1370,11 @@
       sync();
     });
     others.forEach(function (n) { io.observe(n); });
-    scrollHooks.push(function (y) { past = y > 260; sync(); });
+    var gate = $("#how");
+    scrollHooks.push(function (y) {
+      past = gate ? gate.getBoundingClientRect().top < window.innerHeight * 0.45 : y > 260;
+      sync();
+    });
     var x = $("[data-dock-x]", el);
     if (x) x.addEventListener("click", function () {
       closed = true;
@@ -1396,6 +1435,8 @@
     if (starfield) starfield.classList.add("is-on");
     var duel = $("[data-duel]");
     if (duel) Duel(duel);
+    var seams = $("[data-seams]");
+    if (seams) Seams(seams);
     var loop = $("[data-loop]");
     if (loop) Loop(loop);
     var board = $("[data-board]");

@@ -11,10 +11,12 @@ served at thereisnospoon.org.
 ```
 index.html              the landing page (single file, no build step), in
                         the order a visitor asks: what it is and the command
-                        (the hero, with one illustrated before-and-after), how
-                        it works, the verbatim proof, the comparison matrix,
-                        parallel agents, the folder, the keys, the console,
-                        the project in use, the install steps, the FAQ
+                        (the hero, with one illustrated before-and-after), why
+                        (the three seams, and what a built-in memory leaves
+                        open), how it works, the verbatim demo, parallel
+                        agents, the project in use, the comparison matrix,
+                        the folder, the keys, the console, the install
+                        steps, the FAQ
 claude-app/index.html   hand-written page for people who use Claude in the
                         desktop app for work that isn't code (law, investing,
                         research, writing, consulting). Built on the landing's
@@ -46,7 +48,9 @@ CNAME                   custom domain: thereisnospoon.org
                         Actions deploy runs no Jekyll either
 sitemap.xml             GENERATED (docsgen): the landing page + every docs page
 robots.txt              GENERATED (docsgen): crawl policy + the sitemap pointer
-llms.txt                GENERATED (docsgen): the nav as a linked outline for LLMs
+llms.txt                GENERATED (docsgen): what Seamless is in five
+                        paragraphs (cmd/docsgen/llms-intro.md), the
+                        hand-written pages, then the nav as a linked outline
 llms-full.txt           GENERATED (docsgen): every page's full source markdown
 index.md                GENERATED (docsgen): the landing page's markdown twin
                         (llms.txt under the name the Accept: text/markdown
@@ -76,7 +80,7 @@ static/home.css         the hand-written pages' stylesheet: the "knowledge sky"
                         reduced-motion rules
 static/home.js          the landing page's motion and interactive pieces: the
                         hero's before-and-after figure and the mark around it,
-                        word reveals, the
+                        word reveals, the three seams closing in turn, the
                         four-step stage and its orbit, the plan board, the
                         knowledge sky canvas in the folder section, the keys
                         terminals and the layers line, the gardener card, the
@@ -150,7 +154,9 @@ docsgen also writes the crawler files at the site root: `sitemap.xml` (the
 landing page plus every docs page, no lastmod -- there is no deterministic date
 source), `robots.txt` (whose `# seamless-robots-v1` marker is how you can tell
 from outside whether the live host serves this file or Cloudflare's managed
-one), `llms.txt` (the nav as a linked outline, in the llmstxt.org shape),
+one), `llms.txt` (in the llmstxt.org shape: an introduction that answers
+what Seamless is, embedded from `cmd/docsgen/llms-intro.md`; the hand-written
+pages, from `rootPages`; then the nav as a linked outline),
 `llms-full.txt` (every page's full source markdown, untruncated), and
 `.well-known/api-catalog` (an RFC 9727 linkset naming the machine-readable
 entry points; GitHub Pages serves it as application/octet-stream, so the
@@ -253,9 +259,14 @@ root-absolute links rewritten to canonical URLs (see `cmd/docsgen/twin.go`).
 The twins are committed and diffed by `make docs-check` like everything else in
 `docs/docs/`.
 
-The landing page's twin is the site-root `index.md` -- the llms.txt outline
-under the twin name (see `siteRootFiles`), so `/` negotiates exactly like a
-docs page.
+The landing page's twin is the site-root `index.md` -- llms.txt under the
+twin name (see `siteRootFiles`), so `/` negotiates exactly like a docs page.
+That is why llms.txt opens with prose and not with links: an agent that asks
+`/` for markdown reads what Seamless is, the problem it solves, how it differs
+from a built-in memory and the install command before it follows anything.
+`cmd/docsgen/llms-intro.md` is that prose. It restates the landing's claim, so
+change the two together; a test keeps headings out of it and both install
+commands in it.
 
 They exist so agents sending `Accept: text/markdown` get markdown while
 browsers keep getting HTML. GitHub Pages cannot vary on request headers and the
@@ -419,9 +430,43 @@ python3 scripts/example/build.py --check    # what assertion 16 runs
   placed from the figure's top right corner, so check 1280, 1440 and a wide
   window after touching it. It is hidden where the hero stacks.
 - The hero has to answer three things on one screen: what Seamless is, what
-  it changes, and how to get it. Keep its sentence to one, and measure the
-  install pill when the command changes: beside the figure it has about 556px
-  at most, which is why its type shrinks a little on wide screens.
+  it changes, and how to get it. Its `<h1>` is two spans. The line above the
+  headline (`.hero-pre`) carries the words people search for, what it is and
+  for which clients; the headline carries the claim. Keep the paragraph under
+  it to two sentences, and measure the install pill when the command changes:
+  beside the figure it has about 556px at most, which is why its type shrinks
+  a little on wide screens. Up to 760px the figure comes before the install
+  command (`.hero-copy` is `display: contents` there and its pieces are
+  ordered), so a phone's first screen is the claim and the picture.
+- The claim is the one a built-in memory does not make: every agent you run
+  shares one memory and one queue. Session-to-session memory in one client is
+  what Claude Code already does by itself, so a page that leads with it gives
+  a visitor no reason to install. The hero's figure therefore crosses clients
+  (Claude Code on Monday, Codex on Tuesday, each name boxed so the switch is
+  seen), and the why section (`#why`, `Seams` in home.js) names the three
+  places knowledge is lost, in the order of what a client's own memory covers
+  least: between tools, between agents, between sessions. Under them it
+  answers the two objections a visitor arrives with ("Claude Code already has
+  a memory", "A markdown file does this already") in place.
+- Never write that a session "starts from zero". A visitor with a `CLAUDE.md`
+  or the built-in memory knows it is untrue, and stops believing the rest.
+  What is true is narrower: a session knows what the last one worked out only
+  if someone wrote it down.
+- The docked install command appears once the visitor has scrolled past the
+  why section (`Dock` in home.js gates on `#how`), so it never sits on top of
+  the argument. The demo reel stops changing scenes once a visitor has picked
+  one, and holds while a mouse is over it (`scenes-player.js`): a transcript
+  takes longer to read than the tour would give it.
+- What the page says about Claude Code's and Codex's own memories restates
+  Anthropic's and OpenAI's documentation. The same facts are on
+  `/compare/#built-in` and in two guides
+  (`docs-src/guides/claude-code-memory-between-sessions.md`,
+  `share-memory-claude-code-codex.md`), each dated "checked November 2026".
+  When either vendor changes its memory, recheck all four together.
+- The FAQ's second column starts at `<span class="faq-turn">`. Move it when
+  entries are added or removed, so the two columns stay about level. The
+  first six entries are the questions people type into a search box; keep
+  them first.
 - Sections share one stage wherever they would otherwise stack: the four
   steps, the layers. Their panels sit in one grid cell so the stage keeps the
   tallest panel's height and the page never jumps when a step changes. Below
@@ -494,6 +539,8 @@ together; the script refuses to run when they disagree.
   --hide-scrollbars 'http://127.0.0.1:8899/static/og-source.html'
 ```
 
+The card's headline is the landing's, so change the two together.
+
 ## Regenerate the console shots
 
 `static/shots/` holds the console screenshots (6 pages x dark/light, WebP,
@@ -561,6 +608,16 @@ marketing surface, so it is a deliberate act, never a side effect of a build.
 
 ## Pending (owner approval required)
 
+- A recorded Claude Code to Codex scene, against a stronger baseline. The
+  landing's claim is that what one client learns the other starts with, and
+  the hero shows it as an illustration. The four verbatim scenes are all
+  Claude Code sessions, their "without" side is a repo with no `CLAUDE.md` and
+  no saved memory, and their memories were seeded. A cold reader believed the
+  mechanism and doubted the proof for those three reasons. The scene that
+  would answer them: a Codex session briefed with what a real Claude Code
+  session wrote, beside a baseline that has a `CLAUDE.md` and auto memory on
+  (`scripts/branding/`, interactively, since `codex exec` cannot run
+  unattended in the harness). The hero's figure could then quote it.
 - Console shots from a build with backups on. The overview shot shows a "No
   backup yet" card, because the demo is a source build, while the page says a
   release install backs up every day. The fine print under the figure says

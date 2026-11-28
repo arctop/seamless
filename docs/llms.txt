@@ -1,10 +1,27 @@
 # Seamless
 
-> A local-first memory and coordination substrate for the fleet of coding agents you run - markdown files you own, indexed by one local daemon.
+> One shared memory and one task queue for the AI coding agents you run - Claude Code, Codex, any MCP client - with the memory kept as markdown files on your own computer.
+
+Seamless is a free, open-source (MIT) tool that gives the AI coding agents you run one shared memory and one task queue, kept on your own computer. It works with Claude Code, Codex (CLI, desktop app and IDE extension), the Claude desktop app, and any other MCP client, on macOS, Linux and Windows. It is published by Arctop.
+
+**The problem it solves.** Knowledge gets lost wherever work passes from one agent to the next. A new session knows what the last one worked out only if someone wrote it down, so you explain a decision again or watch the agent undo it. Agents working side by side cannot see what the others found or which task is taken, so you relay between them. Claude Code and Codex each keep their own notes, so what one learned the other never sees. Today the person running the agents carries that context across by hand.
+
+**How it works.** Agents save what they learn (constraints, decisions, gotchas, runbooks) as one markdown file each under `~/.seamless`. A hook briefs every new Claude Code or Codex session from those files before its first prompt, and matches each later prompt against them. Parallel agents claim steps from one dependency-aware queue, and a claim is atomic and leased, so two agents never hold the same step. A gardener proposes merges and retirements; nothing is merged, retired or forgotten until you approve it.
+
+**How it differs from built-in memory.** Claude Code's auto memory is notes that one client keeps for itself, per repository, on one computer, and it is not loaded into subagents. Seamless is one store that every session, subagent and client reads and writes, with tasks and plans beside it. The two run side by side, and so does your `CLAUDE.md` or `AGENTS.md`: those files hold the instructions you wrote, and Seamless holds what the agents learn as they work.
+
+**What it costs to try.** One command installs a small local daemon and wires the agents it finds: `curl -fsSL https://thereisnospoon.org/install | sh` on macOS or Linux, `irm https://thereisnospoon.org/install.ps1 | iex` on Windows. There is no account and no telemetry. `seamlessd uninstall` removes it and leaves your files where they are.
+
+## Start here
+
+- [Seamless and the alternatives](https://thereisnospoon.org/compare/): How Seamless differs from Claude Code and Codex built-in memory, Claude Code's Agent Teams, claude-mem, Beads, Basic Memory, agentmemory, Mem0, Zep and Supermemory, with when to choose each one instead.
+- [Seamless in the Claude app](https://thereisnospoon.org/claude-app/): For work that is not code - a legal matter, a deal, a study, a manuscript - kept across chats in the Claude desktop app as plain files on your own computer.
+- [Security and privacy](https://thereisnospoon.org/security/): What a fresh install does, what can leave your computer, project fences, write screening, locked projects that open only with your approval, verified updates, and the limits.
+- [A real project's memory](https://thereisnospoon.org/example/): A read-only copy of part of the Seamless project's own Seamless: the briefing a session starts from, memory files, one plan and its steps, research trials, and handoffs.
 
 ## Getting started
 
-- [What is Seamless?](https://thereisnospoon.org/docs/): A local-first memory and coordination substrate for the fleet of coding agents you run - markdown files you own, indexed by one local daemon.
+- [What is Seamless?](https://thereisnospoon.org/docs/): One shared memory and one task queue for the AI coding agents you run - Claude Code, Codex, any MCP client - with the memory kept as markdown files on your own computer.
 - [Quickstart](https://thereisnospoon.org/docs/quickstart/): Install Seamless with one command, start Claude Code or Codex in a repo, and confirm the first briefing lands.
 - [First prompts to try](https://thereisnospoon.org/docs/first-prompts/): Requests to paste into Claude Code, Codex, or a Claude app chat right after installing - rules, notes, plans, imported history, recall, and handoffs.
 - [Claude Code setup](https://thereisnospoon.org/docs/claude-code/): Register the MCP endpoint, install the hooks that make sessions ambient, map your repos, and verify each step.
@@ -36,16 +53,18 @@
 ## Guides
 
 - [Guides](https://thereisnospoon.org/docs/guides/): Task-shaped walkthroughs - wiring an agent into the loop, writing memories that get recalled, coordinating a fleet, capturing plans, running trials, and fixing what broke.
+- [Make Claude Code remember between sessions](https://thereisnospoon.org/docs/guides/claude-code-memory-between-sessions/): A new Claude Code session starts with no memory of the last one. Three ways to give it persistent memory across sessions - CLAUDE.md, the built-in auto memory, and a shared memory every session is briefed from - and where each one stops.
+- [Share memory between Claude Code and Codex](https://thereisnospoon.org/docs/guides/share-memory-claude-code-codex/): Claude Code and Codex do not share memory - each keeps its own store and reads neither's. How to give both one store, so what a Claude Code session learned is in the next Codex session's briefing, with a two-minute test.
 - [Integrate your agent](https://thereisnospoon.org/docs/guides/integrate-your-agent/): Wire another agent into the loop - the MCP handshake, stdio bridge, session binding, scope discipline, and seam CLI fallback.
 - [Connect Cursor, Cline, Windsurf & Zed](https://thereisnospoon.org/docs/guides/mcp-clients/): Point any MCP client at Seamless's local streamable-HTTP endpoint with bearer auth - a verified config block per client, and an honest account of what a client without hooks does and does not get.
 - [Write memories that get recalled](https://thereisnospoon.org/docs/guides/write-good-memories/): The description is the retrieval surface, not a label - how to write one, how to pick a kind, and the four habits that fill a store with noise.
-- [Coordinate multiple agents](https://thereisnospoon.org/docs/guides/coordinate-agents/): Fan-out over the ready queue, planner/executor splits via plan composition, shared-lab investigation, what happens when a claim holder dies, and the git hooks that check a repo lock.
+- [Coordinate Claude Code and Codex agents with one task queue](https://thereisnospoon.org/docs/guides/coordinate-agents/): Run several Claude Code or Codex sessions on one backlog without relaying between them yourself - a shared task queue with atomic, leased claims, a planner and executors on one plan, what happens when a claim holder dies, and the git hooks that check a repo lock.
 - [Capture Claude Code plans](https://thereisnospoon.org/docs/guides/plan-mode/): How plan mode is captured automatically - which hook does what, a plan's life from draft to approved, and the escape hatches.
 - [Run research trials](https://thereisnospoon.org/docs/guides/research-trials/): The lab loop for systematic debugging - recording what was tried, letting parallel agents share dead ends, and distilling the result into memory.
 - [Import, back up & restore](https://thereisnospoon.org/docs/guides/data/): Scheduled backups and two-click restores in the console, one archive with seamlessd export, seamlessd restore and import, putting ~/.seamless in git, what deleting seam.db actually costs, and moving to a new machine.
 - [Share one daemon across your computers](https://thereisnospoon.org/docs/guides/network-install/): Networked Seamless step by step - set up the Server with seamlessd setup, connect each Client, pair computers on the Devices page, sign in and approve from any browser, and every step by hand.
 - [Lock projects behind your approval](https://thereisnospoon.org/docs/guides/peer-auth/): peer_auth - the daemon in its own OS account, a Unix socket that names each caller by its uid, and locked projects your own agents reach only with an approval you prove.
-- [Screen writes and hold the suspicious ones](https://thereisnospoon.org/docs/guides/write-screening/): Write screening - agent writes are screened and suspicious ones held for you; the existing corpus is reviewed, files changed outside Seamless are quarantined, a lockdown switch narrows what agents receive, and refusals and a metadata feed tell a monitor what happened.
+- [Screen writes and hold the suspicious ones](https://thereisnospoon.org/docs/guides/write-screening/): Write screening, a guard against memory poisoning - agent writes are screened and suspicious ones held for you; the existing corpus is reviewed, files changed outside Seamless are quarantined, a lockdown switch narrows what agents receive, and refusals and a metadata feed tell a monitor what happened.
 - [Feeding a security monitor](https://thereisnospoon.org/docs/guides/security-monitor/): Tell a security monitor what your agents did - a metadata feed of events over a Unix socket and a commit-matching snapshot file, each a small versioned contract, both off by default.
 - [Troubleshooting](https://thereisnospoon.org/docs/guides/troubleshooting/): Symptom-first fixes for a system whose hooks fail open - where silence, not an error, is what a broken install looks like.
 
@@ -81,4 +100,4 @@
 - [Your agent starts every session from zero. Here's what it costs](https://thereisnospoon.org/scenarios/cold-start/): Two real Claude Code sessions, same repo, same prompt - one continues yesterday's plan from a briefing, one re-derives the work from a TODO and re-ships a known bug.
 - [“Tighten the auth cookies”: when your agent breaks a rule you already wrote down](https://thereisnospoon.org/scenarios/constraint-violation/): A security scanner demands SameSite=Strict. The team already learned Strict breaks external-link logins. Two real sessions - one ships the regression anyway, one refuses and cites the constraint.
 - [“Persist the refresh tokens”: why one agent stored them raw and one hashed them](https://thereisnospoon.org/scenarios/token-safety/): Two real sessions given the same persistence task. One mirrors an in-memory map into a raw-token SQL column; one reads a recorded rule first and stores only SHA-256 hashes.
-- [Two agents, one plan step, no collision: what a lease actually buys you](https://thereisnospoon.org/scenarios/task-collision/): Two live Claude Code agents race for the same plan step. One claim wins, one bounces with the holder's name, and the second agent pivots to the next ready step - no duplicate work, no referee.
+- [Two agents, one plan step, no collision: what a lease actually buys you](https://thereisnospoon.org/scenarios/task-collision/): Two live Claude Code sessions pick the same task from one shared task queue. One claim wins, one bounces with the holder's name, and the second agent takes the next ready step - no duplicate work, no referee.

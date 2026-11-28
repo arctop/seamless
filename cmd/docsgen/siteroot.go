@@ -7,14 +7,56 @@ import (
 	"strings"
 )
 
-// rootURLs are the site-root pages docsgen does not render but the sitemap must
-// still name -- the hand-written landing page, the hand-written comparison hub,
-// the hand-written Claude app page (Seamless for chat work that is not code),
-// the hand-written security page, and the example page (a read-only copy of
-// part of the Seamless project's own Seamless, built by scripts/example).
-// Deliberately a constant rather than a directory scan, which would sweep in
-// install, install.ps1, and static assets.
-var rootURLs = []string{"/", "/compare/", "/claude-app/", "/security/", "/example/"}
+// rootPage is a site-root page docsgen does not render: the hand-written
+// landing page, the hand-written comparison hub, the hand-written Claude app
+// page (Seamless for chat work that is not code), the hand-written security
+// page, and the example page (a read-only copy of part of the Seamless
+// project's own Seamless, built by scripts/example). The sitemap names every
+// one. llms.txt lists the ones with a Title, under "Start here": those pages
+// carry the comparison, the security model and the worked example, which are
+// what an assistant asked "should I use this" needs before any docs page. The
+// landing page has no Title because llms.txt is its own markdown twin.
+type rootPage struct {
+	URL   string
+	Title string
+	Note  string
+}
+
+// rootPages is deliberately a constant rather than a directory scan, which
+// would sweep in install, install.ps1, and static assets. A Note restates its
+// page in one line; keep it true to the page when the page changes.
+var rootPages = []rootPage{
+	{URL: "/"},
+	{
+		URL:   "/compare/",
+		Title: "Seamless and the alternatives",
+		Note:  "How Seamless differs from Claude Code and Codex built-in memory, Claude Code's Agent Teams, claude-mem, Beads, Basic Memory, agentmemory, Mem0, Zep and Supermemory, with when to choose each one instead.",
+	},
+	{
+		URL:   "/claude-app/",
+		Title: "Seamless in the Claude app",
+		Note:  "For work that is not code - a legal matter, a deal, a study, a manuscript - kept across chats in the Claude desktop app as plain files on your own computer.",
+	},
+	{
+		URL:   "/security/",
+		Title: "Security and privacy",
+		Note:  "What a fresh install does, what can leave your computer, project fences, write screening, locked projects that open only with your approval, verified updates, and the limits.",
+	},
+	{
+		URL:   "/example/",
+		Title: "A real project's memory",
+		Note:  "A read-only copy of part of the Seamless project's own Seamless: the briefing a session starts from, memory files, one plan and its steps, research trials, and handoffs.",
+	},
+}
+
+// rootURLs is every site-root page's URL, in rootPages order.
+var rootURLs = func() []string {
+	urls := make([]string, 0, len(rootPages))
+	for _, p := range rootPages {
+		urls = append(urls, p.URL)
+	}
+	return urls
+}()
 
 // robotsTxt is written verbatim to the site root. The marker line is
 // load-bearing: the live host sits behind Cloudflare, which can serve its own
@@ -65,6 +107,17 @@ const apiCatalog = `{
 //go:embed auth.md
 var authMd string
 
+// llmsIntro is the prose llms.txt carries between its one-line summary and its
+// link lists: what Seamless is, the problem it solves, how it works, how it
+// differs from a client's built-in memory, and the install commands. llms.txt
+// is also the landing page's markdown twin, so this is what an agent that asks
+// for thereisnospoon.org as markdown reads first. It restates the landing page
+// in plain sentences; change the two together. No headings: the llmstxt.org
+// shape keeps H2 for the link lists.
+//
+//go:embed llms-intro.md
+var llmsIntro string
+
 // xmlEscaper covers the characters XML 1.0 cannot carry raw in text content.
 // Page URLs are slug-derived and never contain them today; escaping anyway
 // keeps a future odd filename from producing a silently invalid sitemap.
@@ -110,14 +163,26 @@ func sitemapXML(site *Site) []byte {
 // wants the project, not the home page's question-shaped title.
 const siteName = "Seamless"
 
+// rootSectionTitle heads llms.txt's list of the site-root pages.
+const rootSectionTitle = "Start here"
+
 // llmsTxt renders /llms.txt in the llmstxt.org shape: an H1, a one-line
-// blockquote summary, then one H2 per nav section with `- [title](url): note`
-// entries. It is built from the same Site data the card grids render, so it
-// has no source of truth of its own to drift.
+// blockquote summary, a few paragraphs of detail (llmsIntro), then H2 sections
+// of `- [title](url): note` entries: the site-root pages first, then one per
+// nav section. The lists are built from rootPages and the same Site data the
+// card grids render, so they have no source of truth of their own to drift.
 func llmsTxt(site *Site) []byte {
 	var b strings.Builder
 	b.WriteString("# " + siteName + "\n\n")
 	b.WriteString("> " + site.Home.Description + "\n")
+	b.WriteString("\n" + strings.TrimSpace(llmsIntro) + "\n")
+	b.WriteString("\n## " + rootSectionTitle + "\n\n")
+	for _, p := range rootPages {
+		if p.Title == "" {
+			continue
+		}
+		b.WriteString("- [" + p.Title + "](" + siteBaseURL + p.URL + "): " + p.Note + "\n")
+	}
 	for _, sec := range site.Sections {
 		b.WriteString("\n## " + sec.Title + "\n\n")
 		for _, p := range sectionPages(sec) {

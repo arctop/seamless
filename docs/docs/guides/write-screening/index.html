@@ -5,20 +5,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Screen writes and hold the suspicious ones - Seamless docs</title>
-<meta name="description" content="Write screening - agent writes are screened and suspicious ones held for you; the existing corpus is reviewed, files changed outside Seamless are quarantined, a lockdown switch narrows what agents receive, and refusals and a metadata feed tell a monitor what happened.">
+<meta name="description" content="Write screening, a guard against memory poisoning - agent writes are screened and suspicious ones held for you; the existing corpus is reviewed, files changed outside Seamless are quarantined, a lockdown switch narrows what agents receive, and refusals and a metadata feed tell a monitor what happened.">
 <link rel="canonical" href="https://thereisnospoon.org/docs/guides/write-screening/">
 <meta name="robots" content="max-image-preview:large, max-snippet:-1">
 <meta property="og:site_name" content="Seamless">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://thereisnospoon.org/docs/guides/write-screening/">
 <meta property="og:title" content="Screen writes and hold the suspicious ones - Seamless docs">
-<meta property="og:description" content="Write screening - agent writes are screened and suspicious ones held for you; the existing corpus is reviewed, files changed outside Seamless are quarantined, a lockdown switch narrows what agents receive, and refusals and a metadata feed tell a monitor what happened.">
+<meta property="og:description" content="Write screening, a guard against memory poisoning - agent writes are screened and suspicious ones held for you; the existing corpus is reviewed, files changed outside Seamless are quarantined, a lockdown switch narrows what agents receive, and refusals and a metadata feed tell a monitor what happened.">
 <meta property="og:image" content="https://thereisnospoon.org/static/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Seamless - sessions end. What they learned doesn&#39;t.">
+<meta property="og:image:alt" content="Seamless - every agent you run should know what the others learned.">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://thereisnospoon.org/docs/guides/"},{"@type":"ListItem","position":3,"name":"Screen writes and hold the suspicious ones","item":"https://thereisnospoon.org/docs/guides/write-screening/"}]},{"@type":"TechArticle","headline":"Screen writes and hold the suspicious ones - Seamless docs","description":"Write screening - agent writes are screened and suspicious ones held for you; the existing corpus is reviewed, files changed outside Seamless are quarantined, a lockdown switch narrows what agents receive, and refusals and a metadata feed tell a monitor what happened.","url":"https://thereisnospoon.org/docs/guides/write-screening/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://thereisnospoon.org/docs/guides/"},{"@type":"ListItem","position":3,"name":"Screen writes and hold the suspicious ones","item":"https://thereisnospoon.org/docs/guides/write-screening/"}]},{"@type":"TechArticle","headline":"Screen writes and hold the suspicious ones - Seamless docs","description":"Write screening, a guard against memory poisoning - agent writes are screened and suspicious ones held for you; the existing corpus is reviewed, files changed outside Seamless are quarantined, a lockdown switch narrows what agents receive, and refusals and a metadata feed tell a monitor what happened.","url":"https://thereisnospoon.org/docs/guides/write-screening/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f5">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#070a13">
 <link rel="icon" type="image/svg+xml" href="../../../static/favicon.svg">
@@ -148,13 +148,17 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
       
       <ul>
         
+        <li><a href="../../guides/claude-code-memory-between-sessions/">Make Claude Code remember between sessions</a></li>
+        
+        <li><a href="../../guides/share-memory-claude-code-codex/">Share memory between Claude Code and Codex</a></li>
+        
         <li><a href="../../guides/integrate-your-agent/">Integrate your agent</a></li>
         
         <li><a href="../../guides/mcp-clients/">Connect Cursor, Cline, Windsurf &amp; Zed</a></li>
         
         <li><a href="../../guides/write-good-memories/">Write memories that get recalled</a></li>
         
-        <li><a href="../../guides/coordinate-agents/">Coordinate multiple agents</a></li>
+        <li><a href="../../guides/coordinate-agents/">Coordinate Claude Code and Codex agents with one task queue</a></li>
         
         <li><a href="../../guides/plan-mode/">Capture Claude Code plans</a></li>
         
@@ -242,7 +246,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
 </nav>
 
   <h1>Screen writes and hold the suspicious ones</h1>
-  <p class="lede">Write screening - agent writes are screened and suspicious ones held for you; the existing corpus is reviewed, files changed outside Seamless are quarantined, a lockdown switch narrows what agents receive, and refusals and a metadata feed tell a monitor what happened.</p>
+  <p class="lede">Write screening, a guard against memory poisoning - agent writes are screened and suspicious ones held for you; the existing corpus is reviewed, files changed outside Seamless are quarantined, a lockdown switch narrows what agents receive, and refusals and a metadata feed tell a monitor what happened.</p>
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>

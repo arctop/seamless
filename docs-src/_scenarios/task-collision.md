@@ -1,6 +1,6 @@
 ---
 title: "Two agents, one plan step, no collision: what a lease actually buys you"
-description: Two live Claude Code agents race for the same plan step. One claim wins, one bounces with the holder's name, and the second agent pivots to the next ready step - no duplicate work, no referee.
+description: Two live Claude Code sessions pick the same task from one shared task queue. One claim wins, one bounces with the holder's name, and the second agent takes the next ready step - no duplicate work, no referee.
 scene: coordination
 order: 4
 ---
@@ -9,8 +9,10 @@ Run two coding agents against the same backlog and sooner or later they pick
 the same task. Both reason correctly - the oldest ready step, the obvious
 `TODO`, the relevant constraint - which is exactly why they converge, and you
 get the same limiter built twice in two branches, or worse, interleaved into
-one. The fix is an old one from distributed systems, applied to agents:
-**claim with a lease**. A claim atomically moves a ready task to
+one. Separate git worktrees do not prevent it: they keep the files apart, and
+the two sessions still choose the same work. What prevents it is a shared
+task queue the agents claim from, and the fix is an old one from distributed
+systems: **claim with a lease**. A claim atomically moves a ready task to
 `in_progress` with a named holder and an expiry; a second claim of the same
 task does not half-succeed - it bounces, naming the holder, and the loser
 picks the next ready step. No coordinator process, no human referee.

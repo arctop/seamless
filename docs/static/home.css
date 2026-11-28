@@ -638,6 +638,11 @@ svg { overflow: visible; }
   inset: -12% -18% -12% -30%;
   background: radial-gradient(closest-side, color-mix(in oklab, var(--bg) 82%, transparent), transparent);
 }
+/* the headline is one h1 in two parts: what Seamless is, in small type, then
+   what it changes */
+.hero-h { margin: 0; font: inherit; }
+.hero-h .hero-pre { display: flex; }
+.hero-h .h1 { display: block; }
 .hero-pre {
   display: inline-flex; align-items: center; gap: 10px;
   margin: 0 0 22px;
@@ -699,7 +704,10 @@ svg { overflow: visible; }
 .hero .hero-copy { max-width: none; min-width: 0; }
 .hero .hero-copy::before { content: none; }
 .hero .hero-pre { margin-bottom: 20px; }
-.hero .hero-sub { max-width: 500px; margin-bottom: 26px; line-height: 1.5; }
+/* the claim is a full sentence, so it sets a size down from the other pages'
+   headlines and holds to three lines beside the figure */
+.hero .h1 { font-size: clamp(39px, 4.35vw, 62px); line-height: 1.03; margin-bottom: 20px; }
+.hero .hero-sub { max-width: 530px; margin-bottom: 26px; line-height: 1.5; }
 .hero .hero-act { gap: 12px; }
 .hero .hero-facts { margin-top: 22px; gap: 7px 20px; font-size: 14.5px; }
 .hero .hero-fork { margin-top: 20px; font-size: 15px; }
@@ -735,6 +743,13 @@ svg { overflow: visible; }
 .duel-mon { padding: 16px 20px 13px; border-bottom: 1px solid var(--term-line); }
 .duel-when { display: flex; align-items: baseline; gap: 11px; margin: 0 0 9px; font-size: 12px; color: var(--term-faint); }
 .duel-when b { font-family: var(--serif); font-style: italic; font-weight: 400; font-size: 22px; line-height: 1; color: #fff; font-variation-settings: "opsz" 48; }
+/* the two clients, boxed like the ends of a seam further down: the figure's
+   point is that Tuesday's session is a different tool */
+.duel-when .who {
+  font-style: normal; color: #fff; white-space: nowrap;
+  padding: 2px 7px; margin: 0 1px; border-radius: 7px;
+  border: 1px solid var(--term-line); background: rgba(255, 255, 255, 0.05);
+}
 .duel .dl { margin: 0 0 7px; color: var(--term-ink); overflow-wrap: anywhere; }
 .duel .dl-prompt { color: var(--term-user); }
 .duel .dl svg { width: 14px; height: 14px; vertical-align: -2.5px; margin-right: 6px; color: var(--term-live); }
@@ -1000,6 +1015,109 @@ svg { overflow: visible; }
   transition-delay: calc(var(--i, 0) * 55ms + var(--d0, 0ms));
 }
 .js [data-split].is-in .wi { transform: none; }
+
+/* ==========================================================================
+   WHY -- the seams: three places knowledge has to cross, one row each.
+   A row at rest is a closed seam: the line runs through, a star sits on the
+   join, and what carries the knowledge across is named under it. Armed by
+   home.js (Seams) a row starts open instead: no line through the join, and a
+   dashed bridge marked "you" over the gap, which is how it gets across today.
+   ========================================================================== */
+.seams { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--hair); }
+.seam {
+  display: grid;
+  grid-template-columns: minmax(0, 0.56fr) minmax(0, 1.4fr) minmax(0, 1.34fr);
+  gap: clamp(20px, 3.4vw, 52px); align-items: center;
+  padding: clamp(22px, 3.4vh, 32px) 0;
+  border-bottom: 1px solid var(--hair);
+}
+.seam-where {
+  font-family: var(--serif); font-size: clamp(25px, 2.35vw, 33px); line-height: 1.05;
+  letter-spacing: -0.016em; font-weight: 400;
+  font-variation-settings: "opsz" 96, "SOFT" 30;
+}
+.seam-where span {
+  display: block; margin: 0 0 4px;
+  font-style: italic; font-size: 17px; letter-spacing: 0; color: var(--muted);
+  font-variation-settings: "opsz" 24;
+}
+.seam-fig { display: flex; align-items: center; min-width: 0; height: 74px; font-family: var(--mono); font-size: 12.5px; line-height: 1.3; }
+.seam-end {
+  flex: none; padding: 6px 12px; border-radius: 10px;
+  border: 1px solid var(--hair-2); background: var(--panel-a); color: var(--ink); white-space: nowrap;
+}
+.seam-run { flex: 1 1 0; min-width: 8px; height: 1px; background: var(--hair-2); }
+.seam-join { flex: none; position: relative; width: 96px; height: 74px; }
+/* the line through the join */
+.seam-join::after {
+  content: ""; position: absolute; left: 0; right: 0; top: calc(50% - 0.5px); height: 1px;
+  background: var(--hair-2); transform-origin: 0 50%;
+}
+/* the bridge a person makes: dashed, over the gap */
+.seam-join::before {
+  content: ""; position: absolute; left: 1px; right: 1px; bottom: 50%; height: 19px;
+  border: 1.5px dashed var(--muted); border-bottom: 0;
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+  opacity: 0;
+}
+.seam-join i {
+  position: absolute; z-index: 1; left: 50%; top: 50%; width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%; background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft), 0 0 14px var(--glow);
+}
+.seam-join b, .seam-join em {
+  position: absolute; left: 50%; transform: translateX(-50%); white-space: nowrap;
+  font-family: var(--serif); font-style: italic; font-weight: 400; font-size: 16px; line-height: 1;
+  font-variation-settings: "opsz" 24;
+}
+.seam-join b { top: calc(50% + 13px); color: var(--accent); }
+.seam-join em { bottom: calc(50% + 25px); font-size: 17px; color: var(--ink); opacity: 0; }
+.seam-say { display: grid; gap: 9px; min-width: 0; }
+.seam-say p {
+  margin: 0; display: grid; grid-template-columns: 17px minmax(0, 1fr); gap: 11px; align-items: start;
+  font-size: 16.5px; line-height: 1.5; text-wrap: pretty;
+}
+.seam-say svg { width: 16px; height: 16px; margin-top: 0.3em; }
+.seam-open { color: var(--muted); }
+.seam-open svg { color: var(--bad); }
+.seam-shut { color: var(--ink); }
+.seam-shut svg { color: var(--ok); }
+.seams-foot { display: flex; justify-content: flex-end; min-height: 27px; margin: 14px 0 0; }
+
+.js .seams.is-armed .seam-join::after { transition: transform 0.85s var(--ease-io); }
+.js .seams.is-armed .seam-join::before,
+.js .seams.is-armed .seam-join em { transition: opacity 0.45s ease; }
+.js .seams.is-armed .seam-join b { transition: opacity 0.5s ease 0.75s; }
+.js .seams.is-armed .seam-open { transition: color 0.6s ease 0.5s; }
+.js .seams.is-armed .seam-shut { transition: opacity 0.55s ease 0.6s, transform 0.7s var(--ease-out) 0.6s; }
+.js .seams.is-armed .seam.is-shut .seam-join i { animation: star-pop 0.9s 0.62s var(--ease-out) backwards; }
+.js .seams.is-armed .seam:not(.is-shut) .seam-join::after { transform: scaleX(0); transition: none; }
+.js .seams.is-armed .seam:not(.is-shut) .seam-join::before,
+.js .seams.is-armed .seam:not(.is-shut) .seam-join em { opacity: 1; }
+.js .seams.is-armed .seam:not(.is-shut) .seam-join i,
+.js .seams.is-armed .seam:not(.is-shut) .seam-join b { opacity: 0; transition: none; }
+.js .seams.is-armed .seam:not(.is-shut) .seam-open { color: var(--ink); transition: none; }
+.js .seams.is-armed .seam:not(.is-shut) .seam-shut { opacity: 0; transform: translateY(6px); transition: none; }
+
+/* the objections, each asked in the visitor's words and answered beside it */
+.why-ask {
+  display: grid; grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr);
+  gap: clamp(22px, 5vw, 80px); align-items: start;
+  margin-top: clamp(40px, 6.4vh, 68px);
+}
+.why-ask + .why-ask {
+  margin-top: clamp(30px, 4.8vh, 48px); padding-top: clamp(30px, 4.8vh, 48px);
+  border-top: 1px solid var(--hair);
+}
+.why-q {
+  font-family: var(--serif); font-style: italic;
+  font-size: clamp(27px, 2.9vw, 40px); line-height: 1.12; letter-spacing: -0.016em; font-weight: 380;
+  font-variation-settings: "opsz" 144, "SOFT" 100;
+  text-wrap: balance;
+}
+.why-a p { margin: 0 0 14px; max-width: 640px; font-size: clamp(17px, 1.3vw, 18.5px); line-height: 1.6; color: var(--text); text-wrap: pretty; }
+.why-a code { font-size: 0.8em; }
+.why-a .why-more { margin: 22px 0 0; }
 
 /* ==========================================================================
    HOW IT WORKS -- four steps on one stage, beside the orbit
@@ -1861,7 +1979,10 @@ svg { overflow: visible; }
 .faq-grid-top .ch-head { position: static; margin-bottom: clamp(26px, 4vh, 42px); }
 .faq-duo { column-count: 2; column-gap: clamp(40px, 5.4vw, 84px); }
 .faq-duo details { break-inside: avoid; }
-.faq-duo .faq-stem { break-before: column; margin: 0; padding: 0 0 14px; }
+/* the second column starts at a question (.faq-turn), not at the stem, so
+   the two columns stay near the same length as questions are added */
+.faq-duo .faq-turn { display: block; break-before: column; }
+.faq-duo .faq-stem { margin: 34px 0 0; padding: 0 0 14px; }
 .faq-duo summary { padding-top: 17px; padding-bottom: 17px; font-size: clamp(19px, 1.55vw, 21.5px); }
 .faq details { border-top: 1px solid var(--hair); }
 .faq details:last-child { border-bottom: 1px solid var(--hair); }
@@ -2270,10 +2391,17 @@ button.mtx-name:hover { color: var(--ink); }
   .hero .install-pill { font-size: clamp(12.5px, 1.02vw, 14px); }
 }
 @media (max-width: 760px) {
+  /* a phone reads the page, it does not install from it: the figure moves up
+     under the sentence, and the command follows the story it belongs to */
+  .hero .hero-grid { gap: 0; }
+  .hero .hero-copy { display: contents; }
+  .hero .duel { order: 1; margin: 2px 0 34px; }
+  .hero .hero-act, .hero .hero-facts, .hero .hero-fork { order: 2; }
   /* one column again; the stem must stop forcing a break, or it opens a
      second column off the right edge */
   .faq-duo { column-count: 1; }
-  .faq-duo .faq-stem { break-before: auto; margin: 30px 0 4px; padding: 0; }
+  .faq-duo .faq-turn { break-before: auto; }
+  .faq-duo .faq-stem { margin: 30px 0 4px; padding: 0; }
 }
 @media (max-width: 1179px) {
   /* the hero stacks: the copy, then the duel */
@@ -2303,6 +2431,11 @@ button.mtx-name:hover { color: var(--ink); }
 }
 @media (max-width: 960px) {
   .fleet-grid, .keys-duo, .loop { grid-template-columns: minmax(0, 1fr); }
+  /* a seam stacks: where, the figure, then what changes */
+  .seam { grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 26px 0 28px; }
+  .seam-where span { display: inline; margin: 0; font-size: 0.72em; }
+  .seam-fig { max-width: 560px; }
+  .why-ask { grid-template-columns: minmax(0, 1fr); gap: 18px; }
   .loop-fig { display: none; }
   /* no orbit, no self-playing lap: one step on show, at its own height */
   .js .loop-p { grid-area: auto; }
@@ -2347,7 +2480,8 @@ button.mtx-name:hover { color: var(--ink); }
   .hero { padding-top: calc(var(--head-h) + 22px); }
   .hero-pre { margin-bottom: 18px; }
   .hero .hero-pre { font-size: 14px; align-items: flex-start; }
-  .hero .hero-facts { display: flex; }
+  /* two by two while both pairs fit, and one clean column on a phone */
+  .hero .hero-facts { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 6px 16px; }
   .works { gap: 6px 18px; }
   .works-os { margin-left: 0; }
   .works-list { font-size: 14.5px; }

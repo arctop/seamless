@@ -123,10 +123,10 @@ func TestCanonicalHostMatchesCNAME(t *testing.T) {
 	require.Equal(t, "https://"+strings.TrimSpace(string(raw)), siteBaseURL)
 }
 
-// TestLlmsTxtListsEveryPage: llms.txt is the nav as a linked outline -- one H2
-// per section, one entry per page with its canonical URL, led by the home
-// page's description. A page missing here is invisible to the consumers the
-// file exists for.
+// TestLlmsTxtListsEveryPage: llms.txt is the site as a linked outline -- the
+// site-root pages, then one H2 per section and one entry per page with its
+// canonical URL, led by the home page's description and the intro. A page
+// missing here is invisible to the consumers the file exists for.
 func TestLlmsTxtListsEveryPage(t *testing.T) {
 	repoRoot(t)
 
@@ -136,12 +136,59 @@ func TestLlmsTxtListsEveryPage(t *testing.T) {
 	llms := string(llmsTxt(site))
 	require.True(t, strings.HasPrefix(llms, "# "+siteName+"\n\n> "+site.Home.Description+"\n"),
 		"llmstxt.org shape: H1 project name, then a one-line blockquote summary")
-	require.Equal(t, len(site.Pages), strings.Count(llms, "\n- ["), "one list entry per page")
+	listed := 0
+	for _, p := range rootPages {
+		if p.Title == "" {
+			continue
+		}
+		listed++
+		require.NotEmpty(t, p.Note, "%s is listed, so it needs a note", p.URL)
+		require.Contains(t, llms, "["+p.Title+"]("+siteBaseURL+p.URL+"): "+p.Note+"\n", "%s is listed", p.URL)
+	}
+	require.Positive(t, listed, "the site-root pages are listed")
+	require.Equal(t, listed+len(site.Pages), strings.Count(llms, "\n- ["),
+		"one list entry per listed site-root page and per docs page")
+	require.Contains(t, llms, "\n## "+rootSectionTitle+"\n")
 	for _, sec := range site.Sections {
 		require.Contains(t, llms, "\n## "+sec.Title+"\n")
 	}
 	for _, p := range site.Pages {
 		require.Contains(t, llms, "["+p.Title+"]("+p.Canonical()+"): "+p.Description+"\n", "%s is listed", p.URL)
+	}
+}
+
+// TestLlmsIntroKeepsTheShape: the intro sits between the summary and the link
+// lists, where the llmstxt.org shape allows any markdown but a heading -- an
+// H2 there would read as a link section with no links. It also has to answer
+// what an assistant is asked: what the tool is and how to install it, with the
+// two canonical commands site-check holds every teaching surface to.
+func TestLlmsIntroKeepsTheShape(t *testing.T) {
+	repoRoot(t)
+
+	intro := strings.TrimSpace(llmsIntro)
+	require.NotEmpty(t, intro)
+	for _, line := range strings.Split(intro, "\n") {
+		require.False(t, strings.HasPrefix(line, "#"), "the intro carries no heading: %q", line)
+	}
+	require.Contains(t, intro, "curl -fsSL "+siteBaseURL+"/install | sh")
+	require.Contains(t, intro, "irm "+siteBaseURL+"/install.ps1 | iex")
+
+	site, err := loadSite("docs-src")
+	require.NoError(t, err)
+	llms := string(llmsTxt(site))
+	at := strings.Index(llms, intro)
+	require.Positive(t, at, "the intro is in llms.txt")
+	require.Less(t, at, strings.Index(llms, "\n## "), "and comes before the first link list")
+}
+
+// TestRootPagesExist: a site-root page the sitemap and llms.txt name must be a
+// page the site actually serves, or both point crawlers at a 404.
+func TestRootPagesExist(t *testing.T) {
+	repoRoot(t)
+
+	require.Equal(t, "/", rootPages[0].URL, "the landing page leads")
+	for _, p := range rootPages {
+		require.FileExists(t, filepath.Join("docs", filepath.FromSlash(p.URL), "index.html"), p.URL)
 	}
 }
 

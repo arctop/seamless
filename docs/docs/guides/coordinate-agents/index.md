@@ -1,13 +1,21 @@
-# Coordinate multiple agents
+# Coordinate Claude Code and Codex agents with one task queue
 
-> Fan-out over the ready queue, planner/executor splits via plan composition, shared-lab investigation, what happens when a claim holder dies, and the git hooks that check a repo lock.
+> Run several Claude Code or Codex sessions on one backlog without relaying between them yourself - a shared task queue with atomic, leased claims, a planner and executors on one plan, what happens when a claim holder dies, and the git hooks that check a repo lock.
 
-Coordinating multiple coding agents with Seamless means pointing N workers -
-Claude Code, Codex, or any MCP client - at one shared, dependency-aware task
-queue with atomic lease-based claiming: every worker runs the same claim loop,
-exactly one wins each task, and a dead worker's lease expires instead of
-stranding its work. There is no scheduler process and no orchestrator - the
-coordination is the workers cooperating over the queue.
+To run several coding agents on one backlog without relaying between them
+yourself, give them one queue and one memory. With Seamless every worker - a
+Claude Code session, a Codex session, or any MCP client - claims its next task
+from a shared, dependency-aware queue. A claim is atomic and carries a lease:
+exactly one worker wins each task, the others are told who holds it, and a
+dead worker's lease expires instead of stranding its work. There is no
+scheduler process and no orchestrator - the coordination is the workers
+cooperating over the queue.
+
+Sessions do not message each other. They read and write one store: what one
+agent saves, the next is briefed with or recalls, and the queue tells each of
+them what is taken. Git worktrees keep the agents' files apart, and a linked
+worktree resolves to its main checkout's project, so agents in separate
+worktrees still share that memory and that queue.
 
 One agent with memory is a better agent. Several agents with *shared* memory and
 no coordination is a worse outcome than one - they duplicate work, contradict each

@@ -5,17 +5,51 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-compatible-6f42c1)](https://thereisnospoon.org/docs/reference/mcp/)
 
-An AI coding agent rediscovers the same constraint every session, because
-nothing it learns survives the context window. Run two agents against the same
-backlog and they pick the same step and build it twice. And the products that
-promise to fix this keep your project's memory in someone else's database.
+**Every agent you run should know what the others learned.**
 
-Seamless is a local-first memory and coordination substrate for AI coding
-agents. Works with Claude Code, Codex CLI, and any MCP client. It also works
-from chats in the Claude desktop app, for long-running work that isn't code:
-see [Seamless in the Claude app](https://thereisnospoon.org/claude-app/).
+Seamless is shared, persistent memory and a task queue for the AI coding agents
+you run: Claude Code, Codex CLI, and any MCP client. Agents save what they
+learn as markdown files on your own computer, every new session starts briefed
+from them, and agents working side by side claim tasks from one queue.
 
-It gives a fleet of agents a shared, durable memory and a way to divide work
+```bash
+curl -fsSL https://thereisnospoon.org/install | sh    # macOS, Linux
+```
+
+```powershell
+irm https://thereisnospoon.org/install.ps1 | iex      # Windows
+```
+
+## Why
+
+You are the only thing your agents have in common. What one of them works out
+reaches the next only if you carry it across, and there are three seams where
+that happens:
+
+- **Between tools.** Claude Code and Codex each keep their own notes, so what
+  one learned the other never sees.
+- **Between agents.** Agents working side by side cannot see what the others
+  found or which step is taken, so you relay between them, or two of them
+  build the same thing.
+- **Between sessions.** A new session knows what the last one worked out only
+  if someone wrote it down, and that someone is usually you.
+
+Seamless is named for closing them: one store that every client reads and
+writes, one queue with atomic, leased claims, and a briefing injected before a
+session's first prompt. All of it
+stays on your computer, in markdown files you can open, edit and keep in git.
+
+Claude Code's built-in memory is a good start, and it keeps working beside
+Seamless. It is one client's notes about one repository on one computer;
+[the comparison](https://thereisnospoon.org/compare/#built-in) sets the two
+side by side.
+
+It also works from chats in the Claude desktop app, for long-running work that
+isn't code: see [Seamless in the Claude app](https://thereisnospoon.org/claude-app/).
+
+## What is in it
+
+A fleet of agents gets a shared, durable memory and a way to divide work
 without colliding: memories with a supersession lifecycle, hybrid recall, a
 dependency-aware task queue with lease-based claiming, and captured plans,
 behind walls you choose. Durable knowledge is stored as markdown files on disk;

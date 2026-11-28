@@ -5,18 +5,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Seamless documentation</title>
-<meta name="description" content="A local-first memory and coordination substrate for the fleet of coding agents you run - markdown files you own, indexed by one local daemon.">
+<meta name="description" content="One shared memory and one task queue for the AI coding agents you run - Claude Code, Codex, any MCP client - with the memory kept as markdown files on your own computer.">
 <link rel="canonical" href="https://thereisnospoon.org/docs/">
 <meta name="robots" content="max-image-preview:large, max-snippet:-1">
 <meta property="og:site_name" content="Seamless">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://thereisnospoon.org/docs/">
 <meta property="og:title" content="Seamless documentation">
-<meta property="og:description" content="A local-first memory and coordination substrate for the fleet of coding agents you run - markdown files you own, indexed by one local daemon.">
+<meta property="og:description" content="One shared memory and one task queue for the AI coding agents you run - Claude Code, Codex, any MCP client - with the memory kept as markdown files on your own computer.">
 <meta property="og:image" content="https://thereisnospoon.org/static/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Seamless - sessions end. What they learned doesn&#39;t.">
+<meta property="og:image:alt" content="Seamless - every agent you run should know what the others learned.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f5">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#070a13">
@@ -147,13 +147,17 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
       
       <ul>
         
+        <li><a href="guides/claude-code-memory-between-sessions/">Make Claude Code remember between sessions</a></li>
+        
+        <li><a href="guides/share-memory-claude-code-codex/">Share memory between Claude Code and Codex</a></li>
+        
         <li><a href="guides/integrate-your-agent/">Integrate your agent</a></li>
         
         <li><a href="guides/mcp-clients/">Connect Cursor, Cline, Windsurf &amp; Zed</a></li>
         
         <li><a href="guides/write-good-memories/">Write memories that get recalled</a></li>
         
-        <li><a href="guides/coordinate-agents/">Coordinate multiple agents</a></li>
+        <li><a href="guides/coordinate-agents/">Coordinate Claude Code and Codex agents with one task queue</a></li>
         
         <li><a href="guides/plan-mode/">Capture Claude Code plans</a></li>
         
@@ -233,16 +237,17 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   <main class="docs-main" id="content">
     <article class="prose home-intro">
   <h1>What is Seamless?</h1>
-  <p class="lede">A local-first memory and coordination substrate for the fleet of coding agents you run - markdown files you own, indexed by one local daemon.</p>
+  <p class="lede">One shared memory and one task queue for the AI coding agents you run - Claude Code, Codex, any MCP client - with the memory kept as markdown files on your own computer.</p>
   
-  <p>Seamless is a local-first memory and coordination system for coding agents -
-a <strong>shared, persistent brain</strong> for Claude Code, Codex, and any other MCP client
-you run. Memory survives the end of a conversation, tasks can be handed from one
-agent to another, and plans get executed together. All of it is stored as
-markdown files in a directory you own, indexed by one SQLite database, and
-served over MCP by the <code>seamlessd</code> daemon on your own computer. The companion
-<code>seam</code> CLI gives headless agents a direct interface. There is no hosted
-Seamless service, external vector database, or account.</p>
+  <p>Seamless is shared, persistent memory and a task queue for the AI coding agents
+you run: Claude Code, Codex, and any other MCP client. What one session learns,
+every later session starts with, in any of those clients. Agents working side by
+side claim tasks from one queue instead of picking the same one, and plans get
+executed together. All of it is stored as markdown files in a directory you
+own, indexed by one SQLite database, and served over MCP by the <code>seamlessd</code>
+daemon on your own computer. The companion <code>seam</code> CLI gives headless agents a
+direct interface. There is no hosted Seamless service, external vector
+database, or account.</p>
 <p>The same store also works from chats in the Claude desktop app, for long-running
 work that isn't code: <a href="https://thereisnospoon.org/claude-app/">Seamless in the Claude app</a>
 covers that side in plain terms.</p>
@@ -321,7 +326,15 @@ everyone - one install command, then your client.</p>
 <td><a href="guides/integrate-your-agent/">Integrate your agent</a></td>
 </tr>
 <tr>
-<td>Make a fleet divide work without colliding</td>
+<td>Carry what one Claude Code session learned into the next</td>
+<td><a href="guides/claude-code-memory-between-sessions/">Make Claude Code remember between sessions</a></td>
+</tr>
+<tr>
+<td>Give Claude Code and Codex the same memory</td>
+<td><a href="guides/share-memory-claude-code-codex/">Share memory between Claude Code and Codex</a></td>
+</tr>
+<tr>
+<td>Run several agents on one backlog without relaying between them</td>
 <td><a href="guides/coordinate-agents/">Coordinate multiple agents</a></td>
 </tr>
 <tr>
@@ -338,9 +351,9 @@ everyone - one install command, then your client.</p>
 <p>Its clients are agents. You are the observer and editor - there is a console,
 and agents use Seamless without you in the loop until you ask to be: lock a
 project and they wait for your approval, turn on write screening and suspicious
-writes wait for your review. It is a personal substrate, not a hosted team
-knowledge base: one daemon on your computer, or one Server your other computers
-pair with.</p>
+writes wait for your review. It is personal, and it is yours to run: one
+daemon on your computer, or one Server your other computers pair with. There
+is no hosted team knowledge base behind it.</p>
 <h2 id="what-it-gives-a-fleet">What it gives a fleet</h2>
 <ul>
 <li><strong>Memory with a lifecycle.</strong> Not an append-only log: memories are superseded
@@ -385,7 +398,7 @@ proposes. Nothing rewrites your knowledge behind your back.</p>
   <a class="doc-card" href="guides/">
     <h2>Guides</h2>
     <p>Task-shaped walkthroughs - wiring up an agent, writing memories worth recalling, running a fleet, and fixing what broke.</p>
-    <span class="card-count">12 pages</span>
+    <span class="card-count">14 pages</span>
   </a>
   
   <a class="doc-card" href="reference/">

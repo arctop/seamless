@@ -1,16 +1,17 @@
 ---
 title: What is Seamless?
-description: A local-first memory and coordination substrate for the fleet of coding agents you run - markdown files you own, indexed by one local daemon.
+description: One shared memory and one task queue for the AI coding agents you run - Claude Code, Codex, any MCP client - with the memory kept as markdown files on your own computer.
 ---
 
-Seamless is a local-first memory and coordination system for coding agents -
-a **shared, persistent brain** for Claude Code, Codex, and any other MCP client
-you run. Memory survives the end of a conversation, tasks can be handed from one
-agent to another, and plans get executed together. All of it is stored as
-markdown files in a directory you own, indexed by one SQLite database, and
-served over MCP by the `seamlessd` daemon on your own computer. The companion
-`seam` CLI gives headless agents a direct interface. There is no hosted
-Seamless service, external vector database, or account.
+Seamless is shared, persistent memory and a task queue for the AI coding agents
+you run: Claude Code, Codex, and any other MCP client. What one session learns,
+every later session starts with, in any of those clients. Agents working side by
+side claim tasks from one queue instead of picking the same one, and plans get
+executed together. All of it is stored as markdown files in a directory you
+own, indexed by one SQLite database, and served over MCP by the `seamlessd`
+daemon on your own computer. The companion `seam` CLI gives headless agents a
+direct interface. There is no hosted Seamless service, external vector
+database, or account.
 
 The same store also works from chats in the Claude desktop app, for long-running
 work that isn't code: [Seamless in the Claude app](https://thereisnospoon.org/claude-app/)
@@ -63,16 +64,18 @@ everyone - one install command, then your client.
 | Keep a client's project away from your other work | [Project isolation](/concepts/project-isolation/) |
 | Share one memory across your computers | [Networked Seamless](/concepts/networked/) |
 | Point a hand-rolled agent at it | [Integrate your agent](/guides/integrate-your-agent/) |
-| Make a fleet divide work without colliding | [Coordinate multiple agents](/guides/coordinate-agents/) |
+| Carry what one Claude Code session learned into the next | [Make Claude Code remember between sessions](/guides/claude-code-memory-between-sessions/) |
+| Give Claude Code and Codex the same memory | [Share memory between Claude Code and Codex](/guides/share-memory-claude-code-codex/) |
+| Run several agents on one backlog without relaying between them | [Coordinate multiple agents](/guides/coordinate-agents/) |
 | Look up a tool, key, or command | [Reference](/reference/) |
 | Fix something that is silently not working | [Troubleshooting](/guides/troubleshooting/) |
 
 Its clients are agents. You are the observer and editor - there is a console,
 and agents use Seamless without you in the loop until you ask to be: lock a
 project and they wait for your approval, turn on write screening and suspicious
-writes wait for your review. It is a personal substrate, not a hosted team
-knowledge base: one daemon on your computer, or one Server your other computers
-pair with.
+writes wait for your review. It is personal, and it is yours to run: one
+daemon on your computer, or one Server your other computers pair with. There
+is no hosted team knowledge base behind it.
 
 ## What it gives a fleet
 

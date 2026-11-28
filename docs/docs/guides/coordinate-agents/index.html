@@ -4,21 +4,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Coordinate multiple agents - Seamless docs</title>
-<meta name="description" content="Fan-out over the ready queue, planner/executor splits via plan composition, shared-lab investigation, what happens when a claim holder dies, and the git hooks that check a repo lock.">
+<title>Coordinate Claude Code and Codex agents with one task queue - Seamless docs</title>
+<meta name="description" content="Run several Claude Code or Codex sessions on one backlog without relaying between them yourself - a shared task queue with atomic, leased claims, a planner and executors on one plan, what happens when a claim holder dies, and the git hooks that check a repo lock.">
 <link rel="canonical" href="https://thereisnospoon.org/docs/guides/coordinate-agents/">
 <meta name="robots" content="max-image-preview:large, max-snippet:-1">
 <meta property="og:site_name" content="Seamless">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://thereisnospoon.org/docs/guides/coordinate-agents/">
-<meta property="og:title" content="Coordinate multiple agents - Seamless docs">
-<meta property="og:description" content="Fan-out over the ready queue, planner/executor splits via plan composition, shared-lab investigation, what happens when a claim holder dies, and the git hooks that check a repo lock.">
+<meta property="og:title" content="Coordinate Claude Code and Codex agents with one task queue - Seamless docs">
+<meta property="og:description" content="Run several Claude Code or Codex sessions on one backlog without relaying between them yourself - a shared task queue with atomic, leased claims, a planner and executors on one plan, what happens when a claim holder dies, and the git hooks that check a repo lock.">
 <meta property="og:image" content="https://thereisnospoon.org/static/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Seamless - sessions end. What they learned doesn&#39;t.">
+<meta property="og:image:alt" content="Seamless - every agent you run should know what the others learned.">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://thereisnospoon.org/docs/guides/"},{"@type":"ListItem","position":3,"name":"Coordinate multiple agents","item":"https://thereisnospoon.org/docs/guides/coordinate-agents/"}]},{"@type":"TechArticle","headline":"Coordinate multiple agents - Seamless docs","description":"Fan-out over the ready queue, planner/executor splits via plan composition, shared-lab investigation, what happens when a claim holder dies, and the git hooks that check a repo lock.","url":"https://thereisnospoon.org/docs/guides/coordinate-agents/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Docs","item":"https://thereisnospoon.org/docs/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://thereisnospoon.org/docs/guides/"},{"@type":"ListItem","position":3,"name":"Coordinate Claude Code and Codex agents with one task queue","item":"https://thereisnospoon.org/docs/guides/coordinate-agents/"}]},{"@type":"TechArticle","headline":"Coordinate Claude Code and Codex agents with one task queue - Seamless docs","description":"Run several Claude Code or Codex sessions on one backlog without relaying between them yourself - a shared task queue with atomic, leased claims, a planner and executors on one plan, what happens when a claim holder dies, and the git hooks that check a repo lock.","url":"https://thereisnospoon.org/docs/guides/coordinate-agents/","inLanguage":"en","isPartOf":{"@id":"https://thereisnospoon.org/#website"}}]}</script>
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f5">
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#070a13">
 <link rel="icon" type="image/svg+xml" href="../../../static/favicon.svg">
@@ -148,13 +148,17 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
       
       <ul>
         
+        <li><a href="../../guides/claude-code-memory-between-sessions/">Make Claude Code remember between sessions</a></li>
+        
+        <li><a href="../../guides/share-memory-claude-code-codex/">Share memory between Claude Code and Codex</a></li>
+        
         <li><a href="../../guides/integrate-your-agent/">Integrate your agent</a></li>
         
         <li><a href="../../guides/mcp-clients/">Connect Cursor, Cline, Windsurf &amp; Zed</a></li>
         
         <li><a href="../../guides/write-good-memories/">Write memories that get recalled</a></li>
         
-        <li><a href="../../guides/coordinate-agents/" class="current" aria-current="page">Coordinate multiple agents</a></li>
+        <li><a href="../../guides/coordinate-agents/" class="current" aria-current="page">Coordinate Claude Code and Codex agents with one task queue</a></li>
         
         <li><a href="../../guides/plan-mode/">Capture Claude Code plans</a></li>
         
@@ -237,24 +241,31 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   <ol>
     <li><a href="../../">Docs</a></li>
     <li><a href="../../guides/">Guides</a></li>
-    <li aria-current="page">Coordinate multiple agents</li>
+    <li aria-current="page">Coordinate Claude Code and Codex agents with one task queue</li>
   </ol>
 </nav>
 
-  <h1>Coordinate multiple agents</h1>
-  <p class="lede">Fan-out over the ready queue, planner/executor splits via plan composition, shared-lab investigation, what happens when a claim holder dies, and the git hooks that check a repo lock.</p>
+  <h1>Coordinate Claude Code and Codex agents with one task queue</h1>
+  <p class="lede">Run several Claude Code or Codex sessions on one backlog without relaying between them yourself - a shared task queue with atomic, leased claims, a planner and executors on one plan, what happens when a claim holder dies, and the git hooks that check a repo lock.</p>
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
       <li class="lvl-2"><a href="#fan-out-over-the-ready-queue">Fan-out over the ready queue</a></li><li class="lvl-3"><a href="#what-the-loser-of-a-race-sees">What the loser of a race sees</a></li><li class="lvl-2"><a href="#planner-and-executor-split-by-plan-composition">Planner and executor, split by plan composition</a></li><li class="lvl-2"><a href="#shared-lab-investigation">Shared-lab investigation</a></li><li class="lvl-2"><a href="#leases-crashes-and-reclaiming">Leases, crashes, and reclaiming</a></li><li class="lvl-2"><a href="#commit-time-lock-checks">Commit-time lock checks</a></li><li class="lvl-3"><a href="#add-the-hooks-to-a-repository">Add the hooks to a repository</a></li><li class="lvl-3"><a href="#what-a-refusal-means">What a refusal means</a></li><li class="lvl-3"><a href="#what-is-never-checked">What is never checked</a></li><li class="lvl-3"><a href="#hooks-off">Hooks off</a></li><li class="lvl-2"><a href="#what-you-see-while-it-runs">What you see while it runs</a></li><li class="lvl-2"><a href="#one-more-collision-to-know-about">One more collision to know about</a></li>
     </ul>
   </details>
-  <p>Coordinating multiple coding agents with Seamless means pointing N workers -
-Claude Code, Codex, or any MCP client - at one shared, dependency-aware task
-queue with atomic lease-based claiming: every worker runs the same claim loop,
-exactly one wins each task, and a dead worker's lease expires instead of
-stranding its work. There is no scheduler process and no orchestrator - the
-coordination is the workers cooperating over the queue.</p>
+  <p>To run several coding agents on one backlog without relaying between them
+yourself, give them one queue and one memory. With Seamless every worker - a
+Claude Code session, a Codex session, or any MCP client - claims its next task
+from a shared, dependency-aware queue. A claim is atomic and carries a lease:
+exactly one worker wins each task, the others are told who holds it, and a
+dead worker's lease expires instead of stranding its work. There is no
+scheduler process and no orchestrator - the coordination is the workers
+cooperating over the queue.</p>
+<p>Sessions do not message each other. They read and write one store: what one
+agent saves, the next is briefed with or recalls, and the queue tells each of
+them what is taken. Git worktrees keep the agents' files apart, and a linked
+worktree resolves to its main checkout's project, so agents in separate
+worktrees still share that memory and that queue.</p>
 <p>One agent with memory is a better agent. Several agents with <em>shared</em> memory and
 no coordination is a worse outcome than one - they duplicate work, contradict each
 other's writes, and discover the same dead end in parallel.</p>

@@ -1,6 +1,6 @@
 # Seamless
 
-> A local-first memory and coordination substrate for the fleet of coding agents you run - markdown files you own, indexed by one local daemon.
+> One shared memory and one task queue for the AI coding agents you run - Claude Code, Codex, any MCP client - with the memory kept as markdown files on your own computer.
 
 ---
 
@@ -9,14 +9,15 @@
 URL: https://thereisnospoon.org/docs/
 
 
-Seamless is a local-first memory and coordination system for coding agents -
-a **shared, persistent brain** for Claude Code, Codex, and any other MCP client
-you run. Memory survives the end of a conversation, tasks can be handed from one
-agent to another, and plans get executed together. All of it is stored as
-markdown files in a directory you own, indexed by one SQLite database, and
-served over MCP by the `seamlessd` daemon on your own computer. The companion
-`seam` CLI gives headless agents a direct interface. There is no hosted
-Seamless service, external vector database, or account.
+Seamless is shared, persistent memory and a task queue for the AI coding agents
+you run: Claude Code, Codex, and any other MCP client. What one session learns,
+every later session starts with, in any of those clients. Agents working side by
+side claim tasks from one queue instead of picking the same one, and plans get
+executed together. All of it is stored as markdown files in a directory you
+own, indexed by one SQLite database, and served over MCP by the `seamlessd`
+daemon on your own computer. The companion `seam` CLI gives headless agents a
+direct interface. There is no hosted Seamless service, external vector
+database, or account.
 
 The same store also works from chats in the Claude desktop app, for long-running
 work that isn't code: [Seamless in the Claude app](https://thereisnospoon.org/claude-app/)
@@ -67,16 +68,18 @@ everyone - one install command, then your client.
 | Keep a client's project away from your other work | [Project isolation](/concepts/project-isolation/) |
 | Share one memory across your computers | [Networked Seamless](/concepts/networked/) |
 | Point a hand-rolled agent at it | [Integrate your agent](/guides/integrate-your-agent/) |
-| Make a fleet divide work without colliding | [Coordinate multiple agents](/guides/coordinate-agents/) |
+| Carry what one Claude Code session learned into the next | [Make Claude Code remember between sessions](/guides/claude-code-memory-between-sessions/) |
+| Give Claude Code and Codex the same memory | [Share memory between Claude Code and Codex](/guides/share-memory-claude-code-codex/) |
+| Run several agents on one backlog without relaying between them | [Coordinate multiple agents](/guides/coordinate-agents/) |
 | Look up a tool, key, or command | [Reference](/reference/) |
 | Fix something that is silently not working | [Troubleshooting](/guides/troubleshooting/) |
 
 Its clients are agents. You are the observer and editor - there is a console,
 and agents use Seamless without you in the loop until you ask to be: lock a
 project and they wait for your approval, turn on write screening and suspicious
-writes wait for your review. It is a personal substrate, not a hosted team
-knowledge base: one daemon on your computer, or one Server your other computers
-pair with.
+writes wait for your review. It is personal, and it is yours to run: one
+daemon on your computer, or one Server your other computers pair with. There
+is no hosted team knowledge base behind it.
 
 ## What it gives a fleet
 
@@ -6505,6 +6508,13 @@ Where the [concepts](/concepts/) pages explain how Seamless thinks, these pages
 are organized around jobs: each one starts from something you are trying to do
 and walks the shortest honest path through it, including the failure modes.
 
+Two pages start from the problem rather than the tool.
+[Make Claude Code remember between sessions](/guides/claude-code-memory-between-sessions/)
+sets `CLAUDE.md`, the built-in auto memory, and a shared memory side by side,
+with what each one carries into the next session.
+[Share memory between Claude Code and Codex](/guides/share-memory-claude-code-codex/)
+gives both clients one store, with a two-minute test.
+
 If you are connecting a client, start with
 [Integrate your agent](/guides/integrate-your-agent/) - the MCP handshake, the
 stdio bridge, session binding, and the scope discipline that keeps writes
@@ -6553,6 +6563,341 @@ remote device honestly does not get.
 [Troubleshooting](/guides/troubleshooting/) is symptom-first, written for a
 system whose hooks deliberately fail open - where a broken install looks like
 silence, not an error message.
+
+---
+
+# Make Claude Code remember between sessions
+
+URL: https://thereisnospoon.org/docs/guides/claude-code-memory-between-sessions/
+
+
+A new Claude Code session starts with an empty context window. It knows
+nothing of the last one unless something loads it again. There are three ways
+to do that: a `CLAUDE.md` you write, the auto memory Claude Code keeps for
+itself, and a shared memory, such as Seamless, that every session, subagent,
+and client is briefed from. This page says what each one carries into the next
+session, where it stops, and how to set up the third.
+
+(`claude --continue` reopens the last conversation itself. This page is about
+what a fresh session knows.)
+
+The first two are built in and free, and worth using whatever else you add.
+What this page says about them was checked against
+[Anthropic's memory documentation](https://code.claude.com/docs/en/memory) in
+November 2026.
+
+## What Claude Code remembers by itself
+
+**`CLAUDE.md`** is a file of instructions you write. Claude Code reads it at
+the start of every session, and re-reads the project-root file from disk after
+a compaction, so it is the right home for standing rules: build commands,
+conventions, the shape of the codebase. It is yours to maintain. Anthropic
+suggests keeping each file under 200 lines, because a longer one uses more
+context and is followed less closely.
+
+**Auto memory** is notes Claude Code writes for itself, from your corrections
+and preferences. It is on by default in local sessions and stored as plain
+markdown under `~/.claude/projects/<project>/memory/`: a `MEMORY.md` index and
+one topic file per memory. The first 200 lines or 25KB of the index load at
+session start, and Claude opens a topic file when it needs one. You can read
+and edit all of it with `/memory`.
+
+If you work in one repository, on one computer, with Claude Code alone, those
+two may be all you need.
+
+### Where each one is stored
+
+| | Where it lives | Who writes it | Loaded |
+|---|---|---|---|
+| `CLAUDE.md` | In the repository, or `~/.claude/CLAUDE.md` for every project | You | Every session, in full |
+| Auto memory | `~/.claude/projects/<project>/memory/` | Claude | The first 200 lines or 25KB of `MEMORY.md`, at session start |
+| Seamless | `~/.seamless/memory/<project>/`, one file per memory | Your agents | A briefing within a token budget at session start, then what matches each prompt |
+
+## Where the built-in memory stops
+
+Each of these is from Anthropic's page, not a guess:
+
+- **One computer.** Auto memory is machine-local. It is not shared across
+  machines or cloud environments.
+- **One repository.** Every repository has its own memory directory, so a rule
+  learned in one project is unknown in the next.
+- **Not subagents.** The main conversation's auto memory is not loaded into
+  subagents. A fork is the exception, and a subagent can be given a memory of
+  its own, which is a separate directory.
+- **A limit on the index.** Only the first 200 lines or 25KB of `MEMORY.md`
+  load. Anything past the limit is dropped at the next load, so Claude Code
+  asks Claude to shorten the file as it gets close.
+- **Its own judgment.** Claude decides what is worth saving and does not save
+  something every session, so whether a lesson was kept is something you find
+  out later.
+- **One client.** It is Claude Code's own store. Codex keeps a separate one
+  and reads neither.
+
+None of this is a defect. It is a memory for one client in one place, and it
+does that job.
+
+## What a shared memory adds
+
+Seamless keeps the same kind of knowledge in one store that every agent you
+run reads and writes:
+
+- **Every client is briefed from it.** A hook injects a `<seam-briefing>` into
+  each new Claude Code and Codex session before the first prompt. What a Claude
+  Code session saved on Monday is in a Codex session's briefing on Tuesday. See
+  [Share memory between Claude Code and Codex](/guides/share-memory-claude-code-codex/).
+- **Rules cannot fall out.** A memory of kind `constraint` is never dropped
+  from its project's briefing to fit the token budget that trims everything
+  else. The first four print in full and the rest are listed by name. See
+  [Sessions & briefings](/concepts/sessions/#the-budget-and-what-survives-it).
+- **Subagents are briefed too.** Every Task subagent starts with the pinned
+  constraints and the memories that match its task.
+- **Each prompt pulls what fits.** Your prompt is matched against the store,
+  and a memory that fits arrives with it as a `<seam-recall>` block.
+- **A compaction does not lose it.** The session-start hook also fires after a
+  compaction, so the briefing lands again.
+- **The work is remembered, not only the knowledge.** Plans, their steps, and
+  what the last session left open are in the briefing, so *continue where we
+  left off* has something to continue from. See
+  [Tasks & plans](/concepts/tasks-and-plans/).
+- **More than one computer, when you want it.** By default everything stays on
+  one computer. In a [networked](/concepts/networked/) install one computer
+  keeps the data and the others connect to it, so a laptop and a desktop share
+  one memory.
+- **The handoff is written for you.** What a session learned is harvested when
+  it ends and listed under *Recent findings* in the next briefing, so the next
+  session sees where the last one stopped without a `HANDOFF.md` you keep by
+  hand.
+- **Forgetting is yours to approve.** A memory is replaced by a newer one and
+  stays readable, and the [gardener](/concepts/gardener/) only proposes merges
+  and retirements.
+
+It runs beside `CLAUDE.md` and auto memory rather than instead of them. Keep
+your standing instructions in `CLAUDE.md`; Seamless holds what gets learned and
+decided along the way.
+
+One thing no memory changes: a rule that is loaded can still be ignored.
+Anthropic says of `CLAUDE.md` that Claude "reads it and tries to follow it, but
+there's no guarantee of strict compliance", and the same goes for a briefing.
+What Seamless adds is that the rule, or at least its name, is in front of every
+session and subagent, and again after a compaction. For a step that must never be
+skipped, write a [hook](https://code.claude.com/docs/en/hooks-guide), which
+runs whatever the model decides.
+
+## Set it up
+
+**macOS · Linux:**
+
+```bash
+curl -fsSL https://thereisnospoon.org/install | sh
+```
+
+
+**Windows:**
+
+```powershell
+irm https://thereisnospoon.org/install.ps1 | iex
+```
+
+
+The installer wires the clients it finds. Restart Claude Code once and open it
+in a repository:
+
+```bash
+cd ~/code/myrepo && claude
+```
+
+The session opens with a `<seam-briefing>` block. The
+[Quickstart](/quickstart/) shows what it looks like and what to check if it is
+missing.
+
+## Check that it remembers
+
+Tell the session one rule:
+
+```prompt
+Save this to Seamless as a constraint: migrations run before the deploy, never after.
+```
+
+Then end the session, start a fresh one in the same repository, and read the
+top of its briefing. The rule is there, before you have typed anything, and it
+is also a file you can open:
+
+```bash
+ls ~/.seamless/memory/
+```
+
+From here the agent writes on its own when it learns something worth keeping.
+[First prompts to try](/first-prompts/) has more requests to paste, including
+one that reads your past Claude Code sessions for the decisions worth keeping.
+
+## Which one to use
+
+| If you want | Use |
+|---|---|
+| Standing instructions you wrote, loaded every session | `CLAUDE.md` |
+| Claude Code to note your preferences without setup | Auto memory |
+| The same knowledge in Claude Code, Codex, and subagents | Seamless |
+| Rules that are in front of the agent every session | Seamless constraints, or a short `CLAUDE.md` |
+| Plans and open work carried into the next session | Seamless |
+| Parallel agents that do not pick the same task | Seamless: see [Coordinate multiple agents](/guides/coordinate-agents/) |
+
+For the same comparison across other memory tools, see
+[Seamless and the alternatives](https://thereisnospoon.org/compare/).
+
+---
+
+# Share memory between Claude Code and Codex
+
+URL: https://thereisnospoon.org/docs/guides/share-memory-claude-code-codex/
+
+
+Claude Code and Codex do not share memory. Each keeps its own store on your
+computer and reads neither's, so a decision one of them made is unknown to the
+other until you paste it across. To share what they learn, both have to read
+and write one store. Seamless is that store: one command wires both clients,
+and a memory saved in a Claude Code session is in the next Codex session's
+briefing, and the other way round.
+
+## What each one keeps by itself
+
+Checked in November 2026 against
+[Anthropic's memory documentation](https://code.claude.com/docs/en/memory) and
+[OpenAI's Codex memories page](https://learn.chatgpt.com/docs/customization/memories).
+
+| | Claude Code | Codex |
+|---|---|---|
+| Its own memory | Auto memory, on by default in local sessions | Memories, off by default |
+| Stored | `~/.claude/projects/<project>/memory/` | Under `~/.codex` |
+| Written | During the session, when Claude judges something worth keeping | In the background, after a chat goes idle |
+| Reads the other's | No | No |
+
+Both are plain files on your own disk, and both are worth leaving on.
+
+## What `AGENTS.md` shares, and what it does not
+
+One file already crosses the gap. Codex reads `AGENTS.md`, and Claude Code
+(v2.1.277 and later) reads a repository's `AGENTS.md` too when the repository
+has no `CLAUDE.md`. When it has both, a `CLAUDE.md` that holds the line
+`@AGENTS.md` imports it, so one file still serves both tools. That shares the
+instructions you wrote: conventions, commands, standing rules.
+
+It does not share what the agents learn while they work. Nothing writes the
+reason for Monday's fix into `AGENTS.md` unless you do, and neither client's
+own memory reaches the other. That is the gap a shared store closes.
+
+## The workarounds, and where they stop
+
+Before a shared store, people bridge the two clients by hand. Each of these
+works up to a point:
+
+- **One instruction file for both.** `AGENTS.md`, with a `CLAUDE.md` that
+  imports it or a symlink between the two. It shares the rules you wrote, and
+  nothing an agent learned.
+- **A notes or handoff file in the repository** that both agents are told to
+  read and update. It works on a small project. Then it grows, nobody prunes
+  it, each agent loads all of it every time, and two agents writing it at once
+  can conflict in git.
+- **Pasting.** You copy one session's summary into the other. Nothing is lost
+  that way, and you do it every time.
+
+A shared store takes over from the second and third. Each fact is its own
+file, the agent that learned it writes it, and a session is handed the ones
+that matter.
+
+## One store for both
+
+With Seamless installed, both clients talk to one local daemon:
+
+- **The same briefing.** A hook injects a `<seam-briefing>` at the start of
+  every Claude Code and Codex session: the project's constraints, the plans in
+  motion, what recent sessions left open, and an index of its memories.
+- **The same recall.** Each prompt is matched against the store in both
+  clients, and a memory that fits arrives with the prompt.
+- **The same tools.** Both call `memory_write`, `recall`, and the task tools on
+  one MCP surface, so either can save what the other will read.
+- **The same queue.** A Claude Code agent and a Codex agent can claim steps of
+  one plan without picking the same one. See
+  [Coordinate multiple agents](/guides/coordinate-agents/).
+
+Everything lands as markdown files under `~/.seamless`, which you can open,
+edit, or keep in git.
+
+## Set it up
+
+**macOS · Linux:**
+
+```bash
+curl -fsSL https://thereisnospoon.org/install | sh
+```
+
+
+**Windows:**
+
+```powershell
+irm https://thereisnospoon.org/install.ps1 | iex
+```
+
+
+The installer wires every client it finds, so there is no step per client.
+Restart both once. Codex asks you to approve its hooks the first time: open
+`/hooks`, read the commands, and accept them
+([why](/codex-cli/#trust-the-hooks-once)). Until you do, a Codex session shows
+no briefing.
+
+Client-specific detail is on [Claude Code setup](/claude-code/) and
+[Codex local setup](/codex-cli/).
+
+## The two-minute test
+
+In Claude Code, in any repository:
+
+```prompt
+Save this to Seamless as a constraint: never force-push main.
+```
+
+Now open Codex in the same repository:
+
+```bash
+cd ~/code/myrepo && codex
+```
+
+The session opens with a `<seam-briefing>` block, and the rule is among its
+constraints. Codex has not been told anything; it was briefed. Try it the other
+way round and the result is the same.
+
+## How the two clients differ
+
+Seamless treats them alike wherever the client allows it, and the differences
+are written down:
+
+- Claude Code runs seven hooks and Codex five. Claude Code's plan mode is
+  captured into notes and a tracking task; Codex has no plan-mode capture.
+- Codex caps what a hook may put in front of the model, so Seamless holds each
+  of its Codex responses to 2,400 estimated tokens.
+- A session's findings are harvested when a Claude Code session ends, and at
+  the end of each Codex turn.
+
+The [hooks reference](/reference/hooks/) has both tables, and
+[Codex compatibility](/reference/codex-compatibility/) has what was verified
+against which Codex version.
+
+## Chats in the Claude desktop app
+
+The same store reaches chat conversations in the Claude desktop app, so a
+decision made in a chat is in the briefing of the Claude Code or Codex session
+that does the work. A chat is wired differently: it has no hooks, so nothing
+is injected by itself, and Claude loads a project when you ask or when a
+Claude Project's instructions tell it to. [Claude app chat setup](/claude-app/)
+has the steps, and
+[Seamless in the Claude app](https://thereisnospoon.org/claude-app/) shows it
+for work that is not code.
+
+## Other clients
+
+Cursor, Cline, Windsurf, Zed, and any other MCP client reach the same store
+through the same tools. They have no hooks either: the agent calls
+`session_start` and `recall`. See
+[Connect Cursor, Cline, Windsurf & Zed](/guides/mcp-clients/).
 
 ---
 
@@ -7337,17 +7682,25 @@ will ever see.
 
 ---
 
-# Coordinate multiple agents
+# Coordinate Claude Code and Codex agents with one task queue
 
 URL: https://thereisnospoon.org/docs/guides/coordinate-agents/
 
 
-Coordinating multiple coding agents with Seamless means pointing N workers -
-Claude Code, Codex, or any MCP client - at one shared, dependency-aware task
-queue with atomic lease-based claiming: every worker runs the same claim loop,
-exactly one wins each task, and a dead worker's lease expires instead of
-stranding its work. There is no scheduler process and no orchestrator - the
-coordination is the workers cooperating over the queue.
+To run several coding agents on one backlog without relaying between them
+yourself, give them one queue and one memory. With Seamless every worker - a
+Claude Code session, a Codex session, or any MCP client - claims its next task
+from a shared, dependency-aware queue. A claim is atomic and carries a lease:
+exactly one worker wins each task, the others are told who holds it, and a
+dead worker's lease expires instead of stranding its work. There is no
+scheduler process and no orchestrator - the coordination is the workers
+cooperating over the queue.
+
+Sessions do not message each other. They read and write one store: what one
+agent saves, the next is briefed with or recalls, and the queue tells each of
+them what is taken. Git worktrees keep the agents' files apart, and a linked
+worktree resolves to its main checkout's project, so agents in separate
+worktrees still share that memory and that queue.
 
 One agent with memory is a better agent. Several agents with *shared* memory and
 no coordination is a worse outcome than one - they duplicate work, contradict each

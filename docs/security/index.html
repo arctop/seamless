@@ -15,7 +15,7 @@
 <meta property="og:image" content="https://thereisnospoon.org/static/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Seamless - sessions end. What they learned doesn't.">
+<meta property="og:image:alt" content="Seamless - every agent you run should know what the others learned.">
 <meta name="twitter:card" content="summary_large_image">
 <script type="application/ld+json">
 {
@@ -36,7 +36,7 @@
 <link rel="preload" as="font" type="font/woff2" href="../static/fonts/fraunces-italic.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="../static/fonts/instrument-sans.woff2" crossorigin>
 <script>(function(){var d=document.documentElement,t=localStorage.getItem("theme");if(t)d.dataset.theme=t;var o=localStorage.getItem("os");if(o==="macos"||o==="linux")o="unix";if(o!=="unix"&&o!=="windows")o=/Windows/i.test(navigator.userAgent)?"windows":"unix";d.dataset.os=o;var r=null;try{r=sessionStorage.getItem("seamless.reading")}catch(e){}d.dataset.reading=r==="tech"?"tech":"plain";d.className+=" js";})();</script>
-<link rel="stylesheet" href="../static/home.css?v=86aad4c5">
+<link rel="stylesheet" href="../static/home.css?v=dbc40c2d">
 <style>
 /* /security/ -- built on the landing's home.css (header, rail, chapters,
    ledger, reading switch, data tables, finale, footer); only this page's own
@@ -381,7 +381,7 @@
           </div>
           <div class="lg-text">
             <p class="rd rd-plain"><span class="rd-label">In plain words</span>When an agent tries to save something that looks planted, like hidden instructions or a password, it waits for you on the console&rsquo;s Held screen instead of reaching the next session. Good for agents that read the web, issues or email.</p>
-            <p class="rd rd-tech"><span class="rd-label">In technical terms</span>Every agent write to a memory or note is screened on your computer for secrets, injection markers, role tags, hidden comments, zero-width and bidi characters, encoded blobs and unlisted links. Holds wait in a database queue, never in the corpus. A constraint&rsquo;s supersede or delete is always held, as is a rule change from a session that fetched outside text. Injected lines carry their provenance, files changed outside Seamless are quarantined, and a lockdown switch narrows briefings to what you confirmed.</p>
+            <p class="rd rd-tech"><span class="rd-label">In technical terms</span>The attack this layer is for is usually called memory poisoning: text an agent read turns into a saved rule that later sessions are briefed with. Every agent write to a memory or note is screened on your computer for secrets, injection markers, role tags, hidden comments, zero-width and bidi characters, encoded blobs and unlisted links. Holds wait in a database queue, never in the corpus. A constraint&rsquo;s supersede or delete is always held, as is a rule change from a session that fetched outside text. Injected lines carry their provenance, files changed outside Seamless are quarantined, and a lockdown switch narrows briefings to what you confirmed.</p>
             <p class="lg-limit"><b>Its limit:</b> the screens are heuristics. They catch the known shapes of an attack and hold the rest of the suspicious writes for you to judge.</p>
           </div>
         </li>

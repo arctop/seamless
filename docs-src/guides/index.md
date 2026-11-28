@@ -7,6 +7,13 @@ Where the [concepts](/concepts/) pages explain how Seamless thinks, these pages
 are organized around jobs: each one starts from something you are trying to do
 and walks the shortest honest path through it, including the failure modes.
 
+Two pages start from the problem rather than the tool.
+[Make Claude Code remember between sessions](/guides/claude-code-memory-between-sessions/)
+sets `CLAUDE.md`, the built-in auto memory, and a shared memory side by side,
+with what each one carries into the next session.
+[Share memory between Claude Code and Codex](/guides/share-memory-claude-code-codex/)
+gives both clients one store, with a two-minute test.
+
 If you are connecting a client, start with
 [Integrate your agent](/guides/integrate-your-agent/) - the MCP handshake, the
 stdio bridge, session binding, and the scope discipline that keeps writes

@@ -22,8 +22,8 @@ slice of traffic. With it, the session opens with an injected briefing: the
 plan is 4/6 done, one step is claimable, and the `rate-limit-not-in-memory`
 gotcha is one `memory_read` away at the moment it matters.
 
-[Seamless](/) is a local-first memory and coordination substrate for coding
-agents: persistent memory, dependency-aware tasks, and shared plans, stored as
+[Seamless](/) is shared memory and a task queue for the coding agents you
+run: persistent memory, dependency-aware tasks, and shared plans, stored as
 markdown files you own and indexed by one local daemon. The transcripts below are
 the recorded sessions, unedited - whole steps are collapsed into fast-forward
 markers, but no line is reworded. The session id is on each pane.

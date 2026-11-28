@@ -1,6 +1,6 @@
 ---
 title: Screen writes and hold the suspicious ones
-description: Write screening - agent writes are screened and suspicious ones held for you; the existing corpus is reviewed, files changed outside Seamless are quarantined, a lockdown switch narrows what agents receive, and refusals and a metadata feed tell a monitor what happened.
+description: Write screening, a guard against memory poisoning - agent writes are screened and suspicious ones held for you; the existing corpus is reviewed, files changed outside Seamless are quarantined, a lockdown switch narrows what agents receive, and refusals and a metadata feed tell a monitor what happened.
 ---
 
 Seamless injects its constraints and conventions into every session's

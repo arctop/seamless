@@ -22,7 +22,7 @@ const ogImagePath = "/static/og.png"
 
 // ogImageAlt describes the card for screen readers and unfurlers; it mirrors
 // the headline rendered inside the image (static/og-source.html).
-const ogImageAlt = "Seamless - sessions end. What they learned doesn't."
+const ogImageAlt = "Seamless - every agent you run should know what the others learned."
 
 // HeadTitle is the single source for every place a page's full title appears
 // (<title>, og:title, a future JSON-LD headline), so they cannot drift. It was
