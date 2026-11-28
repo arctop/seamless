@@ -592,23 +592,26 @@ anything. See [Sessions & briefings](/concepts/sessions/)
 for what that delivers and [the hooks reference](/reference/hooks/) for the
 exact table.
 
-### Why some hooks are commands and others are http
+### Why every hook is a command
 
-This looks inconsistent and is not: SessionStart only fires as a command hook,
-SessionEnd as http races Claude Code's teardown, and the plan-capture hooks
-pre-filter locally so the machine-wide `Write`/`Edit` hot path never touches
-the network. The full rationale, hook by hook, is in
-[the hooks reference](/reference/hooks/#why-claude-code-uses-two-transports).
+Claude Code can run a hook as a command or as an http request, and every
+Seamless hook is a command running `seam hook <event>`: SessionStart only fires
+as a command hook, SessionEnd as http races Claude Code's teardown, the
+plan-capture hooks pre-filter locally so the machine-wide `Write`/`Edit` hot
+path never touches the network, and the Claude app's code sessions never run
+an http UserPromptSubmit. No bearer key lands in `settings.json`. The full
+rationale, hook by hook, is in
+[the hooks reference](/reference/hooks/#why-every-hook-is-a-command).
 
 ### Over https or a socket {#https-and-socket-servers}
 
-That mix, and the `headersHelper` registration, are the shape for a daemon
-reached over plain http. When `server_url` is `https://` (a Client reaching its
-Server over TLS) or `unix://` (a [relay](/concepts/networked/#the-relay), or a
-[peer_auth](/guides/peer-auth/) daemon's socket), every hook is a `seam hook`
-command and MCP is registered as the `seam mcp-proxy` stdio bridge. Claude
-Code's own http client cannot be told about a private CA, and cannot dial a
-socket at all, so both go through `seam`
+The `headersHelper` registration is the shape for a daemon reached over plain
+http. When `server_url` is `https://` (a Client reaching its Server over TLS)
+or `unix://` (a [relay](/concepts/networked/#the-relay), or a
+[peer_auth](/guides/peer-auth/) daemon's socket), MCP is registered as the
+`seam mcp-proxy` stdio bridge instead. Claude Code's own http client cannot be
+told about a private CA, and cannot dial a socket at all, so MCP goes through
+`seam` there, as the hooks do everywhere
 ([why](/guides/network-install/#why-https-changes-the-claude-code-wiring)).
 
 ## Registering the MCP endpoint by hand
@@ -714,11 +717,18 @@ matrix](/reference/claude-app-compatibility/):
   `seamlessd doctor` reports each discoverable runtime on its own line -
   `claude CLI runtime` and `claude app runtime` - so the skew is visible when
   an app-only failure has you debugging.
-- **Per-prompt recall does not currently fire in app code sessions.** On the
-  observed build, the SessionStart briefing, PostToolUse events, and the
-  SessionEnd findings harvest all work - but UserPromptSubmit never fires, so
-  `<seam-recall>` injections never happen there. The briefing at session start
-  is what an app code session gets.
+- **The app runs command hooks only.** On the observed build, the
+  SessionStart briefing, PostToolUse events, and the SessionEnd findings
+  harvest all worked, but the http UserPromptSubmit hook that installs against
+  a plain-http daemon used to write never fired, so app code sessions got no
+  `<seam-recall>` injections and no mid-session usage for the Diary. Every hook
+  is a command hook now; an install from before that gets the command hook the
+  next time `seamlessd install-hooks` runs, which an update does for you.
+- **SessionEnd may come late, or never.** The app keeps a session open until
+  you archive it or quit, and a session it kills ends with no hook at all. The
+  idle reaper ends such a session after `gardener.session_idle_minutes` and
+  reads its usage then, so its agent time still reaches the
+  [Diary](/reference/console/#diary-usage).
 - **Managed worktrees keep their project.** The app may run a session in a
   managed worktree (`<repo>/.claude/worktrees/<name>`); Seamless resolves a
   linked worktree through its git common directory to the main checkout, so
@@ -9377,15 +9387,14 @@ them ([how](#renewal-means-re-pairing)).
 
 ### Why https changes the Claude Code wiring
 
-Under an `https://` base URL, `install-hooks` writes a different shape on
-purpose: **every** Claude Code hook becomes a command hook (including
-`UserPromptSubmit`, normally the one http hook), and the MCP registration
-becomes the `seam mcp-proxy` stdio bridge instead of a direct URL. Claude Code
-performs http hooks and http MCP connections with its own client, which has
-nowhere to be told about `tls.ca_file`; against a private CA that request dies
-in the TLS handshake. Routing both through `seam` puts them on the CLI's trust
-store, which does read `tls.ca_file`. Under plain http the shapes are
-unchanged.
+Under an `https://` base URL, `install-hooks` registers MCP differently on
+purpose: as the `seam mcp-proxy` stdio bridge instead of a direct URL. Claude
+Code performs an http MCP connection with its own client, which has nowhere to
+be told about `tls.ca_file`; against a private CA that request dies in the TLS
+handshake. Routing it through `seam` puts it on the CLI's trust store, which
+does read `tls.ca_file`. The hooks need no change: every Claude Code hook is a
+`seam hook` command on every transport, so they were on that trust store
+already.
 
 ## By hand: connect a Client with the Server's key {#pair-with-the-servers-key}
 
@@ -9896,9 +9905,9 @@ registration:
 seamlessd install-hooks --client claude    # or codex, or all
 ```
 
-With a socket `server_url` every hook is a `seam hook <event>` command (Claude
-Code's own http hook cannot dial a socket), and the MCP registration is the
-`seam mcp-proxy` stdio bridge. They run the `seam` beside the `seamlessd` that
+Every hook is a `seam hook <event>` command, as on any transport, and with a
+socket `server_url` the MCP registration is the `seam mcp-proxy` stdio bridge
+(Claude Code's own http client cannot dial a socket). They run the `seam` beside the `seamlessd` that
 installed them, a copy of your own; add `--seam /opt/seamless/bin/seam` to run
 the daemon's instead, which no process of yours can replace and which moves
 with the daemon when it [updates itself](#updates), or `--seam
@@ -15718,8 +15727,8 @@ Two behaviours matter if you are debugging a hook:
   sent twice. Whatever the network does - a dial that hangs because the
   server's host drops packets, a daemon that accepts the request and never
   answers - the hook gives up 1s inside the timeout its client gives it: at 4s
-  on `user-prompt-submit`, which Codex, and Claude Code on an https install,
-  kill at 5s, and at 9s on every other event. An unknown event name or
+  on `user-prompt-submit`, which both clients kill at 5s, and at 9s on every
+  other event. An unknown event name or
   present-but-invalid `--client` value is an install/configuration bug and
   exits 1; it never silently becomes Claude Code.
 - **`post-tool-use` pre-filters locally.** It fires machine-wide on every
@@ -16412,12 +16421,11 @@ database to read the [optional features](/reference/console/#optional-features)
 from, so it asks the server over HTTP and falls back to its file/env config
 with a warning. The run closes by naming the server it is now a client of.
 
-Under an **https** base URL the wiring changes shape on purpose: every Claude
-Code hook becomes a command hook (including `UserPromptSubmit`, otherwise the
-one http hook) and the MCP registration becomes the `seam mcp-proxy` stdio
-bridge. Claude Code performs http hooks and http MCP connections with its own
-client, which has nowhere to be told about `tls.ca_file`; routing both through
-`seam` puts them on the CLI's trust store. Under http the shapes are unchanged.
+Under an **https** base URL the MCP registration changes shape on purpose: it
+becomes the `seam mcp-proxy` stdio bridge. Claude Code performs an http MCP
+connection with its own client, which has nowhere to be told about
+`tls.ca_file`; routing it through `seam` puts it on the CLI's trust store. The
+hooks are `seam hook` commands on every transport, so they need no change.
 
 The hook file is written before MCP registration. Claude Code registration stays
 best-effort because its current CLI exposes no machine-readable state: a missing
@@ -16482,10 +16490,11 @@ For Claude Code, seven events are installed together: `SessionStart`,
 `UserPromptSubmit`, `SessionEnd`, `PostToolUse`, `SubagentStart`,
 `SubagentStop`, and
 `PermissionRequest`. All are command hooks that run `seam hook <event>` (exec
-form, no shell) except `UserPromptSubmit`, which is an http hook - Claude Code
-will not run an http hook for SessionStart at all, and at SessionEnd a
-fire-and-forget request races process teardown, so the findings harvest would
-often be lost. The Codex profile is five shell-string command hooks. Both
+form, no shell) - Claude Code will not run an http hook for SessionStart at
+all, at SessionEnd a fire-and-forget request races process teardown, so the
+findings harvest would often be lost, and the Claude app's code sessions never
+ran the http `UserPromptSubmit` hook earlier installs wrote, which this
+replaces in place. No bearer key is written into the file. The Codex profile is five shell-string command hooks. Both
 profiles include safe constraint injection and parent-only lifecycle handling
 for subagents; the [hooks reference](/reference/hooks/) has both tables.
 
@@ -18452,7 +18461,7 @@ install order:
 | Event | Matcher | Transport | Timeout | Endpoint | Effect |
 |---|---|---|---|---|---|
 | `SessionStart` | `startup\|resume\|clear\|compact` | command (`seam hook session-start`) | 10s | `/api/hooks/session-start` | Registers the agent's cwd in the repo→project map, assembles the `<seam-briefing>`, and creates or resumes an opaque `cc/<prefix>-<digest>` ambient handle keyed by the full external ID, stamped with the [agent process](#what-rides-on-the-query-string) that ran the hook. A [claim the conversation lost](#claim-notices) leads the briefing. With repo locks on, the briefing shows the checkout's [locks and live peers](#repo-locks). |
-| `UserPromptSubmit` | none | http | 5s | `/api/hooks/user-prompt-submit` | Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a [claim the conversation lost](#claim-notices) or a [repo lock whose holder changed](#repo-locks) when there is one. A miss is logged as a `hook.prompt` event. With the Diary on, it also keeps the session's [usage ledger current](#mid-session-usage), read after the prompt is answered, at most once every three minutes. |
+| `UserPromptSubmit` | none | command (`seam hook user-prompt-submit`) | 5s | `/api/hooks/user-prompt-submit` | Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a [claim the conversation lost](#claim-notices) or a [repo lock whose holder changed](#repo-locks) when there is one. A miss is logged as a `hook.prompt` event. With the Diary on, it also keeps the session's [usage ledger current](#mid-session-usage), read after the prompt is answered, at most once every three minutes. |
 | `SessionEnd` | none | command (`seam hook session-end`) | 10s | `/api/hooks/session-end` | Harvests findings and the session's model token usage, and completes the agent's sessions. The usage counts the transcripts of the subagents it launched too, which Claude Code keeps beside the session's (`<session>/subagents/agent-*.jsonl`). When the agent already ended its session with `session_end`, or the idle reaper expired it, the hook records the token usage alone, on that session, which stays as it ended. Bare ack - Claude Code's schema has no `hookSpecificOutput` for `SessionEnd`. |
 | `PostToolUse` | `Write\|Edit\|MultiEdit\|ExitPlanMode` | command (`seam hook post-tool-use`) | 10s | `/api/hooks/post-tool-use` | Captures plan-file iterations (`Write`/`Edit`/`MultiEdit` under the plans dir) and plan approvals (`ExitPlanMode`), and heartbeats the ambient session for those calls only: `seam hook` drops every other file's write before it leaves the machine, so ordinary edits and shell commands heartbeat nothing. |
 | `SubagentStart` | none | command (`seam hook subagent-start`) | 10s | `/api/hooks/subagent-start` | Injects the child briefing - pinned constraints, up to three `RELEVANT:` memories matched from the child's spawn prompt, and a recall/memory_read footer - into every Task subagent and heartbeats the parent. It never creates, reactivates, or re-scopes an ambient session. |
@@ -18895,9 +18904,10 @@ session with no `session_start` - see
 malformed value is dropped; an absent one (an older `seam`) leaves the session
 reachable only through the older fallbacks.
 
-Claude Code's `UserPromptSubmit` is the one http hook, so no `seam` process
-computes an identity for it; the daemon attributes it through the ambient
-session that client already has.
+`UserPromptSubmit` takes its host from the ambient session that client
+already has, not from the hook, so the http hook an earlier Claude Code install
+wrote - which no `seam` process computes an identity for - is attributed the
+same way until the next install replaces it.
 
 When the host is *not* the daemon's, every daemon-side read of the agent's
 filesystem is skipped rather than attempted, and the skip is recorded as a
@@ -18929,15 +18939,13 @@ Seam session: cc/<id> (ambient) -- if a tool reports an ambiguous scope, session
 
 A Codex session's line carries its `cx/...` handle.
 
-## Why Claude Code uses two transports
+## Why every Claude Code hook is a command {#why-every-hook-is-a-command}
 
-Against a plain-http loopback daemon, six of the Claude Code hooks are
-`command` and one is `http`. (Codex, above, uses `command` for all five - its
-trust gate applies only to command hooks.) Against an `https://` or `unix://`
-`server_url` - a networked Client, a relay, a peer_auth socket - all seven are
-`command` hooks
-([why](/claude-code/#https-and-socket-servers)). Where the split exists, it is
-not stylistic:
+All seven Claude Code hooks are `command` hooks running `seam hook <event>`,
+whatever the transport: a plain-http loopback daemon, an `https://` Server, a
+relay or a peer_auth socket. (Codex, above, uses `command` for all five - it has
+no http hook type.) Claude Code also supports `http` hooks, and each hook here
+has its own reason not to be one:
 
 - **`SessionStart` must be a command hook.** Claude Code only runs
   `command`/`mcp_tool` hooks for `SessionStart`. An `http` hook there is silently
@@ -18953,15 +18961,22 @@ not stylistic:
 - **`SubagentStart` mirrors the Codex profile.** Both clients run the same
   `seam hook subagent-start` command, so the subagent lifecycle stays one
   transport and one code path across profiles.
-- **`UserPromptSubmit` stays `http`.** It fires mid-turn, where http is reliable.
+- **`UserPromptSubmit` runs where the session runs.** It was an `http` hook
+  against a plain-http daemon until the Claude app's code sessions were seen to
+  run every command hook and never that one, which cost them per-prompt recall
+  and the Diary's [mid-session usage](#mid-session-usage). An install from
+  before that still carries the http entry; `seamlessd install-hooks` (which an
+  update reruns) replaces it in place, and `seamlessd doctor` reports it stale
+  until then.
 
 Command hooks work by having Claude Code pipe the event JSON to the command's
 stdin; `seam hook <arg>` forwards that to the matching endpoint and echoes the
-response back on stdout. Same server logic either way - only the transport
-differs.
+response back on stdout. The request goes through the `seam` CLI's own HTTP
+client, which reads `tls.ca_file` and can dial a socket - Claude Code's can do
+neither ([why](/claude-code/#https-and-socket-servers)).
 
-One practical consequence: the bearer key is only written into settings.json for
-the `http` hook. Command hooks read it from the config file at hook time.
+No bearer key is written into settings.json: `seam hook` reads it from the
+config file the hook names with `--config`, at hook time.
 
 ## What install-hooks writes
 
@@ -18981,20 +18996,22 @@ hook time. The command fails if `mcp.api_key` is empty. The examples below are t
 Claude Code (`settings.json`) shapes; the Codex profile is
 [shell strings, not exec form](#the-codex-profile-is-shell-strings).
 
-An http entry looks like this:
+Every entry is a command hook in **exec form** - a bare `command` plus an
+`args` array, spawned directly with no shell - and carries no key:
 
 ```text
 {
   "hooks": {
-    "UserPromptSubmit": [
+    "SessionStart": [
       {
         "seamless_managed": true,
+        "matcher": "startup|resume|clear|compact",
         "hooks": [
           {
-            "type": "http",
-            "url": "http://127.0.0.1:8081/api/hooks/user-prompt-submit",
-            "timeout": 5,
-            "headers": { "Authorization": "Bearer <mcp.api_key>" }
+            "type": "command",
+            "command": "/abs/path/seam",
+            "args": ["hook", "session-start", "--config", "/abs/path/seamless.yaml"],
+            "timeout": 10
           }
         ]
       }
@@ -19003,23 +19020,11 @@ An http entry looks like this:
 }
 ```
 
-A command entry carries no key and uses **exec form** - a bare `command` plus an
-`args` array, spawned directly with no shell:
-
-```text
-{
-  "seamless_managed": true,
-  "matcher": "startup|resume|clear|compact",
-  "hooks": [
-    {
-      "type": "command",
-      "command": "/abs/path/seam",
-      "args": ["hook", "session-start", "--config", "/abs/path/seamless.yaml"],
-      "timeout": 10
-    }
-  ]
-}
-```
+An install from before every hook was a command wrote `UserPromptSubmit` as an
+http entry instead - `"type": "http"`, the daemon's URL, and an
+`Authorization: Bearer` header holding `mcp.api_key`. The next
+`install-hooks` replaces it with the command entry, in place, and the key
+leaves the file with it.
 
 Exec form is deliberate: it is the one shape that behaves identically on every
 OS. Claude Code runs a shell-form command hook through `sh -c` on Unix but
@@ -19622,12 +19627,15 @@ for one is never evidence for the other.
 |---|---|---|---|
 | Bundled Claude Code 2.1.215 (PATH CLI 2.1.216 on the same machine) / Darwin arm64, 2026-07-21 | SessionStart briefing injected in 8/8 app sessions, correctly project-scoped (including global for cwd-less helper sessions); PostToolUse tool-call events recorded; SessionEnd auto-harvest fired on app close and completed the sessions with genuine findings. **UserPromptSubmit never fired** - no per-prompt recall on this surface | The shared user-scope `~/.claude.json` registration (http + `headersHelper`) worked unchanged from an app code session: a `notes_create` round trip landed a real note | Repo cwd resolved to the mapped project; ambient `cc/...` sessions behaved exactly as CLI sessions |
 
-The UserPromptSubmit row is a live defect on that build, not a Seamless
-configuration problem: a firing hook always leaves a trace (an injection or a
-prompt event), and none exists for any of the eight observed app sessions. The
-suspects - the bundled 2.1.215 runtime versus the app's hook dispatch - are
-unresolved, so the finding is pinned to the build and should be re-tested after
-each app update rather than hardened into a permanent claim.
+The UserPromptSubmit row is not a Seamless configuration problem: a firing
+hook always leaves a trace (an injection or a prompt event), and none exists
+for any of the eight observed app sessions. It was also the one http hook that
+install wrote (against a plain-http daemon); every command hook fired. Seamless
+has since made UserPromptSubmit a command hook like the rest
+(`seam hook user-prompt-submit`), which is the shape the app was seen to run.
+That it fires in an app code session in that shape is expected from this
+evidence but not yet observed, so it stays on the list below until a live app
+session shows it.
 
 Managed worktrees did **not** materialize during this capture (the app ran its
 code sessions directly in the repo root), so the worktree-to-project mapping -
@@ -19668,7 +19676,7 @@ project briefing and correctly scoped every later unscoped call.
   reporting the general case as unverifiable.
 - **An app-only machine.** The tested machine had the PATH CLI and the code
   surface installed; chat-surface setup with nothing else present is untested.
-- **UserPromptSubmit's permanence** on the code surface, per above.
+- **The command UserPromptSubmit hook in an app code session**, per above.
 - **A live app code session inside a managed worktree**, per above.
 - **The chat surface since the agent-process binding.**
   `session_start project=<slug>`, and a sessionless-write fallback that skips
@@ -19686,7 +19694,8 @@ the same handshake over plain HTTP. For the app itself: restart it, confirm
 and have a chat conversation call `memory_read`. For the code surface: open an
 app code session in a mapped repo, look for the `<seam-briefing>` block, then
 prompt again and check whether recall injection ever appears - that is the
-UserPromptSubmit re-test. `seamlessd doctor` reports the bundled app runtime
+UserPromptSubmit re-test (after `seamlessd install-hooks`, so the hook is the
+command form). `seamlessd doctor` reports the bundled app runtime
 and the PATH CLI separately precisely so version skew between them is visible
 while you do this.
 

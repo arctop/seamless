@@ -985,8 +985,8 @@ func claudeHeadersHelper(seamBin, configPath string) string {
 // registration already makes with the mcp-proxy bridge.
 //
 // Under an https base URL it registers the `seam mcp-proxy` stdio bridge
-// instead, for the same reason the hooks go exec-form there (see
-// hooks.profileForBaseURL): Claude Code performs an http MCP connection with its
+// instead, for one of the reasons every hook is a `seam hook` command (see
+// hooks.seamlessHooks): Claude Code performs an http MCP connection with its
 // own client, which has nowhere to be told about tls.ca_file, so a private-CA
 // server fails in the handshake. The bridge speaks stdio to Claude Code and
 // https to the daemon through the seam CLI's own trust store. This is the same

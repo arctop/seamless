@@ -173,9 +173,9 @@ func TestHooksCheckManagedHookWithMissingExecutable(t *testing.T) {
 
 	chk := hooksCheck(w.cfg)
 	require.Equal(t, statusWarn, chk.status)
-	// UserPromptSubmit is an http hook under this http base URL: it runs no seam.
+	// Every hook runs the missing seam, UserPromptSubmit among them.
 	require.Contains(t, chk.detail,
-		"(current: UserPromptSubmit; stale: SessionStart, SessionEnd, PostToolUse, SubagentStart, SubagentStop, PermissionRequest)")
+		"(current: none; stale: SessionStart, UserPromptSubmit, SessionEnd, PostToolUse, SubagentStart, SubagentStop, PermissionRequest)")
 	require.Contains(t, chk.detail, "stale in "+managed)
 	require.Contains(t, chk.detail, "an administrator must update it")
 	require.Contains(t, chk.detail, "not runnable from "+managed)
@@ -424,12 +424,11 @@ func TestHooksCheckManagedHooksNamingAClientConfigOfThisServerWithAnotherKey(t *
 
 	chk := hooksCheck(w.cfg)
 	require.Equal(t, statusWarn, chk.status, chk.detail)
-	// UserPromptSubmit is an http hook over TCP, built from this install's own
-	// key and naming no config: current either way. Every command hook is not.
-	require.Contains(t, chk.detail, "(current: UserPromptSubmit; stale: SessionStart, SessionEnd, PostToolUse, "+
+	// Every hook is a command hook naming that config, so none is current.
+	require.Contains(t, chk.detail, "(current: none; stale: SessionStart, UserPromptSubmit, SessionEnd, PostToolUse, "+
 		"SubagentStart, SubagentStop, PermissionRequest)")
-	require.Contains(t, chk.detail, "stale in "+managed+": SessionStart, SessionEnd, PostToolUse, SubagentStart, "+
-		"SubagentStop, PermissionRequest (hook config "+shared+" reaches the same server with another key; "+
+	require.Contains(t, chk.detail, "stale in "+managed+": SessionStart, UserPromptSubmit, SessionEnd, PostToolUse, "+
+		"SubagentStart, SubagentStop, PermissionRequest (hook config "+shared+" reaches the same server with another key; "+
 		"not a file install-hooks writes")
 	require.NotContains(t, chk.detail, otherKey)
 	require.NotContains(t, chk.detail, w.cfg.MCP.APIKey)

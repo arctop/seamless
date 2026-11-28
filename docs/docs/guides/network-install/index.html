@@ -1149,15 +1149,14 @@ relay, which pins the exact certificate it paired with: a renewal means
 re-pairing each relay, and from 14 days out doctor's <code>relay renewal</code> row names
 them (<a href="#renewal-means-re-pairing">how</a>).</p>
 <h3 id="why-https-changes-the-claude-code-wiring">Why https changes the Claude Code wiring</h3>
-<p>Under an <code>https://</code> base URL, <code>install-hooks</code> writes a different shape on
-purpose: <strong>every</strong> Claude Code hook becomes a command hook (including
-<code>UserPromptSubmit</code>, normally the one http hook), and the MCP registration
-becomes the <code>seam mcp-proxy</code> stdio bridge instead of a direct URL. Claude Code
-performs http hooks and http MCP connections with its own client, which has
-nowhere to be told about <code>tls.ca_file</code>; against a private CA that request dies
-in the TLS handshake. Routing both through <code>seam</code> puts them on the CLI's trust
-store, which does read <code>tls.ca_file</code>. Under plain http the shapes are
-unchanged.</p>
+<p>Under an <code>https://</code> base URL, <code>install-hooks</code> registers MCP differently on
+purpose: as the <code>seam mcp-proxy</code> stdio bridge instead of a direct URL. Claude
+Code performs an http MCP connection with its own client, which has nowhere to
+be told about <code>tls.ca_file</code>; against a private CA that request dies in the TLS
+handshake. Routing it through <code>seam</code> puts it on the CLI's trust store, which
+does read <code>tls.ca_file</code>. The hooks need no change: every Claude Code hook is a
+<code>seam hook</code> command on every transport, so they were on that trust store
+already.</p>
 <h2 id="pair-with-the-servers-key">By hand: connect a Client with the Server's key</h2>
 <p>On the <strong>server</strong>, ask for the pairing block:</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd client-config            <span class="c1"># add --redact to paste it into a ticket</span>

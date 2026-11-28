@@ -278,12 +278,15 @@ for one is never evidence for the other.</p>
 </tbody>
 </table>
 </div>
-<p>The UserPromptSubmit row is a live defect on that build, not a Seamless
-configuration problem: a firing hook always leaves a trace (an injection or a
-prompt event), and none exists for any of the eight observed app sessions. The
-suspects - the bundled 2.1.215 runtime versus the app's hook dispatch - are
-unresolved, so the finding is pinned to the build and should be re-tested after
-each app update rather than hardened into a permanent claim.</p>
+<p>The UserPromptSubmit row is not a Seamless configuration problem: a firing
+hook always leaves a trace (an injection or a prompt event), and none exists
+for any of the eight observed app sessions. It was also the one http hook that
+install wrote (against a plain-http daemon); every command hook fired. Seamless
+has since made UserPromptSubmit a command hook like the rest
+(<code>seam hook user-prompt-submit</code>), which is the shape the app was seen to run.
+That it fires in an app code session in that shape is expected from this
+evidence but not yet observed, so it stays on the list below until a live app
+session shows it.</p>
 <p>Managed worktrees did <strong>not</strong> materialize during this capture (the app ran its
 code sessions directly in the repo root), so the worktree-to-project mapping -
 a linked worktree resolves through its git common directory to the main
@@ -335,7 +338,7 @@ and socket evidence above covers one observed build, and <code>doctor</code> kee
 reporting the general case as unverifiable.</li>
 <li><strong>An app-only machine.</strong> The tested machine had the PATH CLI and the code
 surface installed; chat-surface setup with nothing else present is untested.</li>
-<li><strong>UserPromptSubmit's permanence</strong> on the code surface, per above.</li>
+<li><strong>The command UserPromptSubmit hook in an app code session</strong>, per above.</li>
 <li><strong>A live app code session inside a managed worktree</strong>, per above.</li>
 <li><strong>The chat surface since the agent-process binding.</strong>
 <code>session_start project=&lt;slug&gt;</code>, and a sessionless-write fallback that skips
@@ -352,7 +355,8 @@ the same handshake over plain HTTP. For the app itself: restart it, confirm
 and have a chat conversation call <code>memory_read</code>. For the code surface: open an
 app code session in a mapped repo, look for the <code>&lt;seam-briefing&gt;</code> block, then
 prompt again and check whether recall injection ever appears - that is the
-UserPromptSubmit re-test. <code>seamlessd doctor</code> reports the bundled app runtime
+UserPromptSubmit re-test (after <code>seamlessd install-hooks</code>, so the hook is the
+command form). <code>seamlessd doctor</code> reports the bundled app runtime
 and the PATH CLI separately precisely so version skew between them is visible
 while you do this.</p>
 

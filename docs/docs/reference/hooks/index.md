@@ -42,7 +42,7 @@ install order:
 | Event | Matcher | Transport | Timeout | Endpoint | Effect |
 |---|---|---|---|---|---|
 | `SessionStart` | `startup\|resume\|clear\|compact` | command (`seam hook session-start`) | 10s | `/api/hooks/session-start` | Registers the agent's cwd in the repo→project map, assembles the `<seam-briefing>`, and creates or resumes an opaque `cc/<prefix>-<digest>` ambient handle keyed by the full external ID, stamped with the [agent process](#what-rides-on-the-query-string) that ran the hook. A [claim the conversation lost](#claim-notices) leads the briefing. With repo locks on, the briefing shows the checkout's [locks and live peers](#repo-locks). |
-| `UserPromptSubmit` | none | http | 5s | `/api/hooks/user-prompt-submit` | Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a [claim the conversation lost](#claim-notices) or a [repo lock whose holder changed](#repo-locks) when there is one. A miss is logged as a `hook.prompt` event. With the Diary on, it also keeps the session's [usage ledger current](#mid-session-usage), read after the prompt is answered, at most once every three minutes. |
+| `UserPromptSubmit` | none | command (`seam hook user-prompt-submit`) | 5s | `/api/hooks/user-prompt-submit` | Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a [claim the conversation lost](#claim-notices) or a [repo lock whose holder changed](#repo-locks) when there is one. A miss is logged as a `hook.prompt` event. With the Diary on, it also keeps the session's [usage ledger current](#mid-session-usage), read after the prompt is answered, at most once every three minutes. |
 | `SessionEnd` | none | command (`seam hook session-end`) | 10s | `/api/hooks/session-end` | Harvests findings and the session's model token usage, and completes the agent's sessions. The usage counts the transcripts of the subagents it launched too, which Claude Code keeps beside the session's (`<session>/subagents/agent-*.jsonl`). When the agent already ended its session with `session_end`, or the idle reaper expired it, the hook records the token usage alone, on that session, which stays as it ended. Bare ack - Claude Code's schema has no `hookSpecificOutput` for `SessionEnd`. |
 | `PostToolUse` | `Write\|Edit\|MultiEdit\|ExitPlanMode` | command (`seam hook post-tool-use`) | 10s | `/api/hooks/post-tool-use` | Captures plan-file iterations (`Write`/`Edit`/`MultiEdit` under the plans dir) and plan approvals (`ExitPlanMode`), and heartbeats the ambient session for those calls only: `seam hook` drops every other file's write before it leaves the machine, so ordinary edits and shell commands heartbeat nothing. |
 | `SubagentStart` | none | command (`seam hook subagent-start`) | 10s | `/api/hooks/subagent-start` | Injects the child briefing - pinned constraints, up to three `RELEVANT:` memories matched from the child's spawn prompt, and a recall/memory_read footer - into every Task subagent and heartbeats the parent. It never creates, reactivates, or re-scopes an ambient session. |
@@ -485,9 +485,10 @@ session with no `session_start` - see
 malformed value is dropped; an absent one (an older `seam`) leaves the session
 reachable only through the older fallbacks.
 
-Claude Code's `UserPromptSubmit` is the one http hook, so no `seam` process
-computes an identity for it; the daemon attributes it through the ambient
-session that client already has.
+`UserPromptSubmit` takes its host from the ambient session that client
+already has, not from the hook, so the http hook an earlier Claude Code install
+wrote - which no `seam` process computes an identity for - is attributed the
+same way until the next install replaces it.
 
 When the host is *not* the daemon's, every daemon-side read of the agent's
 filesystem is skipped rather than attempted, and the skip is recorded as a
@@ -519,15 +520,13 @@ Seam session: cc/<id> (ambient) -- if a tool reports an ambiguous scope, session
 
 A Codex session's line carries its `cx/...` handle.
 
-## Why Claude Code uses two transports
+## Why every Claude Code hook is a command {#why-every-hook-is-a-command}
 
-Against a plain-http loopback daemon, six of the Claude Code hooks are
-`command` and one is `http`. (Codex, above, uses `command` for all five - its
-trust gate applies only to command hooks.) Against an `https://` or `unix://`
-`server_url` - a networked Client, a relay, a peer_auth socket - all seven are
-`command` hooks
-([why](https://thereisnospoon.org/docs/claude-code/#https-and-socket-servers)). Where the split exists, it is
-not stylistic:
+All seven Claude Code hooks are `command` hooks running `seam hook <event>`,
+whatever the transport: a plain-http loopback daemon, an `https://` Server, a
+relay or a peer_auth socket. (Codex, above, uses `command` for all five - it has
+no http hook type.) Claude Code also supports `http` hooks, and each hook here
+has its own reason not to be one:
 
 - **`SessionStart` must be a command hook.** Claude Code only runs
   `command`/`mcp_tool` hooks for `SessionStart`. An `http` hook there is silently
@@ -543,15 +542,22 @@ not stylistic:
 - **`SubagentStart` mirrors the Codex profile.** Both clients run the same
   `seam hook subagent-start` command, so the subagent lifecycle stays one
   transport and one code path across profiles.
-- **`UserPromptSubmit` stays `http`.** It fires mid-turn, where http is reliable.
+- **`UserPromptSubmit` runs where the session runs.** It was an `http` hook
+  against a plain-http daemon until the Claude app's code sessions were seen to
+  run every command hook and never that one, which cost them per-prompt recall
+  and the Diary's [mid-session usage](#mid-session-usage). An install from
+  before that still carries the http entry; `seamlessd install-hooks` (which an
+  update reruns) replaces it in place, and `seamlessd doctor` reports it stale
+  until then.
 
 Command hooks work by having Claude Code pipe the event JSON to the command's
 stdin; `seam hook <arg>` forwards that to the matching endpoint and echoes the
-response back on stdout. Same server logic either way - only the transport
-differs.
+response back on stdout. The request goes through the `seam` CLI's own HTTP
+client, which reads `tls.ca_file` and can dial a socket - Claude Code's can do
+neither ([why](https://thereisnospoon.org/docs/claude-code/#https-and-socket-servers)).
 
-One practical consequence: the bearer key is only written into settings.json for
-the `http` hook. Command hooks read it from the config file at hook time.
+No bearer key is written into settings.json: `seam hook` reads it from the
+config file the hook names with `--config`, at hook time.
 
 ## What install-hooks writes
 
@@ -571,20 +577,22 @@ hook time. The command fails if `mcp.api_key` is empty. The examples below are t
 Claude Code (`settings.json`) shapes; the Codex profile is
 [shell strings, not exec form](#the-codex-profile-is-shell-strings).
 
-An http entry looks like this:
+Every entry is a command hook in **exec form** - a bare `command` plus an
+`args` array, spawned directly with no shell - and carries no key:
 
 ```text
 {
   "hooks": {
-    "UserPromptSubmit": [
+    "SessionStart": [
       {
         "seamless_managed": true,
+        "matcher": "startup|resume|clear|compact",
         "hooks": [
           {
-            "type": "http",
-            "url": "http://127.0.0.1:8081/api/hooks/user-prompt-submit",
-            "timeout": 5,
-            "headers": { "Authorization": "Bearer <mcp.api_key>" }
+            "type": "command",
+            "command": "/abs/path/seam",
+            "args": ["hook", "session-start", "--config", "/abs/path/seamless.yaml"],
+            "timeout": 10
           }
         ]
       }
@@ -593,23 +601,11 @@ An http entry looks like this:
 }
 ```
 
-A command entry carries no key and uses **exec form** - a bare `command` plus an
-`args` array, spawned directly with no shell:
-
-```text
-{
-  "seamless_managed": true,
-  "matcher": "startup|resume|clear|compact",
-  "hooks": [
-    {
-      "type": "command",
-      "command": "/abs/path/seam",
-      "args": ["hook", "session-start", "--config", "/abs/path/seamless.yaml"],
-      "timeout": 10
-    }
-  ]
-}
-```
+An install from before every hook was a command wrote `UserPromptSubmit` as an
+http entry instead - `"type": "http"`, the daemon's URL, and an
+`Authorization: Bearer` header holding `mcp.api_key`. The next
+`install-hooks` replaces it with the command entry, in place, and the key
+leaves the file with it.
 
 Exec form is deliberate: it is the one shape that behaves identically on every
 OS. Claude Code runs a shell-form command hook through `sh -c` on Unix but

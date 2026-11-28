@@ -42,23 +42,26 @@ anything. See [Sessions & briefings](https://thereisnospoon.org/docs/concepts/se
 for what that delivers and [the hooks reference](https://thereisnospoon.org/docs/reference/hooks/) for the
 exact table.
 
-### Why some hooks are commands and others are http
+### Why every hook is a command
 
-This looks inconsistent and is not: SessionStart only fires as a command hook,
-SessionEnd as http races Claude Code's teardown, and the plan-capture hooks
-pre-filter locally so the machine-wide `Write`/`Edit` hot path never touches
-the network. The full rationale, hook by hook, is in
-[the hooks reference](https://thereisnospoon.org/docs/reference/hooks/#why-claude-code-uses-two-transports).
+Claude Code can run a hook as a command or as an http request, and every
+Seamless hook is a command running `seam hook <event>`: SessionStart only fires
+as a command hook, SessionEnd as http races Claude Code's teardown, the
+plan-capture hooks pre-filter locally so the machine-wide `Write`/`Edit` hot
+path never touches the network, and the Claude app's code sessions never run
+an http UserPromptSubmit. No bearer key lands in `settings.json`. The full
+rationale, hook by hook, is in
+[the hooks reference](https://thereisnospoon.org/docs/reference/hooks/#why-every-hook-is-a-command).
 
 ### Over https or a socket {#https-and-socket-servers}
 
-That mix, and the `headersHelper` registration, are the shape for a daemon
-reached over plain http. When `server_url` is `https://` (a Client reaching its
-Server over TLS) or `unix://` (a [relay](https://thereisnospoon.org/docs/concepts/networked/#the-relay), or a
-[peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/) daemon's socket), every hook is a `seam hook`
-command and MCP is registered as the `seam mcp-proxy` stdio bridge. Claude
-Code's own http client cannot be told about a private CA, and cannot dial a
-socket at all, so both go through `seam`
+The `headersHelper` registration is the shape for a daemon reached over plain
+http. When `server_url` is `https://` (a Client reaching its Server over TLS)
+or `unix://` (a [relay](https://thereisnospoon.org/docs/concepts/networked/#the-relay), or a
+[peer_auth](https://thereisnospoon.org/docs/guides/peer-auth/) daemon's socket), MCP is registered as the
+`seam mcp-proxy` stdio bridge instead. Claude Code's own http client cannot be
+told about a private CA, and cannot dial a socket at all, so MCP goes through
+`seam` there, as the hooks do everywhere
 ([why](https://thereisnospoon.org/docs/guides/network-install/#why-https-changes-the-claude-code-wiring)).
 
 ## Registering the MCP endpoint by hand
@@ -164,11 +167,18 @@ matrix](https://thereisnospoon.org/docs/reference/claude-app-compatibility/):
   `seamlessd doctor` reports each discoverable runtime on its own line -
   `claude CLI runtime` and `claude app runtime` - so the skew is visible when
   an app-only failure has you debugging.
-- **Per-prompt recall does not currently fire in app code sessions.** On the
-  observed build, the SessionStart briefing, PostToolUse events, and the
-  SessionEnd findings harvest all work - but UserPromptSubmit never fires, so
-  `<seam-recall>` injections never happen there. The briefing at session start
-  is what an app code session gets.
+- **The app runs command hooks only.** On the observed build, the
+  SessionStart briefing, PostToolUse events, and the SessionEnd findings
+  harvest all worked, but the http UserPromptSubmit hook that installs against
+  a plain-http daemon used to write never fired, so app code sessions got no
+  `<seam-recall>` injections and no mid-session usage for the Diary. Every hook
+  is a command hook now; an install from before that gets the command hook the
+  next time `seamlessd install-hooks` runs, which an update does for you.
+- **SessionEnd may come late, or never.** The app keeps a session open until
+  you archive it or quit, and a session it kills ends with no hook at all. The
+  idle reaper ends such a session after `gardener.session_idle_minutes` and
+  reads its usage then, so its agent time still reaches the
+  [Diary](https://thereisnospoon.org/docs/reference/console/#diary-usage).
 - **Managed worktrees keep their project.** The app may run a session in a
   managed worktree (`<repo>/.claude/worktrees/<name>`); Seamless resolves a
   linked worktree through its git common directory to the main checkout, so

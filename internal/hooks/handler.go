@@ -214,9 +214,11 @@ type promptPayload struct {
 	UserPrompt     string `json:"user_prompt"` // both clients send it as `prompt`; decodePrompt fills it
 	HookEventName  string `json:"hook_event_name"`
 	Model          string `json:"model"` // Codex sends it; Claude Code does not (see setAmbientModel)
-	// Host is resolved by the handler, not the client: UserPromptSubmit stays an
-	// http hook, so no seam process computes an identity for it. The daemon
-	// attributes it through the ambient session it already owns.
+	// Host is resolved by the handler, not the client: a Claude Code install
+	// from before every hook was a command hook still runs UserPromptSubmit as
+	// an http hook, which no seam process computes an identity for. The daemon
+	// attributes it through the ambient session it already owns, whichever
+	// shape sent it.
 	Host string `json:"-"`
 	// Capture is what `seam hook` pushed under peer_auth (pushed.go), where
 	// every hook is a command hook; nil otherwise.
@@ -1420,11 +1422,11 @@ func (h *Handler) userPromptSubmit(w http.ResponseWriter, r *http.Request) {
 		p.SessionID = ""
 	}
 
-	// UserPromptSubmit is installed as an http hook (it is reliable mid-turn),
-	// so no seam process computed an identity for it. The ambient session the
-	// SessionStart hook already created carries the host, and that is the only
-	// honest source here -- guessing "local" would read a remote agent's
-	// transcript path off this machine.
+	// An earlier install's http UserPromptSubmit hook sends no identity: no
+	// seam process computed one for it. The ambient session the SessionStart
+	// hook already created carries the host, the same for either shape, and
+	// that is the honest source here -- guessing "local" would read a remote
+	// agent's transcript path off this machine.
 	amb, ambFound := h.ambientRow(ctx, client, p.SessionID)
 	p.Host = amb.Host
 
@@ -1805,11 +1807,12 @@ func (h *Handler) gitHead(ctx context.Context, id hookIdentity, cwd string, push
 	return gitread.Head(cwd)
 }
 
-// ambientRow returns the client's ambient session, for the hooks that carry no
-// identity of their own (UserPromptSubmit is an http hook, so no seam process
-// computes one): its Host is the machine the hook speaks for -- "" when there
-// is no such session, which hostOf/sameHost read as local, the same as an
-// older client -- and its metadata the repo-lock record (repoLockNotice).
+// ambientRow returns the client's ambient session, for the hooks that may carry
+// no identity of their own (an earlier install's http UserPromptSubmit, for
+// which no seam process computes one): its Host is the machine the hook speaks
+// for -- "" when there is no such session, which hostOf/sameHost read as
+// local, the same as an older client -- and its metadata the repo-lock record
+// (repoLockNotice).
 // found is false with no database or id, no such session, or a failed lookup
 // (recorded).
 func (h *Handler) ambientRow(ctx context.Context, client Client, claudeSessionID string) (core.Session, bool) {

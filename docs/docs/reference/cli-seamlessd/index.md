@@ -637,12 +637,11 @@ database to read the [optional features](https://thereisnospoon.org/docs/referen
 from, so it asks the server over HTTP and falls back to its file/env config
 with a warning. The run closes by naming the server it is now a client of.
 
-Under an **https** base URL the wiring changes shape on purpose: every Claude
-Code hook becomes a command hook (including `UserPromptSubmit`, otherwise the
-one http hook) and the MCP registration becomes the `seam mcp-proxy` stdio
-bridge. Claude Code performs http hooks and http MCP connections with its own
-client, which has nowhere to be told about `tls.ca_file`; routing both through
-`seam` puts them on the CLI's trust store. Under http the shapes are unchanged.
+Under an **https** base URL the MCP registration changes shape on purpose: it
+becomes the `seam mcp-proxy` stdio bridge. Claude Code performs an http MCP
+connection with its own client, which has nowhere to be told about
+`tls.ca_file`; routing it through `seam` puts it on the CLI's trust store. The
+hooks are `seam hook` commands on every transport, so they need no change.
 
 The hook file is written before MCP registration. Claude Code registration stays
 best-effort because its current CLI exposes no machine-readable state: a missing
@@ -707,10 +706,11 @@ For Claude Code, seven events are installed together: `SessionStart`,
 `UserPromptSubmit`, `SessionEnd`, `PostToolUse`, `SubagentStart`,
 `SubagentStop`, and
 `PermissionRequest`. All are command hooks that run `seam hook <event>` (exec
-form, no shell) except `UserPromptSubmit`, which is an http hook - Claude Code
-will not run an http hook for SessionStart at all, and at SessionEnd a
-fire-and-forget request races process teardown, so the findings harvest would
-often be lost. The Codex profile is five shell-string command hooks. Both
+form, no shell) - Claude Code will not run an http hook for SessionStart at
+all, at SessionEnd a fire-and-forget request races process teardown, so the
+findings harvest would often be lost, and the Claude app's code sessions never
+ran the http `UserPromptSubmit` hook earlier installs wrote, which this
+replaces in place. No bearer key is written into the file. The Codex profile is five shell-string command hooks. Both
 profiles include safe constraint injection and parent-only lifecycle handling
 for subagents; the [hooks reference](https://thereisnospoon.org/docs/reference/hooks/) has both tables.
 

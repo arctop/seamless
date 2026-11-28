@@ -1291,8 +1291,8 @@ Two behaviours matter if you are debugging a hook:
   sent twice. Whatever the network does - a dial that hangs because the
   server's host drops packets, a daemon that accepts the request and never
   answers - the hook gives up 1s inside the timeout its client gives it: at 4s
-  on `user-prompt-submit`, which Codex, and Claude Code on an https install,
-  kill at 5s, and at 9s on every other event. An unknown event name or
+  on `user-prompt-submit`, which both clients kill at 5s, and at 9s on every
+  other event. An unknown event name or
   present-but-invalid `--client` value is an install/configuration bug and
   exits 1; it never silently becomes Claude Code.
 - **`post-tool-use` pre-filters locally.** It fires machine-wide on every

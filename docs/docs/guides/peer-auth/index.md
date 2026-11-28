@@ -344,9 +344,9 @@ registration:
 seamlessd install-hooks --client claude    # or codex, or all
 ```
 
-With a socket `server_url` every hook is a `seam hook <event>` command (Claude
-Code's own http hook cannot dial a socket), and the MCP registration is the
-`seam mcp-proxy` stdio bridge. They run the `seam` beside the `seamlessd` that
+Every hook is a `seam hook <event>` command, as on any transport, and with a
+socket `server_url` the MCP registration is the `seam mcp-proxy` stdio bridge
+(Claude Code's own http client cannot dial a socket). They run the `seam` beside the `seamlessd` that
 installed them, a copy of your own; add `--seam /opt/seamless/bin/seam` to run
 the daemon's instead, which no process of yours can replace and which moves
 with the daemon when it [updates itself](#updates), or `--seam

@@ -59,11 +59,10 @@ type hookEvent struct {
 // client gives the hook. That pin is load-bearing: because a hook fails open,
 // drift here is a silent no-op rather than an error.
 //
-// user-prompt-submit is the one event whose shape follows the transport: on an
-// http base URL the installer wires it as an http hook (reliable mid-turn), and
-// on an https one profileForBaseURL turns it into a command hook so no bearer key
-// lands in settings.json. seam has always accepted the command form, so it stays
-// either way.
+// Every event the installers wire is a command hook on every transport: Claude
+// Code's user-prompt-submit was an http hook on an http base URL until the
+// Claude app's code sessions were seen never to run it (internal/hooks
+// seamlessHooks), and an install from before that still sends it the old way.
 var hookEvents = []hookEvent{
 	{"session-start", "/api/hooks/session-start", hookFullDialBudget, hookDeadline},
 	{"user-prompt-submit", "/api/hooks/user-prompt-submit", hookShortDialBudget, hookPromptDeadline},
@@ -176,8 +175,7 @@ var hookIdentityParams = []string{"host", "repo_root", "main_root", "origin", "a
 // every prompt in user-prompt-submit's case -- so each deadline sits
 // hookDeadlineMargin under the timeout every client gives that event
 // (hook_test.go pins it against internal/hooks): 10s for every command hook
-// but user-prompt-submit, which Codex, and Claude Code on an https install,
-// kill at 5s.
+// but user-prompt-submit, which both clients kill at 5s.
 //
 // A deadline covers everything the hook does from the moment it knows its
 // event: reading the payload, loading config, every attempt and the waits

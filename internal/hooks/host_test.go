@@ -236,8 +236,9 @@ func TestSessionStart_RemoteWithoutRootRecordsItsOwnStage(t *testing.T) {
 	require.True(t, found, "the unplaceable remote cwd must be recorded, not swallowed")
 }
 
-// UserPromptSubmit is an http hook with no identity of its own; the host comes
-// from the ambient session SessionStart already created.
+// UserPromptSubmit's host comes from the ambient session SessionStart already
+// created, not from the hook: an earlier install's http hook sends no identity
+// of its own.
 func TestUserPromptSubmit_AttributesHostViaTheAmbientSession(t *testing.T) {
 	e := newHostEnv(t, config.PlanCapture{})
 	ctx := context.Background()

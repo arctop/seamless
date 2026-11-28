@@ -1126,12 +1126,11 @@ key belongs to the server it dials: it comes from <code>--api-key</code>, else
 database to read the <a href="../../reference/console/#optional-features">optional features</a>
 from, so it asks the server over HTTP and falls back to its file/env config
 with a warning. The run closes by naming the server it is now a client of.</p>
-<p>Under an <strong>https</strong> base URL the wiring changes shape on purpose: every Claude
-Code hook becomes a command hook (including <code>UserPromptSubmit</code>, otherwise the
-one http hook) and the MCP registration becomes the <code>seam mcp-proxy</code> stdio
-bridge. Claude Code performs http hooks and http MCP connections with its own
-client, which has nowhere to be told about <code>tls.ca_file</code>; routing both through
-<code>seam</code> puts them on the CLI's trust store. Under http the shapes are unchanged.</p>
+<p>Under an <strong>https</strong> base URL the MCP registration changes shape on purpose: it
+becomes the <code>seam mcp-proxy</code> stdio bridge. Claude Code performs an http MCP
+connection with its own client, which has nowhere to be told about
+<code>tls.ca_file</code>; routing it through <code>seam</code> puts it on the CLI's trust store. The
+hooks are <code>seam hook</code> commands on every transport, so they need no change.</p>
 <p>The hook file is written before MCP registration. Claude Code registration stays
 best-effort because its current CLI exposes no machine-readable state: a missing
 CLI or failed <code>mcp add-json</code> prints the exact command to run yourself. An existing
@@ -1188,10 +1187,11 @@ registry) are not files Seamless can read, so they are not consulted.</p>
 <code>UserPromptSubmit</code>, <code>SessionEnd</code>, <code>PostToolUse</code>, <code>SubagentStart</code>,
 <code>SubagentStop</code>, and
 <code>PermissionRequest</code>. All are command hooks that run <code>seam hook &lt;event&gt;</code> (exec
-form, no shell) except <code>UserPromptSubmit</code>, which is an http hook - Claude Code
-will not run an http hook for SessionStart at all, and at SessionEnd a
-fire-and-forget request races process teardown, so the findings harvest would
-often be lost. The Codex profile is five shell-string command hooks. Both
+form, no shell) - Claude Code will not run an http hook for SessionStart at
+all, at SessionEnd a fire-and-forget request races process teardown, so the
+findings harvest would often be lost, and the Claude app's code sessions never
+ran the http <code>UserPromptSubmit</code> hook earlier installs wrote, which this
+replaces in place. No bearer key is written into the file. The Codex profile is five shell-string command hooks. Both
 profiles include safe constraint injection and parent-only lifecycle handling
 for subagents; the <a href="../../reference/hooks/">hooks reference</a> has both tables.</p>
 <h2 id="seamlessd_install_service">seamlessd install-service</h2>

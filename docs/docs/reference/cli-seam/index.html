@@ -1235,8 +1235,8 @@ the next turn repeats. A payload that may already have reached it is never
 sent twice. Whatever the network does - a dial that hangs because the
 server's host drops packets, a daemon that accepts the request and never
 answers - the hook gives up 1s inside the timeout its client gives it: at 4s
-on <code>user-prompt-submit</code>, which Codex, and Claude Code on an https install,
-kill at 5s, and at 9s on every other event. An unknown event name or
+on <code>user-prompt-submit</code>, which both clients kill at 5s, and at 9s on every
+other event. An unknown event name or
 present-but-invalid <code>--client</code> value is an install/configuration bug and
 exits 1; it never silently becomes Claude Code.</li>
 <li><strong><code>post-tool-use</code> pre-filters locally.</strong> It fires machine-wide on every

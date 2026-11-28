@@ -122,8 +122,8 @@ func (e *ledgerLiveEnv) advance(d time.Duration) {
 	e.now = e.now.Add(d)
 }
 
-// hook posts one hook as Claude Code's http hook (or a `seam hook` on this
-// computer) would, and returns the answer with its body.
+// hook posts one hook as a `seam hook` on this computer (or an earlier
+// install's http hook) would, and returns the answer with its body.
 func (e *ledgerLiveEnv) hook(event, query string, body map[string]any) (*http.Response, []byte) {
 	e.t.Helper()
 	return ledgerLivePost(e.t, e.url+"/api/hooks/"+event+query, body)

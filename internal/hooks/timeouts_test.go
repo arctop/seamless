@@ -11,14 +11,12 @@ import (
 )
 
 // The timeouts the seam CLI sizes its dial budgets against (cmd/seam
-// hook_test.go): every command hook a client's profile can wire, on either
-// transport.
+// hook_test.go): every command hook a client's profile wires.
 func TestCommandHookTimeouts_ByClient(t *testing.T) {
 	const s = time.Second
 	want := map[Client]map[string]time.Duration{
 		ClientClaudeCode: {
-			"session-start": 10 * s,
-			// An http hook on an http install, a command hook on an https one.
+			"session-start":      10 * s,
 			"user-prompt-submit": 5 * s,
 			"session-end":        10 * s,
 			"post-tool-use":      10 * s,

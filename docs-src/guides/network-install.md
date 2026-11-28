@@ -893,15 +893,14 @@ them ([how](#renewal-means-re-pairing)).
 
 ### Why https changes the Claude Code wiring
 
-Under an `https://` base URL, `install-hooks` writes a different shape on
-purpose: **every** Claude Code hook becomes a command hook (including
-`UserPromptSubmit`, normally the one http hook), and the MCP registration
-becomes the `seam mcp-proxy` stdio bridge instead of a direct URL. Claude Code
-performs http hooks and http MCP connections with its own client, which has
-nowhere to be told about `tls.ca_file`; against a private CA that request dies
-in the TLS handshake. Routing both through `seam` puts them on the CLI's trust
-store, which does read `tls.ca_file`. Under plain http the shapes are
-unchanged.
+Under an `https://` base URL, `install-hooks` registers MCP differently on
+purpose: as the `seam mcp-proxy` stdio bridge instead of a direct URL. Claude
+Code performs an http MCP connection with its own client, which has nowhere to
+be told about `tls.ca_file`; against a private CA that request dies in the TLS
+handshake. Routing it through `seam` puts it on the CLI's trust store, which
+does read `tls.ca_file`. The hooks need no change: every Claude Code hook is a
+`seam hook` command on every transport, so they were on that trust store
+already.
 
 ## By hand: connect a Client with the Server's key {#pair-with-the-servers-key}
 

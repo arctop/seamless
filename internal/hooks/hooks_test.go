@@ -577,13 +577,14 @@ func TestInstallIdempotentAndPreservesUnknownKeys(t *testing.T) {
 	// The foreign seam_managed entry survives alongside the new seamless entry.
 	require.Len(t, ss, 2)
 	require.Contains(t, string(raw), "seamless_managed")
-	// SessionStart and SessionEnd are exec-form command hooks; only
-	// UserPromptSubmit stays http, so the bearer key reaches settings via that
-	// lone http hook.
+	// SessionStart, UserPromptSubmit and SessionEnd are exec-form command
+	// hooks, so the bearer key never reaches settings: `seam hook` reads it
+	// from the config.
 	requireCommandHook(t, hooksObj, "SessionStart", "session-start")
+	requireCommandHook(t, hooksObj, "UserPromptSubmit", "user-prompt-submit")
 	requireCommandHook(t, hooksObj, "SessionEnd", "session-end")
-	require.Contains(t, string(raw), "8081/api/hooks/user-prompt-submit")
-	require.Contains(t, string(raw), "Bearer secret-key")
+	require.NotContains(t, string(raw), "Bearer")
+	require.NotContains(t, string(raw), "secret-key")
 	// UserPromptSubmit and SessionEnd were added too.
 	require.Len(t, hooksObj["UserPromptSubmit"].([]any), 1)
 	require.Len(t, hooksObj["SessionEnd"].([]any), 1)
@@ -641,7 +642,7 @@ func TestInstalledStatus(t *testing.T) {
 // owner edits config or permissions, dropping keys it does not know --
 // including the seamless_managed marker -- while keeping the functional hook
 // entries. Those still-firing hooks must count as installed, matched by their
-// seam-CLI command (command hooks) or hook URL (http hooks).
+// seam-CLI command.
 func TestInstalledStatusSurvivesMarkerStripping(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.json")
@@ -669,15 +670,16 @@ func TestInstalledStatusSurvivesMarkerStripping(t *testing.T) {
 	require.Equal(t, installedEvents(t, ClientClaudeCode), status.Current)
 	require.Empty(t, status.Stale)
 
-	// An unmarked http entry at a different base URL is not ours (e.g. a v1
-	// leftover): the http hook must drop out while the seam-CLI command hooks
-	// still match by their `hook <event>` command.
+	// No hook names the base URL, so judged against another one every hook
+	// still matches by its `hook <event>` command. (An unmarked http entry at
+	// another base URL, a v1 leftover, is not ours:
+	// TestInstallAdoptsAndDedupesUnmarkedHooks.)
 	status, err = InstalledStatus(InstallOptions{
 		Client: ClientClaudeCode, SettingsPath: path, BaseURL: "http://127.0.0.1:9999", APIKey: "k",
 	})
 	require.NoError(t, err)
-	require.NotContains(t, status.Current, "UserPromptSubmit")
-	require.Len(t, status.Current, 6)
+	require.Equal(t, installedEvents(t, ClientClaudeCode), status.Current)
+	require.Empty(t, status.Stale)
 }
 
 // Mirrors the plan-capture dogfood state: an older installer left UNMARKED
@@ -789,10 +791,12 @@ func TestInstallAdoptsAndDedupesUnmarkedHooks(t *testing.T) {
 	require.Equal(t, 1, marked, "seamless-URL duplicates collapse to one marked entry")
 	require.Equal(t, 1, v1, "v1 seam_managed :8080 entry preserved")
 
-	// UserPromptSubmit: the lone unmarked entry is adopted in place (now marked).
+	// UserPromptSubmit: the lone unmarked http entry is adopted in place, now
+	// marked and the command hook every install writes.
 	ups := hooksObj["UserPromptSubmit"].([]any)
 	require.Len(t, ups, 1)
 	require.Equal(t, true, ups[0].(map[string]any)["seamless_managed"])
+	requireCommandHook(t, hooksObj, "UserPromptSubmit", "user-prompt-submit")
 
 	// SessionEnd was absent -> added, as a command hook (not http) with the
 	// config path baked in so the harvest resolves config from any cwd.

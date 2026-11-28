@@ -17,12 +17,15 @@ for one is never evidence for the other.
 |---|---|---|---|
 | Bundled Claude Code 2.1.215 (PATH CLI 2.1.216 on the same machine) / Darwin arm64, 2026-07-21 | SessionStart briefing injected in 8/8 app sessions, correctly project-scoped (including global for cwd-less helper sessions); PostToolUse tool-call events recorded; SessionEnd auto-harvest fired on app close and completed the sessions with genuine findings. **UserPromptSubmit never fired** - no per-prompt recall on this surface | The shared user-scope `~/.claude.json` registration (http + `headersHelper`) worked unchanged from an app code session: a `notes_create` round trip landed a real note | Repo cwd resolved to the mapped project; ambient `cc/...` sessions behaved exactly as CLI sessions |
 
-The UserPromptSubmit row is a live defect on that build, not a Seamless
-configuration problem: a firing hook always leaves a trace (an injection or a
-prompt event), and none exists for any of the eight observed app sessions. The
-suspects - the bundled 2.1.215 runtime versus the app's hook dispatch - are
-unresolved, so the finding is pinned to the build and should be re-tested after
-each app update rather than hardened into a permanent claim.
+The UserPromptSubmit row is not a Seamless configuration problem: a firing
+hook always leaves a trace (an injection or a prompt event), and none exists
+for any of the eight observed app sessions. It was also the one http hook that
+install wrote (against a plain-http daemon); every command hook fired. Seamless
+has since made UserPromptSubmit a command hook like the rest
+(`seam hook user-prompt-submit`), which is the shape the app was seen to run.
+That it fires in an app code session in that shape is expected from this
+evidence but not yet observed, so it stays on the list below until a live app
+session shows it.
 
 Managed worktrees did **not** materialize during this capture (the app ran its
 code sessions directly in the repo root), so the worktree-to-project mapping -
@@ -63,7 +66,7 @@ project briefing and correctly scoped every later unscoped call.
   reporting the general case as unverifiable.
 - **An app-only machine.** The tested machine had the PATH CLI and the code
   surface installed; chat-surface setup with nothing else present is untested.
-- **UserPromptSubmit's permanence** on the code surface, per above.
+- **The command UserPromptSubmit hook in an app code session**, per above.
 - **A live app code session inside a managed worktree**, per above.
 - **The chat surface since the agent-process binding.**
   `session_start project=<slug>`, and a sessionless-write fallback that skips
@@ -81,6 +84,7 @@ the same handshake over plain HTTP. For the app itself: restart it, confirm
 and have a chat conversation call `memory_read`. For the code surface: open an
 app code session in a mapped repo, look for the `<seam-briefing>` block, then
 prompt again and check whether recall injection ever appears - that is the
-UserPromptSubmit re-test. `seamlessd doctor` reports the bundled app runtime
+UserPromptSubmit re-test (after `seamlessd install-hooks`, so the hook is the
+command form). `seamlessd doctor` reports the bundled app runtime
 and the PATH CLI separately precisely so version skew between them is visible
 while you do this.

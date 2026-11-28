@@ -62,8 +62,8 @@ func (e *hostEnv) rlStart(t *testing.T, sid, cwd string, id map[string]string) s
 		map[string]any{"session_id": sid, "cwd": cwd, "source": "startup"}))
 }
 
-// rlPrompt posts a UserPromptSubmit for sid, as Claude Code's http hook does
-// (no identity), and returns the injection.
+// rlPrompt posts a UserPromptSubmit for sid with no identity, as an earlier
+// install's http hook does, and returns the injection.
 func (e *hostEnv) rlPrompt(t *testing.T, sid string) string {
 	t.Helper()
 	return additionalContext(t, e.postFrom(t, "user-prompt-submit", nil,

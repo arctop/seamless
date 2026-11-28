@@ -246,7 +246,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#session-taint">The outside-text mark: session-taint</a></li><li class="lvl-2"><a href="#claim-notices">Claim notices</a></li><li class="lvl-2"><a href="#transcripts">Transcript copies</a></li><li class="lvl-2"><a href="#usage-backfill">The usage backfill</a></li><li class="lvl-2"><a href="#mid-session-usage">Mid-session usage</a></li><li class="lvl-2"><a href="#repo-locks">Repo locks in the briefing</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-claude-code-uses-two-transports">Why Claude Code uses two transports</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
+      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#session-taint">The outside-text mark: session-taint</a></li><li class="lvl-2"><a href="#claim-notices">Claim notices</a></li><li class="lvl-2"><a href="#transcripts">Transcript copies</a></li><li class="lvl-2"><a href="#usage-backfill">The usage backfill</a></li><li class="lvl-2"><a href="#mid-session-usage">Mid-session usage</a></li><li class="lvl-2"><a href="#repo-locks">Repo locks in the briefing</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-every-hook-is-a-command">Why every Claude Code hook is a command</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
     </ul>
   </details>
   <p>Seamless installs hooks for two clients: seven for Claude Code (including
@@ -345,7 +345,7 @@ install order:</p>
 <tr>
 <td><code>UserPromptSubmit</code></td>
 <td>none</td>
-<td>http</td>
+<td>command (<code>seam hook user-prompt-submit</code>)</td>
 <td>5s</td>
 <td><code>/api/hooks/user-prompt-submit</code></td>
 <td>Heartbeats the ambient session, matches the prompt against stored memories, and injects a recall block, led by a <a href="#claim-notices">claim the conversation lost</a> or a <a href="#repo-locks">repo lock whose holder changed</a> when there is one. A miss is logged as a <code>hook.prompt</code> event. With the Diary on, it also keeps the session's <a href="#mid-session-usage">usage ledger current</a>, read after the prompt is answered, at most once every three minutes.</td>
@@ -854,9 +854,10 @@ session with no <code>session_start</code> - see
 <a href="../../concepts/sessions/#process-binding">How tool calls find their session</a>. A
 malformed value is dropped; an absent one (an older <code>seam</code>) leaves the session
 reachable only through the older fallbacks.</p>
-<p>Claude Code's <code>UserPromptSubmit</code> is the one http hook, so no <code>seam</code> process
-computes an identity for it; the daemon attributes it through the ambient
-session that client already has.</p>
+<p><code>UserPromptSubmit</code> takes its host from the ambient session that client
+already has, not from the hook, so the http hook an earlier Claude Code install
+wrote - which no <code>seam</code> process computes an identity for - is attributed the
+same way until the next install replaces it.</p>
 <p>When the host is <em>not</em> the daemon's, every daemon-side read of the agent's
 filesystem is skipped rather than attempted, and the skip is recorded as a
 <code>hook.error</code> event with stage <code>remote-host-skip</code>. The model sniff, which runs
@@ -878,14 +879,12 @@ call that binds it:</p>
 <div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">Seam session: cc/&lt;id&gt; (ambient) -- if a tool reports an ambiguous scope, session, or agent, bind once with session_start name=cc/&lt;id&gt;
 </span></span></code></pre></div>
 <p>A Codex session's line carries its <code>cx/...</code> handle.</p>
-<h2 id="why-claude-code-uses-two-transports">Why Claude Code uses two transports</h2>
-<p>Against a plain-http loopback daemon, six of the Claude Code hooks are
-<code>command</code> and one is <code>http</code>. (Codex, above, uses <code>command</code> for all five - its
-trust gate applies only to command hooks.) Against an <code>https://</code> or <code>unix://</code>
-<code>server_url</code> - a networked Client, a relay, a peer_auth socket - all seven are
-<code>command</code> hooks
-(<a href="../../claude-code/#https-and-socket-servers">why</a>). Where the split exists, it is
-not stylistic:</p>
+<h2 id="why-every-hook-is-a-command">Why every Claude Code hook is a command</h2>
+<p>All seven Claude Code hooks are <code>command</code> hooks running <code>seam hook &lt;event&gt;</code>,
+whatever the transport: a plain-http loopback daemon, an <code>https://</code> Server, a
+relay or a peer_auth socket. (Codex, above, uses <code>command</code> for all five - it has
+no http hook type.) Claude Code also supports <code>http</code> hooks, and each hook here
+has its own reason not to be one:</p>
 <ul>
 <li><strong><code>SessionStart</code> must be a command hook.</strong> Claude Code only runs
 <code>command</code>/<code>mcp_tool</code> hooks for <code>SessionStart</code>. An <code>http</code> hook there is silently
@@ -901,14 +900,21 @@ so the hot path never touches the network.</li>
 <li><strong><code>SubagentStart</code> mirrors the Codex profile.</strong> Both clients run the same
 <code>seam hook subagent-start</code> command, so the subagent lifecycle stays one
 transport and one code path across profiles.</li>
-<li><strong><code>UserPromptSubmit</code> stays <code>http</code>.</strong> It fires mid-turn, where http is reliable.</li>
+<li><strong><code>UserPromptSubmit</code> runs where the session runs.</strong> It was an <code>http</code> hook
+against a plain-http daemon until the Claude app's code sessions were seen to
+run every command hook and never that one, which cost them per-prompt recall
+and the Diary's <a href="#mid-session-usage">mid-session usage</a>. An install from
+before that still carries the http entry; <code>seamlessd install-hooks</code> (which an
+update reruns) replaces it in place, and <code>seamlessd doctor</code> reports it stale
+until then.</li>
 </ul>
 <p>Command hooks work by having Claude Code pipe the event JSON to the command's
 stdin; <code>seam hook &lt;arg&gt;</code> forwards that to the matching endpoint and echoes the
-response back on stdout. Same server logic either way - only the transport
-differs.</p>
-<p>One practical consequence: the bearer key is only written into settings.json for
-the <code>http</code> hook. Command hooks read it from the config file at hook time.</p>
+response back on stdout. The request goes through the <code>seam</code> CLI's own HTTP
+client, which reads <code>tls.ca_file</code> and can dial a socket - Claude Code's can do
+neither (<a href="../../claude-code/#https-and-socket-servers">why</a>).</p>
+<p>No bearer key is written into settings.json: <code>seam hook</code> reads it from the
+config file the hook names with <code>--config</code>, at hook time.</p>
 <h2 id="what-install-hooks-writes">What install-hooks writes</h2>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd install-hooks                        <span class="c1"># default: --client detect</span>
 </span></span><span class="line"><span class="cl">seamlessd install-hooks --settings ./.claude/settings.json
@@ -923,18 +929,20 @@ the running <code>seamlessd</code>, falling back to a bare <code>seam</code> res
 hook time. The command fails if <code>mcp.api_key</code> is empty. The examples below are the
 Claude Code (<code>settings.json</code>) shapes; the Codex profile is
 <a href="#the-codex-profile-is-shell-strings">shell strings, not exec form</a>.</p>
-<p>An http entry looks like this:</p>
+<p>Every entry is a command hook in <strong>exec form</strong> - a bare <code>command</code> plus an
+<code>args</code> array, spawned directly with no shell - and carries no key:</p>
 <div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">{
 </span></span><span class="line"><span class="cl">  &#34;hooks&#34;: {
-</span></span><span class="line"><span class="cl">    &#34;UserPromptSubmit&#34;: [
+</span></span><span class="line"><span class="cl">    &#34;SessionStart&#34;: [
 </span></span><span class="line"><span class="cl">      {
 </span></span><span class="line"><span class="cl">        &#34;seamless_managed&#34;: true,
+</span></span><span class="line"><span class="cl">        &#34;matcher&#34;: &#34;startup|resume|clear|compact&#34;,
 </span></span><span class="line"><span class="cl">        &#34;hooks&#34;: [
 </span></span><span class="line"><span class="cl">          {
-</span></span><span class="line"><span class="cl">            &#34;type&#34;: &#34;http&#34;,
-</span></span><span class="line"><span class="cl">            &#34;url&#34;: &#34;http://127.0.0.1:8081/api/hooks/user-prompt-submit&#34;,
-</span></span><span class="line"><span class="cl">            &#34;timeout&#34;: 5,
-</span></span><span class="line"><span class="cl">            &#34;headers&#34;: { &#34;Authorization&#34;: &#34;Bearer &lt;mcp.api_key&gt;&#34; }
+</span></span><span class="line"><span class="cl">            &#34;type&#34;: &#34;command&#34;,
+</span></span><span class="line"><span class="cl">            &#34;command&#34;: &#34;/abs/path/seam&#34;,
+</span></span><span class="line"><span class="cl">            &#34;args&#34;: [&#34;hook&#34;, &#34;session-start&#34;, &#34;--config&#34;, &#34;/abs/path/seamless.yaml&#34;],
+</span></span><span class="line"><span class="cl">            &#34;timeout&#34;: 10
 </span></span><span class="line"><span class="cl">          }
 </span></span><span class="line"><span class="cl">        ]
 </span></span><span class="line"><span class="cl">      }
@@ -942,21 +950,11 @@ Claude Code (<code>settings.json</code>) shapes; the Codex profile is
 </span></span><span class="line"><span class="cl">  }
 </span></span><span class="line"><span class="cl">}
 </span></span></code></pre></div>
-<p>A command entry carries no key and uses <strong>exec form</strong> - a bare <code>command</code> plus an
-<code>args</code> array, spawned directly with no shell:</p>
-<div class="code-block" data-lang="text"><pre class="chroma"><code><span class="line"><span class="cl">{
-</span></span><span class="line"><span class="cl">  &#34;seamless_managed&#34;: true,
-</span></span><span class="line"><span class="cl">  &#34;matcher&#34;: &#34;startup|resume|clear|compact&#34;,
-</span></span><span class="line"><span class="cl">  &#34;hooks&#34;: [
-</span></span><span class="line"><span class="cl">    {
-</span></span><span class="line"><span class="cl">      &#34;type&#34;: &#34;command&#34;,
-</span></span><span class="line"><span class="cl">      &#34;command&#34;: &#34;/abs/path/seam&#34;,
-</span></span><span class="line"><span class="cl">      &#34;args&#34;: [&#34;hook&#34;, &#34;session-start&#34;, &#34;--config&#34;, &#34;/abs/path/seamless.yaml&#34;],
-</span></span><span class="line"><span class="cl">      &#34;timeout&#34;: 10
-</span></span><span class="line"><span class="cl">    }
-</span></span><span class="line"><span class="cl">  ]
-</span></span><span class="line"><span class="cl">}
-</span></span></code></pre></div>
+<p>An install from before every hook was a command wrote <code>UserPromptSubmit</code> as an
+http entry instead - <code>&quot;type&quot;: &quot;http&quot;</code>, the daemon's URL, and an
+<code>Authorization: Bearer</code> header holding <code>mcp.api_key</code>. The next
+<code>install-hooks</code> replaces it with the command entry, in place, and the key
+leaves the file with it.</p>
 <p>Exec form is deliberate: it is the one shape that behaves identically on every
 OS. Claude Code runs a shell-form command hook through <code>sh -c</code> on Unix but
 PowerShell on Windows, where a POSIX string (an env prefix plus single-quoting)
@@ -1090,7 +1088,7 @@ live/schema evidence and the recapture procedure.</li>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#session-taint">The outside-text mark: session-taint</a></li><li class="lvl-2"><a href="#claim-notices">Claim notices</a></li><li class="lvl-2"><a href="#transcripts">Transcript copies</a></li><li class="lvl-2"><a href="#usage-backfill">The usage backfill</a></li><li class="lvl-2"><a href="#mid-session-usage">Mid-session usage</a></li><li class="lvl-2"><a href="#repo-locks">Repo locks in the briefing</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-claude-code-uses-two-transports">Why Claude Code uses two transports</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
+      <li class="lvl-2"><a href="#the-profiles-at-a-glance">The profiles at a glance</a></li><li class="lvl-2"><a href="#claude-code-seven-hooks">Claude Code: seven hooks</a></li><li class="lvl-2"><a href="#codex-local-host-five-hooks">Codex local host: five hooks</a></li><li class="lvl-2"><a href="#the-fail-open-contract">The fail-open contract</a></li><li class="lvl-2"><a href="#session-taint">The outside-text mark: session-taint</a></li><li class="lvl-2"><a href="#claim-notices">Claim notices</a></li><li class="lvl-2"><a href="#transcripts">Transcript copies</a></li><li class="lvl-2"><a href="#usage-backfill">The usage backfill</a></li><li class="lvl-2"><a href="#mid-session-usage">Mid-session usage</a></li><li class="lvl-2"><a href="#repo-locks">Repo locks in the briefing</a></li><li class="lvl-2"><a href="#what-rides-on-the-query-string">What rides on the query string</a></li><li class="lvl-3"><a href="#the-ambient-session-line">The ambient session line</a></li><li class="lvl-2"><a href="#why-every-hook-is-a-command">Why every Claude Code hook is a command</a></li><li class="lvl-2"><a href="#what-install-hooks-writes">What install-hooks writes</a></li><li class="lvl-3"><a href="#the-codex-profile-is-shell-strings">The Codex profile is shell strings</a></li><li class="lvl-3"><a href="#exact-definitions-legacy-adoption-and-foreign-hooks">Exact definitions, legacy adoption, and foreign hooks</a></li><li class="lvl-2"><a href="#related">Related</a></li>
     </ul>
   </aside>
   

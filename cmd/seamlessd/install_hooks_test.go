@@ -595,11 +595,16 @@ func TestRunInstallHooks_ServerURLWritesTheClientConfigAndOpensNoDatabase(t *tes
 		require.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 	}
 
-	// The hooks point at the server, not at a loopback daemon.
+	// The hooks reach the server through the client config they name, not a
+	// loopback daemon, and carry neither its address nor its key.
 	hookFile, err := os.ReadFile(settings)
 	require.NoError(t, err)
-	require.Contains(t, string(hookFile), srv.URL+"/api/hooks/user-prompt-submit")
-	require.Contains(t, string(hookFile), "Bearer server-key")
+	quotedCfg, err := json.Marshal(cfgPath)
+	require.NoError(t, err)
+	require.Contains(t, string(hookFile), `"user-prompt-submit"`)
+	require.Contains(t, string(hookFile), string(quotedCfg))
+	require.NotContains(t, string(hookFile), srv.URL)
+	require.NotContains(t, string(hookFile), "server-key")
 	require.NotContains(t, string(hookFile), "127.0.0.1:8081")
 
 	// Nothing local was opened or created: no data dir, no seam.db.
@@ -627,10 +632,9 @@ func TestRunInstallHooks_ServerURLWritesTheClientConfigAndOpensNoDatabase(t *tes
 	require.Equal(t, body, string(after))
 }
 
-// Under https every Claude Code hook is exec-form -- including UserPromptSubmit,
-// the one http hook of an http install -- and the MCP registration is the stdio
-// bridge. Claude Code's own HTTP client cannot be told about tls.ca_file; seam
-// can.
+// Under https every Claude Code hook is exec-form, as on every transport, and
+// the MCP registration is the stdio bridge. Claude Code's own HTTP client
+// cannot be told about tls.ca_file; seam can.
 func TestRunInstallHooks_HTTPSClientWiresExecFormHooks(t *testing.T) {
 	home := t.TempDir()
 	clientInstallEnv(t, home)
@@ -656,7 +660,7 @@ func TestRunInstallHooks_HTTPSClientWiresExecFormHooks(t *testing.T) {
 	ups := hooksObj["UserPromptSubmit"].([]any)[0].(map[string]any)["hooks"].([]any)[0].(map[string]any)
 	require.Equal(t, absFixture("/opt/seam"), ups["command"])
 	require.Contains(t, ups["args"], "user-prompt-submit")
-	// No http hook means no bearer key in settings.json.
+	// No bearer key in settings.json: `seam hook` reads it from the config.
 	require.NotContains(t, string(raw), "Bearer")
 	require.NotContains(t, string(raw), "server-key")
 

@@ -41,10 +41,6 @@ func Uninstall(opts UninstallOptions) (UninstallResult, error) {
 	if strings.TrimSpace(opts.BaseURL) == "" {
 		return UninstallResult{}, fmt.Errorf("hooks.Uninstall: base URL is required")
 	}
-	// The same scheme-derived profile the install used, so an https install's
-	// command hooks are recognized as current rather than only as marked-stale
-	// (a marker Claude Code may have stripped).
-	profile = profileForBaseURL(profile, opts.BaseURL)
 
 	settings, mode, err := loadSettings(opts.SettingsPath)
 	if err != nil {
@@ -56,10 +52,11 @@ func Uninstall(opts UninstallOptions) (UninstallResult, error) {
 	for _, hs := range profile {
 		arr := entryArray(hooksObj, hs.Event)
 		desiredURL := strings.TrimRight(opts.BaseURL, "/") + hs.Endpoint
-		// Uninstall does not need the original install paths or API key: exact
-		// entries that differ from this minimal desired value are still recognized
-		// as marked or legacy by the same classifier.
-		desired := buildEntry(client, hs, opts.BaseURL, "", "", "")
+		// Uninstall does not need the original install paths: exact entries that
+		// differ from this minimal desired value are still recognized as marked
+		// or legacy by the same classifier, an http entry an earlier install
+		// wrote among them.
+		desired := buildEntry(client, hs, "", "")
 		matches, _ := classifiedHookIndices(client, arr, desired, hs, desiredURL)
 		if len(matches) == 0 {
 			res.Actions = append(res.Actions, hs.Event+": absent")

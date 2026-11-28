@@ -70,11 +70,14 @@ func isLegacySeamlessDefinition(client Client, entry any, hs hookSpec, desiredUR
 		return false
 	}
 
+	// An http handler at the desired URL is the shape Claude Code's
+	// UserPromptSubmit took on an http base URL before every hook became a
+	// command hook: adopted, so the next install replaces it and its key.
 	if handler["type"] == "http" {
 		url, ok := handler["url"].(string)
 		return ok && sameURL(url, desiredURL)
 	}
-	if hs.CLIArg == "" || handler["type"] != "command" {
+	if handler["type"] != "command" {
 		return false
 	}
 	return isLegacyHookCommand(client, handler, hs.CLIArg)

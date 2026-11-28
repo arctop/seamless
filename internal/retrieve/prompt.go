@@ -131,8 +131,8 @@ type promptHit struct {
 // It never errors on the hook path except on a store failure.
 //
 // host is the machine the cwd belongs to; "" is the daemon's own map. The
-// UserPromptSubmit hook has no host of its own (it stays an http hook, so no
-// seam CLI computes one), and gets it from the ambient session instead.
+// UserPromptSubmit handler takes it from the ambient session rather than the
+// hook: an earlier install's http hook sends no host of its own.
 func (s *Service) PromptRecall(ctx context.Context, host, cwd, prompt string) (string, []string, error) {
 	tokens := promptTokenize(prompt)
 	if len(tokens) == 0 {

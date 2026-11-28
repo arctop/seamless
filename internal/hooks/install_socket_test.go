@@ -13,9 +13,9 @@ import (
 const socketBase = "unix:///opt/seamless/run/seamlessd.sock"
 
 // A socket client's install reaches its daemon over the peer_auth socket, which
-// Claude Code's http hook cannot dial: every hook becomes a `seam hook` command,
-// and no key is needed -- or written -- because the daemon names the caller by
-// its uid.
+// only `seam` can dial: every hook is a `seam hook` command, as on every
+// transport, and no key is needed -- or written -- because the daemon names the
+// caller by its uid.
 func TestInstall_SocketMakesEveryHookACommandWithoutAKey(t *testing.T) {
 	require.True(t, IsSocketBaseURL(socketBase))
 	require.True(t, CommandOnlyBaseURL(socketBase))

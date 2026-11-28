@@ -640,9 +640,9 @@ rather than the daemon's:</p>
 registration:</p>
 <div class="code-block" data-lang="bash"><pre class="chroma"><code><span class="line"><span class="cl">seamlessd install-hooks --client claude    <span class="c1"># or codex, or all</span>
 </span></span></code></pre></div>
-<p>With a socket <code>server_url</code> every hook is a <code>seam hook &lt;event&gt;</code> command (Claude
-Code's own http hook cannot dial a socket), and the MCP registration is the
-<code>seam mcp-proxy</code> stdio bridge. They run the <code>seam</code> beside the <code>seamlessd</code> that
+<p>Every hook is a <code>seam hook &lt;event&gt;</code> command, as on any transport, and with a
+socket <code>server_url</code> the MCP registration is the <code>seam mcp-proxy</code> stdio bridge
+(Claude Code's own http client cannot dial a socket). They run the <code>seam</code> beside the <code>seamlessd</code> that
 installed them, a copy of your own; add <code>--seam /opt/seamless/bin/seam</code> to run
 the daemon's instead, which no process of yours can replace and which moves
 with the daemon when it <a href="#updates">updates itself</a>, or <code>--seam /opt/seamless/client/seam</code> for <a href="#client-copy">root's copy</a>, which the daemon's

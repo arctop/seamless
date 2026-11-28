@@ -25,12 +25,12 @@ func hookSpecFor(t *testing.T, client Client, event string) hookSpec {
 
 func TestClassifyHookDefinition_ExactOwnershipStates(t *testing.T) {
 	hs := hookSpecFor(t, ClientCodex, "Stop")
-	desired := buildEntry(ClientCodex, hs, "http://127.0.0.1:8081", "k", "/opt/seam", "/etc/seamless.yaml")
+	desired := buildEntry(ClientCodex, hs, "/opt/seam", "/etc/seamless.yaml")
 	desiredURL := "http://127.0.0.1:8081/api/hooks/stop"
 
-	currentWithoutMarker := buildEntry(ClientCodex, hs, "http://127.0.0.1:8081", "k", "/opt/seam", "/etc/seamless.yaml")
+	currentWithoutMarker := buildEntry(ClientCodex, hs, "/opt/seam", "/etc/seamless.yaml")
 	delete(currentWithoutMarker, managedMarker)
-	managedStale := buildEntry(ClientCodex, hs, "http://127.0.0.1:8081", "k", "/old/seam", "/old/seamless.yaml")
+	managedStale := buildEntry(ClientCodex, hs, "/old/seam", "/old/seamless.yaml")
 	legacy := map[string]any{
 		"hooks": []any{map[string]any{
 			"type": "command", "command": "/old/seam hook stop --config /old/seamless.yaml", "timeout": 10,

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	pathpkg "path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -24,25 +23,29 @@ const managedMarker = "seamless_managed"
 type hookSpec struct {
 	Event    string // hooks key (SessionStart, UserPromptSubmit, Stop, ...)
 	Matcher  string // "" omits the matcher key (UserPromptSubmit/Stop have none)
-	Endpoint string // path appended to the base URL (the http url, and the dedup key)
+	Endpoint string // the route `seam hook` forwards to, and the URL a legacy http entry named (the dedup key)
 	Timeout  int    // seconds (both clients' unit)
-	CLIArg   string // non-empty => install a `command` hook (`<seam> hook <CLIArg>`) not http; profileForBaseURL fills the empty ones under https
+	CLIArg   string // the `<seam> hook <CLIArg>` event the command hook runs: the endpoint's last segment
 }
 
-// seamlessHooks is the set installed/removed together.
+// seamlessHooks is the set installed/removed together. Every one is a command
+// hook running `seam hook <event>` (exec form, no shell), which forwards the
+// payload to Endpoint, on every transport.
 //
-// SessionStart and SessionEnd are command hooks. Claude Code only runs
-// command/mcp_tool hooks for SessionStart, so an http one is silently skipped
-// and the briefing/ambient session never fire. SessionEnd does support http,
-// but at process exit the fire-and-forget request races the teardown, so the
-// ambient-session harvest often never lands and sessions pile up as active;
-// running it as a command hook Claude Code waits on makes the harvest reliable.
-// Each runs `seam hook <event>` (exec form, no shell), which forwards the
-// payload to Endpoint. UserPromptSubmit fires mid-turn where http is reliable,
-// so it keeps an http hook (and carries the bearer key into settings.json) --
-// on an http base URL. Against an https one profileForBaseURL turns it into a
-// command hook like the rest, because Claude Code's own HTTP client cannot be
-// pointed at tls.ca_file.
+// Claude Code only runs command/mcp_tool hooks for SessionStart, so an http
+// one is silently skipped and the briefing/ambient session never fire.
+// SessionEnd does support http, but at process exit the fire-and-forget
+// request races the teardown, so the ambient-session harvest often never lands
+// and sessions pile up as active; running it as a command hook Claude Code
+// waits on makes the harvest reliable. UserPromptSubmit was an http hook on an
+// http base URL until the Claude app's code sessions were seen to run every
+// command hook and never that one, so per-prompt recall and the Diary's
+// mid-session usage never ran there; as a command hook it also keeps the
+// bearer key out of settings.json, and goes through the CLI's own HTTP client,
+// the one that reads tls.ca_file (Claude Code's cannot be pointed at it) and
+// dials a peer_auth socket (Claude Code's cannot dial one). An http entry an
+// earlier install wrote is still recognized (classifier.go), and the next
+// install replaces it with this one.
 //
 // The plan-capture hooks (PostToolUse, SubagentStop, PermissionRequest) are
 // command hooks too: the seam CLI pre-filters PostToolUse locally so the
@@ -57,7 +60,7 @@ type hookSpec struct {
 // No matcher: every agent type is briefed.
 var seamlessHooks = []hookSpec{
 	{Event: "SessionStart", Matcher: "startup|resume|clear|compact", Endpoint: "/api/hooks/session-start", Timeout: 10, CLIArg: "session-start"},
-	{Event: "UserPromptSubmit", Matcher: "", Endpoint: "/api/hooks/user-prompt-submit", Timeout: 5},
+	{Event: "UserPromptSubmit", Matcher: "", Endpoint: "/api/hooks/user-prompt-submit", Timeout: 5, CLIArg: "user-prompt-submit"},
 	{Event: "SessionEnd", Matcher: "", Endpoint: "/api/hooks/session-end", Timeout: 10, CLIArg: "session-end"},
 	{Event: "PostToolUse", Matcher: "Write|Edit|MultiEdit|ExitPlanMode", Endpoint: "/api/hooks/post-tool-use", Timeout: 10, CLIArg: "post-tool-use"},
 	{Event: "SubagentStart", Matcher: "", Endpoint: "/api/hooks/subagent-start", Timeout: 10, CLIArg: "subagent-start"},
@@ -72,9 +75,8 @@ var seamlessHooks = []hookSpec{
 // constraints-only briefing into a child, and SubagentStop performs only a safe
 // parent heartbeat. Neither enters Claude Code's durable plan-note capture: no
 // Claude-style plan-file/ExitPlanMode surface has been verified for Codex.
-// UserPromptSubmit is a command hook here (CC keeps it http). Every Codex command
-// hook is a SHELL STRING, not the exec-form argv CC uses (buildEntry emits the
-// difference).
+// Every Codex command hook is a SHELL STRING, not the exec-form argv CC uses
+// (buildEntry emits the difference).
 var codexHooks = []hookSpec{
 	{Event: "SessionStart", Matcher: "startup|resume|clear|compact", Endpoint: "/api/hooks/session-start", Timeout: 10, CLIArg: "session-start"},
 	{Event: "UserPromptSubmit", Matcher: "", Endpoint: "/api/hooks/user-prompt-submit", Timeout: 5, CLIArg: "user-prompt-submit"},
@@ -97,58 +99,14 @@ func resolveHookProfile(raw Client) (Client, []hookSpec, error) {
 	return client, seamlessHooks, nil
 }
 
-// profileForBaseURL adapts a client profile to the transport its base URL
-// implies: under https every hook is a command hook, under http the table is
-// returned untouched.
-//
-// The decision is DERIVED from opts.BaseURL rather than carried as an install
-// option on purpose. Install, InstalledStatus, Uninstall, and doctor's
-// desired-vs-installed comparison all already share that one field, so they
-// cannot disagree about which shape is correct; an extra option would have to be
-// set identically in four places, and the one that forgot would wire one shape
-// and judge another -- a desync whose only symptom is a hook reported stale
-// forever, or worse, silently rewritten on every run.
-//
-// Why https forces it: Claude Code performs an http hook's request with its own
-// HTTP client, which knows nothing of tls.ca_file. Against a private-CA or
-// self-signed server that request dies in the TLS handshake with nowhere to
-// configure trust, and a hook that quietly stops firing is the worst failure
-// this profile has. `seam hook <event>` makes the same request through the CLI's
-// single HTTP client, which does read tls.ca_file (cmd/seam/env.go httpClient),
-// and as a bonus it keeps the bearer key out of settings.json. The seam CLI has
-// always accepted every event in this table as a command hook (cmd/seam/hook.go
-// hookEvents), which is what makes the flip a transport change rather than a new
-// protocol.
-//
-// A peer_auth socket base URL (unix:///path) forces it for a stronger reason:
-// Claude Code's http hook cannot dial a Unix socket at all, and the socket is
-// the only way such an install reaches its daemon.
-func profileForBaseURL(profile []hookSpec, baseURL string) []hookSpec {
-	if !CommandOnlyBaseURL(baseURL) {
-		return profile
-	}
-	out := slices.Clone(profile)
-	for i := range out {
-		if out[i].CLIArg == "" {
-			// The CLI event name is the last segment of the endpoint for every
-			// spec that already has one (TestHookSpecCLIArgsDeriveFromEndpoints
-			// pins it), so this derives rather than transcribing a second table.
-			out[i].CLIArg = pathpkg.Base(out[i].Endpoint)
-		}
-	}
-	return out
-}
-
 // IsHTTPSBaseURL reports whether baseURL names an https endpoint. A value that
-// does not parse is not https: the shapes this gates are the strictly safer
-// ones, so an unreadable URL falls back to today's profile rather than to a
-// speculative change.
+// does not parse is not https: the shape this gates is the strictly safer one,
+// so an unreadable URL keeps the direct registration rather than a speculative
+// change.
 //
-// It is exported for one caller: the installer's MCP registration, which must
-// reach the SAME conclusion as the hook profile above (https -> the seam stdio
-// bridge, http -> the direct URL). Two copies of the scheme test is how a
-// machine ends up with exec-form hooks and an http MCP registration that cannot
-// verify the server.
+// It is exported for the installer's MCP registration (CommandOnlyBaseURL):
+// https -> the seam stdio bridge, http -> the direct URL. One copy of the
+// scheme test is what keeps every surface that asks agreeing on the answer.
 func IsHTTPSBaseURL(baseURL string) bool {
 	u, err := url.Parse(strings.TrimSpace(baseURL))
 	if err != nil {
@@ -167,11 +125,11 @@ func IsSocketBaseURL(baseURL string) bool {
 	return strings.EqualFold(u.Scheme, "unix")
 }
 
-// CommandOnlyBaseURL reports whether every hook and the MCP registration must go
-// through the seam CLI for baseURL: an https one (Claude Code cannot be told
-// about tls.ca_file) or a peer_auth socket (Claude Code cannot dial one). The
-// installer's MCP registration asks the same question, so the two cannot
-// disagree.
+// CommandOnlyBaseURL reports whether the MCP registration must go through the
+// seam CLI for baseURL (the stdio bridge): an https one (Claude Code cannot be
+// told about tls.ca_file) or a peer_auth socket (Claude Code cannot dial one).
+// The hooks need no such test: every one is a command hook on every transport
+// (seamlessHooks, codexHooks).
 func CommandOnlyBaseURL(baseURL string) bool {
 	return IsHTTPSBaseURL(baseURL) || IsSocketBaseURL(baseURL)
 }
@@ -181,7 +139,7 @@ type InstallOptions struct {
 	Client       Client // agent client profile; "" (zero value) => Claude Code
 	SettingsPath string // target file: CC settings.json or Codex hooks.json (created if absent)
 	BaseURL      string // e.g. http://127.0.0.1:8081
-	APIKey       string // static bearer key (written into the CC http hook header; Codex command hooks carry none)
+	APIKey       string // static bearer key the command hooks authenticate with, read from --config at hook time; none is written into the file
 	SeamBin      string // path to the seam CLI for command hooks; "" => "seam" (PATH)
 	ConfigPath   string // abs seamless.yaml passed to command hooks as `--config` so they resolve config from any cwd; "" omits it
 
@@ -219,9 +177,11 @@ func Install(opts InstallOptions) (InstallResult, error) {
 	if err != nil {
 		return InstallResult{}, fmt.Errorf("hooks.Install: %w", err)
 	}
-	// A socket install carries no key at all: the daemon identifies its caller
-	// by the uid the kernel reports, and its hooks are all command hooks, which
-	// never write a key into the settings file anyway.
+	// The hooks write no key into the file -- `seam hook` reads it from the
+	// config at hook time -- but hooks wired against a config without one could
+	// never authenticate, and would fail open on every call. A socket install
+	// carries no key at all: the daemon identifies its caller by the uid the
+	// kernel reports.
 	if strings.TrimSpace(opts.APIKey) == "" && !IsSocketBaseURL(opts.BaseURL) {
 		return InstallResult{}, fmt.Errorf("hooks.Install: api key is required")
 	}
@@ -237,7 +197,6 @@ func Install(opts InstallOptions) (InstallResult, error) {
 	if err := validateCovered(profile, opts.Covered); err != nil {
 		return InstallResult{}, err
 	}
-	profile = profileForBaseURL(profile, opts.BaseURL)
 
 	settings, mode, err := loadSettings(opts.SettingsPath)
 	if err != nil {
@@ -250,7 +209,7 @@ func Install(opts InstallOptions) (InstallResult, error) {
 	// shape (buildEntry) vary by client. An empty client is Claude Code.
 	var res InstallResult
 	for _, hs := range profile {
-		desired := buildEntry(client, hs, opts.BaseURL, opts.APIKey, opts.SeamBin, opts.ConfigPath)
+		desired := buildEntry(client, hs, opts.SeamBin, opts.ConfigPath)
 		desiredURL := strings.TrimRight(opts.BaseURL, "/") + hs.Endpoint
 		arr := entryArray(hooksObj, hs.Event)
 		// Classify exact current definitions, marked stale definitions, and only
@@ -330,9 +289,8 @@ func InstalledEvents(client Client) ([]string, error) {
 
 // CommandHookEndpoints returns the `seam hook <arg>` events the installer wires
 // as command hooks across every client profile, each mapped to the endpoint that
-// hook must forward to. It is a union: the Codex profile adds user-prompt-submit
-// (a command hook there, http for CC) and stop, so the CLI pin covers both
-// clients. An event that both profiles wire as a command hook shares one endpoint.
+// hook must forward to. It is a union: the Codex profile adds stop, so the CLI
+// pin covers both clients. An event that both profiles wire shares one endpoint.
 //
 // It exists for the seam CLI's test. The CLI keeps its own copy of this mapping
 // -- it cannot import this package without dragging the store, the retriever, and
@@ -345,9 +303,7 @@ func CommandHookEndpoints() map[string]string {
 	out := make(map[string]string)
 	for _, profile := range [][]hookSpec{seamlessHooks, codexHooks} {
 		for _, hs := range profile {
-			if hs.CLIArg != "" {
-				out[hs.CLIArg] = hs.Endpoint
-			}
+			out[hs.CLIArg] = hs.Endpoint
 		}
 	}
 	return out
@@ -371,7 +327,6 @@ func InstalledStatus(opts InstallOptions) (InstallStatus, error) {
 	if err := validateDefinitionPaths("hooks.InstalledStatus", opts.SeamBin, opts.ConfigPath); err != nil {
 		return InstallStatus{}, err
 	}
-	profile = profileForBaseURL(profile, opts.BaseURL)
 
 	settings, _, err := loadSettings(opts.SettingsPath)
 	if err != nil {
@@ -380,7 +335,7 @@ func InstalledStatus(opts InstallOptions) (InstallStatus, error) {
 	hooksObj := nestedObject(settings, "hooks")
 	var status InstallStatus
 	for _, hs := range profile {
-		desired := buildEntry(client, hs, opts.BaseURL, opts.APIKey, opts.SeamBin, opts.ConfigPath)
+		desired := buildEntry(client, hs, opts.SeamBin, opts.ConfigPath)
 		desiredURL := strings.TrimRight(opts.BaseURL, "/") + hs.Endpoint
 		indices, classes := classifiedHookIndices(client, entryArray(hooksObj, hs.Event), desired, hs, desiredURL)
 		if len(indices) == 0 {
@@ -413,9 +368,6 @@ func RecordedCommandPaths(clientName Client, settingsPath string) (seamBin, conf
 	}
 	hooksObj := nestedObject(settings, "hooks")
 	for _, hs := range profile {
-		if hs.CLIArg == "" {
-			continue
-		}
 		for _, entry := range entryArray(hooksObj, hs.Event) {
 			entryMap, isMap := entry.(map[string]any)
 			if !isMap {
@@ -531,10 +483,15 @@ func entryArray(hooksObj map[string]any, event string) []any {
 	return nil
 }
 
-func buildEntry(client Client, hs hookSpec, baseURL, apiKey, seamBin, configPath string) map[string]any {
+// buildEntry is the entry Seamless installs for hs: a command hook running
+// `<seam> hook <CLIArg>`, in the shape its client runs.
+func buildEntry(client Client, hs hookSpec, seamBin, configPath string) map[string]any {
+	bin := seamBin
+	if bin == "" {
+		bin = "seam"
+	}
 	var hook map[string]any
-	switch {
-	case client == ClientCodex:
+	if client == ClientCodex {
 		// Codex command hooks are SHELL STRINGS, not exec-form argv (its config
 		// schema has no `args` field -- see the versioned Codex contract fixtures).
 		// The whole invocation is one `command` string, plus a `command_windows`
@@ -542,17 +499,13 @@ func buildEntry(client Client, hs hookSpec, baseURL, apiKey, seamBin, configPath
 		// `<seam> hook <event> --config <yaml> --client codex`: no bearer key is
 		// written into hooks.json (the CLI loads it from --config at hook time), and
 		// --client codex is what selects the Codex payload adapter server-side.
-		bin := seamBin
-		if bin == "" {
-			bin = "seam"
-		}
 		hook = map[string]any{
 			"type":            "command",
 			"command":         codexCommand(bin, hs.CLIArg, configPath, posixQuote, posixQuote),
 			"command_windows": codexCommand(bin, hs.CLIArg, configPath, winCommandPath, winQuote),
 			"timeout":         hs.Timeout,
 		}
-	case hs.CLIArg != "":
+	} else {
 		// Command hook, EXEC form: `command` is the bare seam binary and `args`
 		// carries the rest, so Claude Code spawns it directly with no shell. That
 		// is the one shape that behaves identically on every OS -- on Windows CC
@@ -566,10 +519,6 @@ func buildEntry(client Client, hs hookSpec, baseURL, apiKey, seamBin, configPath
 		// config path is passed as `--config` (exec form carries no environment, so
 		// this replaces the old SEAMLESS_CONFIG env prefix) -- otherwise the CLI's
 		// cwd-relative config search misses seamless.yaml and it can't authenticate.
-		bin := seamBin
-		if bin == "" {
-			bin = "seam"
-		}
 		args := []any{"hook", hs.CLIArg}
 		if configPath != "" {
 			args = append(args, "--config", configPath)
@@ -579,13 +528,6 @@ func buildEntry(client Client, hs hookSpec, baseURL, apiKey, seamBin, configPath
 			"command": bin,
 			"args":    args,
 			"timeout": hs.Timeout,
-		}
-	default:
-		hook = map[string]any{
-			"type":    "http",
-			"url":     strings.TrimRight(baseURL, "/") + hs.Endpoint,
-			"timeout": hs.Timeout,
-			"headers": map[string]any{"Authorization": "Bearer " + apiKey},
 		}
 	}
 	entry := map[string]any{

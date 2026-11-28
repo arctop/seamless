@@ -415,11 +415,11 @@ func hangingDials(t *testing.T, refused int32, dials *atomic.Int32) func(config.
 }
 
 // Whatever the network does, a hook gives up at its deadline and fails open
-// before its client kills it: Codex, and Claude Code on an https install, kill
-// user-prompt-submit at 5s. Under the one 10s deadline every event had before,
-// refused dials for the 1s budget followed by one that hung ran to about 6s,
-// because the budget only stops a new attempt from starting and a hanging dial
-// runs to config.DialTimeout. A daemon that accepts the request and never
+// before its client kills it: both clients kill user-prompt-submit at 5s.
+// Under the one 10s deadline every event had before, refused dials for the 1s
+// budget followed by one that hung ran to about 6s, because the budget only
+// stops a new attempt from starting and a hanging dial runs to
+// config.DialTimeout. A daemon that accepts the request and never
 // answers is the same failure one step later, and the payload it has is not
 // sent again. One that sends half its reply and then stalls is the same failure
 // a step later still, and the half it sent never reaches stdout: the client
@@ -585,12 +585,12 @@ func TestHookEvent_AbsentClientTakesClaudeCodeOverrides(t *testing.T) {
 }
 
 // Every budget fits inside the timeout its client gives that hook with half to
-// spare, for every client and every command hook its profile wires, on either
-// transport. Past half, a daemon that is down for good would hold a hook for
-// most of what its client allows, on every prompt in user-prompt-submit's case,
-// and leave an attempt that connects at the end of the budget little time to be
-// served. What keeps a hook inside its client's kill is the deadline, pinned
-// next. A test-only import, like the event pin below.
+// spare, for every client and every command hook its profile wires. Past half,
+// a daemon that is down for good would hold a hook for most of what its client
+// allows, on every prompt in user-prompt-submit's case, and leave an attempt
+// that connects at the end of the budget little time to be served. What keeps
+// a hook inside its client's kill is the deadline, pinned next. A test-only
+// import, like the event pin below.
 func TestHookDialBudgets_FitInsideEveryClientTimeout(t *testing.T) {
 	for _, client := range hooks.HookClients {
 		timeouts, err := hooks.CommandHookTimeouts(client)
@@ -604,21 +604,20 @@ func TestHookDialBudgets_FitInsideEveryClientTimeout(t *testing.T) {
 				"%s kills `seam hook %s` at %s, so its %s budget must be at most half that", client, arg, timeout, budget)
 		}
 	}
-	// An https install makes Claude Code's user-prompt-submit a command hook too
-	// (profileForBaseURL), with the same 5s timeout Codex gives it.
+	// Claude Code's user-prompt-submit is a command hook on every transport,
+	// with the same 5s timeout Codex gives it.
 	cc, err := hooks.CommandHookTimeouts(hooks.ClientClaudeCode)
 	require.NoError(t, err)
 	require.Equal(t, 5*time.Second, cc["user-prompt-submit"])
 }
 
 // Every deadline ends the hook at least hookDeadlineMargin before its client
-// kills it, for every client and every command hook its profile wires, on
-// either transport. The budget pin above holds only for dials that are
-// refused; this one holds whatever the network does, because the deadline
-// bounds the whole forward. Past it, a dial that hangs (a server whose host
-// drops packets) or a daemon that never answers runs a hook into its client's
-// kill: a timeout warning in place of a quiet fail-open, on every prompt in
-// user-prompt-submit's case.
+// kills it, for every client and every command hook its profile wires. The
+// budget pin above holds only for dials that are refused; this one holds
+// whatever the network does, because the deadline bounds the whole forward.
+// Past it, a dial that hangs (a server whose host drops packets) or a daemon
+// that never answers runs a hook into its client's kill: a timeout warning in
+// place of a quiet fail-open, on every prompt in user-prompt-submit's case.
 func TestHookDeadlines_EndBeforeEveryClientKillsTheHook(t *testing.T) {
 	for _, client := range hooks.HookClients {
 		timeouts, err := hooks.CommandHookTimeouts(client)
@@ -637,8 +636,8 @@ func TestHookDeadlines_EndBeforeEveryClientKillsTheHook(t *testing.T) {
 }
 
 // The deadlines by event, pinned whole so no event joins without one: a second
-// under the 10s every client gives a command hook, and under the 5s Codex, and
-// Claude Code on an https install, give user-prompt-submit.
+// under the 10s every client gives a command hook, and under the 5s both
+// clients give user-prompt-submit.
 func TestHookDeadlines_ByEvent(t *testing.T) {
 	const s = time.Second
 	want := map[string]time.Duration{

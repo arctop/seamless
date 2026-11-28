@@ -245,7 +245,7 @@ var c=q.get("client")||localStorage.getItem("clients")||"";var cs=c.split(",").f
   
   <details class="toc-inline"><summary>On this page</summary>
     <ul>
-      <li class="lvl-2"><a href="#install-the-hooks-and-register-mcp">Install the hooks and register MCP</a></li><li class="lvl-3"><a href="#why-some-hooks-are-commands-and-others-are-http">Why some hooks are commands and others are http</a></li><li class="lvl-3"><a href="#https-and-socket-servers">Over https or a socket</a></li><li class="lvl-2"><a href="#registering-the-mcp-endpoint-by-hand">Registering the MCP endpoint by hand</a></li><li class="lvl-2"><a href="#map-your-repos">Map your repos</a></li><li class="lvl-2"><a href="#tell-your-agents-it-exists">Tell your agents it exists</a></li><li class="lvl-2"><a href="#the-claude-apps-code-surface">The Claude app&#39;s code surface</a></li><li class="lvl-2"><a href="#verify">Verify</a></li>
+      <li class="lvl-2"><a href="#install-the-hooks-and-register-mcp">Install the hooks and register MCP</a></li><li class="lvl-3"><a href="#why-every-hook-is-a-command">Why every hook is a command</a></li><li class="lvl-3"><a href="#https-and-socket-servers">Over https or a socket</a></li><li class="lvl-2"><a href="#registering-the-mcp-endpoint-by-hand">Registering the MCP endpoint by hand</a></li><li class="lvl-2"><a href="#map-your-repos">Map your repos</a></li><li class="lvl-2"><a href="#tell-your-agents-it-exists">Tell your agents it exists</a></li><li class="lvl-2"><a href="#the-claude-apps-code-surface">The Claude app&#39;s code surface</a></li><li class="lvl-2"><a href="#verify">Verify</a></li>
     </ul>
   </details>
   <p>Claude Code is the client Seamless is built around. Wiring it up is two
@@ -280,20 +280,23 @@ its plan-mode activity gets captured, all without the agent choosing to call
 anything. See <a href="../concepts/sessions/">Sessions &amp; briefings</a>
 for what that delivers and <a href="../reference/hooks/">the hooks reference</a> for the
 exact table.</p>
-<h3 id="why-some-hooks-are-commands-and-others-are-http">Why some hooks are commands and others are http</h3>
-<p>This looks inconsistent and is not: SessionStart only fires as a command hook,
-SessionEnd as http races Claude Code's teardown, and the plan-capture hooks
-pre-filter locally so the machine-wide <code>Write</code>/<code>Edit</code> hot path never touches
-the network. The full rationale, hook by hook, is in
-<a href="../reference/hooks/#why-claude-code-uses-two-transports">the hooks reference</a>.</p>
+<h3 id="why-every-hook-is-a-command">Why every hook is a command</h3>
+<p>Claude Code can run a hook as a command or as an http request, and every
+Seamless hook is a command running <code>seam hook &lt;event&gt;</code>: SessionStart only fires
+as a command hook, SessionEnd as http races Claude Code's teardown, the
+plan-capture hooks pre-filter locally so the machine-wide <code>Write</code>/<code>Edit</code> hot
+path never touches the network, and the Claude app's code sessions never run
+an http UserPromptSubmit. No bearer key lands in <code>settings.json</code>. The full
+rationale, hook by hook, is in
+<a href="../reference/hooks/#why-every-hook-is-a-command">the hooks reference</a>.</p>
 <h3 id="https-and-socket-servers">Over https or a socket</h3>
-<p>That mix, and the <code>headersHelper</code> registration, are the shape for a daemon
-reached over plain http. When <code>server_url</code> is <code>https://</code> (a Client reaching its
-Server over TLS) or <code>unix://</code> (a <a href="../concepts/networked/#the-relay">relay</a>, or a
-<a href="../guides/peer-auth/">peer_auth</a> daemon's socket), every hook is a <code>seam hook</code>
-command and MCP is registered as the <code>seam mcp-proxy</code> stdio bridge. Claude
-Code's own http client cannot be told about a private CA, and cannot dial a
-socket at all, so both go through <code>seam</code>
+<p>The <code>headersHelper</code> registration is the shape for a daemon reached over plain
+http. When <code>server_url</code> is <code>https://</code> (a Client reaching its Server over TLS)
+or <code>unix://</code> (a <a href="../concepts/networked/#the-relay">relay</a>, or a
+<a href="../guides/peer-auth/">peer_auth</a> daemon's socket), MCP is registered as the
+<code>seam mcp-proxy</code> stdio bridge instead. Claude Code's own http client cannot be
+told about a private CA, and cannot dial a socket at all, so MCP goes through
+<code>seam</code> there, as the hooks do everywhere
 (<a href="../guides/network-install/#why-https-changes-the-claude-code-wiring">why</a>).</p>
 <h2 id="registering-the-mcp-endpoint-by-hand">Registering the MCP endpoint by hand</h2>
 <p>For a different MCP client, or when <code>install-hooks</code> could not find the
@@ -373,11 +376,18 @@ or lead the PATH CLI (observed: 2.1.215 in the app beside a 2.1.216 CLI).
 <code>seamlessd doctor</code> reports each discoverable runtime on its own line -
 <code>claude CLI runtime</code> and <code>claude app runtime</code> - so the skew is visible when
 an app-only failure has you debugging.</li>
-<li><strong>Per-prompt recall does not currently fire in app code sessions.</strong> On the
-observed build, the SessionStart briefing, PostToolUse events, and the
-SessionEnd findings harvest all work - but UserPromptSubmit never fires, so
-<code>&lt;seam-recall&gt;</code> injections never happen there. The briefing at session start
-is what an app code session gets.</li>
+<li><strong>The app runs command hooks only.</strong> On the observed build, the
+SessionStart briefing, PostToolUse events, and the SessionEnd findings
+harvest all worked, but the http UserPromptSubmit hook that installs against
+a plain-http daemon used to write never fired, so app code sessions got no
+<code>&lt;seam-recall&gt;</code> injections and no mid-session usage for the Diary. Every hook
+is a command hook now; an install from before that gets the command hook the
+next time <code>seamlessd install-hooks</code> runs, which an update does for you.</li>
+<li><strong>SessionEnd may come late, or never.</strong> The app keeps a session open until
+you archive it or quit, and a session it kills ends with no hook at all. The
+idle reaper ends such a session after <code>gardener.session_idle_minutes</code> and
+reads its usage then, so its agent time still reaches the
+<a href="../reference/console/#diary-usage">Diary</a>.</li>
 <li><strong>Managed worktrees keep their project.</strong> The app may run a session in a
 managed worktree (<code>&lt;repo&gt;/.claude/worktrees/&lt;name&gt;</code>); Seamless resolves a
 linked worktree through its git common directory to the main checkout, so
@@ -423,7 +433,7 @@ organized by symptom.</p>
   <aside class="docs-toc" aria-label="On this page">
     <p class="toc-head">On this page</p>
     <ul>
-      <li class="lvl-2"><a href="#install-the-hooks-and-register-mcp">Install the hooks and register MCP</a></li><li class="lvl-3"><a href="#why-some-hooks-are-commands-and-others-are-http">Why some hooks are commands and others are http</a></li><li class="lvl-3"><a href="#https-and-socket-servers">Over https or a socket</a></li><li class="lvl-2"><a href="#registering-the-mcp-endpoint-by-hand">Registering the MCP endpoint by hand</a></li><li class="lvl-2"><a href="#map-your-repos">Map your repos</a></li><li class="lvl-2"><a href="#tell-your-agents-it-exists">Tell your agents it exists</a></li><li class="lvl-2"><a href="#the-claude-apps-code-surface">The Claude app&#39;s code surface</a></li><li class="lvl-2"><a href="#verify">Verify</a></li>
+      <li class="lvl-2"><a href="#install-the-hooks-and-register-mcp">Install the hooks and register MCP</a></li><li class="lvl-3"><a href="#why-every-hook-is-a-command">Why every hook is a command</a></li><li class="lvl-3"><a href="#https-and-socket-servers">Over https or a socket</a></li><li class="lvl-2"><a href="#registering-the-mcp-endpoint-by-hand">Registering the MCP endpoint by hand</a></li><li class="lvl-2"><a href="#map-your-repos">Map your repos</a></li><li class="lvl-2"><a href="#tell-your-agents-it-exists">Tell your agents it exists</a></li><li class="lvl-2"><a href="#the-claude-apps-code-surface">The Claude app&#39;s code surface</a></li><li class="lvl-2"><a href="#verify">Verify</a></li>
     </ul>
   </aside>
   
